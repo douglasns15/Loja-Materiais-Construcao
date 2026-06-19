@@ -1,0 +1,389 @@
+// =============================================================================
+// NexoLoja - Schema do Banco de Dados (Supabase / PostgreSQL)
+// =============================================================================
+// Arquitetura: Multi-Tenant, Modular e Offline-First
+//
+// Princípios seguidos (conforme CLAUDE.md):
+//  - Multi-tenancy estrito: toda tabela de dados possui `tenantId` (UUID da loja)
+//  - Tipos leves: SmallInt para status/enums, VarChar com limite estrito
+//  - Proibido salvar BLOBs: apenas URLs de mídia (Cloudflare R2)
+//  - Campos de sincronização offline: `id` UUID gerado no cliente, `syncStatus`
+//  - Módulos ativáveis: tabela `TenantModule` controla quais módulos cada loja usa
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+/// Status de sincronização para suporte Offline-First (IndexedDB → Supabase)
+enum SyncStatus {
+  PENDING   // Criado localmente, aguardando envio ao servidor
+  SYNCED    // Confirmado no servidor
+  CONFLICT  // Conflito detectado durante sincronização
+}
+
+/// Tipo de movimentação financeira
+enum TransactionType {
+  INCOME    // Entrada
+  EXPENSE   // Saída
+}
+
+/// Status de um pedido/venda
+enum OrderStatus {
+  DRAFT      // Rascunho (aberto no caixa offline)
+  CONFIRMED  // Confirmado
+  INVOICED   // Faturado / NF emitida
+  CANCELLED  // Cancelado
+}
+
+/// Tipo de unidade de medida — relevante para módulo Material de Construção
+enum UnitType {
+  UNIT       // Unidade (un)
+  METER      // Metro linear (m)
+  SQUARE_METER // Metro quadrado (m²)
+  CUBIC_METER  // Metro cúbico (m³)
+  KILOGRAM   // Quilograma (kg)
+  LITER      // Litro (l)
+  THOUSAND   // Milheiro (mil) — ex: tijolos
+  BAG        // Saco (sc) — ex: cimento
+  ROLL       // Rolo — ex: manta, tela
+}
+
+/// Papel do usuário dentro de um tenant
+enum UserRole {
+  OWNER      // Dono da loja (acesso total)
+  MANAGER    // Gerente
+  CASHIER    // Operador de caixa
+  STOCK      // Responsável de estoque
+}
+
+// =============================================================================
+// MÓDULO CORE — Tenants (Lojas) e Usuários
+// =============================================================================
+
+/// Representa uma loja/empresa (tenant). Raiz do multi-tenancy.
+model Tenant {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @db.VarChar(120)
+  slug        String   @unique @db.VarChar(60)  // Identificador único amigável (ex: "loja-do-ze")
+  cnpj        String?  @unique @db.VarChar(18)
+  phone       String?  @db.VarChar(20)
+  logoUrl     String?  @db.VarChar(500)          // URL no Cloudflare R2 — nunca BLOB
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relações
+  users       User[]
+  modules     TenantModule[]
+  products    Product[]
+  categories  Category[]
+  customers   Customer[]
+  suppliers   Supplier[]
+  orders      Order[]
+  cashSessions CashSession[]
+  stockMovements StockMovement[]
+  deliveries  Delivery[]
+
+  @@map("tenants")
+}
+
+/// Módulos ativáveis por tenant (ex: "CONSTRUCTION_MATERIALS", "FOOD", "CLOTHING")
+model TenantModule {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  moduleKey String   @db.VarChar(60)  // Ex: "CONSTRUCTION_MATERIALS"
+  isActive  Boolean  @default(true)
+  config    Json?                      // Configurações específicas do módulo (JSON leve)
+  createdAt DateTime @default(now())
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, moduleKey])
+  @@map("tenant_modules")
+}
+
+/// Usuário do sistema. Pertence a um único tenant.
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @db.Uuid
+  name         String    @db.VarChar(100)
+  email        String    @db.VarChar(150)
+  passwordHash String    @db.VarChar(255)  // bcrypt — nunca texto puro
+  role         UserRole  @default(CASHIER)
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orders       Order[]
+  cashSessions CashSession[]
+
+  @@unique([tenantId, email])
+  @@map("users")
+}
+
+// =============================================================================
+// MÓDULO CORE — Catálogo de Produtos
+// =============================================================================
+
+/// Categoria de produto. Hierarquia simples (pai/filho).
+model Category {
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @db.Uuid
+  parentId  String?   @db.Uuid          // Subcategoria (opcional)
+  name      String    @db.VarChar(80)
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  parent    Category? @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children  Category[] @relation("CategoryHierarchy")
+  products  Product[]
+
+  @@unique([tenantId, name, parentId])
+  @@map("categories")
+}
+
+/// Produto do catálogo. Suporta unidades especiais do módulo Material de Construção.
+model Product {
+  id              String    @id @default(uuid()) @db.Uuid
+  tenantId        String    @db.Uuid
+  categoryId      String?   @db.Uuid
+  sku             String    @db.VarChar(60)   // Código interno ou código de barras
+  name            String    @db.VarChar(150)
+  description     String?   @db.VarChar(500)
+  imageUrl        String?   @db.VarChar(500)  // URL no Cloudflare R2 — nunca BLOB
+  unit            UnitType  @default(UNIT)
+  /// Fator de conversão para módulo Material de Construção
+  /// Ex: 1 milheiro = 1000 unidades → conversionFactor = 1000
+  conversionFactor Decimal? @db.Decimal(10, 4)
+  costPrice       Decimal   @db.Decimal(12, 4)
+  salePrice       Decimal   @db.Decimal(12, 4)
+  stockQty        Decimal   @default(0) @db.Decimal(12, 4)
+  minStockQty     Decimal   @default(0) @db.Decimal(12, 4)
+  isActive        Boolean   @default(true)
+  /// Peso em kg — usado para cálculo de frete pesado (módulo Material de Construção)
+  weightKg        Decimal?  @db.Decimal(8, 3)
+  // Campos de sincronização offline
+  syncStatus      SyncStatus @default(SYNCED)
+  updatedAt       DateTime   @updatedAt
+  createdAt       DateTime   @default(now())
+
+  tenant          Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category        Category?  @relation(fields: [categoryId], references: [id])
+  orderItems      OrderItem[]
+  stockMovements  StockMovement[]
+
+  @@unique([tenantId, sku])
+  @@index([tenantId, name])
+  @@map("products")
+}
+
+// =============================================================================
+// MÓDULO CORE — Clientes e Fornecedores
+// =============================================================================
+
+/// Cliente da loja.
+model Customer {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @db.Uuid
+  name        String    @db.VarChar(120)
+  cpfCnpj     String?   @db.VarChar(18)
+  phone       String?   @db.VarChar(20)
+  email       String?   @db.VarChar(150)
+  address     String?   @db.VarChar(300)
+  notes       String?   @db.VarChar(500)
+  isActive    Boolean   @default(true)
+  // Campos de sincronização offline
+  syncStatus  SyncStatus @default(SYNCED)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orders      Order[]
+  deliveries  Delivery[]
+
+  @@unique([tenantId, cpfCnpj])
+  @@index([tenantId, name])
+  @@map("customers")
+}
+
+/// Fornecedor de produtos.
+model Supplier {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @db.Uuid
+  name        String    @db.VarChar(120)
+  cnpj        String?   @db.VarChar(18)
+  phone       String?   @db.VarChar(20)
+  email       String?   @db.VarChar(150)
+  address     String?   @db.VarChar(300)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  stockMovements StockMovement[]
+
+  @@unique([tenantId, cnpj])
+  @@map("suppliers")
+}
+
+// =============================================================================
+// MÓDULO CORE — Vendas (PDV / Caixa)
+// =============================================================================
+
+/// Sessão de caixa. Controla abertura/fechamento e totais do operador.
+model CashSession {
+  id            String    @id @default(uuid()) @db.Uuid
+  tenantId      String    @db.Uuid
+  userId        String    @db.Uuid
+  openedAt      DateTime  @default(now())
+  closedAt      DateTime?
+  openingAmount Decimal   @db.Decimal(12, 2)  // Valor de abertura do caixa
+  closingAmount Decimal?  @db.Decimal(12, 2)  // Valor de fechamento informado
+  expectedAmount Decimal? @db.Decimal(12, 2)  // Valor calculado pelo sistema
+  notes         String?   @db.VarChar(500)
+  // Campos de sincronização offline
+  syncStatus    SyncStatus @default(SYNCED)
+
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user          User      @relation(fields: [userId], references: [id])
+  orders        Order[]
+
+  @@index([tenantId, openedAt])
+  @@map("cash_sessions")
+}
+
+/// Pedido / Venda. Criado no caixa (pode ser offline).
+model Order {
+  id             String      @id @default(uuid()) @db.Uuid
+  tenantId       String      @db.Uuid
+  cashSessionId  String?     @db.Uuid
+  userId         String      @db.Uuid       // Operador que realizou a venda
+  customerId     String?     @db.Uuid
+  status         OrderStatus @default(DRAFT)
+  subtotal       Decimal     @db.Decimal(12, 2)
+  discountAmount Decimal     @default(0) @db.Decimal(12, 2)
+  freightAmount  Decimal     @default(0) @db.Decimal(12, 2)  // Frete pesado (módulo Material de Construção)
+  total          Decimal     @db.Decimal(12, 2)
+  notes          String?     @db.VarChar(500)
+  // Campos de sincronização offline
+  syncStatus     SyncStatus  @default(PENDING)  // Vendas nascem como PENDING no caixa offline
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  tenant         Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  cashSession    CashSession? @relation(fields: [cashSessionId], references: [id])
+  user           User        @relation(fields: [userId], references: [id])
+  customer       Customer?   @relation(fields: [customerId], references: [id])
+  items          OrderItem[]
+  payments       Payment[]
+  delivery       Delivery?
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, status])
+  @@map("orders")
+}
+
+/// Item de um pedido.
+model OrderItem {
+  id          String   @id @default(uuid()) @db.Uuid
+  orderId     String   @db.Uuid
+  productId   String   @db.Uuid
+  productName String   @db.VarChar(150)  // Snapshot do nome no momento da venda
+  unit        UnitType                   // Snapshot da unidade no momento da venda
+  quantity    Decimal  @db.Decimal(12, 4)
+  unitPrice   Decimal  @db.Decimal(12, 4)
+  discount    Decimal  @default(0) @db.Decimal(12, 4)
+  total       Decimal  @db.Decimal(12, 2)
+
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product     Product  @relation(fields: [productId], references: [id])
+
+  @@map("order_items")
+}
+
+/// Pagamento de um pedido. Um pedido pode ter múltiplos pagamentos (ex: dinheiro + cartão).
+model Payment {
+  id        String   @id @default(uuid()) @db.Uuid
+  orderId   String   @db.Uuid
+  method    String   @db.VarChar(30)   // Ex: "CASH", "CREDIT_CARD", "PIX", "BOLETO"
+  amount    Decimal  @db.Decimal(12, 2)
+  paidAt    DateTime @default(now())
+  reference String?  @db.VarChar(100)  // NSU, código de transação, etc.
+
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+// =============================================================================
+// MÓDULO MATERIAL DE CONSTRUÇÃO — Entrega Pesada
+// =============================================================================
+
+/// Entrega de pedido. Ativado pelo módulo "CONSTRUCTION_MATERIALS".
+/// Suporta agendamento e controle de frete pesado.
+model Delivery {
+  id             String    @id @default(uuid()) @db.Uuid
+  tenantId       String    @db.Uuid
+  orderId        String    @unique @db.Uuid
+  customerId     String    @db.Uuid
+  scheduledAt    DateTime?                      // Data/hora agendada para entrega
+  deliveredAt    DateTime?                      // Data/hora efetiva da entrega
+  address        String    @db.VarChar(300)
+  /// Status: 0=Pendente, 1=Em rota, 2=Entregue, 3=Cancelado
+  /// SmallInt conforme diretriz de tipos leves
+  status         Int       @default(0) @db.SmallInt
+  driverName     String?   @db.VarChar(100)
+  vehiclePlate   String?   @db.VarChar(10)
+  totalWeightKg  Decimal?  @db.Decimal(10, 3)  // Peso total calculado dos itens
+  freightCost    Decimal?  @db.Decimal(12, 2)
+  notes          String?   @db.VarChar(500)
+  // Campos de sincronização offline
+  syncStatus     SyncStatus @default(SYNCED)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order          Order     @relation(fields: [orderId], references: [id])
+  customer       Customer  @relation(fields: [customerId], references: [id])
+
+  @@index([tenantId, scheduledAt])
+  @@map("deliveries")
+}
+
+// =============================================================================
+// MÓDULO CORE — Estoque
+// =============================================================================
+
+/// Movimentação de estoque. Rastreabilidade de entradas e saídas.
+model StockMovement {
+  id          String          @id @default(uuid()) @db.Uuid
+  tenantId    String          @db.Uuid
+  productId   String          @db.Uuid
+  supplierId  String?         @db.Uuid
+  type        TransactionType                    // INCOME = entrada, EXPENSE = saída
+  quantity    Decimal         @db.Decimal(12, 4)
+  unitCost    Decimal?        @db.Decimal(12, 4) // Custo unitário na entrada
+  reason      String?         @db.VarChar(150)   // Ex: "Compra NF 1234", "Ajuste de inventário"
+  // Campos de sincronização offline
+  syncStatus  SyncStatus      @default(SYNCED)
+  createdAt   DateTime        @default(now())
+
+  tenant      Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product     Product         @relation(fields: [productId], references: [id])
+  supplier    Supplier?       @relation(fields: [supplierId], references: [id])
+
+  @@index([tenantId, productId, createdAt])
+  @@map("stock_movements")
+}
