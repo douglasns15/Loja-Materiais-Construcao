@@ -21,6 +21,9 @@ Um *Architecture Decision Record* é um documento curto e versionado que captura
 | [ADR-002](./ADR-002-delivery-status-enum.md) | Tipo do campo `Delivery.status` (`Int` vs. `enum`) | Proposto |
 | [ADR-003](./ADR-003-payment-tenantid-syncstatus.md) | `tenantId` e `syncStatus` no modelo `Payment` | Proposto |
 | [ADR-004](./ADR-004-soft-delete-e-auditoria.md) | Estratégia de soft-delete e auditoria | Proposto |
+| [ADR-005](./ADR-005-stack-e-arquitetura.md) | Stack tecnológica e arquitetura geral | Aceito |
+
+> O detalhamento da arquitetura (diagrama, estrutura do monorepo, segurança/RLS, offline, deploy e roadmap) está em [`../ARCHITECTURE.md`](../ARCHITECTURE.md).
 
 ## Como adicionar um novo ADR
 
