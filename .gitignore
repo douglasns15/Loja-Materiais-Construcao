@@ -1,0 +1,15 @@
+# Segurança (Segredos e Senhas)
+.env
+.env*.local
+
+# Dependências (Serão baixadas de novo no servidor)
+node_modules/
+.next/
+out/
+build/
+
+# Arquivos de log e sistema
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store

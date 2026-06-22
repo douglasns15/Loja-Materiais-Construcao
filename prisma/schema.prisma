@@ -66,6 +66,14 @@ enum UserRole {
   STOCK      // Responsável de estoque
 }
 
+/// Status de entrega (ADR-002)
+enum DeliveryStatus {
+  PENDING    // Pendente
+  IN_ROUTE   // Em rota
+  DELIVERED  // Entregue
+  CANCELLED  // Cancelado
+}
+
 // =============================================================================
 // MÓDULO CORE — Tenants (Lojas) e Usuários
 // =============================================================================
@@ -90,9 +98,11 @@ model Tenant {
   customers   Customer[]
   suppliers   Supplier[]
   orders      Order[]
+  payments    Payment[]
   cashSessions CashSession[]
   stockMovements StockMovement[]
   deliveries  Delivery[]
+  auditEvents AuditEvent[]
 
   @@map("tenants")
 }
@@ -143,6 +153,7 @@ model Category {
   parentId  String?   @db.Uuid          // Subcategoria (opcional)
   name      String    @db.VarChar(80)
   isActive  Boolean   @default(true)
+  deletedAt DateTime?                   // Soft-delete (ADR-004)
   createdAt DateTime  @default(now())
 
   tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -172,6 +183,7 @@ model Product {
   stockQty        Decimal   @default(0) @db.Decimal(12, 4)
   minStockQty     Decimal   @default(0) @db.Decimal(12, 4)
   isActive        Boolean   @default(true)
+  deletedAt       DateTime?                   // Soft-delete (ADR-004)
   /// Peso em kg — usado para cálculo de frete pesado (módulo Material de Construção)
   weightKg        Decimal?  @db.Decimal(8, 3)
   // Campos de sincronização offline
@@ -204,6 +216,7 @@ model Customer {
   address     String?   @db.VarChar(300)
   notes       String?   @db.VarChar(500)
   isActive    Boolean   @default(true)
+  deletedAt   DateTime?                   // Soft-delete (ADR-004)
   // Campos de sincronização offline
   syncStatus  SyncStatus @default(SYNCED)
   createdAt   DateTime  @default(now())
@@ -228,6 +241,7 @@ model Supplier {
   email       String?   @db.VarChar(150)
   address     String?   @db.VarChar(300)
   isActive    Boolean   @default(true)
+  deletedAt   DateTime?                   // Soft-delete (ADR-004)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -314,16 +328,20 @@ model OrderItem {
 }
 
 /// Pagamento de um pedido. Um pedido pode ter múltiplos pagamentos (ex: dinheiro + cartão).
+/// ADR-003: tenantId denormalizado para multi-tenancy estrito e RLS
 model Payment {
   id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid          // Denormalizado para isolamento multi-tenant (ADR-003)
   orderId   String   @db.Uuid
   method    String   @db.VarChar(30)   // Ex: "CASH", "CREDIT_CARD", "PIX", "BOLETO"
   amount    Decimal  @db.Decimal(12, 2)
   paidAt    DateTime @default(now())
   reference String?  @db.VarChar(100)  // NSU, código de transação, etc.
 
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
+  @@index([tenantId, orderId])
   @@map("payments")
 }
 
@@ -333,30 +351,29 @@ model Payment {
 
 /// Entrega de pedido. Ativado pelo módulo "CONSTRUCTION_MATERIALS".
 /// Suporta agendamento e controle de frete pesado.
+/// ADR-002: status migrado de Int para enum DeliveryStatus
 model Delivery {
-  id             String    @id @default(uuid()) @db.Uuid
-  tenantId       String    @db.Uuid
-  orderId        String    @unique @db.Uuid
-  customerId     String    @db.Uuid
+  id             String         @id @default(uuid()) @db.Uuid
+  tenantId       String         @db.Uuid
+  orderId        String         @unique @db.Uuid
+  customerId     String         @db.Uuid
   scheduledAt    DateTime?                      // Data/hora agendada para entrega
   deliveredAt    DateTime?                      // Data/hora efetiva da entrega
-  address        String    @db.VarChar(300)
-  /// Status: 0=Pendente, 1=Em rota, 2=Entregue, 3=Cancelado
-  /// SmallInt conforme diretriz de tipos leves
-  status         Int       @default(0) @db.SmallInt
-  driverName     String?   @db.VarChar(100)
-  vehiclePlate   String?   @db.VarChar(10)
-  totalWeightKg  Decimal?  @db.Decimal(10, 3)  // Peso total calculado dos itens
-  freightCost    Decimal?  @db.Decimal(12, 2)
-  notes          String?   @db.VarChar(500)
+  address        String         @db.VarChar(300)
+  status         DeliveryStatus @default(PENDING)  // ADR-002: enum para type-safety
+  driverName     String?        @db.VarChar(100)
+  vehiclePlate   String?        @db.VarChar(10)
+  totalWeightKg  Decimal?       @db.Decimal(10, 3)  // Peso total calculado dos itens
+  freightCost    Decimal?       @db.Decimal(12, 2)
+  notes          String?        @db.VarChar(500)
   // Campos de sincronização offline
-  syncStatus     SyncStatus @default(SYNCED)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  syncStatus     SyncStatus     @default(SYNCED)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
-  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  order          Order     @relation(fields: [orderId], references: [id])
-  customer       Customer  @relation(fields: [customerId], references: [id])
+  tenant         Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order          Order          @relation(fields: [orderId], references: [id])
+  customer       Customer       @relation(fields: [customerId], references: [id])
 
   @@index([tenantId, scheduledAt])
   @@map("deliveries")
@@ -386,4 +403,28 @@ model StockMovement {
 
   @@index([tenantId, productId, createdAt])
   @@map("stock_movements")
+}
+
+// =============================================================================
+// MÓDULO CORE — Auditoria Seletiva
+// =============================================================================
+
+/// Auditoria seletiva de eventos críticos (ADR-004)
+/// Registra apenas ações sensíveis: cancelamento de venda, alteração de preço,
+/// ajuste manual de estoque, fechamento de caixa com divergência, mudança de papel
+model AuditEvent {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  userId    String?  @db.Uuid              // Usuário que executou a ação (null para ações do sistema)
+  entity    String   @db.VarChar(60)       // Ex: "Order", "Product", "CashSession", "User"
+  entityId  String   @db.Uuid              // ID da entidade afetada
+  action    String   @db.VarChar(60)       // Ex: "CANCEL_ORDER", "CHANGE_PRICE", "ADJUST_STOCK", "CLOSE_CASH_WITH_DIVERGENCE"
+  meta      Json?                          // Metadados compactos da ação (valores antes/depois, motivo, etc.)
+  createdAt DateTime @default(now())
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, entity, entityId])
+  @@index([tenantId, createdAt])
+  @@map("audit_events")
 }
