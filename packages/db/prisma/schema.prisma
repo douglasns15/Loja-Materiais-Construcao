@@ -16,8 +16,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")  // Pooler 6543 (pgbouncer) — runtime da aplicação
+  directUrl = env("DIRECT_URL")    // Porta direta 5432 — usada pelas migrations (migrate/diff)
 }
 
 // =============================================================================
@@ -123,12 +124,14 @@ model TenantModule {
 }
 
 /// Usuário do sistema. Pertence a um único tenant.
+/// ADR-005: as credenciais são propriedade do Supabase Auth (auth.users), não desta tabela.
+/// `id` é fornecido pela aplicação e DEVE ser igual ao `auth.users.id` do Supabase Auth.
+/// O vínculo formal (FK cross-schema para auth.users) será configurado na Fase 2 (Auth/RLS).
 model User {
-  id           String    @id @default(uuid()) @db.Uuid
+  id           String    @id @db.Uuid       // = Supabase Auth user id (auth.users.id)
   tenantId     String    @db.Uuid
   name         String    @db.VarChar(100)
   email        String    @db.VarChar(150)
-  passwordHash String    @db.VarChar(255)  // bcrypt — nunca texto puro
   role         UserRole  @default(CASHIER)
   isActive     Boolean   @default(true)
   createdAt    DateTime  @default(now())

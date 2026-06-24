@@ -1,0 +1,8 @@
+{
+  "name": "@nexoloja/web",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo \"apps/web reservado para a Fase 2 (MVP Next.js/PWA)\""
+  }
+}

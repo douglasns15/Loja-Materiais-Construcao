@@ -1,12 +1,18 @@
 # Segurança (Segredos e Senhas)
 .env
 .env*.local
+.dev.vars
 
 # Dependências (Serão baixadas de novo no servidor)
 node_modules/
 .next/
 out/
 build/
+
+# Monorepo / build
+.turbo/
+.wrangler/
+dist/
 
 # Arquivos de log e sistema
 npm-debug.log*
