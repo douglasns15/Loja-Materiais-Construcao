@@ -27,3 +27,13 @@ export function calcOrderTotal(params: {
   const { subtotal, discountAmount = 0, freightAmount = 0 } = params;
   return subtotal - discountAmount + freightAmount;
 }
+
+/**
+ * Margem de lucro percentual sobre o preço de venda (markup sobre venda).
+ * Ex: custo 60, venda 100 → 40%. Retorna 0 se o preço de venda for <= 0.
+ * Arredondada a 2 casas para exibição.
+ */
+export function calcMarginPercent(costPrice: number, salePrice: number): number {
+  if (salePrice <= 0) return 0;
+  return Number((((salePrice - costPrice) / salePrice) * 100).toFixed(2));
+}

@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { createPrismaClient } from '@nexoloja/db';
+import products from './routes/products';
 
 type Bindings = {
   /** Conexão injetada pelo Cloudflare Hyperdrive (ADR-005). */
@@ -11,6 +12,9 @@ type Bindings = {
 const app = new Hono<{ Bindings: Bindings }>();
 
 app.get('/health', (c) => c.json({ ok: true, service: 'nexoloja-api' }));
+
+// Rotas de recursos
+app.route('/products', products);
 
 /**
  * Validação do item 3: confirma que o Prisma roda no Cloudflare Worker via driver

@@ -3,7 +3,7 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-06-25
+> **Última atualização:** 2026-06-25 (CRUD de Produtos)
 
 ---
 
@@ -28,8 +28,13 @@
 - [x] **Ajuste:** baseline de migrations (`0_init` + `0001_drop_password_hash`)
 - [x] **Ajuste:** auth alinhada ao Supabase Auth (remoção de `User.passwordHash`; `User.id` = `auth.users.id`)
 - [x] Endpoint de validação `GET /db-check` lendo o banco (validado em `wrangler dev`)
-- [ ] Primeiros endpoints CRUD reais da API (produtos, clientes)
+- [x] CRUD de **Produtos** (`/products`) — validado ponta a ponta no Supabase
+- [ ] CRUD de **Clientes** (`/customers`)
+- [ ] CRUD de **Categorias** / **Fornecedores**
 - [ ] Deploy na edge (Cloudflare Workers + Hyperdrive→Supavisor) — requer `wrangler login`
+
+> ℹ️ Tenant ainda vem do header temporário `x-tenant-id` — será substituído pelo
+> claim do JWT (Supabase Auth + RLS) na Fase 2.
 
 ---
 

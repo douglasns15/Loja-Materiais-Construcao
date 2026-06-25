@@ -7,3 +7,5 @@ import { z } from 'zod';
 
 export const tenantIdSchema = z.string().uuid();
 export type TenantId = z.infer<typeof tenantIdSchema>;
+
+export * from './product';
