@@ -3,6 +3,8 @@ import { createPrismaClient } from '@nexoloja/db';
 import { type Env, getConnectionString } from './lib/request';
 import products from './routes/products';
 import customers from './routes/customers';
+import categories from './routes/categories';
+import suppliers from './routes/suppliers';
 
 const app = new Hono<Env>();
 
@@ -11,6 +13,8 @@ app.get('/health', (c) => c.json({ ok: true, service: 'nexoloja-api' }));
 // Rotas de recursos
 app.route('/products', products);
 app.route('/customers', customers);
+app.route('/categories', categories);
+app.route('/suppliers', suppliers);
 
 /**
  * Validação do item 3: confirma que o Prisma roda no Cloudflare Worker via driver

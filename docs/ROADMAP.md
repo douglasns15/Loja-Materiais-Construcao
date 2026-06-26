@@ -3,7 +3,7 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-06-26 (CRUD de Clientes)
+> **Última atualização:** 2026-06-26 (CRUD de Categorias e Fornecedores)
 
 ---
 
@@ -30,7 +30,7 @@
 - [x] Endpoint de validação `GET /db-check` lendo o banco (validado em `wrangler dev`)
 - [x] CRUD de **Produtos** (`/products`) — validado ponta a ponta no Supabase
 - [x] CRUD de **Clientes** (`/customers`) — validado ponta a ponta no Supabase
-- [ ] CRUD de **Categorias** / **Fornecedores**
+- [x] CRUD de **Categorias** (`/categories`, com hierarquia) e **Fornecedores** (`/suppliers`)
 - [ ] Deploy na edge (Cloudflare Workers + Hyperdrive→Supavisor) — requer `wrangler login`
 
 > ℹ️ Tenant ainda vem do header temporário `x-tenant-id` — será substituído pelo
