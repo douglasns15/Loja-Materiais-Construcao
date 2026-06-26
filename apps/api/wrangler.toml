@@ -4,12 +4,12 @@ compatibility_date = "2024-12-01"
 # nodejs_compat é necessário para o driver `pg` rodar no Worker (item 3 / ADR-005).
 compatibility_flags = ["nodejs_compat"]
 
-# --- Hyperdrive → Supavisor (ADR-005) ---
-# Crie o Hyperdrive apontando para o DIRECT_URL do Supabase e cole o id abaixo:
+# --- Hyperdrive → Supabase (ADR-005) ---
+# Conexão poolada na edge. Recriar com:
 #   npx wrangler hyperdrive create nexoloja-db --connection-string="<DIRECT_URL>"
-# [[hyperdrive]]
-# binding = "HYPERDRIVE"
-# id = "<seu-hyperdrive-id>"
+[[hyperdrive]]
+binding = "HYPERDRIVE"
+id = "7b728afad9a643f096bfbcdb6d0724ea"
 
 # --- Desenvolvimento local ---
 # Sem Hyperdrive, defina DATABASE_URL em apps/api/.dev.vars (NÃO commitar):
