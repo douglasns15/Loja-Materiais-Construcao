@@ -1,20 +1,16 @@
 import { Hono } from 'hono';
 import { createPrismaClient } from '@nexoloja/db';
+import { type Env, getConnectionString } from './lib/request';
 import products from './routes/products';
+import customers from './routes/customers';
 
-type Bindings = {
-  /** Conexão injetada pelo Cloudflare Hyperdrive (ADR-005). */
-  HYPERDRIVE?: { connectionString: string };
-  /** Fallback para desenvolvimento local (wrangler secret / .dev.vars). */
-  DATABASE_URL?: string;
-};
-
-const app = new Hono<{ Bindings: Bindings }>();
+const app = new Hono<Env>();
 
 app.get('/health', (c) => c.json({ ok: true, service: 'nexoloja-api' }));
 
 // Rotas de recursos
 app.route('/products', products);
+app.route('/customers', customers);
 
 /**
  * Validação do item 3: confirma que o Prisma roda no Cloudflare Worker via driver
@@ -22,7 +18,7 @@ app.route('/products', products);
  * Faz apenas uma contagem leve em `tenants`.
  */
 app.get('/db-check', async (c) => {
-  const connectionString = c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL;
+  const connectionString = getConnectionString(c.env);
   if (!connectionString) {
     return c.json(
       { ok: false, error: 'Sem connection string (HYPERDRIVE ou DATABASE_URL).' },

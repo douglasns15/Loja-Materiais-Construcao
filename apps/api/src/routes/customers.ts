@@ -1,21 +1,12 @@
 import { Hono } from 'hono';
 import { createPrismaClient, Prisma } from '@nexoloja/db';
-import { calcMarginPercent } from '@nexoloja/core';
-import { createProductSchema, updateProductSchema } from '@nexoloja/shared';
+import { createCustomerSchema, updateCustomerSchema } from '@nexoloja/shared';
 import { type Env, getConnectionString, getTenantId } from '../lib/request';
 
-/** Acrescenta a margem calculada (regra pura de packages/core) ao produto. */
-function withMargin<T extends { costPrice: unknown; salePrice: unknown }>(p: T) {
-  return {
-    ...p,
-    marginPercent: calcMarginPercent(Number(p.costPrice), Number(p.salePrice)),
-  };
-}
+const customers = new Hono<Env>();
 
-const products = new Hono<Env>();
-
-/** Lista produtos ativos (não deletados) do tenant. */
-products.get('/', async (c) => {
+/** Lista clientes ativos (não deletados) do tenant. */
+customers.get('/', async (c) => {
   const tenantId = getTenantId(c);
   if (!tenantId) {
     return c.json({ ok: false, error: 'Header x-tenant-id ausente ou inválido.' }, 400);
@@ -27,20 +18,20 @@ products.get('/', async (c) => {
 
   try {
     const prisma = createPrismaClient(connectionString);
-    const items = await prisma.product.findMany({
+    const items = await prisma.customer.findMany({
       where: { tenantId, deletedAt: null },
       orderBy: { name: 'asc' },
       take: 100,
     });
-    return c.json({ ok: true, data: items.map(withMargin) });
+    return c.json({ ok: true, data: items });
   } catch (err) {
-    console.error('GET /products falhou:', err);
-    return c.json({ ok: false, error: 'Falha ao listar produtos.' }, 500);
+    console.error('GET /customers falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao listar clientes.' }, 500);
   }
 });
 
-/** Detalhe de um produto. */
-products.get('/:id', async (c) => {
+/** Detalhe de um cliente. */
+customers.get('/:id', async (c) => {
   const tenantId = getTenantId(c);
   if (!tenantId) {
     return c.json({ ok: false, error: 'Header x-tenant-id ausente ou inválido.' }, 400);
@@ -52,21 +43,21 @@ products.get('/:id', async (c) => {
 
   try {
     const prisma = createPrismaClient(connectionString);
-    const item = await prisma.product.findFirst({
+    const item = await prisma.customer.findFirst({
       where: { id: c.req.param('id'), tenantId, deletedAt: null },
     });
     if (!item) {
-      return c.json({ ok: false, error: 'Produto não encontrado.' }, 404);
+      return c.json({ ok: false, error: 'Cliente não encontrado.' }, 404);
     }
-    return c.json({ ok: true, data: withMargin(item) });
+    return c.json({ ok: true, data: item });
   } catch (err) {
-    console.error('GET /products/:id falhou:', err);
-    return c.json({ ok: false, error: 'Falha ao buscar o produto.' }, 500);
+    console.error('GET /customers/:id falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao buscar o cliente.' }, 500);
   }
 });
 
-/** Cria um produto. */
-products.post('/', async (c) => {
+/** Cria um cliente. */
+customers.post('/', async (c) => {
   const tenantId = getTenantId(c);
   if (!tenantId) {
     return c.json({ ok: false, error: 'Header x-tenant-id ausente ou inválido.' }, 400);
@@ -77,7 +68,7 @@ products.post('/', async (c) => {
   }
 
   const body = await c.req.json().catch(() => null);
-  const parsed = createProductSchema.safeParse(body);
+  const parsed = createCustomerSchema.safeParse(body);
   if (!parsed.success) {
     return c.json(
       { ok: false, error: 'Dados inválidos.', issues: parsed.error.flatten() },
@@ -87,26 +78,26 @@ products.post('/', async (c) => {
 
   try {
     const prisma = createPrismaClient(connectionString);
-    const created = await prisma.product.create({
+    const created = await prisma.customer.create({
       data: { ...parsed.data, tenantId },
     });
-    return c.json({ ok: true, data: withMargin(created) }, 201);
+    return c.json({ ok: true, data: created }, 201);
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError) {
       if (err.code === 'P2002') {
-        return c.json({ ok: false, error: 'Já existe um produto com esse SKU.' }, 409);
+        return c.json({ ok: false, error: 'Já existe um cliente com esse CPF/CNPJ.' }, 409);
       }
       if (err.code === 'P2003') {
-        return c.json({ ok: false, error: 'Tenant ou categoria inexistente.' }, 400);
+        return c.json({ ok: false, error: 'Tenant inexistente.' }, 400);
       }
     }
-    console.error('POST /products falhou:', err);
-    return c.json({ ok: false, error: 'Falha ao criar o produto.' }, 500);
+    console.error('POST /customers falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao criar o cliente.' }, 500);
   }
 });
 
-/** Atualiza um produto (parcial). */
-products.patch('/:id', async (c) => {
+/** Atualiza um cliente (parcial). */
+customers.patch('/:id', async (c) => {
   const tenantId = getTenantId(c);
   if (!tenantId) {
     return c.json({ ok: false, error: 'Header x-tenant-id ausente ou inválido.' }, 400);
@@ -117,7 +108,7 @@ products.patch('/:id', async (c) => {
   }
 
   const body = await c.req.json().catch(() => null);
-  const parsed = updateProductSchema.safeParse(body);
+  const parsed = updateCustomerSchema.safeParse(body);
   if (!parsed.success) {
     return c.json(
       { ok: false, error: 'Dados inválidos.', issues: parsed.error.flatten() },
@@ -129,26 +120,26 @@ products.patch('/:id', async (c) => {
     const prisma = createPrismaClient(connectionString);
     const id = c.req.param('id');
     // updateMany garante o escopo do tenant (proteção antes do RLS da Fase 2).
-    const result = await prisma.product.updateMany({
+    const result = await prisma.customer.updateMany({
       where: { id, tenantId, deletedAt: null },
       data: parsed.data,
     });
     if (result.count === 0) {
-      return c.json({ ok: false, error: 'Produto não encontrado.' }, 404);
+      return c.json({ ok: false, error: 'Cliente não encontrado.' }, 404);
     }
-    const updated = await prisma.product.findFirst({ where: { id, tenantId } });
-    return c.json({ ok: true, data: updated ? withMargin(updated) : null });
+    const updated = await prisma.customer.findFirst({ where: { id, tenantId } });
+    return c.json({ ok: true, data: updated });
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-      return c.json({ ok: false, error: 'Já existe um produto com esse SKU.' }, 409);
+      return c.json({ ok: false, error: 'Já existe um cliente com esse CPF/CNPJ.' }, 409);
     }
-    console.error('PATCH /products/:id falhou:', err);
-    return c.json({ ok: false, error: 'Falha ao atualizar o produto.' }, 500);
+    console.error('PATCH /customers/:id falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao atualizar o cliente.' }, 500);
   }
 });
 
 /** Soft-delete (ADR-004): marca `deletedAt`. */
-products.delete('/:id', async (c) => {
+customers.delete('/:id', async (c) => {
   const tenantId = getTenantId(c);
   if (!tenantId) {
     return c.json({ ok: false, error: 'Header x-tenant-id ausente ou inválido.' }, 400);
@@ -160,18 +151,18 @@ products.delete('/:id', async (c) => {
 
   try {
     const prisma = createPrismaClient(connectionString);
-    const result = await prisma.product.updateMany({
+    const result = await prisma.customer.updateMany({
       where: { id: c.req.param('id'), tenantId, deletedAt: null },
       data: { deletedAt: new Date() },
     });
     if (result.count === 0) {
-      return c.json({ ok: false, error: 'Produto não encontrado.' }, 404);
+      return c.json({ ok: false, error: 'Cliente não encontrado.' }, 404);
     }
     return c.json({ ok: true });
   } catch (err) {
-    console.error('DELETE /products/:id falhou:', err);
-    return c.json({ ok: false, error: 'Falha ao remover o produto.' }, 500);
+    console.error('DELETE /customers/:id falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao remover o cliente.' }, 500);
   }
 });
 
-export default products;
+export default customers;

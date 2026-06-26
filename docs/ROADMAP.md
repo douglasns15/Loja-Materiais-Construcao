@@ -3,7 +3,7 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-06-25 (CRUD de Produtos)
+> **Última atualização:** 2026-06-26 (CRUD de Clientes)
 
 ---
 
@@ -29,7 +29,7 @@
 - [x] **Ajuste:** auth alinhada ao Supabase Auth (remoção de `User.passwordHash`; `User.id` = `auth.users.id`)
 - [x] Endpoint de validação `GET /db-check` lendo o banco (validado em `wrangler dev`)
 - [x] CRUD de **Produtos** (`/products`) — validado ponta a ponta no Supabase
-- [ ] CRUD de **Clientes** (`/customers`)
+- [x] CRUD de **Clientes** (`/customers`) — validado ponta a ponta no Supabase
 - [ ] CRUD de **Categorias** / **Fornecedores**
 - [ ] Deploy na edge (Cloudflare Workers + Hyperdrive→Supavisor) — requer `wrangler login`
 
