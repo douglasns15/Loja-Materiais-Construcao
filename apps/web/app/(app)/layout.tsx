@@ -36,8 +36,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex min-h-screen">
-      <aside className="flex w-56 shrink-0 flex-col border-r border-gray-200 bg-white p-4">
+    <div className="flex h-screen">
+      <aside className="flex h-screen w-56 shrink-0 flex-col border-r border-gray-200 bg-white p-4">
         <div className="mb-6 px-2 text-xl font-bold">NexoLoja</div>
         <nav className="space-y-1">
           {NAV.map((item) => {
@@ -62,7 +62,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           Sair
         </button>
       </aside>
-      <main className="flex-1 p-6">{children}</main>
+      <main className="flex-1 overflow-y-auto p-6">{children}</main>
     </div>
   );
 }
