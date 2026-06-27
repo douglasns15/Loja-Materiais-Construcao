@@ -12,7 +12,8 @@
     "@nexoloja/core": "*",
     "@nexoloja/db": "*",
     "@nexoloja/shared": "*",
-    "hono": "^4.6.14"
+    "hono": "^4.6.14",
+    "jose": "^5.9.6"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241218.0",

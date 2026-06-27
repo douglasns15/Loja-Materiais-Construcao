@@ -1,14 +1,22 @@
 import type { Context } from 'hono';
-import { tenantIdSchema } from '@nexoloja/shared';
 
 export type Bindings = {
   /** Conexão injetada pelo Cloudflare Hyperdrive (ADR-005). */
   HYPERDRIVE?: { connectionString: string };
   /** Fallback para desenvolvimento local (wrangler secret / .dev.vars). */
   DATABASE_URL?: string;
+  /** URL do projeto Supabase (para verificar o JWT via JWKS). */
+  SUPABASE_URL?: string;
 };
 
-export type Env = { Bindings: Bindings };
+/** Dados do usuário autenticado, populados pelo middleware `requireAuth`. */
+export type Variables = {
+  tenantId: string;
+  userId: string;
+  role: string;
+};
+
+export type Env = { Bindings: Bindings; Variables: Variables };
 
 /** Resolve a string de conexão (Hyperdrive na edge; DATABASE_URL no dev local). */
 export function getConnectionString(env: Bindings): string | null {
@@ -16,10 +24,9 @@ export function getConnectionString(env: Bindings): string | null {
 }
 
 /**
- * TEMPORÁRIO (Fase 1): o tenant vem do header `x-tenant-id`.
- * Na Fase 2 será substituído pelo claim `tenant_id` do JWT do Supabase Auth + RLS.
+ * Tenant do usuário autenticado. Populado pelo middleware `requireAuth` a partir
+ * do JWT verificado do Supabase Auth — não mais de um header confiável (Fase 2).
  */
 export function getTenantId(c: Context<Env>): string | null {
-  const parsed = tenantIdSchema.safeParse(c.req.header('x-tenant-id'));
-  return parsed.success ? parsed.data : null;
+  return c.get('tenantId') ?? null;
 }

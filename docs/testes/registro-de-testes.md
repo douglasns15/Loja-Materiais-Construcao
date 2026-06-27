@@ -91,4 +91,23 @@ URL: `https://nexoloja-api.imortal.workers.dev`
 
 ## Fase 2 — Autenticação, RLS e MVP
 
-⏭️ _Em planejamento._
+### 2.A — Autenticação via Supabase JWT (produção) (2026-06-27)
+
+Bootstrap: OWNER `owner@lojademo.com` criado e vinculado à `loja-demo`
+(`users.id` = `auth.users.id`).
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Login Supabase (grant_type=password) | retorna access_token | ✅ JWT (796 chars) |
+| `GET /products` com `Authorization: Bearer` | 200 | ✅ |
+| `GET /categories` com Bearer | dados reais do tenant | ✅ (tenant resolvido do token) |
+| `GET /products` sem token | 401 | ✅ |
+| Apenas o antigo header `x-tenant-id` | 401 | ✅ brecha fechada |
+| Token inválido/forjado | 401 | ✅ |
+
+> Middleware `requireAuth`: verifica assinatura via JWKS (ES256) e resolve
+> `tenantId`/`role` da tabela `users`. O header `x-tenant-id` foi aposentado.
+
+### 2.B — RLS (políticas SQL) — ⏭️ pendente
+### 2.C — Convite de funcionários por e-mail — ⏭️ pendente
+### 2.D — UI (Next.js) — ⏭️ pendente

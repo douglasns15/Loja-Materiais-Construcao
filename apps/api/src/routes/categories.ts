@@ -2,8 +2,12 @@ import { Hono } from 'hono';
 import { createPrismaClient, Prisma } from '@nexoloja/db';
 import { createCategorySchema, updateCategorySchema } from '@nexoloja/shared';
 import { type Env, getConnectionString, getTenantId } from '../lib/request';
+import { requireAuth } from '../middleware/auth';
 
 const categories = new Hono<Env>();
+
+// Todas as rotas de categorias exigem autenticação (JWT do Supabase).
+categories.use('*', requireAuth);
 
 /** Lista categorias ativas (não deletadas) do tenant. */
 categories.get('/', async (c) => {

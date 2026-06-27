@@ -2,8 +2,12 @@ import { Hono } from 'hono';
 import { createPrismaClient, Prisma } from '@nexoloja/db';
 import { createSupplierSchema, updateSupplierSchema } from '@nexoloja/shared';
 import { type Env, getConnectionString, getTenantId } from '../lib/request';
+import { requireAuth } from '../middleware/auth';
 
 const suppliers = new Hono<Env>();
+
+// Todas as rotas de fornecedores exigem autenticação (JWT do Supabase).
+suppliers.use('*', requireAuth);
 
 /** Lista fornecedores ativos (não deletados) do tenant. */
 suppliers.get('/', async (c) => {

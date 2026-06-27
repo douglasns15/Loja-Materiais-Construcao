@@ -4,6 +4,10 @@ compatibility_date = "2024-12-01"
 # nodejs_compat é necessário para o driver `pg` rodar no Worker (item 3 / ADR-005).
 compatibility_flags = ["nodejs_compat"]
 
+# Variáveis públicas (não-segredas)
+[vars]
+SUPABASE_URL = "https://esxssekaflzewibbklpu.supabase.co"
+
 # --- Hyperdrive → Supabase (ADR-005) ---
 # Conexão poolada na edge. Recriar com:
 #   npx wrangler hyperdrive create nexoloja-db --connection-string="<DIRECT_URL>"

@@ -3,6 +3,7 @@ import { createPrismaClient, Prisma } from '@nexoloja/db';
 import { calcMarginPercent } from '@nexoloja/core';
 import { createProductSchema, updateProductSchema } from '@nexoloja/shared';
 import { type Env, getConnectionString, getTenantId } from '../lib/request';
+import { requireAuth } from '../middleware/auth';
 
 /** Acrescenta a margem calculada (regra pura de packages/core) ao produto. */
 function withMargin<T extends { costPrice: unknown; salePrice: unknown }>(p: T) {
@@ -13,6 +14,9 @@ function withMargin<T extends { costPrice: unknown; salePrice: unknown }>(p: T) 
 }
 
 const products = new Hono<Env>();
+
+// Todas as rotas de produtos exigem autenticação (JWT do Supabase).
+products.use('*', requireAuth);
 
 /** Lista produtos ativos (não deletados) do tenant. */
 products.get('/', async (c) => {

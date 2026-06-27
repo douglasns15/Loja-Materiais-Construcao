@@ -2,8 +2,12 @@ import { Hono } from 'hono';
 import { createPrismaClient, Prisma } from '@nexoloja/db';
 import { createCustomerSchema, updateCustomerSchema } from '@nexoloja/shared';
 import { type Env, getConnectionString, getTenantId } from '../lib/request';
+import { requireAuth } from '../middleware/auth';
 
 const customers = new Hono<Env>();
+
+// Todas as rotas de clientes exigem autenticação (JWT do Supabase).
+customers.use('*', requireAuth);
 
 /** Lista clientes ativos (não deletados) do tenant. */
 customers.get('/', async (c) => {
