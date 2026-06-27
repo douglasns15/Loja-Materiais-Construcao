@@ -140,5 +140,19 @@ Testado no navegador (preview), `apps/web` (Next 15 + Tailwind) → API em produ
 > (criava produto e não aparecia). **Correção:** `wrangler hyperdrive update <id>
 > --caching-disabled` (pooling mantido). Reteste OK.
 
+### 2.E.2 — App shell (menu lateral) + tela de Clientes (2026-06-27)
+
+| Teste | Resultado |
+|---|---|
+| Layout com menu lateral (Produtos/Clientes) + proteção de login centralizada | ✅ |
+| Navegação entre telas pelo menu | ✅ |
+| Tela de Clientes: lista lê do banco | ✅ |
+| Cadastro de cliente (form → API → banco → refresh) | ✅ Construtora Souza, Pedreira Norte |
+| Build de produção (`next build`) | ✅ 5 rotas, sem erros |
+
+> Obs.: o clique sintético da ferramenta de preview às vezes não dispara o submit
+> nativo do form; `requestSubmit()` confirma o handler. Não é bug do app (clique real
+> do usuário funciona).
+
 ### 2.D — Convite de funcionários por e-mail — ⏭️ pendente
-### 2.F — UI: clientes, caixa e venda — ⏭️ pendente
+### 2.F — UI: caixa e venda — ⏭️ pendente

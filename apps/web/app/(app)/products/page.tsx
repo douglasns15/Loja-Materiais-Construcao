@@ -1,9 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { createProductSchema } from '@nexoloja/shared';
-import { supabase } from '@/lib/supabase';
 import { apiGet, apiPost } from '@/lib/api';
 
 type Product = {
@@ -12,7 +10,6 @@ type Product = {
   name: string;
   costPrice: string;
   salePrice: string;
-  stockQty: string;
   marginPercent: number;
 };
 
@@ -20,12 +17,8 @@ const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 export default function ProductsPage() {
-  const router = useRouter();
-  const [ready, setReady] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [error, setError] = useState<string | null>(null);
-
-  // Form
   const [form, setForm] = useState({ name: '', sku: '', costPrice: '', salePrice: '' });
   const [saving, setSaving] = useState(false);
 
@@ -39,16 +32,7 @@ export default function ProductsPage() {
   }
 
   useEffect(() => {
-    (async () => {
-      const { data } = await supabase.auth.getSession();
-      if (!data.session) {
-        router.replace('/login');
-        return;
-      }
-      setReady(true);
-      await load();
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    load();
   }, []);
 
   async function onCreate(e: React.FormEvent) {
@@ -78,25 +62,14 @@ export default function ProductsPage() {
     }
   }
 
-  async function logout() {
-    await supabase.auth.signOut();
-    router.replace('/login');
-  }
-
-  if (!ready) {
-    return <main className="p-8 text-gray-500">Carregando…</main>;
-  }
-
   return (
-    <main className="mx-auto max-w-4xl p-6">
-      <header className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Produtos</h1>
-        <button onClick={logout} className="text-sm text-gray-500 hover:text-gray-900">
-          Sair
-        </button>
-      </header>
+    <div className="mx-auto max-w-4xl">
+      <h1 className="mb-6 text-2xl font-bold">Produtos</h1>
 
-      <form onSubmit={onCreate} className="mb-6 grid grid-cols-1 gap-3 rounded-2xl bg-white p-4 shadow-sm sm:grid-cols-5">
+      <form
+        onSubmit={onCreate}
+        className="mb-6 grid grid-cols-1 gap-3 rounded-2xl bg-white p-4 shadow-sm sm:grid-cols-5"
+      >
         <input
           placeholder="Nome"
           value={form.name}
@@ -168,6 +141,6 @@ export default function ProductsPage() {
           </tbody>
         </table>
       </div>
-    </main>
+    </div>
   );
 }

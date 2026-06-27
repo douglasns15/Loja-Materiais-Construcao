@@ -3,7 +3,7 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-06-27 (Fase 2 — UI fatia 1: login + produtos)
+> **Última atualização:** 2026-06-27 (Fase 2 — UI: app shell + clientes)
 
 ---
 
@@ -45,8 +45,9 @@
 - [x] Custom Access Token Hook (injeta `tenant_id`/`user_role` no JWT)
 - [x] Ativar RLS nas tabelas + políticas de isolamento por `tenant_id`
 - [x] UI (Next.js + Tailwind): scaffold + tela de **login** (Supabase Auth)
+- [x] UI: **app shell** (menu lateral + proteção de login centralizada)
 - [x] UI: tela de **produtos** (lista + cadastro via API, com CORS)
-- [ ] UI: cadastro de **clientes**
+- [x] UI: tela de **clientes** (lista + cadastro)
 - [ ] UI: abertura/fechamento de **caixa**
 - [ ] UI: lançamento de um **pedido de venda**
 - [ ] Convite de funcionários por e-mail (`inviteUserByEmail`)
