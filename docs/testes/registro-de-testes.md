@@ -108,6 +108,20 @@ Bootstrap: OWNER `owner@lojademo.com` criado e vinculado à `loja-demo`
 > Middleware `requireAuth`: verifica assinatura via JWKS (ES256) e resolve
 > `tenantId`/`role` da tabela `users`. O header `x-tenant-id` foi aposentado.
 
-### 2.B — RLS (políticas SQL) — ⏭️ pendente
-### 2.C — Convite de funcionários por e-mail — ⏭️ pendente
-### 2.D — UI (Next.js) — ⏭️ pendente
+### 2.B+C — Access Token Hook + RLS (produção) (2026-06-27)
+
+Migration `0002_rls_and_auth_hook` aplicada. Hook ativado no painel.
+RLS em 14/14 tabelas de aplicação · 2 funções · 14 políticas.
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| **B)** JWT após login carrega claims | `tenant_id` + `user_role` | ✅ `tenant_id`, `user_role: OWNER` |
+| Regressão: API com Bearer (`postgres` ignora RLS) | 200 | ✅ |
+| **C)** Acesso direto PostgREST `authenticated` | só dados do tenant | ✅ Cimentos + CP-II |
+| **C)** Acesso direto PostgREST `anon` (sem login) | vazio/negado | ✅ `[]` |
+
+> A API (papel `postgres`, dono) ignora RLS e isola por código; o RLS protege o
+> acesso direto via `supabase-js`. Escrita direta bloqueada (sem policy de write).
+
+### 2.D — Convite de funcionários por e-mail — ⏭️ pendente
+### 2.E — UI (Next.js) — ⏭️ pendente

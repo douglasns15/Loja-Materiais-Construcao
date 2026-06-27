@@ -3,7 +3,7 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-06-27 (Fase 2 — Etapa A: auth via JWT)
+> **Última atualização:** 2026-06-27 (Fase 2 — Hook + RLS)
 
 ---
 
@@ -42,9 +42,8 @@
 
 - [x] **API protegida por JWT do Supabase** (middleware `requireAuth`) — aposenta o `x-tenant-id`
 - [x] Bootstrap de loja + OWNER (`users.id` = `auth.users.id`)
-- [ ] Custom Access Token Hook (injeta `tenant_id`/`role` no JWT)
-- [ ] Ativar RLS nas tabelas (sair de UNRESTRICTED)
-- [ ] Políticas SQL de isolamento por `tenant_id`
+- [x] Custom Access Token Hook (injeta `tenant_id`/`user_role` no JWT)
+- [x] Ativar RLS nas tabelas + políticas de isolamento por `tenant_id`
 - [ ] Convite de funcionários por e-mail (`inviteUserByEmail`)
 - [ ] Vínculo formal `users.id` ↔ `auth.users.id` (FK cross-schema)
 - [ ] UI (Next.js): painel de autenticação
