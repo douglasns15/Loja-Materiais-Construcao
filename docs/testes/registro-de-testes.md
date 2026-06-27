@@ -123,5 +123,22 @@ RLS em 14/14 tabelas de aplicação · 2 funções · 14 políticas.
 > A API (papel `postgres`, dono) ignora RLS e isola por código; o RLS protege o
 > acesso direto via `supabase-js`. Escrita direta bloqueada (sem policy de write).
 
+### 2.E — UI (Next.js) — Fatia 1: login + produtos (2026-06-27)
+
+Testado no navegador (preview), `apps/web` (Next 15 + Tailwind) → API em produção.
+
+| Teste | Resultado |
+|---|---|
+| Tela de login renderiza | ✅ |
+| Login Supabase (`owner@lojademo.com`) → redirect `/products` | ✅ |
+| Lista de produtos via API (Bearer + CORS) | ✅ |
+| Cadastrar produto pela tela (TIJ-8F) → grava no banco | ✅ |
+| Lista atualiza com moeda + margem | ✅ R$ 0,80 / R$ 1,20 / 33.33% |
+| Logout | ✅ |
+
+> ⚠️ **Achado:** o cache de leitura do Hyperdrive servia listas velhas após escrita
+> (criava produto e não aparecia). **Correção:** `wrangler hyperdrive update <id>
+> --caching-disabled` (pooling mantido). Reteste OK.
+
 ### 2.D — Convite de funcionários por e-mail — ⏭️ pendente
-### 2.E — UI (Next.js) — ⏭️ pendente
+### 2.F — UI: clientes, caixa e venda — ⏭️ pendente

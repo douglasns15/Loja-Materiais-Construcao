@@ -11,6 +11,8 @@ SUPABASE_URL = "https://esxssekaflzewibbklpu.supabase.co"
 # --- Hyperdrive → Supabase (ADR-005) ---
 # Conexão poolada na edge. Recriar com:
 #   npx wrangler hyperdrive create nexoloja-db --connection-string="<DIRECT_URL>"
+# Cache de leitura DESABILITADO (evita listas velhas após escrita num ERP/POS):
+#   npx wrangler hyperdrive update <id> --caching-disabled
 [[hyperdrive]]
 binding = "HYPERDRIVE"
 id = "7b728afad9a643f096bfbcdb6d0724ea"

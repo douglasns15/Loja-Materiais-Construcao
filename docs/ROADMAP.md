@@ -3,7 +3,7 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-06-27 (Fase 2 — Hook + RLS)
+> **Última atualização:** 2026-06-27 (Fase 2 — UI fatia 1: login + produtos)
 
 ---
 
@@ -44,12 +44,23 @@
 - [x] Bootstrap de loja + OWNER (`users.id` = `auth.users.id`)
 - [x] Custom Access Token Hook (injeta `tenant_id`/`user_role` no JWT)
 - [x] Ativar RLS nas tabelas + políticas de isolamento por `tenant_id`
+- [x] UI (Next.js + Tailwind): scaffold + tela de **login** (Supabase Auth)
+- [x] UI: tela de **produtos** (lista + cadastro via API, com CORS)
+- [ ] UI: cadastro de **clientes**
+- [ ] UI: abertura/fechamento de **caixa**
+- [ ] UI: lançamento de um **pedido de venda**
 - [ ] Convite de funcionários por e-mail (`inviteUserByEmail`)
 - [ ] Vínculo formal `users.id` ↔ `auth.users.id` (FK cross-schema)
-- [ ] UI (Next.js): painel de autenticação
-- [ ] UI: abertura/fechamento de caixa
-- [ ] UI: cadastro rápido de produtos e clientes
-- [ ] UI: lançamento de um pedido simples de venda
+
+> **Por que o convite de funcionários está adiado:** ele será uma tela de *gestão de
+> usuários* dentro do painel, e faz mais sentido construí-lo depois do núcleo do MVP
+> (login → cadastros → venda). Não bloqueia nada agora porque o primeiro OWNER de cada
+> loja já é criado pelo script de **bootstrap** (invite-only), então dá para desenvolver
+> e testar todo o fluxo sem o convite pronto. Entra na fase de gestão de usuários/papéis.
+
+> **Nota de infra:** o cache de leitura do Hyperdrive foi **desabilitado**
+> (`--caching-disabled`) para evitar listas desatualizadas logo após uma escrita —
+> essencial num ERP/POS. O pooling de conexão segue ativo.
 
 ---
 

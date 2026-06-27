@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { cors } from 'hono/cors';
 import { createPrismaClient } from '@nexoloja/db';
 import { type Env, getConnectionString } from './lib/request';
 import products from './routes/products';
@@ -7,6 +8,16 @@ import categories from './routes/categories';
 import suppliers from './routes/suppliers';
 
 const app = new Hono<Env>();
+
+// CORS: libera a PWA (dev local; origens de produção entram aqui depois).
+app.use(
+  '*',
+  cors({
+    origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+    allowHeaders: ['Authorization', 'Content-Type'],
+    allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+  }),
+);
 
 app.get('/health', (c) => c.json({ ok: true, service: 'nexoloja-api' }));
 
