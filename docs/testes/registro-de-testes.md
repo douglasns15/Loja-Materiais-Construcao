@@ -207,6 +207,7 @@ API `GET /tenant` (nome/logo da loja) + componente `ReceiptPrint` + estilos `@me
 | Desconto no comprovante/orçamento (Subtotal/Desconto/Total) | ✅ |
 | Tooltip por item (margem + desconto possível) | ✅ "Margem 2.7% • até R$1,00/un" |
 | Botão "Voltar e editar" após Concluir/Orçamento | ✅ restaura carrinho e desconto |
+| **Passo de revisão** (Concluir → Revisar → Confirmar) | ✅ estoque só baixa ao Confirmar; Voltar mantém estoque intacto (6→6→4) |
 
 ### 2.D — Convite de funcionários por e-mail — ⏭️ pendente
 ### 2.I — NFC-e fiscal (SEFAZ) — ⏭️ fase futura dedicada

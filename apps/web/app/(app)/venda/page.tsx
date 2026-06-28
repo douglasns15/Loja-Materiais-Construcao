@@ -20,12 +20,48 @@ type CartItem = {
   quantity: number;
   stockQty: number;
 };
-type Result =
-  | { type: 'sale'; total: number; change: number; method: PaymentMethod; items: CartItem[]; date: string; discount: number }
-  | { type: 'quote'; total: number; items: CartItem[]; date: string; discount: number };
+type View =
+  | { kind: 'review' }
+  | { kind: 'done'; total: number; discount: number; change: number; method: PaymentMethod; items: CartItem[]; date: string }
+  | { kind: 'quote'; total: number; discount: number; items: CartItem[]; date: string };
 
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+/** Lista de itens + subtotal/desconto/total (reusado em revisão, venda e orçamento). */
+function Summary({ items, total, discount }: { items: CartItem[]; total: number; discount: number }) {
+  const subtotal = items.reduce((acc, i) => acc + i.unitPrice * i.quantity, 0);
+  return (
+    <>
+      <ul className="divide-y divide-gray-100 text-sm">
+        {items.map((i) => (
+          <li key={i.productId} className="flex justify-between py-1">
+            <span>
+              {i.quantity}× {i.name}
+            </span>
+            <span>{BRL(i.unitPrice * i.quantity)}</span>
+          </li>
+        ))}
+      </ul>
+      {discount > 0 && (
+        <div className="space-y-1 border-t border-gray-200 pt-2 text-sm text-gray-500">
+          <div className="flex justify-between">
+            <span>Subtotal</span>
+            <span>{BRL(subtotal)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Desconto</span>
+            <span>− {BRL(discount)}</span>
+          </div>
+        </div>
+      )}
+      <div className={`flex justify-between font-medium ${discount > 0 ? '' : 'border-t border-gray-200 pt-2'}`}>
+        <span>Total</span>
+        <span>{BRL(total)}</span>
+      </div>
+    </>
+  );
+}
 
 export default function VendaPage() {
   const [ready, setReady] = useState(false);
@@ -39,7 +75,7 @@ export default function VendaPage() {
   const [discount, setDiscount] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<Result | null>(null);
+  const [view, setView] = useState<View | null>(null);
   const [store, setStore] = useState<Store | null>(null);
   const [printModel, setPrintModel] = useState<'80mm' | 'A4'>('80mm');
 
@@ -138,12 +174,23 @@ export default function VendaPage() {
     setCart(cart.filter((c) => c.productId !== productId));
   }
 
-  async function onConcluir() {
+  /** "Concluir venda" agora só abre a REVISÃO — nada é gravado ainda. */
+  function onConcluir() {
     setError(null);
+    if (cart.length === 0) {
+      setError('Carrinho vazio.');
+      return;
+    }
     if (discountTooHigh) {
       setError('O desconto não pode ser maior que o subtotal.');
       return;
     }
+    setView({ kind: 'review' });
+  }
+
+  /** Confirmação: AQUI a venda é gravada de fato (estoque baixa, caixa recebe). */
+  async function onConfirmar() {
+    setError(null);
     const payload = {
       items: cart.map((c) => ({ productId: c.productId, quantity: c.quantity, unitPrice: c.unitPrice })),
       payments: [{ method, amount: totals.total }],
@@ -157,17 +204,15 @@ export default function VendaPage() {
     setBusy(true);
     try {
       const res = await apiPost<{ change: number }>('/orders', parsed.data);
-      setResult({
-        type: 'sale',
+      setView({
+        kind: 'done',
         total: totals.total,
+        discount: discountValue,
         change: res.change,
         method,
         items: cart,
-        discount: discountValue,
         date: new Date().toLocaleString('pt-BR'),
       });
-      // Mantém carrinho/desconto/recebido para o "Voltar e editar" (igual ao orçamento).
-      // "Nova venda" é quem limpa tudo. Atenção: concluir de novo registra uma NOVA venda.
       await loadProducts();
     } catch (e) {
       setError((e as Error).message);
@@ -177,6 +222,7 @@ export default function VendaPage() {
   }
 
   function onOrcamento() {
+    setError(null);
     if (cart.length === 0) {
       setError('Adicione itens para gerar um orçamento.');
       return;
@@ -185,24 +231,24 @@ export default function VendaPage() {
       setError('O desconto não pode ser maior que o subtotal.');
       return;
     }
-    setResult({
-      type: 'quote',
+    setView({
+      kind: 'quote',
       total: totals.total,
-      items: cart,
       discount: discountValue,
+      items: cart,
       date: new Date().toLocaleString('pt-BR'),
     });
   }
 
-  /** Volta para o PDV mantendo o carrinho (útil p/ ajustar após um orçamento). */
+  /** Volta ao PDV mantendo o carrinho (revisão e orçamento não gravam nada). */
   function voltar() {
-    setResult(null);
+    setView(null);
     setError(null);
   }
 
-  /** Começa uma venda do zero, limpando o carrinho e os campos. */
+  /** Começa do zero, limpando carrinho e campos. */
   function novaVenda() {
-    setResult(null);
+    setView(null);
     setError(null);
     setCart([]);
     setReceived('');
@@ -225,58 +271,83 @@ export default function VendaPage() {
     );
   }
 
-  if (result) {
+  // --- Revisão (pré-confirmação): nada gravado, estoque intacto ---
+  if (view?.kind === 'review') {
     return (
       <div className="mx-auto max-w-xl">
-        <h1 className="mb-4 text-2xl font-bold">{result.type === 'sale' ? 'Venda concluída' : 'Orçamento'}</h1>
+        <h1 className="mb-4 text-2xl font-bold">Revisar venda</h1>
         <div className="space-y-3 rounded-2xl bg-white p-6 shadow-sm">
-          {result.type === 'sale' ? (
-            <p className="inline-flex items-center gap-2 rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-700">
-              Venda registrada ✅
-            </p>
-          ) : (
+          <p className="inline-flex items-center gap-2 rounded-full bg-blue-100 px-3 py-1 text-sm font-medium text-blue-700">
+            Confira antes de confirmar
+          </p>
+          <Summary items={cart} total={totals.total} discount={discountValue} />
+          <div className="flex justify-between text-sm text-gray-500">
+            <span>Pagamento</span>
+            <span>{PAYMENT_METHOD_LABELS[method]}</span>
+          </div>
+          {method === 'CASH' && received !== '' && (
+            <div className="flex justify-between text-sm">
+              <span>Troco</span>
+              <span>{BRL(Math.max(0, change))}</span>
+            </div>
+          )}
+          <p className="text-xs text-gray-400">
+            O estoque só é baixado ao confirmar. Você pode voltar e editar sem afetar nada.
+          </p>
+          {error && <p className="text-sm text-red-600">{error}</p>}
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={voltar}
+              disabled={busy}
+              className="rounded-lg border border-gray-300 py-2 font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+            >
+              ← Voltar e editar
+            </button>
+            <button
+              onClick={onConfirmar}
+              disabled={busy}
+              className="rounded-lg bg-green-600 py-2 font-medium text-white hover:bg-green-700 disabled:opacity-60"
+            >
+              {busy ? 'Confirmando…' : 'Confirmar venda'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // --- Venda concluída (gravada) ou Orçamento ---
+  if (view) {
+    const isQuote = view.kind === 'quote';
+    return (
+      <div className="mx-auto max-w-xl">
+        <h1 className="mb-4 text-2xl font-bold">{isQuote ? 'Orçamento' : 'Venda concluída'}</h1>
+        <div className="space-y-3 rounded-2xl bg-white p-6 shadow-sm">
+          {isQuote ? (
             <p className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-sm font-medium text-amber-700">
               Orçamento (não é venda)
             </p>
+          ) : (
+            <p className="inline-flex items-center gap-2 rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-700">
+              Venda registrada ✅
+            </p>
           )}
-          <ul className="divide-y divide-gray-100 text-sm">
-            {result.items.map((i) => (
-              <li key={i.productId} className="flex justify-between py-1">
-                <span>{i.quantity}× {i.name}</span>
-                <span>{BRL(i.unitPrice * i.quantity)}</span>
-              </li>
-            ))}
-          </ul>
-          {result.discount > 0 && (
-            <div className="space-y-1 border-t border-gray-200 pt-2 text-sm text-gray-500">
-              <div className="flex justify-between">
-                <span>Subtotal</span>
-                <span>{BRL(result.items.reduce((a, i) => a + i.unitPrice * i.quantity, 0))}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Desconto</span>
-                <span>− {BRL(result.discount)}</span>
-              </div>
-            </div>
-          )}
-          <div className={`flex justify-between font-medium ${result.discount > 0 ? '' : 'border-t border-gray-200 pt-2'}`}>
-            <span>Total</span>
-            <span>{BRL(result.total)}</span>
-          </div>
-          {result.type === 'sale' && (
+          <Summary items={view.items} total={view.total} discount={view.discount} />
+          {view.kind === 'done' && (
             <>
               <div className="flex justify-between text-sm text-gray-500">
                 <span>Pagamento</span>
-                <span>{PAYMENT_METHOD_LABELS[result.method]}</span>
+                <span>{PAYMENT_METHOD_LABELS[view.method]}</span>
               </div>
-              {result.change > 0 && (
+              {view.change > 0 && (
                 <div className="flex justify-between text-sm">
                   <span>Troco</span>
-                  <span>{BRL(result.change)}</span>
+                  <span>{BRL(view.change)}</span>
                 </div>
               )}
             </>
           )}
+
           <div className="flex items-center gap-2 border-t border-gray-200 pt-3">
             <span className="text-sm text-gray-500">Imprimir:</span>
             <select
@@ -294,33 +365,41 @@ export default function VendaPage() {
               Imprimir
             </button>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={voltar}
-              className="rounded-lg border border-gray-300 py-2 font-medium text-gray-700 hover:bg-gray-100"
-            >
-              ← Voltar e editar
-            </button>
-            <button onClick={novaVenda} className="rounded-lg bg-gray-900 py-2 font-medium text-white hover:bg-gray-800">
+
+          {isQuote ? (
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={voltar}
+                className="rounded-lg border border-gray-300 py-2 font-medium text-gray-700 hover:bg-gray-100"
+              >
+                ← Voltar e editar
+              </button>
+              <button onClick={novaVenda} className="rounded-lg bg-gray-900 py-2 font-medium text-white hover:bg-gray-800">
+                Nova venda
+              </button>
+            </div>
+          ) : (
+            <button onClick={novaVenda} className="w-full rounded-lg bg-gray-900 py-2 font-medium text-white hover:bg-gray-800">
               Nova venda
             </button>
-          </div>
+          )}
         </div>
 
         <ReceiptPrint
-          kind={result.type}
+          kind={isQuote ? 'quote' : 'sale'}
           store={store}
-          items={result.items.map((i) => ({ name: i.name, quantity: i.quantity, unitPrice: i.unitPrice }))}
-          total={result.total}
-          discount={result.discount}
-          date={result.date}
-          method={result.type === 'sale' ? result.method : undefined}
-          change={result.type === 'sale' ? result.change : undefined}
+          items={view.items.map((i) => ({ name: i.name, quantity: i.quantity, unitPrice: i.unitPrice }))}
+          total={view.total}
+          discount={view.discount}
+          date={view.date}
+          method={view.kind === 'done' ? view.method : undefined}
+          change={view.kind === 'done' ? view.change : undefined}
         />
       </div>
     );
   }
 
+  // --- PDV (carrinho) ---
   return (
     <div className="mx-auto max-w-3xl">
       <h1 className="mb-6 text-2xl font-bold">Venda</h1>
@@ -375,10 +454,7 @@ export default function VendaPage() {
               cart.map((i) => (
                 <tr key={i.productId} className="border-t border-gray-100">
                   <td className="px-4 py-2">
-                    <span
-                      title={itemTooltip(i)}
-                      className="cursor-help border-b border-dotted border-gray-300"
-                    >
+                    <span title={itemTooltip(i)} className="cursor-help border-b border-dotted border-gray-300">
                       {i.name}
                     </span>
                   </td>
@@ -466,10 +542,10 @@ export default function VendaPage() {
           <div className="mt-4 grid grid-cols-2 gap-2">
             <button
               onClick={onConcluir}
-              disabled={busy || cart.length === 0 || discountTooHigh}
+              disabled={cart.length === 0 || discountTooHigh}
               className="rounded-lg bg-gray-900 py-2 font-medium text-white hover:bg-gray-800 disabled:opacity-50"
             >
-              {busy ? 'Concluindo…' : 'Concluir venda'}
+              Concluir venda
             </button>
             <button
               onClick={onOrcamento}
