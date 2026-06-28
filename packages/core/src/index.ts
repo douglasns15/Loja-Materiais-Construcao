@@ -37,3 +37,24 @@ export function calcMarginPercent(costPrice: number, salePrice: number): number 
   if (salePrice <= 0) return 0;
   return Number((((salePrice - costPrice) / salePrice) * 100).toFixed(2));
 }
+
+// =============================================================================
+// CAIXA (Cash Session)
+// =============================================================================
+
+/**
+ * Valor esperado no caixa = abertura + entradas em dinheiro durante a sessão.
+ * Usado no fechamento para comparar com o valor contado pelo operador.
+ */
+export function calcExpectedCash(openingAmount: number, cashInflows: number[]): number {
+  const total = cashInflows.reduce((acc, v) => acc + v, openingAmount);
+  return Number(total.toFixed(2));
+}
+
+/**
+ * Divergência de fechamento = valor contado − valor esperado.
+ * Positivo = sobra; negativo = falta; 0 = bateu. Arredondada a 2 casas.
+ */
+export function calcCashDivergence(expectedAmount: number, closingAmount: number): number {
+  return Number((closingAmount - expectedAmount).toFixed(2));
+}

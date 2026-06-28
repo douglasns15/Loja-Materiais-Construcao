@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { calcMarginPercent, calcOrderTotal, calcSubtotal } from './index';
+import {
+  calcCashDivergence,
+  calcExpectedCash,
+  calcMarginPercent,
+  calcOrderTotal,
+  calcSubtotal,
+} from './index';
 
 describe('calcSubtotal', () => {
   it('soma os totais das linhas', () => {
@@ -38,5 +44,29 @@ describe('calcMarginPercent', () => {
 
   it('arredonda a 2 casas', () => {
     expect(calcMarginPercent(10, 30)).toBe(66.67);
+  });
+});
+
+describe('calcExpectedCash', () => {
+  it('soma abertura + entradas em dinheiro', () => {
+    expect(calcExpectedCash(100, [50, 25.5])).toBe(175.5);
+  });
+
+  it('retorna a abertura quando não há entradas', () => {
+    expect(calcExpectedCash(100, [])).toBe(100);
+  });
+});
+
+describe('calcCashDivergence', () => {
+  it('zero quando o contado bate com o esperado', () => {
+    expect(calcCashDivergence(175.5, 175.5)).toBe(0);
+  });
+
+  it('positivo quando sobra dinheiro', () => {
+    expect(calcCashDivergence(175.5, 180)).toBe(4.5);
+  });
+
+  it('negativo quando falta dinheiro', () => {
+    expect(calcCashDivergence(175.5, 170)).toBe(-5.5);
   });
 });

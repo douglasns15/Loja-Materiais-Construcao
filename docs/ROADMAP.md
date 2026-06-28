@@ -3,7 +3,7 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-06-27 (Fase 2 — UI: app shell + clientes)
+> **Última atualização:** 2026-06-27 (Fase 2 — Caixa)
 
 ---
 
@@ -48,8 +48,8 @@
 - [x] UI: **app shell** (menu lateral + proteção de login centralizada)
 - [x] UI: tela de **produtos** (lista + cadastro via API, com CORS)
 - [x] UI: tela de **clientes** (lista + cadastro)
-- [ ] UI: abertura/fechamento de **caixa**
-- [ ] UI: lançamento de um **pedido de venda**
+- [x] UI + API: abertura/fechamento de **caixa** (com divergência e auditoria)
+- [ ] UI + API: lançamento de um **pedido de venda** (estoque atômico — ADR-001)
 - [ ] Convite de funcionários por e-mail (`inviteUserByEmail`)
 - [ ] Vínculo formal `users.id` ↔ `auth.users.id` (FK cross-schema)
 

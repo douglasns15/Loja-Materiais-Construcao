@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 
 const NAV = [
+  { href: '/caixa', label: 'Caixa' },
   { href: '/products', label: 'Produtos' },
   { href: '/customers', label: 'Clientes' },
 ];

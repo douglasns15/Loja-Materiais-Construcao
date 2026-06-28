@@ -154,5 +154,21 @@ Testado no navegador (preview), `apps/web` (Next 15 + Tailwind) → API em produ
 > nativo do form; `requestSubmit()` confirma o handler. Não é bug do app (clique real
 > do usuário funciona).
 
+### 2.G — Caixa (abertura/fechamento) (2026-06-27)
+
+Core: `calcExpectedCash`, `calcCashDivergence` (+ testes, total 13 no core).
+API `/cash-sessions` (open/current/close) + UI `/caixa`.
+
+| Teste | Resultado |
+|---|---|
+| API: `current` sem caixa | ✅ `null` |
+| API: `open` R$100 | ✅ 201 |
+| API: `open` de novo | ✅ 409 (já aberto) |
+| API: `current` mostra esperado | ✅ R$100, entradas R$0 |
+| API: `close` contando R$90 | ✅ divergência −10 + auditoria |
+| Auditoria ADR-004 (CLOSE_CASH_WITH_DIVERGENCE) | ✅ registrada com meta |
+| UI: abrir caixa (R$200) → estado "aberto" + esperado | ✅ |
+| UI: fechar (R$195) → "divergência −R$5 (falta)" | ✅ |
+
 ### 2.D — Convite de funcionários por e-mail — ⏭️ pendente
-### 2.F — UI: caixa e venda — ⏭️ pendente
+### 2.F — UI/API: Venda (PDV) — ⏭️ pendente
