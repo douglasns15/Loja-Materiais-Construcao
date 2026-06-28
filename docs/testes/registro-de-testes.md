@@ -186,8 +186,17 @@ API `POST /orders` (transação atômica ADR-001) + UI `/venda`.
 | UI: **Concluir venda** → registrada | ✅ |
 | UI: **Orçamento** → cotação "não é venda" (sem persistir) | ✅ 2× Cimento R$74,00 |
 
-> ⏭️ Fatia 2 (próxima): impressão do comprovante (não-fiscal) e do orçamento
-> em térmica 80mm e A4.
+### 2.H.2 — Venda / PDV — Fatia 2: impressão (2026-06-28)
+
+API `GET /tenant` (nome/logo da loja) + componente `ReceiptPrint` + estilos `@media print`.
+
+| Teste | Resultado |
+|---|---|
+| API: `GET /tenant` retorna nome/logo | ✅ "Loja Demo" (logoUrl null) |
+| Build de produção (`next build`) | ✅ 7 rotas, sem erros |
+| Comprovante e orçamento com seleção 80mm/A4 + cabeçalho (nome/logo) | 🟡 código pronto; **teste visual de impressão pendente no navegador** (preview indisponível nesta sessão) |
+
+> Logo: aparece quando a loja tiver `logoUrl` (upload de logo p/ R2 é tarefa futura).
 
 ### 2.D — Convite de funcionários por e-mail — ⏭️ pendente
 ### 2.I — NFC-e fiscal (SEFAZ) — ⏭️ fase futura dedicada

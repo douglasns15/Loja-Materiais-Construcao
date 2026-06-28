@@ -9,12 +9,13 @@ import {
 } from '@nexoloja/shared';
 import { calcSaleTotals } from '@nexoloja/core';
 import { apiGet, apiPost } from '@/lib/api';
+import { ReceiptPrint, type Store } from '@/components/ReceiptPrint';
 
 type Product = { id: string; name: string; sku: string; salePrice: string; stockQty: string };
 type CartItem = { productId: string; name: string; unitPrice: number; quantity: number; stockQty: number };
 type Result =
-  | { type: 'sale'; total: number; change: number; method: PaymentMethod; items: CartItem[] }
-  | { type: 'quote'; total: number; items: CartItem[] };
+  | { type: 'sale'; total: number; change: number; method: PaymentMethod; items: CartItem[]; date: string }
+  | { type: 'quote'; total: number; items: CartItem[]; date: string };
 
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -31,6 +32,8 @@ export default function VendaPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
+  const [store, setStore] = useState<Store | null>(null);
+  const [printModel, setPrintModel] = useState<'80mm' | 'A4'>('80mm');
 
   async function loadProducts() {
     setProducts(await apiGet<Product[]>('/products'));
@@ -39,6 +42,7 @@ export default function VendaPage() {
   useEffect(() => {
     (async () => {
       try {
+        apiGet<Store>('/tenant').then(setStore).catch(() => {});
         const session = await apiGet<{ id: string } | null>('/cash-sessions/current');
         setCaixaOpen(!!session);
         if (session) await loadProducts();
@@ -49,6 +53,23 @@ export default function VendaPage() {
       }
     })();
   }, []);
+
+  /** Define o modelo (80mm/A4), injeta a regra @page e abre o diálogo de impressão. */
+  function imprimir() {
+    const area = document.getElementById('print-area');
+    if (area) area.setAttribute('data-model', printModel);
+    let style = document.getElementById('print-page-style') as HTMLStyleElement | null;
+    if (!style) {
+      style = document.createElement('style');
+      style.id = 'print-page-style';
+      document.head.appendChild(style);
+    }
+    style.textContent =
+      printModel === '80mm'
+        ? '@media print { @page { size: 80mm auto; margin: 4mm; } }'
+        : '@media print { @page { size: A4; margin: 14mm; } }';
+    window.print();
+  }
 
   const totals = useMemo(
     () => calcSaleTotals(cart.map((i) => ({ quantity: i.quantity, unitPrice: i.unitPrice }))),
@@ -101,7 +122,14 @@ export default function VendaPage() {
     setBusy(true);
     try {
       const res = await apiPost<{ change: number }>('/orders', parsed.data);
-      setResult({ type: 'sale', total: totals.total, change: res.change, method, items: cart });
+      setResult({
+        type: 'sale',
+        total: totals.total,
+        change: res.change,
+        method,
+        items: cart,
+        date: new Date().toLocaleString('pt-BR'),
+      });
       setCart([]);
       setReceived('');
       await loadProducts();
@@ -117,7 +145,12 @@ export default function VendaPage() {
       setError('Adicione itens para gerar um orçamento.');
       return;
     }
-    setResult({ type: 'quote', total: totals.total, items: cart });
+    setResult({
+      type: 'quote',
+      total: totals.total,
+      items: cart,
+      date: new Date().toLocaleString('pt-BR'),
+    });
   }
 
   function novaVenda() {
@@ -181,11 +214,37 @@ export default function VendaPage() {
               )}
             </>
           )}
-          <p className="text-xs text-gray-400">Impressão (térmica/A4) chega na próxima etapa.</p>
+          <div className="flex items-center gap-2 border-t border-gray-200 pt-3">
+            <span className="text-sm text-gray-500">Imprimir:</span>
+            <select
+              value={printModel}
+              onChange={(e) => setPrintModel(e.target.value as '80mm' | 'A4')}
+              className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
+            >
+              <option value="80mm">Térmica 80mm</option>
+              <option value="A4">A4</option>
+            </select>
+            <button
+              onClick={imprimir}
+              className="rounded-lg border border-gray-300 px-3 py-1 text-sm font-medium hover:bg-gray-100"
+            >
+              Imprimir
+            </button>
+          </div>
           <button onClick={novaVenda} className="w-full rounded-lg bg-gray-900 py-2 font-medium text-white hover:bg-gray-800">
             Nova venda
           </button>
         </div>
+
+        <ReceiptPrint
+          kind={result.type}
+          store={store}
+          items={result.items.map((i) => ({ name: i.name, quantity: i.quantity, unitPrice: i.unitPrice }))}
+          total={result.total}
+          date={result.date}
+          method={result.type === 'sale' ? result.method : undefined}
+          change={result.type === 'sale' ? result.change : undefined}
+        />
       </div>
     );
   }

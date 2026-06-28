@@ -3,7 +3,7 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-06-27 (Fase 2 — Venda/PDV)
+> **Última atualização:** 2026-06-28 (Fase 2 — Venda/PDV: impressão)
 
 ---
 
@@ -51,7 +51,9 @@
 - [x] UI + API: abertura/fechamento de **caixa** (com divergência e auditoria)
 - [x] UI + API: **venda/PDV** — carrinho, pagamento (Dinheiro/Déb/Créd/PIX),
       Concluir e Orçamento; estoque atômico (ADR-001) e baixa no caixa
-- [ ] Impressão: comprovante de venda (não-fiscal) + orçamento — térmica 80mm e A4
+- [x] Impressão: comprovante de venda (não-fiscal) + orçamento — térmica 80mm e A4,
+      com cabeçalho (nome + logo da loja) — *teste visual de impressão a confirmar*
+- [ ] Upload de logo da loja (Cloudflare R2)
 - [ ] **NFC-e fiscal** (SEFAZ + certificado) — fase futura dedicada
 - [ ] Convite de funcionários por e-mail (`inviteUserByEmail`)
 - [ ] Vínculo formal `users.id` ↔ `auth.users.id` (FK cross-schema)

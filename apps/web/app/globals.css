@@ -1,3 +1,110 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* =========================================================================
+   Impressão de comprovante / orçamento
+   Na tela o #print-area fica oculto; na impressão ele é o único conteúdo.
+   O modelo (80mm / A4) é definido por data-model + uma regra @page injetada
+   dinamicamente antes de window.print().
+   ========================================================================= */
+@media screen {
+  #print-area {
+    display: none;
+  }
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #print-area,
+  #print-area * {
+    visibility: visible;
+  }
+  #print-area {
+    display: block;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    color: #000;
+    font-family: ui-sans-serif, system-ui, sans-serif;
+  }
+  #print-area[data-model='80mm'] {
+    font-size: 11px;
+  }
+  #print-area[data-model='A4'] {
+    font-size: 13px;
+    padding: 0 8px;
+  }
+}
+
+/* Estrutura do documento (vale em ambos os modelos) */
+#print-area .rc-head {
+  text-align: center;
+  margin-bottom: 8px;
+}
+#print-area .rc-logo {
+  max-height: 64px;
+  margin: 0 auto 4px;
+  display: block;
+}
+#print-area .rc-store {
+  font-weight: 800;
+  font-size: 1.15em;
+}
+#print-area .rc-sub {
+  font-size: 0.85em;
+}
+#print-area .rc-title {
+  text-align: center;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  margin: 10px 0 2px;
+}
+#print-area .rc-title.quote {
+  font-size: 1.5em;
+  border: 2px solid #000;
+  padding: 4px 0;
+}
+#print-area .rc-date {
+  text-align: center;
+  font-size: 0.85em;
+  margin-bottom: 8px;
+}
+#print-area .rc-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 6px;
+}
+#print-area .rc-table th,
+#print-area .rc-table td {
+  text-align: left;
+  padding: 2px 0;
+  border-bottom: 1px dotted #999;
+}
+#print-area .rc-table .right {
+  text-align: right;
+}
+#print-area .rc-total {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 800;
+  font-size: 1.1em;
+  border-top: 2px solid #000;
+  padding-top: 4px;
+}
+#print-area .rc-pay {
+  margin-top: 6px;
+  font-size: 0.9em;
+}
+#print-area .rc-pay div {
+  display: flex;
+  justify-content: space-between;
+}
+#print-area .rc-foot {
+  margin-top: 12px;
+  text-align: center;
+  font-size: 0.8em;
+}
