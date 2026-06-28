@@ -17,6 +17,7 @@ type Props = {
   items: ReceiptItem[];
   total: number;
   date: string;
+  discount?: number;
   method?: PaymentMethod;
   change?: number;
 };
@@ -29,8 +30,10 @@ const BRL = (v: number) =>
  * e só aparece na impressão (ver regras @media print em globals.css). O modelo
  * (80mm / A4) é controlado pelo atributo data-model, definido antes de imprimir.
  */
-export function ReceiptPrint({ kind, store, items, total, date, method, change }: Props) {
+export function ReceiptPrint({ kind, store, items, total, date, discount, method, change }: Props) {
   const isQuote = kind === 'quote';
+  const subtotal = items.reduce((acc, i) => acc + i.unitPrice * i.quantity, 0);
+  const hasDiscount = (discount ?? 0) > 0;
   return (
     <div id="print-area" data-model="80mm">
       <header className="rc-head">
@@ -68,6 +71,19 @@ export function ReceiptPrint({ kind, store, items, total, date, method, change }
           ))}
         </tbody>
       </table>
+
+      {hasDiscount ? (
+        <div className="rc-pay">
+          <div>
+            <span>Subtotal</span>
+            <span>{BRL(subtotal)}</span>
+          </div>
+          <div>
+            <span>Desconto</span>
+            <span>− {BRL(discount ?? 0)}</span>
+          </div>
+        </div>
+      ) : null}
 
       <div className="rc-total">
         <span>TOTAL</span>

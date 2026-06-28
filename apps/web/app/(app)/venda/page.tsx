@@ -7,15 +7,22 @@ import {
   createSaleSchema,
   type PaymentMethod,
 } from '@nexoloja/shared';
-import { calcSaleTotals } from '@nexoloja/core';
+import { calcMarginPercent, calcSaleTotals } from '@nexoloja/core';
 import { apiGet, apiPost } from '@/lib/api';
 import { ReceiptPrint, type Store } from '@/components/ReceiptPrint';
 
-type Product = { id: string; name: string; sku: string; salePrice: string; stockQty: string };
-type CartItem = { productId: string; name: string; unitPrice: number; quantity: number; stockQty: number };
+type Product = { id: string; name: string; sku: string; salePrice: string; costPrice: string; stockQty: string };
+type CartItem = {
+  productId: string;
+  name: string;
+  unitPrice: number;
+  costPrice: number;
+  quantity: number;
+  stockQty: number;
+};
 type Result =
-  | { type: 'sale'; total: number; change: number; method: PaymentMethod; items: CartItem[]; date: string }
-  | { type: 'quote'; total: number; items: CartItem[]; date: string };
+  | { type: 'sale'; total: number; change: number; method: PaymentMethod; items: CartItem[]; date: string; discount: number }
+  | { type: 'quote'; total: number; items: CartItem[]; date: string; discount: number };
 
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -29,6 +36,7 @@ export default function VendaPage() {
   const [qty, setQty] = useState('1');
   const [method, setMethod] = useState<PaymentMethod>('CASH');
   const [received, setReceived] = useState('');
+  const [discount, setDiscount] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
@@ -71,11 +79,26 @@ export default function VendaPage() {
     window.print();
   }
 
+  const discountValue = Math.max(0, Number(discount) || 0);
   const totals = useMemo(
-    () => calcSaleTotals(cart.map((i) => ({ quantity: i.quantity, unitPrice: i.unitPrice }))),
-    [cart],
+    () =>
+      calcSaleTotals(
+        cart.map((i) => ({ quantity: i.quantity, unitPrice: i.unitPrice })),
+        { discountAmount: discountValue },
+      ),
+    [cart, discountValue],
   );
+  const discountTooHigh = discountValue > totals.subtotal;
   const change = method === 'CASH' && received ? Number(received) - totals.total : 0;
+
+  /** Tooltip por item: margem de lucro e desconto máximo possível (até o custo). */
+  function itemTooltip(i: CartItem): string {
+    const margin = calcMarginPercent(i.costPrice, i.unitPrice);
+    const maxDisc = Math.max(0, Number((i.unitPrice - i.costPrice).toFixed(2)));
+    return maxDisc > 0
+      ? `Margem: ${margin}% • Desconto possível: até ${BRL(maxDisc)}/un`
+      : `Margem: ${margin}% • Sem margem para desconto`;
+  }
 
   function addToCart() {
     setError(null);
@@ -97,7 +120,14 @@ export default function VendaPage() {
     } else {
       setCart([
         ...cart,
-        { productId: p.id, name: p.name, unitPrice: Number(p.salePrice), quantity: q, stockQty: stock },
+        {
+          productId: p.id,
+          name: p.name,
+          unitPrice: Number(p.salePrice),
+          costPrice: Number(p.costPrice),
+          quantity: q,
+          stockQty: stock,
+        },
       ]);
     }
     setSelected('');
@@ -110,9 +140,14 @@ export default function VendaPage() {
 
   async function onConcluir() {
     setError(null);
+    if (discountTooHigh) {
+      setError('O desconto não pode ser maior que o subtotal.');
+      return;
+    }
     const payload = {
       items: cart.map((c) => ({ productId: c.productId, quantity: c.quantity, unitPrice: c.unitPrice })),
       payments: [{ method, amount: totals.total }],
+      ...(discountValue > 0 ? { discountAmount: discountValue } : {}),
     };
     const parsed = createSaleSchema.safeParse(payload);
     if (!parsed.success) {
@@ -128,10 +163,12 @@ export default function VendaPage() {
         change: res.change,
         method,
         items: cart,
+        discount: discountValue,
         date: new Date().toLocaleString('pt-BR'),
       });
       setCart([]);
       setReceived('');
+      setDiscount('');
       await loadProducts();
     } catch (e) {
       setError((e as Error).message);
@@ -145,17 +182,32 @@ export default function VendaPage() {
       setError('Adicione itens para gerar um orçamento.');
       return;
     }
+    if (discountTooHigh) {
+      setError('O desconto não pode ser maior que o subtotal.');
+      return;
+    }
     setResult({
       type: 'quote',
       total: totals.total,
       items: cart,
+      discount: discountValue,
       date: new Date().toLocaleString('pt-BR'),
     });
   }
 
+  /** Volta para o PDV mantendo o carrinho (útil p/ ajustar após um orçamento). */
+  function voltar() {
+    setResult(null);
+    setError(null);
+  }
+
+  /** Começa uma venda do zero, limpando o carrinho e os campos. */
   function novaVenda() {
     setResult(null);
     setError(null);
+    setCart([]);
+    setReceived('');
+    setDiscount('');
   }
 
   if (!ready) return <p className="text-gray-500">Carregando…</p>;
@@ -196,7 +248,19 @@ export default function VendaPage() {
               </li>
             ))}
           </ul>
-          <div className="flex justify-between border-t border-gray-200 pt-2 font-medium">
+          {result.discount > 0 && (
+            <div className="space-y-1 border-t border-gray-200 pt-2 text-sm text-gray-500">
+              <div className="flex justify-between">
+                <span>Subtotal</span>
+                <span>{BRL(result.items.reduce((a, i) => a + i.unitPrice * i.quantity, 0))}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Desconto</span>
+                <span>− {BRL(result.discount)}</span>
+              </div>
+            </div>
+          )}
+          <div className={`flex justify-between font-medium ${result.discount > 0 ? '' : 'border-t border-gray-200 pt-2'}`}>
             <span>Total</span>
             <span>{BRL(result.total)}</span>
           </div>
@@ -231,9 +295,17 @@ export default function VendaPage() {
               Imprimir
             </button>
           </div>
-          <button onClick={novaVenda} className="w-full rounded-lg bg-gray-900 py-2 font-medium text-white hover:bg-gray-800">
-            Nova venda
-          </button>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={voltar}
+              className="rounded-lg border border-gray-300 py-2 font-medium text-gray-700 hover:bg-gray-100"
+            >
+              ← Voltar e editar
+            </button>
+            <button onClick={novaVenda} className="rounded-lg bg-gray-900 py-2 font-medium text-white hover:bg-gray-800">
+              Nova venda
+            </button>
+          </div>
         </div>
 
         <ReceiptPrint
@@ -241,6 +313,7 @@ export default function VendaPage() {
           store={store}
           items={result.items.map((i) => ({ name: i.name, quantity: i.quantity, unitPrice: i.unitPrice }))}
           total={result.total}
+          discount={result.discount}
           date={result.date}
           method={result.type === 'sale' ? result.method : undefined}
           change={result.type === 'sale' ? result.change : undefined}
@@ -302,7 +375,14 @@ export default function VendaPage() {
             ) : (
               cart.map((i) => (
                 <tr key={i.productId} className="border-t border-gray-100">
-                  <td className="px-4 py-2">{i.name}</td>
+                  <td className="px-4 py-2">
+                    <span
+                      title={itemTooltip(i)}
+                      className="cursor-help border-b border-dotted border-gray-300"
+                    >
+                      {i.name}
+                    </span>
+                  </td>
                   <td className="px-4 py-2 text-right">{i.quantity}</td>
                   <td className="px-4 py-2 text-right">{BRL(i.unitPrice)}</td>
                   <td className="px-4 py-2 text-right">{BRL(i.unitPrice * i.quantity)}</td>
@@ -344,36 +424,57 @@ export default function VendaPage() {
                 className="w-full rounded-lg border border-gray-300 px-3 py-2"
               />
               {received !== '' && (
-                <p className="mt-1 text-sm text-gray-500">
-                  Troco: {BRL(Math.max(0, change))}
-                </p>
+                <div className="mt-2 flex items-center justify-between rounded-lg bg-green-50 px-3 py-2 ring-1 ring-green-200">
+                  <span className="text-sm font-medium text-green-800">Troco</span>
+                  <span className="text-2xl font-bold text-green-700">{BRL(Math.max(0, change))}</span>
+                </div>
               )}
             </div>
           )}
         </div>
 
         <div className="flex flex-col justify-between rounded-2xl bg-white p-4 shadow-sm">
-          <div className="space-y-1 text-sm">
-            <div className="flex justify-between text-gray-500">
-              <span>Subtotal</span>
-              <span>{BRL(totals.subtotal)}</span>
+          <div>
+            <div className="space-y-1 text-sm">
+              <div className="flex justify-between text-gray-500">
+                <span>Subtotal</span>
+                <span>{BRL(totals.subtotal)}</span>
+              </div>
+              <div className="flex justify-between text-lg font-bold">
+                <span>Total</span>
+                <span>{BRL(totals.total)}</span>
+              </div>
             </div>
-            <div className="flex justify-between text-lg font-bold">
-              <span>Total</span>
-              <span>{BRL(totals.total)}</span>
+            <div className="mt-3 flex items-center justify-between gap-2 border-t border-gray-100 pt-3">
+              <label htmlFor="desc" className="text-sm text-gray-600">
+                Desconto (R$)
+              </label>
+              <input
+                id="desc"
+                type="number"
+                step="0.01"
+                min="0"
+                value={discount}
+                onChange={(e) => setDiscount(e.target.value)}
+                placeholder="0,00"
+                className="w-28 rounded-lg border border-gray-300 px-2 py-1 text-right"
+              />
             </div>
+            {discountTooHigh && (
+              <p className="mt-1 text-xs text-red-600">O desconto não pode ser maior que o subtotal.</p>
+            )}
           </div>
           <div className="mt-4 grid grid-cols-2 gap-2">
             <button
               onClick={onConcluir}
-              disabled={busy || cart.length === 0}
+              disabled={busy || cart.length === 0 || discountTooHigh}
               className="rounded-lg bg-gray-900 py-2 font-medium text-white hover:bg-gray-800 disabled:opacity-50"
             >
               {busy ? 'Concluindo…' : 'Concluir venda'}
             </button>
             <button
               onClick={onOrcamento}
-              disabled={cart.length === 0}
+              disabled={cart.length === 0 || discountTooHigh}
               className="rounded-lg border border-gray-300 py-2 font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
             >
               Orçamento

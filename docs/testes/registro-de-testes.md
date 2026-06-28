@@ -198,5 +198,15 @@ API `GET /tenant` (nome/logo da loja) + componente `ReceiptPrint` + estilos `@me
 
 > Logo: aparece quando a loja tiver `logoUrl` (upload de logo p/ R2 é tarefa futura).
 
+### 2.H.3 — Ajustes do PDV (2026-06-28)
+
+| Ajuste | Resultado |
+|---|---|
+| Troco em destaque (Dinheiro) | ✅ caixa verde, fonte grande (R$ 36,00) |
+| Campo de desconto entre Total e botões | ✅ Subtotal 74 → Total 64; bloqueia se > subtotal |
+| Desconto no comprovante/orçamento (Subtotal/Desconto/Total) | ✅ |
+| Tooltip por item (margem + desconto possível) | ✅ "Margem 2.7% • até R$1,00/un" |
+| Botão "Voltar e editar" após Concluir/Orçamento | ✅ restaura carrinho e desconto |
+
 ### 2.D — Convite de funcionários por e-mail — ⏭️ pendente
 ### 2.I — NFC-e fiscal (SEFAZ) — ⏭️ fase futura dedicada
