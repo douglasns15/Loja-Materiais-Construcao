@@ -10,8 +10,9 @@
 > **relatórios de vendas/caixa**, ou **cancelamento de venda** (ADR-004).
 > Estado atual: PDV completo (carrinho → revisão → confirmar → impressão, com layout
 > 80mm/A4 validado no navegador), caixa, auth+RLS e CRUDs de cadastro funcionando e
-> publicados. App roda com `npm run dev` em `apps/web` (chama a API publicada em
-> `nexoloja-api.imortal.workers.dev`).
+> publicados. App roda com `npm run dev` na **raiz** (sobe só o web via turbo filter;
+> `dev:all`/`dev:api` exigem Postgres local p/ Hyperdrive). O front chama a API publicada
+> em `nexoloja-api.imortal.workers.dev`.
 
 ---
 
