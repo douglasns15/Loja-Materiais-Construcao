@@ -194,9 +194,26 @@ API `GET /tenant` (nome/logo da loja) + componente `ReceiptPrint` + estilos `@me
 |---|---|
 | API: `GET /tenant` retorna nome/logo | ✅ "Loja Demo" (logoUrl null) |
 | Build de produção (`next build`) | ✅ 7 rotas, sem erros |
-| Comprovante e orçamento com seleção 80mm/A4 + cabeçalho (nome/logo) | 🟡 código pronto; **teste visual de impressão pendente no navegador** (preview indisponível nesta sessão) |
+| Comprovante e orçamento com seleção 80mm/A4 + cabeçalho (nome/logo) | ✅ layout validado no navegador (ver 2.H.4) |
 
 > Logo: aparece quando a loja tiver `logoUrl` (upload de logo p/ R2 é tarefa futura).
+
+### 2.H.4 — Venda / PDV — validação visual da impressão (2026-06-28)
+
+Validado no navegador (`npm run dev`, preview) via página temporária que renderiza o
+`ReceiptPrint` com dados de exemplo, simulando a largura do papel (80mm ≈ 302px, A4 ≈ 794px).
+Página removida após o teste. Console sem erros/avisos.
+
+| Layout | Resultado |
+|---|---|
+| 80mm — Comprovante de venda (cabeçalho, itens, Subtotal/Desconto, TOTAL, Pagamento/Troco, rodapé) | ✅ |
+| A4 — Comprovante de venda (4 colunas alinhadas, totais, pagamento/troco) | ✅ |
+| A4 — Orçamento (título em caixa destacada, rodapé "não é documento fiscal") | ✅ |
+| Alternância 80mm ↔ A4 (largura/fonte) e venda ↔ orçamento | ✅ |
+
+> Observação: o diálogo nativo de impressão (`window.print()`) e a saída em papel real
+> dependem da impressora do usuário — só o usuário pode confirmar a impressão física.
+> O que foi validado aqui é a renderização/layout do documento.
 
 ### 2.H.3 — Ajustes do PDV (2026-06-28)
 

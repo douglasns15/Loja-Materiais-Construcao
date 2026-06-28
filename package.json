@@ -8,7 +8,9 @@
   ],
   "packageManager": "npm@10.9.2",
   "scripts": {
-    "dev": "turbo run dev",
+    "dev": "turbo run dev --filter=@nexoloja/web",
+    "dev:api": "turbo run dev --filter=@nexoloja/api",
+    "dev:all": "turbo run dev",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "test": "turbo run test",

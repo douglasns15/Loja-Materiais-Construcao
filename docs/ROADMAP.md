@@ -3,14 +3,15 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-06-28 (Fase 2 — Venda/PDV concluída, com revisão antes de confirmar)
+> **Última atualização:** 2026-06-28 (Fase 2 — Venda/PDV concluída; impressão validada no navegador)
 
 > ▶️ **Próximo passo (a definir com o usuário):** uma destas frentes —
 > **upload de logo da loja** (Cloudflare R2), **tela de entrada/gestão de estoque**,
 > **relatórios de vendas/caixa**, ou **cancelamento de venda** (ADR-004).
-> Estado atual: PDV completo (carrinho → revisão → confirmar → impressão), caixa,
-> auth+RLS e CRUDs de cadastro funcionando e publicados. App roda com `npm run dev`
-> em `apps/web` (chama a API publicada em `nexoloja-api.imortal.workers.dev`).
+> Estado atual: PDV completo (carrinho → revisão → confirmar → impressão, com layout
+> 80mm/A4 validado no navegador), caixa, auth+RLS e CRUDs de cadastro funcionando e
+> publicados. App roda com `npm run dev` em `apps/web` (chama a API publicada em
+> `nexoloja-api.imortal.workers.dev`).
 
 ---
 
@@ -59,7 +60,7 @@
 - [x] UI + API: **venda/PDV** — carrinho, pagamento (Dinheiro/Déb/Créd/PIX),
       Concluir e Orçamento; estoque atômico (ADR-001) e baixa no caixa
 - [x] Impressão: comprovante de venda (não-fiscal) + orçamento — térmica 80mm e A4,
-      com cabeçalho (nome + logo da loja) — *teste visual de impressão a confirmar*
+      com cabeçalho (nome + logo da loja) — *layout validado no navegador (2.H.4)*
 - [ ] Upload de logo da loja (Cloudflare R2)
 - [ ] **NFC-e fiscal** (SEFAZ + certificado) — fase futura dedicada
 - [ ] Convite de funcionários por e-mail (`inviteUserByEmail`)
