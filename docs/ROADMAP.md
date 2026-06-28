@@ -3,7 +3,7 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-06-27 (Fase 2 — Caixa)
+> **Última atualização:** 2026-06-27 (Fase 2 — Venda/PDV)
 
 ---
 
@@ -49,7 +49,10 @@
 - [x] UI: tela de **produtos** (lista + cadastro via API, com CORS)
 - [x] UI: tela de **clientes** (lista + cadastro)
 - [x] UI + API: abertura/fechamento de **caixa** (com divergência e auditoria)
-- [ ] UI + API: lançamento de um **pedido de venda** (estoque atômico — ADR-001)
+- [x] UI + API: **venda/PDV** — carrinho, pagamento (Dinheiro/Déb/Créd/PIX),
+      Concluir e Orçamento; estoque atômico (ADR-001) e baixa no caixa
+- [ ] Impressão: comprovante de venda (não-fiscal) + orçamento — térmica 80mm e A4
+- [ ] **NFC-e fiscal** (SEFAZ + certificado) — fase futura dedicada
 - [ ] Convite de funcionários por e-mail (`inviteUserByEmail`)
 - [ ] Vínculo formal `users.id` ↔ `auth.users.id` (FK cross-schema)
 

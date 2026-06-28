@@ -13,3 +13,4 @@ export * from './customer';
 export * from './category';
 export * from './supplier';
 export * from './cashSession';
+export * from './sale';

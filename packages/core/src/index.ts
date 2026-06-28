@@ -58,3 +58,39 @@ export function calcExpectedCash(openingAmount: number, cashInflows: number[]): 
 export function calcCashDivergence(expectedAmount: number, closingAmount: number): number {
   return Number((closingAmount - expectedAmount).toFixed(2));
 }
+
+// =============================================================================
+// VENDA (Sale / PDV)
+// =============================================================================
+
+export interface SaleItemInput {
+  quantity: number;
+  unitPrice: number;
+  discount?: number;
+}
+
+/** Total de uma linha da venda: quantidade × preço unitário − desconto da linha. */
+export function calcSaleItemTotal(item: SaleItemInput): number {
+  return Number((item.quantity * item.unitPrice - (item.discount ?? 0)).toFixed(2));
+}
+
+/**
+ * Subtotal (soma das linhas) e total (subtotal − desconto + frete) de uma venda.
+ * Reaproveita `calcOrderTotal`. Tudo arredondado a 2 casas.
+ */
+export function calcSaleTotals(
+  items: SaleItemInput[],
+  opts: { discountAmount?: number; freightAmount?: number } = {},
+): { subtotal: number; total: number } {
+  const subtotal = Number(
+    items.reduce((acc, item) => acc + calcSaleItemTotal(item), 0).toFixed(2),
+  );
+  const total = Number(
+    calcOrderTotal({
+      subtotal,
+      discountAmount: opts.discountAmount,
+      freightAmount: opts.freightAmount,
+    }).toFixed(2),
+  );
+  return { subtotal, total };
+}

@@ -4,6 +4,8 @@ import {
   calcExpectedCash,
   calcMarginPercent,
   calcOrderTotal,
+  calcSaleItemTotal,
+  calcSaleTotals,
   calcSubtotal,
 } from './index';
 
@@ -68,5 +70,35 @@ describe('calcCashDivergence', () => {
 
   it('negativo quando falta dinheiro', () => {
     expect(calcCashDivergence(175.5, 170)).toBe(-5.5);
+  });
+});
+
+describe('calcSaleItemTotal', () => {
+  it('quantidade × preço − desconto', () => {
+    expect(calcSaleItemTotal({ quantity: 3, unitPrice: 10, discount: 5 })).toBe(25);
+  });
+
+  it('sem desconto', () => {
+    expect(calcSaleItemTotal({ quantity: 2.5, unitPrice: 4 })).toBe(10);
+  });
+});
+
+describe('calcSaleTotals', () => {
+  it('subtotal e total com desconto e frete', () => {
+    const r = calcSaleTotals(
+      [
+        { quantity: 2, unitPrice: 10 },
+        { quantity: 1, unitPrice: 5 },
+      ],
+      { discountAmount: 3, freightAmount: 8 },
+    );
+    expect(r.subtotal).toBe(25);
+    expect(r.total).toBe(30);
+  });
+
+  it('total = subtotal quando sem desconto/frete', () => {
+    const r = calcSaleTotals([{ quantity: 4, unitPrice: 2.5 }]);
+    expect(r.subtotal).toBe(10);
+    expect(r.total).toBe(10);
   });
 });

@@ -170,5 +170,24 @@ API `/cash-sessions` (open/current/close) + UI `/caixa`.
 | UI: abrir caixa (R$200) → estado "aberto" + esperado | ✅ |
 | UI: fechar (R$195) → "divergência −R$5 (falta)" | ✅ |
 
+### 2.H — Venda / PDV — Fatia 1: motor + tela (2026-06-27)
+
+Core: `calcSaleItemTotal`, `calcSaleTotals` (+ testes, total 17 no core).
+API `POST /orders` (transação atômica ADR-001) + UI `/venda`.
+
+| Teste | Resultado |
+|---|---|
+| API: venda com caixa aberto | ✅ 201, status CONFIRMED |
+| API: baixa de estoque atômica (ADR-001) | ✅ 50 → 46 (StockMovement + decremento) |
+| API: pagamento alimenta o caixa | ✅ esperado subiu p/ R$104,80 |
+| API: bloqueia venda sem caixa / sem estoque | ✅ (validado no código + caminhos 400) |
+| UI: formas de pagamento (Dinheiro, Déb., Créd., PIX) | ✅ |
+| UI: adicionar ao carrinho + totais | ✅ 3× Tijolo = R$3,60 |
+| UI: **Concluir venda** → registrada | ✅ |
+| UI: **Orçamento** → cotação "não é venda" (sem persistir) | ✅ 2× Cimento R$74,00 |
+
+> ⏭️ Fatia 2 (próxima): impressão do comprovante (não-fiscal) e do orçamento
+> em térmica 80mm e A4.
+
 ### 2.D — Convite de funcionários por e-mail — ⏭️ pendente
-### 2.F — UI/API: Venda (PDV) — ⏭️ pendente
+### 2.I — NFC-e fiscal (SEFAZ) — ⏭️ fase futura dedicada
