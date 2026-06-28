@@ -3,7 +3,14 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-06-28 (Fase 2 — Venda/PDV: impressão)
+> **Última atualização:** 2026-06-28 (Fase 2 — Venda/PDV concluída, com revisão antes de confirmar)
+
+> ▶️ **Próximo passo (a definir com o usuário):** uma destas frentes —
+> **upload de logo da loja** (Cloudflare R2), **tela de entrada/gestão de estoque**,
+> **relatórios de vendas/caixa**, ou **cancelamento de venda** (ADR-004).
+> Estado atual: PDV completo (carrinho → revisão → confirmar → impressão), caixa,
+> auth+RLS e CRUDs de cadastro funcionando e publicados. App roda com `npm run dev`
+> em `apps/web` (chama a API publicada em `nexoloja-api.imortal.workers.dev`).
 
 ---
 
