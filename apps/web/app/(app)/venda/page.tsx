@@ -166,9 +166,8 @@ export default function VendaPage() {
         discount: discountValue,
         date: new Date().toLocaleString('pt-BR'),
       });
-      setCart([]);
-      setReceived('');
-      setDiscount('');
+      // Mantém carrinho/desconto/recebido para o "Voltar e editar" (igual ao orçamento).
+      // "Nova venda" é quem limpa tudo. Atenção: concluir de novo registra uma NOVA venda.
       await loadProducts();
     } catch (e) {
       setError((e as Error).message);
