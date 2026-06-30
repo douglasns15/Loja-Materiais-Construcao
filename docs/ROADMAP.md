@@ -66,6 +66,8 @@
 - [x] UI + API: **gestão de estoque** — entrada (compra/recebimento, transação atômica
       ADR-001) e ajuste de inventário (com `AuditEvent ADJUST_STOCK`, ADR-004), histórico
       de movimentações e alerta de estoque baixo — *validado no navegador e via API (2.J)*
+- [x] UI: **estoque mínimo por produto** — campo no cadastro + edição inline na tela de
+      Produtos (`PATCH /products`); arma o alerta de “baixo” na tela de Estoque — *(2.J.2)*
 - [ ] Upload de logo da loja (Cloudflare R2)
 - [ ] **NFC-e fiscal** (SEFAZ + certificado) — fase futura dedicada
 - [ ] Convite de funcionários por e-mail (`inviteUserByEmail`)

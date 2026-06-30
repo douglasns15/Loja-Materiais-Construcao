@@ -268,5 +268,42 @@ sobre o produto "Cimento".
 > (`stockQty <= minStockQty`, testado no core), mas não foram demonstrados
 > visualmente porque os produtos da loja-demo estão com `minStockQty = 0`.
 
+### 2.J.2 — Estoque mínimo por produto (2026-06-30)
+
+Campo "Estoque mín." no cadastro de produto + edição inline por linha na tela de
+Produtos (`apiPatch` → `PATCH /products/:id`). Arma o alerta de "baixo" da tela de
+Estoque (regra `stockQty <= minStockQty` com `minStockQty > 0`). Validado no navegador.
+
+| Teste | Resultado |
+|---|---|
+| Build de produção (`next build`) | ✅ 8 rotas, sem erros |
+| Coluna "Estoque mín." na tabela de Produtos | ✅ |
+| Botão "Salvar" por linha (habilita só ao alterar o valor) | ✅ |
+| Editar mínimo (Cimento → 300) via `PATCH` | ✅ persiste, botão volta a desabilitar |
+| Estoque baixo reflete na tela de Estoque (Cimento 259 ≤ 300) | ✅ badge "baixo" + "1 com estoque baixo" |
+| Produto acima do mínimo não marca baixo (Tijolo 1001 > 5) | ✅ |
+| Console do navegador | ✅ sem erros |
+
+> Após o teste, os mínimos da loja-demo foram restaurados para 0 (estoque intacto:
+> Cimento 259, Tijolo 1001).
+
+### 2.J.3 — Ajustes do estoque: spinner e filtros (2026-06-30)
+
+Dois acertos pedidos após o uso: (1) as setinhas dos campos numéricos de estoque
+mínimo andavam de 0,0001 em 0,0001 (`step="0.0001"`) — trocado para `step="1"` nos
+campos de mínimo (inteiros); os campos de quantidade ficam em `step="any"` (aceitam
+fracionados para kg/m²). (2) Filtros nas "Movimentações recentes": Produto (resolvido
+no servidor via `?productId=`), Tipo, Motivo e período (De/Até, no cliente) + "Limpar".
+
+| Teste | Resultado |
+|---|---|
+| Spinner do estoque mínimo (3× ↑ a partir de 0 → 3; ↓ → 2) | ✅ anda de 1 em 1 |
+| Filtro Tipo = Saída | ✅ 17 de 22 (só saídas) |
+| Filtro Motivo = "ajuste" | ✅ 3 de 22 (só ajustes) |
+| Filtro Produto = Cimento (refetch no servidor) | ✅ 13 de 13 (total muda) |
+| Filtro período (hoje) combinado c/ Produto | ✅ 4 de 13 |
+| Botão "Limpar" | ✅ volta a 22 de 22 e some |
+| Build de produção + console do navegador | ✅ sem erros |
+
 ### 2.D — Convite de funcionários por e-mail — ⏭️ pendente
 ### 2.I — NFC-e fiscal (SEFAZ) — ⏭️ fase futura dedicada

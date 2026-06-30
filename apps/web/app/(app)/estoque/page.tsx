@@ -35,12 +35,18 @@ const QTY = (v: string | number) =>
 const DATETIME = (iso: string) =>
   new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 
+const EMPTY_FILTERS = { productId: '', type: '', reason: '', dateFrom: '', dateTo: '' };
+
 export default function EstoquePage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [movements, setMovements] = useState<Movement[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  // Filtros das movimentações. `productId` é resolvido no servidor (?productId=);
+  // os demais são aplicados no cliente sobre a lista carregada.
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
 
   // Formulário de entrada de estoque (compra/recebimento).
   const [entry, setEntry] = useState({
@@ -56,16 +62,24 @@ export default function EstoquePage() {
   const [adjust, setAdjust] = useState({ productId: '', countedQty: '', reason: '' });
   const [savingAdjust, setSavingAdjust] = useState(false);
 
-  async function load() {
+  async function loadCatalog() {
     try {
-      const [p, s, m] = await Promise.all([
+      const [p, s] = await Promise.all([
         apiGet<Product[]>('/products'),
         apiGet<Supplier[]>('/suppliers'),
-        apiGet<Movement[]>('/stock/movements'),
       ]);
       setProducts(p);
       setSuppliers(s);
-      setMovements(m);
+      setError(null);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
+  async function loadMovements() {
+    try {
+      const q = filters.productId ? `?productId=${encodeURIComponent(filters.productId)}` : '';
+      setMovements(await apiGet<Movement[]>(`/stock/movements${q}`));
       setError(null);
     } catch (e) {
       setError((e as Error).message);
@@ -73,8 +87,14 @@ export default function EstoquePage() {
   }
 
   useEffect(() => {
-    load();
+    loadCatalog();
   }, []);
+
+  // Recarrega as movimentações quando o filtro de produto muda (resolvido no servidor).
+  useEffect(() => {
+    loadMovements();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.productId]);
 
   const lowStock = useMemo(
     () =>
@@ -83,6 +103,24 @@ export default function EstoquePage() {
       ),
     [products],
   );
+
+  // Filtros aplicados no cliente (tipo, motivo e período) sobre a lista já carregada.
+  const filteredMovements = useMemo(() => {
+    return movements.filter((m) => {
+      if (filters.type && m.type !== filters.type) return false;
+      if (filters.reason) {
+        const hay = `${m.reason ?? ''} ${m.supplier?.name ?? ''}`.toLowerCase();
+        if (!hay.includes(filters.reason.toLowerCase())) return false;
+      }
+      const day = (m.createdAt ?? '').slice(0, 10); // yyyy-mm-dd
+      if (filters.dateFrom && day < filters.dateFrom) return false;
+      if (filters.dateTo && day > filters.dateTo) return false;
+      return true;
+    });
+  }, [movements, filters.type, filters.reason, filters.dateFrom, filters.dateTo]);
+
+  const filtersActive =
+    filters.productId || filters.type || filters.reason || filters.dateFrom || filters.dateTo;
 
   const adjustProduct = products.find((p) => p.id === adjust.productId);
 
@@ -109,7 +147,7 @@ export default function EstoquePage() {
       await apiPost('/stock/movements', parsed.data);
       setEntry({ productId: '', quantity: '', unitCost: '', supplierId: '', reason: '' });
       setNotice('Entrada de estoque registrada.');
-      await load();
+      await Promise.all([loadCatalog(), loadMovements()]);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -137,7 +175,7 @@ export default function EstoquePage() {
       await apiPost('/stock/adjust', parsed.data);
       setAdjust({ productId: '', countedQty: '', reason: '' });
       setNotice('Estoque ajustado (registrado na auditoria).');
-      await load();
+      await Promise.all([loadCatalog(), loadMovements()]);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -172,7 +210,7 @@ export default function EstoquePage() {
             <input
               placeholder="Quantidade"
               type="number"
-              step="0.0001"
+              step="any"
               min="0"
               value={entry.quantity}
               onChange={(e) => setEntry({ ...entry, quantity: e.target.value })}
@@ -234,7 +272,7 @@ export default function EstoquePage() {
             <input
               placeholder="Contagem real"
               type="number"
-              step="0.0001"
+              step="any"
               min="0"
               value={adjust.countedQty}
               onChange={(e) => setAdjust({ ...adjust, countedQty: e.target.value })}
@@ -324,7 +362,80 @@ export default function EstoquePage() {
 
       {/* Histórico de movimentações */}
       <div className="mt-6 overflow-hidden rounded-2xl bg-white shadow-sm">
-        <h2 className="px-4 py-3 font-semibold">Movimentações recentes</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+          <h2 className="font-semibold">Movimentações recentes</h2>
+          <span className="text-xs text-gray-400">
+            {filteredMovements.length} de {movements.length}
+          </span>
+        </div>
+
+        {/* Barra de filtros */}
+        <div className="flex flex-wrap items-end gap-2 border-t border-gray-100 px-4 py-3">
+          <label className="flex flex-col text-xs text-gray-500">
+            Produto
+            <select
+              value={filters.productId}
+              onChange={(e) => setFilters({ ...filters, productId: e.target.value })}
+              className="mt-1 rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-gray-900"
+            >
+              <option value="">Todos</option>
+              {products.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col text-xs text-gray-500">
+            Tipo
+            <select
+              value={filters.type}
+              onChange={(e) => setFilters({ ...filters, type: e.target.value })}
+              className="mt-1 rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-gray-900"
+            >
+              <option value="">Todos</option>
+              <option value="INCOME">Entrada</option>
+              <option value="EXPENSE">Saída</option>
+            </select>
+          </label>
+          <label className="flex flex-col text-xs text-gray-500">
+            Motivo
+            <input
+              value={filters.reason}
+              onChange={(e) => setFilters({ ...filters, reason: e.target.value })}
+              placeholder="Buscar…"
+              className="mt-1 rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-gray-900"
+            />
+          </label>
+          <label className="flex flex-col text-xs text-gray-500">
+            De
+            <input
+              type="date"
+              value={filters.dateFrom}
+              onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
+              className="mt-1 rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-gray-900"
+            />
+          </label>
+          <label className="flex flex-col text-xs text-gray-500">
+            Até
+            <input
+              type="date"
+              value={filters.dateTo}
+              onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
+              className="mt-1 rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-gray-900"
+            />
+          </label>
+          {filtersActive && (
+            <button
+              type="button"
+              onClick={() => setFilters(EMPTY_FILTERS)}
+              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+            >
+              Limpar
+            </button>
+          )}
+        </div>
+
         <table className="w-full text-sm">
           <thead className="bg-gray-100 text-left text-gray-600">
             <tr>
@@ -336,14 +447,16 @@ export default function EstoquePage() {
             </tr>
           </thead>
           <tbody>
-            {movements.length === 0 ? (
+            {filteredMovements.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-6 text-center text-gray-400">
-                  Nenhuma movimentação ainda.
+                  {movements.length === 0
+                    ? 'Nenhuma movimentação ainda.'
+                    : 'Nenhuma movimentação para os filtros selecionados.'}
                 </td>
               </tr>
             ) : (
-              movements.map((m) => (
+              filteredMovements.map((m) => (
                 <tr key={m.id} className="border-t border-gray-100">
                   <td className="px-4 py-2 text-gray-500">{DATETIME(m.createdAt)}</td>
                   <td className="px-4 py-2">{m.product?.name ?? '—'}</td>
