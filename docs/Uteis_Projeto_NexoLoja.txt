@@ -1,0 +1,18 @@
+## O servidor de dev está rodando — você pode abrir http://localhost:3000 e testar você mesmo:
+
+Login: owner@lojademo.com / NexoLoja#2026
+
+http://localhost:3000/
+
+## Leia docs/ROADMAP.md e docs/testes/registro-de-testes.md e vamos continuar
+
+## Subir servidor
+
+cd C:\Users\Douglas\Documents\GitHub\Loja-Materiais-Construcao
+
+npm run dev
+
+✓ Ready in 5.6s
+- Local:  http://localhost:3000
+
+
