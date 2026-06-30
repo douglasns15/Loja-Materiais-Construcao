@@ -8,7 +8,11 @@ import { requireAuth } from '../middleware/auth';
 const cashSessions = new Hono<Env>();
 cashSessions.use('*', requireAuth);
 
-/** Soma das entradas em dinheiro (pagamentos CASH) dos pedidos da sessão. */
+/**
+ * Soma das entradas em dinheiro (pagamentos CASH) dos pedidos da sessão.
+ * Ignora vendas CANCELLED: ao cancelar, o dinheiro volta e o esperado recalcula
+ * sozinho (os Payments seguem gravados para auditoria).
+ */
 async function cashInflow(
   prisma: ReturnType<typeof createPrismaClient>,
   tenantId: string,
@@ -16,7 +20,11 @@ async function cashInflow(
 ): Promise<number> {
   const agg = await prisma.payment.aggregate({
     _sum: { amount: true },
-    where: { tenantId, method: 'CASH', order: { cashSessionId: sessionId } },
+    where: {
+      tenantId,
+      method: 'CASH',
+      order: { cashSessionId: sessionId, status: { not: 'CANCELLED' } },
+    },
   });
   return Number(agg._sum.amount ?? 0);
 }

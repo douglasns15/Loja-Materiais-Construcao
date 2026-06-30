@@ -1,12 +1,48 @@
 import { Hono } from 'hono';
 import { createPrismaClient } from '@nexoloja/db';
 import { calcSaleItemTotal, calcSaleTotals } from '@nexoloja/core';
-import { createSaleSchema } from '@nexoloja/shared';
+import { cancelOrderSchema, createSaleSchema } from '@nexoloja/shared';
 import { type Env, getConnectionString, getTenantId } from '../lib/request';
 import { requireAuth } from '../middleware/auth';
 
 const orders = new Hono<Env>();
 orders.use('*', requireAuth);
+
+/**
+ * Lista as vendas do caixa atualmente aberto do operador (mais recentes primeiro),
+ * com itens, pagamentos e status. Base da tela de Vendas e do cancelamento, que é
+ * restrito ao caixa aberto (mantém a integridade dos caixas já fechados). Sem caixa
+ * aberto, retorna lista vazia.
+ */
+orders.get('/', async (c) => {
+  const tenantId = getTenantId(c);
+  const userId = c.get('userId');
+  const connectionString = getConnectionString(c.env);
+  if (!tenantId || !connectionString) {
+    return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
+  }
+
+  try {
+    const prisma = createPrismaClient(connectionString);
+    const session = await prisma.cashSession.findFirst({
+      where: { tenantId, userId, closedAt: null },
+      select: { id: true },
+    });
+    if (!session) {
+      return c.json({ ok: true, data: [] });
+    }
+    const list = await prisma.order.findMany({
+      where: { tenantId, cashSessionId: session.id },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      include: { items: true, payments: true },
+    });
+    return c.json({ ok: true, data: list });
+  } catch (err) {
+    console.error('GET /orders falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao listar as vendas.' }, 500);
+  }
+});
 
 /**
  * Registra uma venda. Em uma única transação (ADR-001):
@@ -142,6 +178,118 @@ orders.post('/', async (c) => {
   } catch (err) {
     console.error('POST /orders falhou:', err);
     return c.json({ ok: false, error: 'Falha ao registrar a venda.' }, 500);
+  }
+});
+
+/**
+ * Cancela uma venda (ADR-004). Restrito ao caixa aberto do operador para não
+ * corromper caixas já fechados. Em uma única transação:
+ *  - estorna o estoque: para cada item, grava StockMovement INCOME (reverso da
+ *    saída da venda) e incrementa Product.stockQty (ADR-001);
+ *  - marca o Order como CANCELLED;
+ *  - registra AuditEvent CANCEL_ORDER com o motivo.
+ * Os Payments são preservados (auditoria); o caixa recalcula sozinho porque o
+ * cálculo de entrada em dinheiro ignora pedidos CANCELLED.
+ */
+orders.post('/:id/cancel', async (c) => {
+  const tenantId = getTenantId(c);
+  const userId = c.get('userId');
+  const connectionString = getConnectionString(c.env);
+  if (!tenantId || !connectionString) {
+    return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
+  }
+
+  const orderId = c.req.param('id');
+  const parsed = cancelOrderSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) {
+    return c.json(
+      { ok: false, error: 'Informe o motivo do cancelamento.', issues: parsed.error.flatten() },
+      400,
+    );
+  }
+  const { reason } = parsed.data;
+
+  try {
+    const prisma = createPrismaClient(connectionString);
+
+    // Caixa aberto do operador: o cancelamento só vale para vendas dele.
+    const session = await prisma.cashSession.findFirst({
+      where: { tenantId, userId, closedAt: null },
+      select: { id: true },
+    });
+    if (!session) {
+      return c.json({ ok: false, error: 'Abra o caixa para cancelar uma venda.' }, 400);
+    }
+
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, tenantId },
+      include: { items: true },
+    });
+    if (!order) {
+      return c.json({ ok: false, error: 'Venda não encontrada.' }, 404);
+    }
+    if (order.status === 'CANCELLED') {
+      return c.json({ ok: false, error: 'Esta venda já foi cancelada.' }, 409);
+    }
+    if (order.status !== 'CONFIRMED') {
+      return c.json({ ok: false, error: 'Só é possível cancelar vendas confirmadas.' }, 400);
+    }
+    if (order.cashSessionId !== session.id) {
+      return c.json(
+        { ok: false, error: 'Só é possível cancelar vendas do caixa aberto atual.' },
+        400,
+      );
+    }
+
+    const cancelled = await prisma.$transaction(async (tx) => {
+      // ADR-001: estorna cada item — movimento reverso (INCOME) + incremento do cache.
+      for (const item of order.items) {
+        await tx.stockMovement.create({
+          data: {
+            tenantId,
+            productId: item.productId,
+            type: 'INCOME',
+            quantity: item.quantity,
+            reason: `Cancelamento da venda ${order.id}`,
+            syncStatus: 'SYNCED',
+          },
+        });
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { stockQty: { increment: item.quantity } },
+        });
+      }
+
+      const updated = await tx.order.update({
+        where: { id: order.id },
+        data: { status: 'CANCELLED' },
+        include: { items: true, payments: true },
+      });
+
+      // Evento crítico (ADR-004): cancelamento de venda.
+      await tx.auditEvent.create({
+        data: {
+          tenantId,
+          userId,
+          entity: 'Order',
+          entityId: order.id,
+          action: 'CANCEL_ORDER',
+          meta: {
+            reason,
+            total: Number(order.total),
+            itemsCount: order.items.length,
+            cashSessionId: session.id,
+          },
+        },
+      });
+
+      return updated;
+    });
+
+    return c.json({ ok: true, data: cancelled });
+  } catch (err) {
+    console.error('POST /orders/:id/cancel falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao cancelar a venda.' }, 500);
   }
 });
 

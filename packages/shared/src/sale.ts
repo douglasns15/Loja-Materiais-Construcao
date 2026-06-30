@@ -34,3 +34,12 @@ export const createSaleSchema = z.object({
   notes: z.string().max(500).optional(),
 });
 export type CreateSaleInput = z.infer<typeof createSaleSchema>;
+
+/**
+ * Payload para cancelar uma venda (ADR-004). O motivo é obrigatório porque o
+ * cancelamento é um evento crítico auditado (`AuditEvent CANCEL_ORDER`).
+ */
+export const cancelOrderSchema = z.object({
+  reason: z.string().min(3, 'Informe o motivo do cancelamento.').max(300),
+});
+export type CancelOrderInput = z.infer<typeof cancelOrderSchema>;

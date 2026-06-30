@@ -3,13 +3,16 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-06-30 (Fase 2 — Gestão de estoque concluída; entrada/ajuste validados no navegador e via API publicada)
+> **Última atualização:** 2026-06-30 (Fase 2 — Cancelamento de venda concluído; estorno de estoque/caixa + auditoria validados via API publicada e UI no navegador)
 
 > ▶️ **Próximo passo (a definir com o usuário):** uma destas frentes —
-> **upload de logo da loja** (Cloudflare R2), **relatórios de vendas/caixa**,
-> ou **cancelamento de venda** (ADR-004).
+> **relatórios de vendas/caixa** (vendas por período, totais por forma de pagamento,
+> fechamentos), **upload de logo da loja** (Cloudflare R2), ou **devolução/estorno de
+> caixa fechado** (fluxo separado do cancelamento — repõe estoque e lança saída no caixa
+> de HOJE, preservando o caixa original).
 > Estado atual: PDV completo (carrinho → revisão → confirmar → impressão, com layout
-> 80mm/A4 validado no navegador), **gestão de estoque** (entrada/ajuste/histórico),
+> 80mm/A4 validado no navegador), **cancelamento de venda** (estorno de estoque/caixa +
+> auditoria, restrito ao caixa aberto), **gestão de estoque** (entrada/ajuste/histórico),
 > caixa, auth+RLS e CRUDs de cadastro funcionando e publicados. App roda com
 > `npm run dev` na **raiz** (sobe só o web via turbo filter; `dev:all`/`dev:api` exigem
 > Postgres local p/ Hyperdrive). O front chama a API publicada em
@@ -68,10 +71,15 @@
       de movimentações e alerta de estoque baixo — *validado no navegador e via API (2.J)*
 - [x] UI: **estoque mínimo por produto** — campo no cadastro + edição inline na tela de
       Produtos (`PATCH /products`); arma o alerta de “baixo” na tela de Estoque — *(2.J.2)*
-- [ ] UI + API: **cancelamento de venda** (ADR-004) — estorno de estoque (StockMovement
-      reverso), reversão do pagamento no caixa e `AuditEvent CANCEL_ORDER`
+- [x] UI + API: **cancelamento de venda** (ADR-004) — estorno de estoque (StockMovement
+      reverso INCOME), reversão do pagamento no caixa (esperado ignora `CANCELLED`) e
+      `AuditEvent CANCEL_ORDER`; restrito ao caixa aberto — *validado via API publicada
+      (14/14) e UI no navegador (2.K)*
 - [ ] **Relatórios** de vendas e caixa — vendas por período, totais por forma de
       pagamento e fechamentos de caixa
+- [ ] **Devolução / estorno de caixa fechado** — fluxo separado do cancelamento: repõe
+      estoque (StockMovement INCOME) e lança a saída no caixa **de hoje** (não no caixa
+      original já fechado), preservando o histórico. Reaproveita o motor do cancelamento.
 - [ ] Upload de logo da loja (Cloudflare R2)
 - [ ] **NFC-e fiscal** (SEFAZ + certificado) — fase futura dedicada
 - [ ] Convite de funcionários por e-mail (`inviteUserByEmail`)

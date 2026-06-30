@@ -305,5 +305,75 @@ no servidor via `?productId=`), Tipo, Motivo e período (De/Até, no cliente) + 
 | Botão "Limpar" | ✅ volta a 22 de 22 e some |
 | Build de produção + console do navegador | ✅ sem erros |
 
+### 2.K — Cancelamento de venda (2026-06-30)
+
+`cancelOrderSchema` (motivo obrigatório, ADR-004) + API `GET /orders` (vendas do caixa
+aberto) e `POST /orders/:id/cancel` + UI `/vendas`. **Sem migration** — `OrderStatus.CANCELLED`
+e `AuditEvent` já existiam. Escopo: cancelamento **restrito ao caixa aberto** do operador
+(não corrompe caixas fechados). O estorno é atômico (ADR-001): cada item gera `StockMovement
+INCOME` reverso + incremento de `stockQty`; o `cashInflow` do caixa passou a ignorar pedidos
+`CANCELLED` (esperado recalcula sozinho); `AuditEvent CANCEL_ORDER` na mesma transação.
+
+Validado contra a **API publicada** (deploy do worker → login real `owner@lojademo.com` →
+JWT → Bearer) por script E2E, e depois pela UI no navegador (`npm run dev`, preview), sobre
+o produto "Cimento".
+
+**API (script E2E — 14/14)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Registrar venda (2× Cimento = R$74, CASH) | 201 | ✅ |
+| Estoque baixa na venda (ADR-001) | 259 → 257 | ✅ |
+| Caixa sobe o esperado (pgto CASH) | Δ +R$74 | ✅ |
+| Cancelar sem motivo (ADR-004) | bloqueado | ✅ 400 |
+| Cancelar venda inexistente | não encontrada | ✅ 404 |
+| Cancelar venda confirmada | 200 + status | ✅ `CANCELLED` |
+| Estoque **estornado** (INCOME reverso) | 257 → 259 | ✅ |
+| Caixa **recalcula** (ignora `CANCELLED`) | esperado volta à base | ✅ 975,8 → 901,8 |
+| Cancelar a mesma venda de novo | bloqueado | ✅ 409 |
+| `StockMovement EXPENSE` (venda) + `INCOME` (cancelamento) | ambos gravados | ✅ |
+| `GET /orders` mostra a venda | status atual | ✅ `CANCELLED` |
+| `AuditEvent CANCEL_ORDER` (lido via service_role) | gravado com motivo | ✅ "Teste E2E — cliente desistiu" |
+| Typecheck `apps/api` (`tsc --noEmit`) | sem erros | ✅ |
+| Build de produção (`next build`) | rota `/vendas` gerada | ✅ 9 rotas, sem erros |
+
+**UI no navegador (`/vendas`)**
+
+| Teste | Resultado |
+|---|---|
+| Item "Vendas" no menu lateral | ✅ |
+| Lista as vendas do caixa aberto (mais recentes primeiro) | ✅ |
+| Venda cancelada: badge "Cancelada", riscada, **sem** botão de cancelar | ✅ |
+| Venda confirmada: badge "Confirmada" + botão "Cancelar venda" | ✅ |
+| Itens, total e forma de pagamento por venda | ✅ |
+| Sem caixa aberto → orienta a abrir o caixa | ✅ (lógica) |
+| Console do navegador | ✅ sem erros |
+
+> Observação: cancelar de caixa **já fechado** é intencionalmente bloqueado — esse caso vira
+> o fluxo futuro de **devolução/estorno** (repõe estoque e lança saída no caixa de hoje),
+> que reaproveita o motor de estorno deste cancelamento.
+
+### 2.K.2 — Histórico de Vendas: rename do menu + reimpressão de nota (2026-06-30)
+
+Ajustes de usabilidade na tela de vendas: (1) menu renomeado para desambiguar o par —
+**"Venda" → "Nova Venda"** (PDV) e **"Vendas" → "Histórico de Vendas"**; (2) botão
+**"Reimprimir nota"** ao lado de "Cancelar venda", reaproveitando o `ReceiptPrint` e a
+lógica de impressão do PDV (seletor 80mm/A4 + `@page`). Mudança 100% no front (usa
+`GET /orders` e `GET /tenant` já publicados) — sem deploy de API. Validado no navegador.
+
+| Teste | Resultado |
+|---|---|
+| Menu mostra "Nova Venda" e "Histórico de Vendas" | ✅ |
+| Build de produção (`next build`) | ✅ 9 rotas, sem erros |
+| Seletor "Modelo de impressão" (Térmica 80mm / A4) no topo | ✅ |
+| Venda confirmada: botões "Reimprimir nota" + "Cancelar venda" | ✅ |
+| Venda cancelada: sem botões (não reimprime nem cancela) | ✅ |
+| Reimprimir (80mm) monta o `#print-area` correto e chama `window.print()` | ✅ "COMPROVANTE DE VENDA" Cimento R$37 + Tijolo R$1,20 = R$38,20, Dinheiro |
+| Trocar para A4 e reimprimir aplica `@page size: A4` (`data-model=A4`) | ✅ |
+| Console do navegador | ✅ sem erros |
+
+> A impressão física depende da impressora do usuário (`window.print()`); aqui foi validada
+> a montagem do documento e a injeção da regra `@page` por modelo.
+
 ### 2.D — Convite de funcionários por e-mail — ⏭️ pendente
 ### 2.I — NFC-e fiscal (SEFAZ) — ⏭️ fase futura dedicada
