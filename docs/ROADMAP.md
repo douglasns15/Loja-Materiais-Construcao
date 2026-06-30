@@ -68,6 +68,10 @@
       de movimentações e alerta de estoque baixo — *validado no navegador e via API (2.J)*
 - [x] UI: **estoque mínimo por produto** — campo no cadastro + edição inline na tela de
       Produtos (`PATCH /products`); arma o alerta de “baixo” na tela de Estoque — *(2.J.2)*
+- [ ] UI + API: **cancelamento de venda** (ADR-004) — estorno de estoque (StockMovement
+      reverso), reversão do pagamento no caixa e `AuditEvent CANCEL_ORDER`
+- [ ] **Relatórios** de vendas e caixa — vendas por período, totais por forma de
+      pagamento e fechamentos de caixa
 - [ ] Upload de logo da loja (Cloudflare R2)
 - [ ] **NFC-e fiscal** (SEFAZ + certificado) — fase futura dedicada
 - [ ] Convite de funcionários por e-mail (`inviteUserByEmail`)
