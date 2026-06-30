@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyStockMovement,
   calcCashDivergence,
   calcExpectedCash,
+  calcInventoryAdjustment,
   calcMarginPercent,
   calcOrderTotal,
   calcSaleItemTotal,
   calcSaleTotals,
   calcSubtotal,
+  reconcileStock,
 } from './index';
 
 describe('calcSubtotal', () => {
@@ -100,5 +103,49 @@ describe('calcSaleTotals', () => {
     const r = calcSaleTotals([{ quantity: 4, unitPrice: 2.5 }]);
     expect(r.subtotal).toBe(10);
     expect(r.total).toBe(10);
+  });
+});
+
+describe('applyStockMovement', () => {
+  it('INCOME soma ao estoque atual', () => {
+    expect(applyStockMovement(10, 'INCOME', 5)).toBe(15);
+  });
+
+  it('EXPENSE subtrai do estoque atual', () => {
+    expect(applyStockMovement(10, 'EXPENSE', 4)).toBe(6);
+  });
+
+  it('mantém a precisão de 4 casas (unidades fracionadas)', () => {
+    expect(applyStockMovement(2.5, 'INCOME', 0.125)).toBe(2.625);
+  });
+});
+
+describe('reconcileStock', () => {
+  it('saldo = Σ INCOME − Σ EXPENSE (ADR-001)', () => {
+    expect(
+      reconcileStock([
+        { type: 'INCOME', quantity: 100 },
+        { type: 'EXPENSE', quantity: 30 },
+        { type: 'EXPENSE', quantity: 4 },
+      ]),
+    ).toBe(66);
+  });
+
+  it('retorna 0 quando não há movimentações', () => {
+    expect(reconcileStock([])).toBe(0);
+  });
+});
+
+describe('calcInventoryAdjustment', () => {
+  it('contagem menor → EXPENSE da diferença', () => {
+    expect(calcInventoryAdjustment(10, 7)).toEqual({ type: 'EXPENSE', quantity: 3 });
+  });
+
+  it('contagem maior → INCOME da diferença', () => {
+    expect(calcInventoryAdjustment(10, 12)).toEqual({ type: 'INCOME', quantity: 2 });
+  });
+
+  it('contagem igual → quantidade 0 (nada a fazer)', () => {
+    expect(calcInventoryAdjustment(10, 10)).toEqual({ type: 'INCOME', quantity: 0 });
   });
 });

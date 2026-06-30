@@ -3,16 +3,17 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-06-28 (Fase 2 — Venda/PDV concluída; impressão validada no navegador)
+> **Última atualização:** 2026-06-30 (Fase 2 — Gestão de estoque concluída; entrada/ajuste validados no navegador e via API publicada)
 
 > ▶️ **Próximo passo (a definir com o usuário):** uma destas frentes —
-> **upload de logo da loja** (Cloudflare R2), **tela de entrada/gestão de estoque**,
-> **relatórios de vendas/caixa**, ou **cancelamento de venda** (ADR-004).
+> **upload de logo da loja** (Cloudflare R2), **relatórios de vendas/caixa**,
+> ou **cancelamento de venda** (ADR-004).
 > Estado atual: PDV completo (carrinho → revisão → confirmar → impressão, com layout
-> 80mm/A4 validado no navegador), caixa, auth+RLS e CRUDs de cadastro funcionando e
-> publicados. App roda com `npm run dev` na **raiz** (sobe só o web via turbo filter;
-> `dev:all`/`dev:api` exigem Postgres local p/ Hyperdrive). O front chama a API publicada
-> em `nexoloja-api.imortal.workers.dev`.
+> 80mm/A4 validado no navegador), **gestão de estoque** (entrada/ajuste/histórico),
+> caixa, auth+RLS e CRUDs de cadastro funcionando e publicados. App roda com
+> `npm run dev` na **raiz** (sobe só o web via turbo filter; `dev:all`/`dev:api` exigem
+> Postgres local p/ Hyperdrive). O front chama a API publicada em
+> `nexoloja-api.imortal.workers.dev`.
 
 ---
 
@@ -62,6 +63,9 @@
       Concluir e Orçamento; estoque atômico (ADR-001) e baixa no caixa
 - [x] Impressão: comprovante de venda (não-fiscal) + orçamento — térmica 80mm e A4,
       com cabeçalho (nome + logo da loja) — *layout validado no navegador (2.H.4)*
+- [x] UI + API: **gestão de estoque** — entrada (compra/recebimento, transação atômica
+      ADR-001) e ajuste de inventário (com `AuditEvent ADJUST_STOCK`, ADR-004), histórico
+      de movimentações e alerta de estoque baixo — *validado no navegador e via API (2.J)*
 - [ ] Upload de logo da loja (Cloudflare R2)
 - [ ] **NFC-e fiscal** (SEFAZ + certificado) — fase futura dedicada
 - [ ] Convite de funcionários por e-mail (`inviteUserByEmail`)

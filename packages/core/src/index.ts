@@ -94,3 +94,56 @@ export function calcSaleTotals(
   );
   return { subtotal, total };
 }
+
+// =============================================================================
+// ESTOQUE (Stock) — ADR-001
+// =============================================================================
+
+/** Tipo de movimentação de estoque. Espelha o enum `TransactionType` do schema. */
+export type StockMovementType = 'INCOME' | 'EXPENSE';
+
+export interface StockMovementLike {
+  type: StockMovementType;
+  quantity: number;
+}
+
+/**
+ * Aplica uma movimentação sobre o estoque atual: INCOME soma, EXPENSE subtrai.
+ * Retorna o novo saldo arredondado a 4 casas (mesma precisão de `Product.stockQty`).
+ */
+export function applyStockMovement(
+  currentQty: number,
+  type: StockMovementType,
+  quantity: number,
+): number {
+  const delta = type === 'INCOME' ? quantity : -quantity;
+  return Number((currentQty + delta).toFixed(4));
+}
+
+/**
+ * Reconciliação de estoque (ADR-001): saldo = Σ INCOME − Σ EXPENSE.
+ * Fonte de verdade auditável para corrigir divergências no cache `Product.stockQty`.
+ */
+export function reconcileStock(movements: StockMovementLike[]): number {
+  const total = movements.reduce(
+    (acc, m) => acc + (m.type === 'INCOME' ? m.quantity : -m.quantity),
+    0,
+  );
+  return Number(total.toFixed(4));
+}
+
+/**
+ * Traduz uma contagem de inventário no movimento necessário para chegar nela.
+ * Ex: estoque atual 10, contado 7 → EXPENSE de 3; contado 12 → INCOME de 2.
+ * `quantity` 0 indica que a contagem já bate (nenhum movimento necessário).
+ */
+export function calcInventoryAdjustment(
+  currentQty: number,
+  countedQty: number,
+): { type: StockMovementType; quantity: number } {
+  const delta = Number((countedQty - currentQty).toFixed(4));
+  return {
+    type: delta >= 0 ? 'INCOME' : 'EXPENSE',
+    quantity: Math.abs(delta),
+  };
+}

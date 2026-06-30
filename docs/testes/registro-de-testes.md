@@ -226,5 +226,47 @@ Página removida após o teste. Console sem erros/avisos.
 | Botão "Voltar e editar" após Concluir/Orçamento | ✅ restaura carrinho e desconto |
 | **Passo de revisão** (Concluir → Revisar → Confirmar) | ✅ estoque só baixa ao Confirmar; Voltar mantém estoque intacto (6→6→4) |
 
+### 2.J — Gestão de Estoque (entrada + ajuste) (2026-06-30)
+
+Core: `applyStockMovement`, `reconcileStock` (ADR-001), `calcInventoryAdjustment`
+(+ testes, total **25 no core**). API `/stock` (`POST /movements`, `POST /adjust`,
+`GET /movements`) + UI `/estoque`. **Sem migration** — o schema já tinha `StockMovement`
+e `AuditEvent`.
+
+Validado contra a **API publicada** (login real `owner@lojademo.com` → JWT → Bearer),
+primeiro via chamadas diretas e depois pela UI no navegador (`npm run dev`, preview),
+sobre o produto "Cimento".
+
+**API (chamadas diretas)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Core: 8 funções de estoque (Vitest) | — | ✅ 25/25 no core |
+| API: entrada (INCOME) +10, transação atômica (ADR-001) | 2 → 12 | ✅ 12 |
+| API: ajuste p/ contagem 5 → calcula EXPENSE 7 | 12 → 5 | ✅ EXPENSE 7 |
+| API: `AuditEvent ADJUST_STOCK` na mesma transação | gravado | ✅ (saldo confirmou a tx) |
+| API: histórico por produto (`GET /movements?productId=`) | 2 movimentos | ✅ |
+| API: estoque final no produto | 5 | ✅ |
+| API: saída maior que o estoque | bloqueada | ✅ 400 |
+| API: ajuste sem motivo (ADR-004) | bloqueado | ✅ 400 (Zod) |
+| API: rota exige JWT (`GET /stock/movements` sem token) | 401 | ✅ |
+| Build de produção (`next build`) | rota `/estoque` gerada | ✅ 8 rotas, sem erros |
+| Typecheck `apps/api` (`tsc --noEmit`) | sem erros | ✅ |
+
+**UI no navegador (`/estoque`)**
+
+| Teste | Resultado |
+|---|---|
+| Tela renderiza (entrada + ajuste + estoque atual + histórico) | ✅ console sem erros |
+| Entrada pela UI (Cimento +5) → "Entrada registrada" + lista atualiza | ✅ 5 → 10 |
+| Ajuste: preview do delta ao digitar a contagem | ✅ "10 → 8 (-2)" |
+| Ajuste pela UI (contagem 8, motivo) → gera Saída 2 + auditoria | ✅ 10 → 8, topo do histórico |
+| Histórico mostra entradas/saídas (inclui baixas de venda) com tipo e motivo | ✅ |
+| Validação client-side (entrada sem produto) | ✅ mensagem amigável |
+
+> A coluna "Mínimo" e o destaque de **estoque baixo** funcionam por lógica
+> (`stockQty <= minStockQty`, testado no core), mas não foram demonstrados
+> visualmente porque os produtos da loja-demo estão com `minStockQty = 0`.
+
 ### 2.D — Convite de funcionários por e-mail — ⏭️ pendente
 ### 2.I — NFC-e fiscal (SEFAZ) — ⏭️ fase futura dedicada

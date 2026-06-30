@@ -8,6 +8,7 @@ import categories from './routes/categories';
 import suppliers from './routes/suppliers';
 import cashSessions from './routes/cashSessions';
 import orders from './routes/orders';
+import stock from './routes/stock';
 import tenant from './routes/tenant';
 
 const app = new Hono<Env>();
@@ -31,6 +32,7 @@ app.route('/categories', categories);
 app.route('/suppliers', suppliers);
 app.route('/cash-sessions', cashSessions);
 app.route('/orders', orders);
+app.route('/stock', stock);
 app.route('/tenant', tenant);
 
 /**
