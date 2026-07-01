@@ -513,5 +513,55 @@ Worker publicado (`wrangler deploy`) com as rotas novas.
 > Erro inicial `code: 10042` ("enable R2 through the Cloudflare Dashboard") resolvido
 > ativando o R2 no painel da conta (aceitar termos) antes de criar o bucket.
 
+### 2.N — Editar dados da loja (nome/CNPJ/telefone) (2026-07-01)
+
+API: `PATCH /tenant` com `updateTenantSchema` (`packages/shared`) — nome obrigatório
+(1–120), CNPJ (≤18) e telefone (≤20) opcionais, com string vazia normalizada para `null`
+(evita colisão no índice único de `cnpj`); erro `P2002` do CNPJ mapeado para **409**. UI:
+o card "Dados da loja" em `/configuracoes` virou formulário (inputs + Salvar/Descartar;
+"Salvar" só habilita quando há alteração real em relação ao banco), com mensagens de
+erro/sucesso próprias (separadas do card da Logo). **Sem migration** — `name/cnpj/phone`
+já existiam no `Tenant`.
+
+**Build / typecheck (local)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Typecheck `apps/api` (`tsc --noEmit`, após `prisma generate`) | sem erros | ✅ |
+| Build de produção (`next build`) | rota `/configuracoes` gerada | ✅ 13 rotas, sem erros (3.66 kB) |
+
+**Deploy (produção)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| `wrangler deploy` (rota `PATCH /tenant`) | publicado | ✅ versão `6b2d9093` (`nexoloja-api.imortal.workers.dev`) |
+| Smoke test `PATCH /tenant` **sem token** | rota existe e exige auth | ✅ 401 (não 404) |
+
+**Ajuste — máscara de CNPJ/telefone + canonicalização (2026-07-01)**
+
+Helpers puros em `packages/shared` (`onlyDigits`, `formatCnpj`, `formatPhoneBr`). O banco
+passa a guardar **só dígitos** (forma canônica) — o `updateTenantSchema` normaliza no
+servidor (independe da pontuação; robustece o índice único de `cnpj`). Na UI, os campos
+aceitam **só números** ao digitar (`onChange` → dígitos) e **formatam ao sair do campo**
+(`onBlur` → `00.000.000/0000-00` / `(00) 00000-0000`); comparação de "alterado" por dígitos.
+Exibição formatada também no comprovante (`ReceiptPrint`).
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Typecheck `apps/api` + build `next build` (após o ajuste) | sem erros | ✅ 13 rotas (`/configuracoes` 3.9 kB) |
+| `wrangler deploy` (schema Zod atualizado) | publicado | ✅ versão `c6486aca` |
+
+> **Esclarecimento (pontos levantados no uso):** o índice único de `cnpj` é da tabela
+> **`Tenant`** (uma loja não pode repetir o CNPJ de **outra loja**). Não há relação com o
+> `cpfCnpj` de **Cliente** (tabela diferente, único por `[tenantId, cpfCnpj]`) — por isso
+> gravar no CNPJ da loja o mesmo CNPJ de um cliente é **aceito** (correto). E o **409** só
+> dispara contra outra loja; como só existe a `loja-demo` e ainda não há tela de criar loja
+> (bootstrap é via script invite-only), esse caminho não é alcançável hoje.
+
+> **Pendente (usuário):** E2E no navegador — login → `/configuracoes` → editar
+> nome/CNPJ/telefone → **Salvar** → persiste; reeditar CNPJ para um já usado → **409**.
+> A tela é protegida por login (senha, digitada só pelo usuário), então o E2E fica com o
+> usuário, como nas etapas anteriores (2.M).
+
 ### 2.D — Convite de funcionários por e-mail — ⏭️ pendente
 ### 2.I — NFC-e fiscal (SEFAZ) — ⏭️ fase futura dedicada

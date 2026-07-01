@@ -1,6 +1,11 @@
 'use client';
 
-import { PAYMENT_METHOD_LABELS, type PaymentMethod } from '@nexoloja/shared';
+import {
+  PAYMENT_METHOD_LABELS,
+  formatCnpj,
+  formatPhoneBr,
+  type PaymentMethod,
+} from '@nexoloja/shared';
 
 export type Store = {
   name: string;
@@ -42,8 +47,8 @@ export function ReceiptPrint({ kind, store, items, total, date, discount, method
           <img src={store.logoUrl} alt="" className="rc-logo" />
         ) : null}
         <div className="rc-store">{store?.name ?? 'Loja'}</div>
-        {store?.cnpj ? <div className="rc-sub">CNPJ: {store.cnpj}</div> : null}
-        {store?.phone ? <div className="rc-sub">{store.phone}</div> : null}
+        {store?.cnpj ? <div className="rc-sub">CNPJ: {formatCnpj(store.cnpj)}</div> : null}
+        {store?.phone ? <div className="rc-sub">{formatPhoneBr(store.phone)}</div> : null}
       </header>
 
       <div className={`rc-title ${isQuote ? 'quote' : ''}`}>

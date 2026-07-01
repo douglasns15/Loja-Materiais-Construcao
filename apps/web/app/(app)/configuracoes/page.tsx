@@ -1,8 +1,15 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { LOGO_ALLOWED_TYPES, LOGO_MAX_BYTES, validateLogo } from '@nexoloja/shared';
-import { apiDelete, apiGet, apiUpload } from '@/lib/api';
+import {
+  LOGO_ALLOWED_TYPES,
+  LOGO_MAX_BYTES,
+  formatCnpj,
+  formatPhoneBr,
+  onlyDigits,
+  validateLogo,
+} from '@nexoloja/shared';
+import { apiDelete, apiGet, apiPatch, apiUpload } from '@/lib/api';
 
 type Store = {
   name: string;
@@ -21,9 +28,26 @@ export default function ConfiguracoesPage() {
   const [file, setFile] = useState<File | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Formulário dos dados cadastrais (card "Dados da loja"), independente da logo.
+  const [form, setForm] = useState({ name: '', cnpj: '', phone: '' });
+  const [savingData, setSavingData] = useState(false);
+  const [dataError, setDataError] = useState<string | null>(null);
+  const [dataSuccess, setDataSuccess] = useState<string | null>(null);
+
+  function fillForm(s: Store) {
+    // O banco guarda só dígitos; exibimos formatado (a edição volta a dígitos no onChange).
+    setForm({
+      name: s.name ?? '',
+      cnpj: formatCnpj(s.cnpj),
+      phone: formatPhoneBr(s.phone),
+    });
+  }
+
   async function load() {
     try {
-      setStore(await apiGet<Store>('/tenant'));
+      const s = await apiGet<Store>('/tenant');
+      setStore(s);
+      fillForm(s);
       setError(null);
     } catch (e) {
       setError((e as Error).message);
@@ -90,7 +114,39 @@ export default function ConfiguracoesPage() {
     }
   }
 
+  async function onSaveData(e: React.FormEvent) {
+    e.preventDefault();
+    setDataError(null);
+    setDataSuccess(null);
+    if (!form.name.trim()) {
+      setDataError('O nome da loja é obrigatório.');
+      return;
+    }
+    setSavingData(true);
+    try {
+      // Envia só dígitos (forma canônica); o servidor normaliza igual por garantia.
+      const updated = await apiPatch<Store>('/tenant', {
+        name: form.name.trim(),
+        cnpj: onlyDigits(form.cnpj) || null,
+        phone: onlyDigits(form.phone) || null,
+      });
+      setStore(updated);
+      fillForm(updated);
+      setDataSuccess('Dados da loja atualizados.');
+    } catch (e) {
+      setDataError((e as Error).message);
+    } finally {
+      setSavingData(false);
+    }
+  }
+
   const shownLogo = preview ?? store?.logoUrl ?? null;
+  // Habilita "Salvar" só quando há alteração real; compara por dígitos (ignora máscara).
+  const dataChanged =
+    !!store &&
+    (form.name.trim() !== (store.name ?? '') ||
+      onlyDigits(form.cnpj) !== onlyDigits(store.cnpj) ||
+      onlyDigits(form.phone) !== onlyDigits(store.phone));
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -148,23 +204,94 @@ export default function ConfiguracoesPage() {
 
       <section className="mt-6 rounded-2xl bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold">Dados da loja</h2>
-        <dl className="mt-3 space-y-2 text-sm">
-          <div className="flex justify-between">
-            <dt className="text-gray-500">Nome</dt>
-            <dd className="font-medium">{store?.name ?? '—'}</dd>
-          </div>
-          <div className="flex justify-between">
-            <dt className="text-gray-500">CNPJ</dt>
-            <dd className="font-medium">{store?.cnpj ?? '—'}</dd>
-          </div>
-          <div className="flex justify-between">
-            <dt className="text-gray-500">Telefone</dt>
-            <dd className="font-medium">{store?.phone ?? '—'}</dd>
-          </div>
-        </dl>
-        <p className="mt-3 text-xs text-gray-400">
-          Edição de nome/CNPJ/telefone entra numa próxima etapa desta tela.
+        <p className="mt-1 text-sm text-gray-500">
+          Nome, CNPJ e telefone usados nos comprovantes e orçamentos.
         </p>
+
+        <form onSubmit={onSaveData} className="mt-4 space-y-4">
+          <div>
+            <label htmlFor="store-name" className="block text-sm font-medium text-gray-700">
+              Nome <span className="text-red-500">*</span>
+            </label>
+            <input
+              id="store-name"
+              type="text"
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              maxLength={120}
+              required
+              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="store-cnpj" className="block text-sm font-medium text-gray-700">
+                CNPJ
+              </label>
+              <input
+                id="store-cnpj"
+                type="text"
+                inputMode="numeric"
+                value={form.cnpj}
+                // Digita só números; formata ao sair do campo (onBlur).
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, cnpj: onlyDigits(e.target.value).slice(0, 14) }))
+                }
+                onBlur={() => setForm((f) => ({ ...f, cnpj: formatCnpj(f.cnpj) }))}
+                maxLength={18}
+                placeholder="Só números (ex.: 11222333000144)"
+                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+              />
+            </div>
+            <div>
+              <label htmlFor="store-phone" className="block text-sm font-medium text-gray-700">
+                Telefone
+              </label>
+              <input
+                id="store-phone"
+                type="text"
+                inputMode="numeric"
+                value={form.phone}
+                // Digita só números; formata ao sair do campo (onBlur).
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, phone: onlyDigits(e.target.value).slice(0, 11) }))
+                }
+                onBlur={() => setForm((f) => ({ ...f, phone: formatPhoneBr(f.phone) }))}
+                maxLength={20}
+                placeholder="Só números (ex.: 11987654321)"
+                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              type="submit"
+              disabled={savingData || !dataChanged}
+              className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+            >
+              {savingData ? 'Salvando…' : 'Salvar dados'}
+            </button>
+            {dataChanged && store && (
+              <button
+                type="button"
+                onClick={() => {
+                  fillForm(store);
+                  setDataError(null);
+                  setDataSuccess(null);
+                }}
+                disabled={savingData}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+              >
+                Descartar
+              </button>
+            )}
+          </div>
+
+          {dataError && <p className="text-sm text-red-600">{dataError}</p>}
+          {dataSuccess && <p className="text-sm text-green-600">{dataSuccess}</p>}
+        </form>
       </section>
     </div>
   );

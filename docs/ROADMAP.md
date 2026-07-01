@@ -3,22 +3,20 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-01 (Fase 2 — Upload de logo da loja **concluído**
-> (Cloudflare R2 / ADR-007): binding `[[r2_buckets]]` no Worker (sem chaves S3/CORS);
-> `POST /tenant/logo` valida tipo/tamanho e grava a imagem no R2 salvando SÓ a `logoUrl`;
-> `DELETE /tenant/logo` remove; leitura pública servida pelo próprio Worker em
-> `GET /public/logo/:tenantId` com cache longo + cache-bust por versão. Validação pura em
-> `packages/shared` (`validateLogo`). Nova tela `/configuracoes`. **Sem migration**. Bucket
-> `nexoloja-media` criado, Worker publicado e **E2E validado no navegador** pelo usuário)
+> **Última atualização:** 2026-07-01 (Fase 2 — Editar dados da loja: rota `PATCH /tenant`
+> (Zod `updateTenantSchema` — nome obrigatório, CNPJ/telefone opcionais com string vazia →
+> `null`; trata `P2002` do CNPJ único → 409) e o card "Dados da loja" em `/configuracoes`
+> virou formulário (editar/salvar/descartar, "Salvar" só habilita quando há alteração real).
+> **Sem migration** — `name/cnpj/phone` já existiam no `Tenant`. Typecheck da API + build do
+> web verdes; **Worker publicado** (`wrangler deploy`, versão `6b2d9093`) e smoke test
+> `PATCH /tenant` sem token → 401 OK. **Falta só** o E2E no navegador pelo usuário)
 
-> ▶️ **Próximo passo — Editar os dados da loja (nome/CNPJ/telefone).** A tela
-> `/configuracoes` já mostra esses campos em modo leitura; falta torná-los editáveis:
-> - **API:** `PATCH /tenant` (validação Zod dos campos: nome obrigatório, CNPJ/telefone
->   opcionais) atualizando o `Tenant`.
-> - **Web:** transformar o card "Dados da loja" num formulário (editar + salvar), reusando
->   o padrão das outras telas de cadastro.
-> - *Também em aberto na Fase 2:* devolução **parcial** (itens/quantidades) e, mais à frente,
->   gestão de usuários (convite de funcionários) e NFC-e fiscal.
+> ▶️ **Próximo passo — validar E2E no navegador** a edição dos dados da loja (login →
+> `/configuracoes` → editar nome/CNPJ/telefone → Salvar → persiste; CNPJ duplicado → 409).
+> Depois, escolher o próximo item em aberto da Fase 2:
+> - Devolução **parcial** (itens/quantidades com rateio de valor) — hoje é sempre da venda inteira.
+> - Gestão de usuários / convite de funcionários por e-mail (`inviteUserByEmail`).
+> - NFC-e fiscal (SEFAZ + certificado) — fase futura dedicada.
 > Estado atual: PDV completo (carrinho → revisão → confirmar → impressão, com layout
 > 80mm/A4 validado no navegador), **cancelamento de venda** (estorno de estoque/caixa +
 > auditoria, restrito ao caixa aberto), **gestão de estoque** (entrada/ajuste/histórico),
@@ -107,6 +105,15 @@
       `GET /public/logo/:tenantId` (cache longo + cache-bust `?v=`). UI nova `/configuracoes`
       (upload + preview + validação). **Sem migration** — `logoUrl` já existia. Bucket
       `nexoloja-media` criado + Worker publicado + E2E validado no navegador. *(2.M)*
+- 🟡 **Editar dados da loja (nome/CNPJ/telefone)** — API `PATCH /tenant` (Zod
+      `updateTenantSchema`: nome obrigatório, CNPJ/telefone opcionais → `null` quando vazio;
+      `P2002` do CNPJ único → 409) e o card "Dados da loja" em `/configuracoes` virou
+      formulário (editar/salvar/descartar; "Salvar" habilita só com alteração real). **Sem
+      migration** — campos já existiam no `Tenant`. Máscara de CNPJ/telefone: digita só
+      números e formata ao sair do campo (`formatCnpj`/`formatPhoneBr` em `packages/shared`);
+      banco guarda **só dígitos** (canônico → índice único de `cnpj` robusto). Typecheck da
+      API + build do web ✅. **Worker publicado** (`wrangler deploy`) + smoke test 401 OK;
+      **falta só** o E2E no navegador pelo usuário. *(2.N)*
 - [ ] **NFC-e fiscal** (SEFAZ + certificado) — fase futura dedicada
 - [ ] Convite de funcionários por e-mail (`inviteUserByEmail`)
 - [ ] Vínculo formal `users.id` ↔ `auth.users.id` (FK cross-schema)

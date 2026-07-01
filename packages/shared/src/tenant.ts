@@ -1,3 +1,6 @@
+import { z } from 'zod';
+import { onlyDigits } from './format';
+
 /**
  * Regras de mídia da loja (logo) — ADR-007.
  * Constantes e validação PURA reusadas no cliente (feedback imediato) e no
@@ -41,3 +44,25 @@ export function validateLogo(
   }
   return { ok: true };
 }
+
+/**
+ * Payload para editar os dados cadastrais da loja (`PATCH /tenant`).
+ * Nome é obrigatório; CNPJ e telefone são opcionais e guardados como SÓ dígitos
+ * (forma canônica — a formatação é de apresentação, ver `formatCnpj`/`formatPhoneBr`).
+ * Isso torna o índice único de `cnpj` robusto (independe de pontuação); vazio → `null`.
+ * Limites em dígitos: CNPJ 14, telefone 11.
+ */
+export const updateTenantSchema = z.object({
+  name: z.string().trim().min(1, 'O nome da loja é obrigatório.').max(120),
+  cnpj: z
+    .string()
+    .nullish()
+    .transform((v) => onlyDigits(v) || null)
+    .refine((v) => v === null || v.length <= 14, { message: 'CNPJ inválido.' }),
+  phone: z
+    .string()
+    .nullish()
+    .transform((v) => onlyDigits(v) || null)
+    .refine((v) => v === null || v.length <= 11, { message: 'Telefone inválido.' }),
+});
+export type UpdateTenantInput = z.infer<typeof updateTenantSchema>;
