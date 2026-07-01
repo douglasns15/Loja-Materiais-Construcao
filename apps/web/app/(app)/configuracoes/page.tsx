@@ -10,6 +10,8 @@ import {
   validateLogo,
 } from '@nexoloja/shared';
 import { apiDelete, apiGet, apiPatch, apiUpload } from '@/lib/api';
+import { useMe } from '@/lib/useMe';
+import { UsersSection } from './UsersSection';
 
 type Store = {
   name: string;
@@ -19,6 +21,7 @@ type Store = {
 };
 
 export default function ConfiguracoesPage() {
+  const { me, loading: meLoading, isAdmin } = useMe();
   const [store, setStore] = useState<Store | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -147,6 +150,22 @@ export default function ConfiguracoesPage() {
     (form.name.trim() !== (store.name ?? '') ||
       onlyDigits(form.cnpj) !== onlyDigits(store.cnpj) ||
       onlyDigits(form.phone) !== onlyDigits(store.phone));
+
+  // RBAC (ADR-008): Configurações é área administrativa. A API já bloqueia as escritas;
+  // aqui evitamos exibir a tela para quem não é Admin (acesso direto pela URL).
+  if (meLoading) {
+    return <div className="p-2 text-gray-500">Carregando…</div>;
+  }
+  if (!isAdmin) {
+    return (
+      <div className="mx-auto max-w-2xl">
+        <h1 className="mb-2 text-2xl font-bold">Configurações da loja</h1>
+        <p className="rounded-xl bg-white p-6 text-sm text-gray-600 shadow-sm">
+          Acesso restrito a administradores.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -293,6 +312,8 @@ export default function ConfiguracoesPage() {
           {dataSuccess && <p className="text-sm text-green-600">{dataSuccess}</p>}
         </form>
       </section>
+
+      <UsersSection currentUserId={me?.id ?? null} />
     </div>
   );
 }

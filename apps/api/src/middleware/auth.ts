@@ -1,6 +1,7 @@
 import { createMiddleware } from 'hono/factory';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { createPrismaClient } from '@nexoloja/db';
+import { isAdminRole } from '@nexoloja/shared';
 import { type Env, getConnectionString } from '../lib/request';
 
 // O conjunto de chaves públicas (JWKS) do Supabase é cacheado no isolate do Worker.
@@ -68,5 +69,17 @@ export const requireAuth = createMiddleware<Env>(async (c, next) => {
     return c.json({ ok: false, error: 'Falha na autenticação.' }, 500);
   }
 
+  await next();
+});
+
+/**
+ * Exige papel administrativo (Admin — `OWNER`/`MANAGER`, ver ADR-008). Deve rodar
+ * DEPOIS de `requireAuth` (que popula `role`). Usado em ações de administração da loja:
+ * gestão de usuários, dados/logo da loja, etc.
+ */
+export const requireAdmin = createMiddleware<Env>(async (c, next) => {
+  if (!isAdminRole(c.get('role'))) {
+    return c.json({ ok: false, error: 'Ação restrita a administradores.' }, 403);
+  }
   await next();
 });

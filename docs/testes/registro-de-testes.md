@@ -551,6 +551,13 @@ Exibição formatada também no comprovante (`ReceiptPrint`).
 | Typecheck `apps/api` + build `next build` (após o ajuste) | sem erros | ✅ 13 rotas (`/configuracoes` 3.9 kB) |
 | `wrangler deploy` (schema Zod atualizado) | publicado | ✅ versão `c6486aca` |
 
+**E2E no navegador (usuário)**
+
+| Teste | Resultado |
+|---|---|
+| `/configuracoes` → editar CNPJ → **Salvar** → persiste | ✅ validado pelo usuário |
+| Máscara: digitar só dígitos → formata ao sair do campo (CNPJ/telefone) | ✅ validado pelo usuário |
+
 > **Esclarecimento (pontos levantados no uso):** o índice único de `cnpj` é da tabela
 > **`Tenant`** (uma loja não pode repetir o CNPJ de **outra loja**). Não há relação com o
 > `cpfCnpj` de **Cliente** (tabela diferente, único por `[tenantId, cpfCnpj]`) — por isso
@@ -563,5 +570,101 @@ Exibição formatada também no comprovante (`ReceiptPrint`).
 > A tela é protegida por login (senha, digitada só pelo usuário), então o E2E fica com o
 > usuário, como nas etapas anteriores (2.M).
 
-### 2.D — Convite de funcionários por e-mail — ⏭️ pendente
+### 2.O — RBAC + gestão de usuários da loja — fatia 1 (2026-07-01)
+
+ADR-008. Papéis **Admin** (`OWNER`/`MANAGER`) e **Usuário** (`CASHIER`/`STOCK`) derivados do
+`UserRole` atual — **sem migration** (funções puras em `packages/shared/roles.ts`:
+`isAdminRole`, `toStoreRole`, `storeRoleToUserRole`). API: middleware `requireAdmin`;
+`GET /me` (papel para o front); `/users` (`GET` lista, `PATCH /:id` define papel/ativação com
+guardas — não altera o próprio usuário nem o `OWNER` — e grava `AuditEvent CHANGE_ROLE`,
+ADR-004); `PATCH /tenant` e upload/remoção de logo passaram a exigir Admin. Front: hook
+`useMe`, item **Configurações** escondido para não-Admin, guard na página e nova seção
+**Usuários** em `/configuracoes`. Convite por e-mail fica para a fatia 2 (exige `service_role`).
+
+**Build / typecheck (local)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Typecheck `apps/api` (`tsc --noEmit`, após `prisma generate`) | sem erros | ✅ |
+| Build de produção (`next build`) | `/configuracoes` regenerada | ✅ 13 rotas, sem erros (4.99 kB) |
+
+**Deploy + smoke (produção)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| `wrangler deploy` (RBAC + `/me` + `/users`) | publicado | ✅ versão `909427d2` |
+| `GET /me` sem token | exige auth | ✅ 401 |
+| `GET /users` sem token | exige auth | ✅ 401 |
+
+**API publicada (E2E — script `e2e-rbac`, 14/14)**
+
+Segundo usuário de teste criado na loja-demo (`caixa@lojademo.com`, `CASHIER`) via novo
+script `packages/db/scripts/create-user.mjs`. Login real dos dois usuários (owner + caixa)
+→ JWT → Bearer. O caixa é revertido a `USER`/ativo ao fim do roteiro.
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| owner `/me` → papel derivado | ADMIN (role OWNER) | ✅ |
+| caixa `/me` → papel derivado | USER (role CASHIER) | ✅ |
+| owner `GET /users` | 200 + lista (2 usuários) | ✅ |
+| lista traz o caixa como USER | sim | ✅ |
+| caixa `GET /users` | 403 (requireAdmin) | ✅ |
+| caixa `PATCH /tenant` | 403 | ✅ |
+| owner `PATCH` em si mesmo | 400 (não altera o próprio acesso) | ✅ |
+| owner promove caixa → ADMIN | 200, grava role `MANAGER` | ✅ |
+| caixa passa a enxergar como ADMIN e acessa `/users` | 200 | ✅ |
+| owner reverte caixa → USER | 200, grava role `CASHIER` | ✅ |
+| owner desativa o caixa | 200, `isActive=false` | ✅ |
+| caixa desativado → `/me` | 403 (bloqueado no `requireAuth`) | ✅ |
+| owner reativa o caixa | 200, `isActive=true` | ✅ |
+
+> `AuditEvent CHANGE_ROLE` é gravado em cada `PATCH /users/:id` (ADR-004). Falta apenas a
+> **confirmação visual no navegador** (menu esconde Configurações p/ Usuário; seção Usuários
+> para Admin) — a lógica que a tela consome já está validada acima.
+
+### 2.P — Perfil do usuário ("Meus dados") + trocar senha (2026-07-01)
+
+Menu de conta no rodapé do menu lateral (ícone de usuário + nome; popover com nome/e-mail/
+papel, **Meus dados** e **Sair**). Painel **Meus dados** edita nome + **telefone** (via
+`PATCH /me`) e troca a **senha** pelo Supabase Auth no cliente, **com reautenticação** (pede
+a senha atual → `signInWithPassword` → `updateUser`). E-mail somente leitura. Telefone
+guardado como só dígitos (formata na exibição, igual ao Tenant).
+
+Migration **`0004_user_phone`** — coluna `phone VARCHAR(20)` opcional em `users`. Sem
+alteração de RLS (as políticas de linha da 0002 cobrem a nova coluna).
+
+**Migration / build (local)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| `prisma migrate deploy` (0004) | aplicada | ✅ |
+| `prisma migrate status` | up to date | ✅ "Database schema is up to date" |
+| Typecheck `apps/api` + `next build` | sem erros | ✅ 13 rotas |
+
+**API publicada (E2E — script `e2e-me`, 6/6)**
+
+Worker republicado (versão `685109c2`). Login real do `caixa@lojademo.com`.
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| `GET /me` inclui `phone` | campo presente | ✅ |
+| `PATCH /me` (nome + telefone) | 200 | ✅ |
+| Nome atualizado | "Operador de Caixa" | ✅ |
+| Telefone normalizado p/ dígitos | `11987654321` (de `(11) 98765-4321`) | ✅ |
+| Nome vazio | bloqueado | ✅ 400 |
+| Telefone vazio → `null` + nome restaurado | ok | ✅ |
+
+**Navegador (usuário) — 2026-07-01**
+
+| Teste | Resultado |
+|---|---|
+| Editar telefone do `caixa` pelo painel **Meus dados** | ✅ salvo |
+| **Trocar senha** (com senha atual) | ✅ trocada |
+| Logout → login com a **senha antiga** | ✅ erro (como esperado) |
+| Login com a **senha nova** | ✅ entrou normalmente |
+
+> A troca de senha é client-side (Supabase Auth) com reautenticação — só o usuário digita
+> as senhas. Fluxo confirmado ponta a ponta pelo usuário.
+
+### 2.D — Convite de funcionários por e-mail — ⏭️ pendente (fatia 2 do ADR-008)
 ### 2.I — NFC-e fiscal (SEFAZ) — ⏭️ fase futura dedicada

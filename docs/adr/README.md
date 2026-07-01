@@ -24,6 +24,8 @@ Um *Architecture Decision Record* é um documento curto e versionado que captura
 | [ADR-005](./ADR-005-stack-e-arquitetura.md) | Stack tecnológica e arquitetura geral | Aceito |
 | [ADR-006](./ADR-006-devolucao-e-movimentacoes-de-caixa.md) | Devolução de venda e movimentações de caixa | Aceito |
 | [ADR-007](./ADR-007-armazenamento-de-midia-r2.md) | Armazenamento de mídia no Cloudflare R2 (logo) | Aceito |
+| [ADR-008](./ADR-008-papeis-e-rbac.md) | Papéis de usuário e RBAC dentro da loja | Aceito |
+| [ADR-009](./ADR-009-multi-loja-e-super-admin.md) | Multi-loja, onboarding e Super Usuário (plataforma) | Proposto |
 
 > O detalhamento da arquitetura (diagrama, estrutura do monorepo, segurança/RLS, offline, deploy e roadmap) está em [`../ARCHITECTURE.md`](../ARCHITECTURE.md).
 
