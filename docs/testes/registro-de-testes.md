@@ -470,5 +470,48 @@ Cenário real: vende no caixa A → **fecha A** → abre caixa B (hoje) → devo
 > A devolução é sempre da venda **inteira** nesta fase; devolução **parcial** (itens/quantidades)
 > está registrada como melhoria futura no ROADMAP e no ADR-006.
 
+### 2.M — Upload de logo da loja (Cloudflare R2) (2026-07-01)
+
+ADR-007. **R2 binding** (`[[r2_buckets]]` → `MEDIA`) no Worker, sem chaves S3/CORS.
+API: `POST /tenant/logo` (valida tipo/tamanho, `env.MEDIA.put`, grava só `logoUrl`),
+`DELETE /tenant/logo` (apaga objeto + zera `logoUrl`) e `GET /public/logo/:tenantId`
+(leitura pública servida pelo Worker, cache longo + cache-bust `?v=`). Validação pura
+`validateLogo` em `packages/shared` (PNG/JPG/WebP, ≤ 1 MB) reusada no front e no back.
+UI nova `/configuracoes` (preview + validação + Salvar/Remover). **Sem migration** —
+`Tenant.logoUrl` já existia. **Proibido BLOB/Base64** (CLAUDE.md): só a URL no banco.
+
+**Build / typecheck / core (local)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Typecheck `apps/api` (`tsc --noEmit`, após `prisma generate`) | sem erros | ✅ API OK |
+| Build de produção (`next build`) | rota `/configuracoes` gerada | ✅ 11 rotas, sem erros (3.12 kB) |
+| Core (Vitest) — regressão (nada quebrou) | 35/35 | ✅ 35/35 |
+
+**UI no navegador (`/configuracoes`, `npm run dev` → API publicada)**
+
+| Teste | Resultado |
+|---|---|
+| Item "Configurações" no menu lateral | ✅ |
+| Tela renderiza (card Logo + card Dados da loja) | ✅ console sem erros |
+| `GET /tenant` popula os dados | ✅ "Loja Demo" (logoUrl null → placeholder "Sem logo") |
+| Botão "Salvar logo" desabilitado sem arquivo | ✅ (cinza) |
+| Botão "Remover" oculto quando não há logo | ✅ |
+
+**Nuvem + E2E (usuário) — 2026-07-01**
+
+R2 ativado no painel · bucket `nexoloja-media` criado (`wrangler r2 bucket create`) ·
+Worker publicado (`wrangler deploy`) com as rotas novas.
+
+| Teste | Resultado |
+|---|---|
+| `wrangler r2 bucket create nexoloja-media` | ✅ criado (após ativar o R2 no painel) |
+| `wrangler deploy` (rotas `/tenant/logo`, `/public/logo/:tenantId`) | ✅ publicado |
+| Upload de logo em `/configuracoes` → aparece na tela e persiste | ✅ validado no navegador pelo usuário |
+| Logo no **cabeçalho do comprovante** (80mm/A4) | ✅ validado no navegador pelo usuário |
+
+> Erro inicial `code: 10042` ("enable R2 through the Cloudflare Dashboard") resolvido
+> ativando o R2 no painel da conta (aceitar termos) antes de criar o bucket.
+
 ### 2.D — Convite de funcionários por e-mail — ⏭️ pendente
 ### 2.I — NFC-e fiscal (SEFAZ) — ⏭️ fase futura dedicada

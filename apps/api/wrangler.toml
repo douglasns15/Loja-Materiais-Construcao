@@ -17,6 +17,14 @@ SUPABASE_URL = "https://esxssekaflzewibbklpu.supabase.co"
 binding = "HYPERDRIVE"
 id = "7b728afad9a643f096bfbcdb6d0724ea"
 
+# --- Cloudflare R2: mídia da loja (ADR-007) ---
+# Binding do bucket de mídia. O Worker faz put/get/delete direto (sem chaves S3,
+# sem CORS de bucket). Criar o bucket uma única vez com:
+#   npx wrangler r2 bucket create nexoloja-media
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "nexoloja-media"
+
 # --- Desenvolvimento local ---
 # Sem Hyperdrive, defina DATABASE_URL em apps/api/.dev.vars (NÃO commitar):
 #   DATABASE_URL="postgresql://...:6543/postgres?pgbouncer=true"
