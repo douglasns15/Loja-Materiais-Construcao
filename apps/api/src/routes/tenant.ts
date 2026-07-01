@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { createPrismaClient, Prisma } from '@nexoloja/db';
 import { updateTenantSchema, validateLogo } from '@nexoloja/shared';
 import { type Env, getConnectionString, getTenantId } from '../lib/request';
-import { requireAuth } from '../middleware/auth';
+import { requireAdmin, requireAuth } from '../middleware/auth';
 
 /** Chave do objeto da logo no R2 — uma por loja; reenviar sobrescreve (ADR-007). */
 const logoKey = (tenantId: string) => `logos/${tenantId}`;
@@ -37,8 +37,8 @@ tenant.get('/', async (c) => {
   }
 });
 
-/** Edita os dados cadastrais da loja (nome obrigatório; CNPJ/telefone opcionais). */
-tenant.patch('/', async (c) => {
+/** Edita os dados cadastrais da loja (nome obrigatório; CNPJ/telefone opcionais). Admin. */
+tenant.patch('/', requireAdmin, async (c) => {
   const tenantId = getTenantId(c);
   const connectionString = getConnectionString(c.env);
   if (!tenantId || !connectionString) {
@@ -76,7 +76,7 @@ tenant.patch('/', async (c) => {
  * requisição com o `Content-Type` da imagem; o Worker valida tipo/tamanho,
  * grava no R2 (`env.MEDIA`) e salva SÓ a URL em `Tenant.logoUrl` (nunca BLOB).
  */
-tenant.post('/logo', async (c) => {
+tenant.post('/logo', requireAdmin, async (c) => {
   const tenantId = getTenantId(c);
   const connectionString = getConnectionString(c.env);
   const bucket = c.env.MEDIA;
@@ -116,7 +116,7 @@ tenant.post('/logo', async (c) => {
 });
 
 /** Remove a logo: apaga o objeto no R2 e zera `Tenant.logoUrl` (ADR-007). */
-tenant.delete('/logo', async (c) => {
+tenant.delete('/logo', requireAdmin, async (c) => {
   const tenantId = getTenantId(c);
   const connectionString = getConnectionString(c.env);
   const bucket = c.env.MEDIA;

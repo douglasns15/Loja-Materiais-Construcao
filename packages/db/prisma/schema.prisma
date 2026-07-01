@@ -142,6 +142,7 @@ model User {
   tenantId     String    @db.Uuid
   name         String    @db.VarChar(100)
   email        String    @db.VarChar(150)
+  phone        String?   @db.VarChar(20)     // Telefone pessoal do usuário (opcional; só dígitos)
   role         UserRole  @default(CASHIER)
   isActive     Boolean   @default(true)
   createdAt    DateTime  @default(now())

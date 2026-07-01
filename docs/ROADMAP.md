@@ -3,20 +3,24 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-01 (Fase 2 — Editar dados da loja: rota `PATCH /tenant`
-> (Zod `updateTenantSchema` — nome obrigatório, CNPJ/telefone opcionais com string vazia →
-> `null`; trata `P2002` do CNPJ único → 409) e o card "Dados da loja" em `/configuracoes`
-> virou formulário (editar/salvar/descartar, "Salvar" só habilita quando há alteração real).
-> **Sem migration** — `name/cnpj/phone` já existiam no `Tenant`. Typecheck da API + build do
-> web verdes; **Worker publicado** (`wrangler deploy`, versão `6b2d9093`) e smoke test
-> `PATCH /tenant` sem token → 401 OK. **Falta só** o E2E no navegador pelo usuário)
+> **Última atualização:** 2026-07-01 (Fase 2 — **Perfil "Meus dados" (2.P)**: menu de conta
+> no rodapé (ícone + nome, popover com Meus dados/Sair); painel edita nome + **telefone**
+> (`PATCH /me`) e troca **senha** via Supabase Auth com **reautenticação**. Migration
+> `0004_user_phone` (coluna `phone` opcional em `users`) aplicada; Worker publicado (versão
+> `685109c2`); E2E `PATCH /me` 6/6. Antes disso: **RBAC + gestão de usuários (ADR-008 fatia 1,
+> 2.O)** — papéis Admin/Usuário derivados do `UserRole` sem migration, `requireAdmin`, `/me`,
+> `/users`, gate de Configurações; E2E de RBAC 14/14. Falta a **fatia 2** do ADR-008 (convite
+> por e-mail via `service_role`), que **fecha a Fase 2**, e a conferência visual no navegador)
 
-> ▶️ **Próximo passo — validar E2E no navegador** a edição dos dados da loja (login →
-> `/configuracoes` → editar nome/CNPJ/telefone → Salvar → persiste; CNPJ duplicado → 409).
-> Depois, escolher o próximo item em aberto da Fase 2:
-> - Devolução **parcial** (itens/quantidades com rateio de valor) — hoje é sempre da venda inteira.
-> - Gestão de usuários / convite de funcionários por e-mail (`inviteUserByEmail`).
-> - NFC-e fiscal (SEFAZ + certificado) — fase futura dedicada.
+> ▶️ **Próximo passo — fatia 2 (FECHA a Fase 2): convite de usuário por e-mail**
+> (`inviteUserByEmail`). Pré-requisito do usuário: provisionar a `SUPABASE_SERVICE_ROLE_KEY`
+> como **secret do Worker** (`wrangler secret put SUPABASE_SERVICE_ROLE_KEY`). A implementar:
+> `POST /users/invite` (cria no Supabase Auth + linha em `users` com papel) e botão
+> **Convidar** na seção Usuários de `/configuracoes`. RBAC (2.O) e perfil (2.P) já validados
+> pelo usuário no navegador — logins: Admin `owner@lojademo.com`, Usuário `caixa@lojademo.com`.
+> - *Melhoria futura na Fase 2:* devolução **parcial** (itens/quantidades com rateio).
+> - *Fase própria (Plataforma, ver abaixo):* **multi-loja + Super Usuário + onboarding** (ADR-009).
+> - *Fase futura dedicada:* **NFC-e fiscal** (SEFAZ + certificado).
 > Estado atual: PDV completo (carrinho → revisão → confirmar → impressão, com layout
 > 80mm/A4 validado no navegador), **cancelamento de venda** (estorno de estoque/caixa +
 > auditoria, restrito ao caixa aberto), **gestão de estoque** (entrada/ajuste/histórico),
@@ -105,28 +109,65 @@
       `GET /public/logo/:tenantId` (cache longo + cache-bust `?v=`). UI nova `/configuracoes`
       (upload + preview + validação). **Sem migration** — `logoUrl` já existia. Bucket
       `nexoloja-media` criado + Worker publicado + E2E validado no navegador. *(2.M)*
-- 🟡 **Editar dados da loja (nome/CNPJ/telefone)** — API `PATCH /tenant` (Zod
+- [x] **Editar dados da loja (nome/CNPJ/telefone)** — API `PATCH /tenant` (Zod
       `updateTenantSchema`: nome obrigatório, CNPJ/telefone opcionais → `null` quando vazio;
       `P2002` do CNPJ único → 409) e o card "Dados da loja" em `/configuracoes` virou
       formulário (editar/salvar/descartar; "Salvar" habilita só com alteração real). **Sem
       migration** — campos já existiam no `Tenant`. Máscara de CNPJ/telefone: digita só
       números e formata ao sair do campo (`formatCnpj`/`formatPhoneBr` em `packages/shared`);
       banco guarda **só dígitos** (canônico → índice único de `cnpj` robusto). Typecheck da
-      API + build do web ✅. **Worker publicado** (`wrangler deploy`) + smoke test 401 OK;
-      **falta só** o E2E no navegador pelo usuário. *(2.N)*
-- [ ] **NFC-e fiscal** (SEFAZ + certificado) — fase futura dedicada
-- [ ] Convite de funcionários por e-mail (`inviteUserByEmail`)
+      API + build do web ✅. **Worker publicado** (`wrangler deploy`) + **editar→salvar e
+      máscara validados pelo usuário no navegador**. *(2.N)*
+- 🟡 **Gestão de usuários da loja + RBAC (ADR-008)** — *item que fecha a Fase 2*. Papéis
+      **Admin** (`OWNER`/`MANAGER`) e **Usuário** (`CASHIER`/`STOCK`) derivados do `UserRole`
+      atual — **sem migration** (funções puras em `packages/shared/roles.ts`). Convenção de
+      escrita: Admin→`MANAGER`, dono→`OWNER` (preservado), Usuário→`CASHIER`.
+  - [x] **Fatia 1 (feita):** `requireAdmin` na API; `GET /me` (papel p/ o front); `/users`
+        (listar + definir papel + ativar/desativar, com `AuditEvent CHANGE_ROLE`, ADR-004);
+        `PATCH /tenant` e logo agora exigem Admin; front esconde **Configurações** do menu e
+        bloqueia a tela para não-Admin + seção de **Usuários** em `/configuracoes`. Typecheck
+        API + build web ✅; **Worker publicado** (versão `909427d2`) + smoke 401 OK. *(2.O)*
+  - [ ] **Fatia 2:** convite por e-mail (`inviteUserByEmail`) — exige a
+        `SUPABASE_SERVICE_ROLE_KEY` como **secret do Worker** (provisionar + deploy) e um
+        `POST /users/invite`. Até lá, novos usuários nascem pelo script de bootstrap.
+- [x] **Perfil do usuário ("Meus dados")** — menu de conta no rodapé do menu lateral (ícone +
+      nome; abre popover com nome/e-mail/papel, **Meus dados** e **Sair**). Painel edita nome
+      e **telefone** (via `PATCH /me`) e troca a **senha** pelo Supabase Auth no cliente **com
+      reautenticação** (pede a senha atual). E-mail é somente leitura. **Migration
+      `0004_user_phone`** (coluna `phone` opcional em `users`; sem alteração de RLS). API+build
+      ✅; Worker publicado (versão `685109c2`); E2E do `PATCH /me` 6/6. *(2.P)*
 - [ ] Vínculo formal `users.id` ↔ `auth.users.id` (FK cross-schema)
+- [ ] **NFC-e fiscal** (SEFAZ + certificado) — fase futura dedicada
 
-> **Por que o convite de funcionários está adiado:** ele será uma tela de *gestão de
-> usuários* dentro do painel, e faz mais sentido construí-lo depois do núcleo do MVP
-> (login → cadastros → venda). Não bloqueia nada agora porque o primeiro OWNER de cada
-> loja já é criado pelo script de **bootstrap** (invite-only), então dá para desenvolver
-> e testar todo o fluxo sem o convite pronto. Entra na fase de gestão de usuários/papéis.
+> **Gestão de usuários fecha a Fase 2 (ADR-008):** foi deixada por último de propósito —
+> só faz sentido depois do núcleo do MVP (login → cadastros → venda → caixa → estoque →
+> relatórios), e não bloqueou nada até aqui porque o primeiro OWNER de cada loja nasce do
+> script de **bootstrap** (invite-only). Agora entra como o item de fechamento, trazendo
+> junto o **RBAC** (o `user_role` já vai no JWT, mas ainda não é verificado). O papel de
+> **Super Usuário (fabricante)** NÃO entra aqui — é de plataforma (cross-tenant) e vive na
+> fase abaixo (ADR-009).
 
 > **Nota de infra:** o cache de leitura do Hyperdrive foi **desabilitado**
 > (`--caching-disabled`) para evitar listas desatualizadas logo após uma escrita —
 > essencial num ERP/POS. O pooling de conexão segue ativo.
+
+---
+
+## 🟠 Fase 2.5 — Plataforma: multi-loja, Super Usuário e onboarding — **Pendente**
+
+> Capacidades de **plataforma** que **cruzam o limite do tenant** (a fronteira de segurança
+> via RLS). Separadas da Fase 2 de propósito: não são necessárias para uma loja operar e
+> mexem no modelo de isolamento — ver **ADR-009**. Assentam sobre o RBAC da Fase 2 (ADR-008).
+
+- [ ] **Super Usuário (fabricante)** — papel de plataforma **fora** do `UserRole` por-tenant
+      (tabela `PlatformAdmin` e/ou claim `is_platform_admin`), com acesso **cross-tenant
+      controlado** (rotas de plataforma dedicadas na API, não relaxamento do RLS) e auditoria.
+- [ ] **Onboarding de loja** — criar `Tenant` + primeiro **Admin** (substitui o script de
+      bootstrap). Decidir gatilho: **provisionado pelo Super Usuário** (recomendado) vs.
+      signup self-service. A unicidade `Tenant.cnpj` (`@unique`, 409) passa a ter uso real.
+- [ ] **Painel de gestão de lojas** (exclusivo do Super Usuário) — listar/ativar/inativar
+      lojas (`Tenant.isActive`) e entrar no contexto de uma loja para suporte.
+- [ ] Estender a **auditoria (ADR-004)** para eventos de plataforma.
 
 ---
 
