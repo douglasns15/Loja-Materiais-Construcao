@@ -3,11 +3,14 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-06-30 (Fase 2 — Cancelamento de venda concluído; estorno de estoque/caixa + auditoria validados via API publicada e UI no navegador)
+> **Última atualização:** 2026-07-01 (Fase 2 — Relatórios de vendas e caixa: nova rota
+> `/reports` com agregação no servidor + página `/relatorios`; core `calcAverageTicket`
+> e `withPaymentShare` com testes; **worker republicado e validado por E2E na API
+> publicada** — faturamento/ticket médio/quebra por pagamento e divergências de caixa
+> conferidos sobre os dados reais da loja-demo)
 
 > ▶️ **Próximo passo (a definir com o usuário):** uma destas frentes —
-> **relatórios de vendas/caixa** (vendas por período, totais por forma de pagamento,
-> fechamentos), **upload de logo da loja** (Cloudflare R2), ou **devolução/estorno de
+> **upload de logo da loja** (Cloudflare R2), ou **devolução/estorno de
 > caixa fechado** (fluxo separado do cancelamento — repõe estoque e lança saída no caixa
 > de HOJE, preservando o caixa original).
 > Estado atual: PDV completo (carrinho → revisão → confirmar → impressão, com layout
@@ -75,8 +78,13 @@
       reverso INCOME), reversão do pagamento no caixa (esperado ignora `CANCELLED`) e
       `AuditEvent CANCEL_ORDER`; restrito ao caixa aberto — *validado via API publicada
       (14/14) e UI no navegador (2.K)*
-- [ ] **Relatórios** de vendas e caixa — vendas por período, totais por forma de
-      pagamento e fechamentos de caixa
+- [x] **Relatórios** de vendas e caixa — nova rota `/reports` (`GET /sales`,
+      `GET /cash-sessions`) com agregação no servidor (Prisma `aggregate`/`groupBy`,
+      cost-zero); vendas por período (faturamento, nº de vendas, ticket médio,
+      canceladas à parte), totais por forma de pagamento (com participação %) e
+      histórico de fechamentos de caixa com divergência; UI `/relatorios` com atalhos
+      (Hoje/7d/30d) e período De–Até. Core: `calcAverageTicket` + `withPaymentShare`
+      (testes Vitest). **Sem migration** — usa `Order`/`Payment`/`CashSession`. *(2.L)*
 - [ ] **Devolução / estorno de caixa fechado** — fluxo separado do cancelamento: repõe
       estoque (StockMovement INCOME) e lança a saída no caixa **de hoje** (não no caixa
       original já fechado), preservando o histórico. Reaproveita o motor do cancelamento.

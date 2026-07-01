@@ -10,6 +10,8 @@ import {
   calcSaleTotals,
   calcSubtotal,
   reconcileStock,
+  calcAverageTicket,
+  withPaymentShare,
 } from './index';
 
 describe('calcSubtotal', () => {
@@ -147,5 +149,42 @@ describe('calcInventoryAdjustment', () => {
 
   it('contagem igual → quantidade 0 (nada a fazer)', () => {
     expect(calcInventoryAdjustment(10, 10)).toEqual({ type: 'INCOME', quantity: 0 });
+  });
+});
+
+describe('calcAverageTicket', () => {
+  it('faturamento ÷ nº de vendas', () => {
+    expect(calcAverageTicket(300, 4)).toBe(75);
+  });
+
+  it('arredonda a 2 casas', () => {
+    expect(calcAverageTicket(100, 3)).toBe(33.33);
+  });
+
+  it('retorna 0 quando não há vendas (sem divisão por zero)', () => {
+    expect(calcAverageTicket(0, 0)).toBe(0);
+  });
+});
+
+describe('withPaymentShare', () => {
+  it('calcula a participação % e ordena da maior para a menor', () => {
+    const rows = [
+      { method: 'CASH', total: 30, count: 2 },
+      { method: 'PIX', total: 70, count: 1 },
+    ];
+    expect(withPaymentShare(rows)).toEqual([
+      { method: 'PIX', total: 70, count: 1, share: 70 },
+      { method: 'CASH', total: 30, count: 2, share: 30 },
+    ]);
+  });
+
+  it('participação 0 quando não há total (evita divisão por zero)', () => {
+    expect(withPaymentShare([{ method: 'CASH', total: 0, count: 0 }])).toEqual([
+      { method: 'CASH', total: 0, count: 0, share: 0 },
+    ]);
+  });
+
+  it('lista vazia → array vazio', () => {
+    expect(withPaymentShare([])).toEqual([]);
   });
 });

@@ -375,5 +375,47 @@ lógica de impressão do PDV (seletor 80mm/A4 + `@page`). Mudança 100% no front
 > A impressão física depende da impressora do usuário (`window.print()`); aqui foi validada
 > a montagem do documento e a injeção da regra `@page` por modelo.
 
+### 2.L — Relatórios de vendas e caixa (2026-06-30)
+
+Core: `calcAverageTicket` (ticket médio, divisão por zero) e `withPaymentShare`
+(participação % por forma de pagamento + ordenação) — **+6 testes, total 31 no core**.
+Nova rota `/reports` com agregação no servidor (Prisma `aggregate`/`groupBy`, cost-zero):
+`GET /reports/sales?from=&to=` (faturamento, nº de vendas, ticket médio, canceladas à
+parte, quebra por forma de pagamento) e `GET /reports/cash-sessions?from=&to=` (histórico
+de fechamentos com divergência). UI `/relatorios` (atalhos Hoje/7d/30d + período De–Até,
+cards de resumo, tabela por pagamento e tabela de fechamentos). **Sem migration** — usa
+`Order`/`Payment`/`CashSession`. Vendas `CANCELLED` ficam fora do faturamento (coerente
+com o caixa) e são contadas à parte. Bordas do período aplicadas no fuso da loja (UTC-3).
+
+**Build / typecheck / core**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Core: `calcAverageTicket` + `withPaymentShare` (Vitest) | — | ✅ 31/31 no core |
+| Typecheck `apps/api` (`tsc --noEmit`, após `prisma generate`) | sem erros | ✅ |
+| Build de produção (`next build`) | rota `/relatorios` gerada | ✅ 10 rotas, sem erros (3.19 kB) |
+| Compilação + checagem de tipos do web | sem erros | ✅ |
+
+**API publicada (E2E — deploy do worker → login real `owner@lojademo.com` → JWT → Bearer)**
+
+Worker republicado (`wrangler deploy`) com a rota `/reports`. Script E2E sobre os dados
+reais da loja-demo.
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| `GET /reports/sales` (todo o histórico) | 200 | ✅ Faturamento R$ 1.084,80 · 10 vendas |
+| Ticket médio = faturamento ÷ nº de vendas | R$ 108,48 | ✅ (1.084,80 ÷ 10) |
+| Canceladas contadas à parte (fora do faturamento) | 3 | ✅ |
+| Quebra por forma de pagamento (com participação %) | CASH + PIX | ✅ CASH R$ 801,80 (73,91%) · PIX R$ 283,00 (26,09%) |
+| Σ pagamentos = faturamento (sanidade) | igual | ✅ R$ 1.084,80 = R$ 1.084,80 |
+| `GET /reports/cash-sessions` | 200 + fechamentos | ✅ 3 fechamentos |
+| Divergência calculada = contado − esperado | bate por sessão | ✅ −11, −5, −10 (sem discrepância) |
+| Filtro de período (`?from=&to=` de 1 dia) | agrega só o dia | ✅ hoje R$ 0,00 / 0 vendas |
+| `GET /reports/sales` sem token | 401 | ✅ |
+
+> UI `/relatorios` no navegador (cards, tabela por pagamento, fechamentos) fica para
+> confirmação visual no ambiente do usuário; os dados que a tela consome já foram
+> validados acima contra a API publicada.
+
 ### 2.D — Convite de funcionários por e-mail — ⏭️ pendente
 ### 2.I — NFC-e fiscal (SEFAZ) — ⏭️ fase futura dedicada

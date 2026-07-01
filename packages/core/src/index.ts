@@ -147,3 +147,44 @@ export function calcInventoryAdjustment(
     quantity: Math.abs(delta),
   };
 }
+
+// =============================================================================
+// RELATÓRIOS (Reports) — vendas por período e formas de pagamento
+// =============================================================================
+
+/**
+ * Ticket médio = faturamento ÷ nº de vendas. Retorna 0 quando não há vendas
+ * (evita divisão por zero). Arredondado a 2 casas para exibição.
+ */
+export function calcAverageTicket(totalRevenue: number, salesCount: number): number {
+  if (salesCount <= 0) return 0;
+  return Number((totalRevenue / salesCount).toFixed(2));
+}
+
+/** Total agregado por forma de pagamento (entrada crua vinda do groupBy). */
+export interface PaymentMethodTotal {
+  method: string;
+  total: number;
+  count: number;
+}
+
+/** Forma de pagamento com sua participação percentual no total recebido. */
+export interface PaymentMethodShare extends PaymentMethodTotal {
+  /** Participação no total recebido, em % (2 casas). 0 quando o total é 0. */
+  share: number;
+}
+
+/**
+ * Enriquece a quebra por forma de pagamento com a participação percentual de
+ * cada uma no total recebido e ordena da maior para a menor. Função pura: a
+ * soma por método já vem agregada do banco (cost-zero); aqui só derivamos o %.
+ */
+export function withPaymentShare(rows: PaymentMethodTotal[]): PaymentMethodShare[] {
+  const grandTotal = rows.reduce((acc, r) => acc + r.total, 0);
+  return rows
+    .map((r) => ({
+      ...r,
+      share: grandTotal > 0 ? Number(((r.total / grandTotal) * 100).toFixed(2)) : 0,
+    }))
+    .sort((a, b) => b.total - a.total);
+}
