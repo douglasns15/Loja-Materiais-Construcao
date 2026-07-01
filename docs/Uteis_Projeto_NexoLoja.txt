@@ -5,7 +5,7 @@ Login: owner@lojademo.com / NexoLoja#2026
 http://localhost:3000/
 
 ## Leia docs/ROADMAP.md e docs/testes/registro-de-testes.md e vamos continuar
-Próximo passo sugerido (para a outra sessão): Relatórios de vendas e caixa 
+Próximo passo sugerido vamos para o upload de logo (R2)
 
 ## Subir servidor
 
