@@ -59,6 +59,26 @@ export function calcCashDivergence(expectedAmount: number, closingAmount: number
   return Number((closingAmount - expectedAmount).toFixed(2));
 }
 
+/** Movimentação de caixa que não é venda (devolução, sangria, suprimento, despesa). */
+export interface CashMovementLike {
+  type: StockMovementType; // reaproveita 'INCOME' | 'EXPENSE'
+  amount: number;
+}
+
+/**
+ * Saldo líquido das movimentações de caixa: Σ INCOME − Σ EXPENSE.
+ * Entra no valor esperado do caixa junto com a abertura e as vendas em dinheiro,
+ * permitindo que uma devolução (EXPENSE) reduza o esperado do caixa de hoje.
+ * Arredondado a 2 casas.
+ */
+export function netCashMovements(movements: CashMovementLike[]): number {
+  const total = movements.reduce(
+    (acc, m) => acc + (m.type === 'INCOME' ? m.amount : -m.amount),
+    0,
+  );
+  return Number(total.toFixed(2));
+}
+
 // =============================================================================
 // VENDA (Sale / PDV)
 // =============================================================================

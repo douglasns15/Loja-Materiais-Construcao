@@ -9,6 +9,7 @@ type CashSession = {
   openedAt: string;
   openingAmount: string;
   cashInflow: number;
+  cashMovementsNet: number; // entradas − saídas de caixa (devolução, sangria, suprimento)
   expectedAmount: number;
 };
 
@@ -118,6 +119,12 @@ export default function CaixaPage() {
               <dd className="text-right">{BRL(session.openingAmount)}</dd>
               <dt className="text-gray-500">Entradas em dinheiro</dt>
               <dd className="text-right">{BRL(session.cashInflow)}</dd>
+              {session.cashMovementsNet !== 0 && (
+                <>
+                  <dt className="text-gray-500">Devoluções / saídas</dt>
+                  <dd className="text-right text-red-600">{BRL(session.cashMovementsNet)}</dd>
+                </>
+              )}
               <dt className="font-medium">Esperado no caixa</dt>
               <dd className="text-right font-medium">{BRL(session.expectedAmount)}</dd>
             </dl>

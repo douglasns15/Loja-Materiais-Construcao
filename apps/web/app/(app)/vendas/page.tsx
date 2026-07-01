@@ -2,22 +2,32 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { PAYMENT_METHOD_LABELS, cancelOrderSchema, type PaymentMethod } from '@nexoloja/shared';
+import {
+  PAYMENT_METHOD_LABELS,
+  cancelOrderSchema,
+  returnOrderSchema,
+  type PaymentMethod,
+} from '@nexoloja/shared';
 import { apiGet, apiPost } from '@/lib/api';
 import { ReceiptPrint, type Store } from '@/components/ReceiptPrint';
 
 type OrderItem = { id: string; productName: string; quantity: string; unitPrice: string; total: string };
 type Payment = { id: string; method: string; amount: string };
+type OrderStatus = 'DRAFT' | 'CONFIRMED' | 'INVOICED' | 'CANCELLED' | 'RETURNED';
 type Order = {
   id: string;
-  status: 'DRAFT' | 'CONFIRMED' | 'INVOICED' | 'CANCELLED';
+  status: OrderStatus;
   subtotal: string;
   discountAmount: string;
   total: string;
   createdAt: string;
+  cashSession: { id: string; closedAt: string | null } | null;
   items: OrderItem[];
   payments: Payment[];
 };
+
+/** Ação em curso no modal: cancelamento (caixa aberto) ou devolução (caixa fechado). */
+type ActionMode = 'cancel' | 'return';
 
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -29,10 +39,11 @@ function methodLabel(m: string): string {
 
 export default function VendasPage() {
   const [ready, setReady] = useState(false);
-  const [caixaOpen, setCaixaOpen] = useState(false);
+  const [openSessionId, setOpenSessionId] = useState<string | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [cancelId, setCancelId] = useState<string | null>(null);
+  // Modal de ação: qual venda e se é cancelamento ou devolução.
+  const [action, setAction] = useState<{ id: string; mode: ActionMode } | null>(null);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [store, setStore] = useState<Store | null>(null);
@@ -41,7 +52,9 @@ export default function VendasPage() {
   const [printJob, setPrintJob] = useState<{ order: Order; key: number } | null>(null);
 
   async function loadOrders() {
-    setOrders(await apiGet<Order[]>('/orders'));
+    // scope=all: histórico completo (inclui vendas de caixas já fechados), para
+    // permitir a devolução de vendas fora do caixa aberto.
+    setOrders(await apiGet<Order[]>('/orders?scope=all'));
   }
 
   useEffect(() => {
@@ -49,8 +62,8 @@ export default function VendasPage() {
       try {
         apiGet<Store>('/tenant').then(setStore).catch(() => {});
         const session = await apiGet<{ id: string } | null>('/cash-sessions/current');
-        setCaixaOpen(!!session);
-        if (session) await loadOrders();
+        setOpenSessionId(session?.id ?? null);
+        await loadOrders();
       } catch (e) {
         setError((e as Error).message);
       } finally {
@@ -87,30 +100,36 @@ export default function VendasPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [printJob]);
 
-  function abrirCancelamento(id: string) {
+  function abrirAcao(id: string, mode: ActionMode) {
     setError(null);
     setReason('');
-    setCancelId(id);
+    setAction({ id, mode });
   }
 
-  function fecharCancelamento() {
-    setCancelId(null);
+  function fecharAcao() {
+    setAction(null);
     setReason('');
     setError(null);
   }
 
-  async function confirmarCancelamento() {
-    if (!cancelId) return;
-    const parsed = cancelOrderSchema.safeParse({ reason: reason.trim() });
+  async function confirmarAcao() {
+    if (!action) return;
+    const schema = action.mode === 'cancel' ? cancelOrderSchema : returnOrderSchema;
+    const parsed = schema.safeParse({ reason: reason.trim() });
     if (!parsed.success) {
-      setError('Informe o motivo do cancelamento (mín. 3 caracteres).');
+      setError(
+        action.mode === 'cancel'
+          ? 'Informe o motivo do cancelamento (mín. 3 caracteres).'
+          : 'Informe o motivo da devolução (mín. 3 caracteres).',
+      );
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      await apiPost(`/orders/${cancelId}/cancel`, parsed.data);
-      fecharCancelamento();
+      const path = action.mode === 'cancel' ? 'cancel' : 'return';
+      await apiPost(`/orders/${action.id}/${path}`, parsed.data);
+      fecharAcao();
       await loadOrders();
     } catch (e) {
       setError((e as Error).message);
@@ -121,24 +140,7 @@ export default function VendasPage() {
 
   if (!ready) return <p className="text-gray-500">Carregando…</p>;
 
-  if (!caixaOpen) {
-    return (
-      <div className="mx-auto max-w-xl">
-        <h1 className="mb-4 text-2xl font-bold">Histórico de Vendas</h1>
-        <div className="rounded-2xl bg-white p-6 text-center shadow-sm">
-          <p className="mb-3 text-gray-600">
-            As vendas listadas aqui são as do caixa aberto. Abra o caixa para ver, reimprimir e cancelar vendas.
-          </p>
-          <Link
-            href="/caixa"
-            className="inline-block rounded-lg bg-gray-900 px-4 py-2 font-medium text-white hover:bg-gray-800"
-          >
-            Ir para o Caixa
-          </Link>
-        </div>
-      </div>
-    );
-  }
+  const caixaOpen = !!openSessionId;
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -156,36 +158,56 @@ export default function VendasPage() {
           </select>
         </div>
       </div>
-      <p className="mb-6 text-sm text-gray-500">
-        Vendas do caixa aberto. Reimprima o comprovante ou cancele (estorna o estoque e devolve o valor ao caixa).
+      <p className="mb-4 text-sm text-gray-500">
+        Vendas mais recentes. Reimprima o comprovante, <strong>cancele</strong> vendas do caixa
+        aberto (estorna estoque e caixa) ou <strong>devolva</strong> vendas de caixas já fechados
+        (repõe o estoque e lança a saída no caixa de hoje).
       </p>
 
-      {error && !cancelId && <p className="mb-4 text-sm text-red-600">{error}</p>}
+      {!caixaOpen && (
+        <div className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800 ring-1 ring-amber-200">
+          Caixa fechado — você pode consultar e reimprimir. Para cancelar ou devolver,{' '}
+          <Link href="/caixa" className="font-medium underline">
+            abra o caixa
+          </Link>
+          .
+        </div>
+      )}
+
+      {error && !action && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
       <div className="space-y-3">
         {orders.length === 0 ? (
           <div className="rounded-2xl bg-white p-6 text-center text-gray-400 shadow-sm">
-            Nenhuma venda neste caixa ainda.
+            Nenhuma venda registrada ainda.
           </div>
         ) : (
           orders.map((o) => {
             const cancelled = o.status === 'CANCELLED';
+            const returned = o.status === 'RETURNED';
+            const inactive = cancelled || returned;
+            // Venda do caixa aberto atual → cancelar; de caixa fechado → devolver.
+            const isOpenSessionOrder = caixaOpen && o.cashSession?.id === openSessionId;
+            const canAct = o.status === 'CONFIRMED' && caixaOpen;
             const time = new Date(o.createdAt).toLocaleString('pt-BR');
             const methods = [...new Set(o.payments.map((p) => methodLabel(p.method)))].join(', ');
+            const editing = action?.id === o.id;
             return (
               <div
                 key={o.id}
-                className={`rounded-2xl bg-white p-4 shadow-sm ${cancelled ? 'opacity-60' : ''}`}
+                className={`rounded-2xl bg-white p-4 shadow-sm ${inactive ? 'opacity-60' : ''}`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs text-gray-400">
-                        #{o.id.slice(0, 8)}
-                      </span>
+                      <span className="font-mono text-xs text-gray-400">#{o.id.slice(0, 8)}</span>
                       {cancelled ? (
                         <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
                           Cancelada
+                        </span>
+                      ) : returned ? (
+                        <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-700">
+                          Devolvida
                         </span>
                       ) : (
                         <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
@@ -196,7 +218,7 @@ export default function VendasPage() {
                     <div className="mt-0.5 text-xs text-gray-500">{time}</div>
                   </div>
                   <div className="text-right">
-                    <div className={`text-lg font-bold ${cancelled ? 'line-through' : ''}`}>
+                    <div className={`text-lg font-bold ${inactive ? 'line-through' : ''}`}>
                       {BRL(o.total)}
                     </div>
                     {methods && <div className="text-xs text-gray-500">{methods}</div>}
@@ -214,58 +236,84 @@ export default function VendasPage() {
                   ))}
                 </ul>
 
-                {!cancelled && (
-                  <>
-                    {cancelId === o.id ? (
-                      <div className="mt-3 space-y-2 rounded-lg bg-red-50 p-3 ring-1 ring-red-200">
-                        <label className="block text-sm font-medium text-red-800">
-                          Motivo do cancelamento
-                        </label>
-                        <textarea
-                          value={reason}
-                          onChange={(e) => setReason(e.target.value)}
-                          rows={2}
-                          placeholder="Ex.: cliente desistiu, item errado…"
-                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                        />
-                        {error && <p className="text-sm text-red-600">{error}</p>}
-                        <p className="text-xs text-gray-500">
-                          O estoque dos itens volta e o valor é estornado do caixa. Não dá para desfazer.
-                        </p>
-                        <div className="grid grid-cols-2 gap-2">
-                          <button
-                            onClick={fecharCancelamento}
-                            disabled={busy}
-                            className="rounded-lg border border-gray-300 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
-                          >
-                            Voltar
-                          </button>
-                          <button
-                            onClick={confirmarCancelamento}
-                            disabled={busy}
-                            className="rounded-lg bg-red-600 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60"
-                          >
-                            {busy ? 'Cancelando…' : 'Confirmar cancelamento'}
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="mt-3 flex justify-end gap-2 border-t border-gray-100 pt-3">
+                {editing ? (
+                  <div
+                    className={`mt-3 space-y-2 rounded-lg p-3 ring-1 ${
+                      action?.mode === 'cancel'
+                        ? 'bg-red-50 ring-red-200'
+                        : 'bg-orange-50 ring-orange-200'
+                    }`}
+                  >
+                    <label
+                      className={`block text-sm font-medium ${
+                        action?.mode === 'cancel' ? 'text-red-800' : 'text-orange-800'
+                      }`}
+                    >
+                      {action?.mode === 'cancel' ? 'Motivo do cancelamento' : 'Motivo da devolução'}
+                    </label>
+                    <textarea
+                      value={reason}
+                      onChange={(e) => setReason(e.target.value)}
+                      rows={2}
+                      placeholder="Ex.: cliente desistiu, item com defeito…"
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    />
+                    {error && <p className="text-sm text-red-600">{error}</p>}
+                    <p className="text-xs text-gray-500">
+                      {action?.mode === 'cancel'
+                        ? 'O estoque dos itens volta e o valor é estornado deste caixa. Não dá para desfazer.'
+                        : 'O estoque dos itens volta e a saída do valor é lançada no caixa de hoje. Não dá para desfazer.'}
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={fecharAcao}
+                        disabled={busy}
+                        className="rounded-lg border border-gray-300 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                      >
+                        Voltar
+                      </button>
+                      <button
+                        onClick={confirmarAcao}
+                        disabled={busy}
+                        className={`rounded-lg py-2 text-sm font-medium text-white disabled:opacity-60 ${
+                          action?.mode === 'cancel'
+                            ? 'bg-red-600 hover:bg-red-700'
+                            : 'bg-orange-600 hover:bg-orange-700'
+                        }`}
+                      >
+                        {busy
+                          ? 'Processando…'
+                          : action?.mode === 'cancel'
+                            ? 'Confirmar cancelamento'
+                            : 'Confirmar devolução'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-3 flex justify-end gap-2 border-t border-gray-100 pt-3">
+                    <button
+                      onClick={() => reimprimir(o)}
+                      className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
+                    >
+                      Reimprimir nota
+                    </button>
+                    {canAct &&
+                      (isOpenSessionOrder ? (
                         <button
-                          onClick={() => reimprimir(o)}
-                          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
-                        >
-                          Reimprimir nota
-                        </button>
-                        <button
-                          onClick={() => abrirCancelamento(o.id)}
+                          onClick={() => abrirAcao(o.id, 'cancel')}
                           className="rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50"
                         >
                           Cancelar venda
                         </button>
-                      </div>
-                    )}
-                  </>
+                      ) : (
+                        <button
+                          onClick={() => abrirAcao(o.id, 'return')}
+                          className="rounded-lg border border-orange-200 px-3 py-1.5 text-sm font-medium text-orange-600 hover:bg-orange-50"
+                        >
+                          Devolver
+                        </button>
+                      ))}
+                  </div>
                 )}
               </div>
             );

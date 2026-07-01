@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { createPrismaClient } from '@nexoloja/db';
-import { calcCashDivergence, calcExpectedCash } from '@nexoloja/core';
+import { calcCashDivergence, calcExpectedCash, netCashMovements } from '@nexoloja/core';
 import { closeCashSessionSchema, openCashSessionSchema } from '@nexoloja/shared';
 import { type Env, getConnectionString, getTenantId } from '../lib/request';
 import { requireAuth } from '../middleware/auth';
@@ -29,6 +29,23 @@ async function cashInflow(
   return Number(agg._sum.amount ?? 0);
 }
 
+/**
+ * Saldo líquido das movimentações de caixa da sessão (ADR-006): entradas
+ * (suprimento) menos saídas (devolução, sangria, despesa). Reduz/aumenta o
+ * valor esperado do caixa junto com a abertura e as vendas em dinheiro.
+ */
+async function cashMovementsNet(
+  prisma: ReturnType<typeof createPrismaClient>,
+  tenantId: string,
+  sessionId: string,
+): Promise<number> {
+  const movements = await prisma.cashMovement.findMany({
+    where: { tenantId, cashSessionId: sessionId },
+    select: { type: true, amount: true },
+  });
+  return netCashMovements(movements.map((m) => ({ type: m.type, amount: Number(m.amount) })));
+}
+
 /** Sessão de caixa aberta do operador atual + valor esperado até agora. */
 cashSessions.get('/current', async (c) => {
   const tenantId = getTenantId(c);
@@ -47,8 +64,12 @@ cashSessions.get('/current', async (c) => {
       return c.json({ ok: true, data: null });
     }
     const inflow = await cashInflow(prisma, tenantId, session.id);
-    const expectedAmount = calcExpectedCash(Number(session.openingAmount), [inflow]);
-    return c.json({ ok: true, data: { ...session, cashInflow: inflow, expectedAmount } });
+    const movementsNet = await cashMovementsNet(prisma, tenantId, session.id);
+    const expectedAmount = calcExpectedCash(Number(session.openingAmount), [inflow, movementsNet]);
+    return c.json({
+      ok: true,
+      data: { ...session, cashInflow: inflow, cashMovementsNet: movementsNet, expectedAmount },
+    });
   } catch (err) {
     console.error('GET /cash-sessions/current falhou:', err);
     return c.json({ ok: false, error: 'Falha ao buscar o caixa.' }, 500);
@@ -112,7 +133,8 @@ cashSessions.post('/close', async (c) => {
     }
 
     const inflow = await cashInflow(prisma, tenantId, session.id);
-    const expectedAmount = calcExpectedCash(Number(session.openingAmount), [inflow]);
+    const movementsNet = await cashMovementsNet(prisma, tenantId, session.id);
+    const expectedAmount = calcExpectedCash(Number(session.openingAmount), [inflow, movementsNet]);
     const divergence = calcCashDivergence(expectedAmount, parsed.data.closingAmount);
 
     const closed = await prisma.$transaction(async (tx) => {

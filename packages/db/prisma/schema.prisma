@@ -43,7 +43,16 @@ enum OrderStatus {
   DRAFT      // Rascunho (aberto no caixa offline)
   CONFIRMED  // Confirmado
   INVOICED   // Faturado / NF emitida
-  CANCELLED  // Cancelado
+  CANCELLED  // Cancelado (estorno dentro do caixa aberto)
+  RETURNED   // Devolvido (estorno de venda de caixa já fechado — saída no caixa de hoje)
+}
+
+/// Natureza de uma movimentação de caixa que não é uma venda (CashMovement).
+enum CashMovementKind {
+  RETURN      // Devolução de venda (saída de dinheiro)
+  WITHDRAWAL  // Sangria — retirada de dinheiro do caixa (saída)
+  SUPPLY      // Suprimento — reforço de troco (entrada)
+  EXPENSE     // Despesa paga pelo caixa (saída)
 }
 
 /// Tipo de unidade de medida — relevante para módulo Material de Construção
@@ -101,6 +110,7 @@ model Tenant {
   orders      Order[]
   payments    Payment[]
   cashSessions CashSession[]
+  cashMovements CashMovement[]
   stockMovements StockMovement[]
   deliveries  Delivery[]
   auditEvents AuditEvent[]
@@ -276,6 +286,7 @@ model CashSession {
   tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user          User      @relation(fields: [userId], references: [id])
   orders        Order[]
+  movements     CashMovement[]
 
   @@index([tenantId, openedAt])
   @@map("cash_sessions")
@@ -346,6 +357,33 @@ model Payment {
 
   @@index([tenantId, orderId])
   @@map("payments")
+}
+
+/// Movimentação de dinheiro no caixa que NÃO é uma venda: devolução, sangria,
+/// suprimento e despesa avulsa. Entra no cálculo do valor esperado do caixa
+/// (INCOME soma, EXPENSE subtrai), permitindo lançar a saída de uma devolução
+/// no caixa de HOJE sem tocar no caixa original já fechado. `relatedOrderId`
+/// referencia a venda de origem (devolução) — referência solta, no estilo de
+/// AuditEvent (sem FK), pois a venda pode pertencer a outra sessão.
+model CashMovement {
+  id             String           @id @default(uuid()) @db.Uuid
+  tenantId       String           @db.Uuid          // Denormalizado para isolamento multi-tenant (ADR-003)
+  cashSessionId  String           @db.Uuid
+  userId         String           @db.Uuid          // Operador que lançou a movimentação
+  type           TransactionType                    // INCOME soma / EXPENSE subtrai do esperado
+  kind           CashMovementKind
+  amount         Decimal          @db.Decimal(12, 2)
+  reason         String?          @db.VarChar(300)
+  relatedOrderId String?          @db.Uuid          // Venda de origem (devolução)
+  // Campos de sincronização offline
+  syncStatus     SyncStatus       @default(SYNCED)
+  createdAt      DateTime         @default(now())
+
+  tenant         Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  cashSession    CashSession      @relation(fields: [cashSessionId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, cashSessionId])
+  @@map("cash_movements")
 }
 
 // =============================================================================

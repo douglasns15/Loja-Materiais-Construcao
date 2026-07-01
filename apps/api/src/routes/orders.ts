@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { createPrismaClient } from '@nexoloja/db';
 import { calcSaleItemTotal, calcSaleTotals } from '@nexoloja/core';
-import { cancelOrderSchema, createSaleSchema } from '@nexoloja/shared';
+import { cancelOrderSchema, createSaleSchema, returnOrderSchema } from '@nexoloja/shared';
 import { type Env, getConnectionString, getTenantId } from '../lib/request';
 import { requireAuth } from '../middleware/auth';
 
@@ -9,10 +9,12 @@ const orders = new Hono<Env>();
 orders.use('*', requireAuth);
 
 /**
- * Lista as vendas do caixa atualmente aberto do operador (mais recentes primeiro),
- * com itens, pagamentos e status. Base da tela de Vendas e do cancelamento, que é
- * restrito ao caixa aberto (mantém a integridade dos caixas já fechados). Sem caixa
- * aberto, retorna lista vazia.
+ * Lista as vendas com itens, pagamentos e status (mais recentes primeiro).
+ *  - `?scope=all`: últimas vendas do tenant em qualquer sessão (base do Histórico
+ *    de Vendas; inclui o estado do caixa de cada venda para decidir entre cancelar
+ *    e devolver). Sem exigir caixa aberto.
+ *  - padrão: vendas do caixa atualmente aberto do operador (base do cancelamento,
+ *    restrito ao caixa aberto). Sem caixa aberto, retorna lista vazia.
  */
 orders.get('/', async (c) => {
   const tenantId = getTenantId(c);
@@ -22,8 +24,25 @@ orders.get('/', async (c) => {
     return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
   }
 
+  const scope = c.req.query('scope');
+
   try {
     const prisma = createPrismaClient(connectionString);
+
+    if (scope === 'all') {
+      const list = await prisma.order.findMany({
+        where: { tenantId },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+        include: {
+          items: true,
+          payments: true,
+          cashSession: { select: { id: true, closedAt: true } },
+        },
+      });
+      return c.json({ ok: true, data: list });
+    }
+
     const session = await prisma.cashSession.findFirst({
       where: { tenantId, userId, closedAt: null },
       select: { id: true },
@@ -35,7 +54,11 @@ orders.get('/', async (c) => {
       where: { tenantId, cashSessionId: session.id },
       orderBy: { createdAt: 'desc' },
       take: 100,
-      include: { items: true, payments: true },
+      include: {
+        items: true,
+        payments: true,
+        cashSession: { select: { id: true, closedAt: true } },
+      },
     });
     return c.json({ ok: true, data: list });
   } catch (err) {
@@ -290,6 +313,145 @@ orders.post('/:id/cancel', async (c) => {
   } catch (err) {
     console.error('POST /orders/:id/cancel falhou:', err);
     return c.json({ ok: false, error: 'Falha ao cancelar a venda.' }, 500);
+  }
+});
+
+/**
+ * Devolve uma venda de caixa já FECHADO (ADR-006). Diferente do cancelamento
+ * (restrito ao caixa aberto), a devolução preserva a venda e o caixa originais e,
+ * em uma única transação:
+ *  - estorna o estoque: para cada item, StockMovement INCOME reverso + incremento
+ *    de Product.stockQty (ADR-001, reaproveita o motor do cancelamento);
+ *  - lança a SAÍDA de dinheiro no caixa de HOJE: CashMovement EXPENSE/RETURN com o
+ *    valor total da venda (reduz o esperado do caixa aberto atual);
+ *  - marca o Order como RETURNED (bloqueia devolução dupla; segue contando como
+ *    faturamento do dia original — o relatório só exclui CANCELLED);
+ *  - registra AuditEvent RETURN_ORDER com o motivo.
+ * Exige um caixa aberto (destino da saída). Vendas do próprio caixa aberto devem
+ * ser canceladas (não devolvidas).
+ */
+orders.post('/:id/return', async (c) => {
+  const tenantId = getTenantId(c);
+  const userId = c.get('userId');
+  const connectionString = getConnectionString(c.env);
+  if (!tenantId || !connectionString) {
+    return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
+  }
+
+  const orderId = c.req.param('id');
+  const parsed = returnOrderSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) {
+    return c.json(
+      { ok: false, error: 'Informe o motivo da devolução.', issues: parsed.error.flatten() },
+      400,
+    );
+  }
+  const { reason } = parsed.data;
+
+  try {
+    const prisma = createPrismaClient(connectionString);
+
+    // Caixa aberto do operador: destino da saída de dinheiro da devolução.
+    const session = await prisma.cashSession.findFirst({
+      where: { tenantId, userId, closedAt: null },
+      select: { id: true },
+    });
+    if (!session) {
+      return c.json({ ok: false, error: 'Abra o caixa para registrar a devolução.' }, 400);
+    }
+
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, tenantId },
+      include: { items: true },
+    });
+    if (!order) {
+      return c.json({ ok: false, error: 'Venda não encontrada.' }, 404);
+    }
+    if (order.status === 'RETURNED') {
+      return c.json({ ok: false, error: 'Esta venda já foi devolvida.' }, 409);
+    }
+    if (order.status === 'CANCELLED') {
+      return c.json({ ok: false, error: 'Esta venda foi cancelada; não há o que devolver.' }, 409);
+    }
+    if (order.status !== 'CONFIRMED') {
+      return c.json({ ok: false, error: 'Só é possível devolver vendas confirmadas.' }, 400);
+    }
+    // Venda do próprio caixa aberto: o certo é cancelar (estorno na mesma sessão).
+    if (order.cashSessionId === session.id) {
+      return c.json(
+        { ok: false, error: 'Esta venda é do caixa aberto atual; use Cancelar em vez de Devolver.' },
+        400,
+      );
+    }
+
+    const total = Number(order.total);
+
+    const returned = await prisma.$transaction(async (tx) => {
+      // ADR-001: estorna cada item — movimento reverso (INCOME) + incremento do cache.
+      for (const item of order.items) {
+        await tx.stockMovement.create({
+          data: {
+            tenantId,
+            productId: item.productId,
+            type: 'INCOME',
+            quantity: item.quantity,
+            reason: `Devolução da venda ${order.id}`,
+            syncStatus: 'SYNCED',
+          },
+        });
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { stockQty: { increment: item.quantity } },
+        });
+      }
+
+      // ADR-006: saída de dinheiro no caixa de HOJE (não no caixa original).
+      const movement = await tx.cashMovement.create({
+        data: {
+          tenantId,
+          cashSessionId: session.id,
+          userId,
+          type: 'EXPENSE',
+          kind: 'RETURN',
+          amount: total,
+          reason: reason,
+          relatedOrderId: order.id,
+          syncStatus: 'SYNCED',
+        },
+      });
+
+      const updated = await tx.order.update({
+        where: { id: order.id },
+        data: { status: 'RETURNED' },
+        include: { items: true, payments: true },
+      });
+
+      // Evento crítico (ADR-004/006): devolução de venda.
+      await tx.auditEvent.create({
+        data: {
+          tenantId,
+          userId,
+          entity: 'Order',
+          entityId: order.id,
+          action: 'RETURN_ORDER',
+          meta: {
+            reason,
+            total,
+            itemsCount: order.items.length,
+            originalCashSessionId: order.cashSessionId,
+            refundCashSessionId: session.id,
+            cashMovementId: movement.id,
+          },
+        },
+      });
+
+      return { order: updated, movement };
+    });
+
+    return c.json({ ok: true, data: returned });
+  } catch (err) {
+    console.error('POST /orders/:id/return falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao registrar a devolução.' }, 500);
   }
 });
 

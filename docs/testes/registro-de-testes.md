@@ -417,5 +417,58 @@ reais da loja-demo.
 > confirmação visual no ambiente do usuário; os dados que a tela consome já foram
 > validados acima contra a API publicada.
 
+### 2.L2 — Devolução de venda de caixa fechado (2026-07-01)
+
+ADR-006. Migration `0003_cash_movements_and_return` (tabela `cash_movements` + enum
+`CashMovementKind` + valor `OrderStatus.RETURNED` + política RLS) **aplicada no Supabase**
+(`migrate deploy`). Core: `netCashMovements` (entradas − saídas de caixa) usado no cálculo
+do esperado — **+4 testes, total 35 no core**. API: `POST /orders/:id/return` (estorno de
+estoque + `CashMovement EXPENSE/RETURN` no caixa de hoje + `RETURN_ORDER`) e `GET
+/orders?scope=all` (histórico entre sessões). UI: botão **Devolver** no Histórico + linha
+"Devoluções / saídas" no Caixa. Worker **republicado**.
+
+**Build / typecheck / core**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Core: `netCashMovements` (Vitest) | — | ✅ 35/35 no core |
+| `prisma migrate status` → 0003 pendente e depois aplicada | up to date | ✅ |
+| Typecheck `apps/api` (`tsc --noEmit`, após `prisma generate`) | sem erros | ✅ |
+| Build de produção (`next build`) | 10 rotas | ✅ sem erros |
+
+**API publicada (E2E — script `e2e-return`, 16/16)**
+
+Cenário real: vende no caixa A → **fecha A** → abre caixa B (hoje) → devolve a venda de A.
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Venda no caixa A (2× Cimento = R$74) + baixa de estoque | 259 → 257 | ✅ |
+| Devolver sem caixa aberto | bloqueado | ✅ 400 |
+| Devolver sem motivo (ADR-004) | bloqueado | ✅ 400 |
+| Devolução aceita → pedido `RETURNED` | 200 | ✅ |
+| `CashMovement EXPENSE/RETURN` criado (R$74) | gravado | ✅ |
+| Estoque **reposto** na devolução | 257 → 259 | ✅ |
+| Caixa de hoje registra a saída (net negativo) | −R$74 | ✅ |
+| Esperado do caixa desconta a saída | abertura 100 − 74 = R$26 | ✅ |
+| Devolver a mesma venda de novo | bloqueado | ✅ 409 |
+| Devolver venda do caixa **aberto** (deve cancelar) | bloqueado | ✅ 400 |
+| Devolver venda inexistente | não encontrada | ✅ 404 |
+| `GET /orders?scope=all` mostra a venda como `RETURNED` + estado do caixa | ok | ✅ |
+| `AuditEvent RETURN_ORDER` (via service_role) | gravado com motivo/sessões | ✅ |
+
+**UI no navegador (`/vendas` e `/caixa`)**
+
+| Teste | Resultado |
+|---|---|
+| Histórico lista vendas entre sessões (scope=all) com badges | ✅ Confirmada / Cancelada / Devolvida |
+| Venda de caixa fechado mostra botão **Devolver**; do caixa aberto, **Cancelar** | ✅ |
+| Caixa fechado → banner "abra o caixa" e ações ocultas | ✅ |
+| Devolução pela UI (motivo) → venda vira **Devolvida** | ✅ #e0172543 (Devolvida 3→4) |
+| Console do navegador | ✅ sem erros |
+| Caixa mostra linha **"Devoluções / saídas"** em vermelho e reduz o Esperado | ✅ −R$38,20 → esperado R$161,80 (abertura R$200) |
+
+> A devolução é sempre da venda **inteira** nesta fase; devolução **parcial** (itens/quantidades)
+> está registrada como melhoria futura no ROADMAP e no ADR-006.
+
 ### 2.D — Convite de funcionários por e-mail — ⏭️ pendente
 ### 2.I — NFC-e fiscal (SEFAZ) — ⏭️ fase futura dedicada

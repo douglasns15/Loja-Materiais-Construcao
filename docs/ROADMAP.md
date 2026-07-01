@@ -3,16 +3,24 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-01 (Fase 2 — Relatórios de vendas e caixa: nova rota
-> `/reports` com agregação no servidor + página `/relatorios`; core `calcAverageTicket`
-> e `withPaymentShare` com testes; **worker republicado e validado por E2E na API
-> publicada** — faturamento/ticket médio/quebra por pagamento e divergências de caixa
-> conferidos sobre os dados reais da loja-demo)
+> **Última atualização:** 2026-07-01 (Fase 2 — Devolução de venda de caixa fechado
+> (ADR-006): nova tabela `CashMovement` + status `RETURNED`; `POST /orders/:id/return`
+> repõe estoque e lança a saída no caixa de HOJE; esperado do caixa passa a descontar
+> saídas (`netCashMovements` no core); UI "Devolver" no Histórico. Migration `0003`)
 
-> ▶️ **Próximo passo (a definir com o usuário):** uma destas frentes —
-> **upload de logo da loja** (Cloudflare R2), ou **devolução/estorno de
-> caixa fechado** (fluxo separado do cancelamento — repõe estoque e lança saída no caixa
-> de HOJE, preservando o caixa original).
+> ▶️ **Próximo passo — Upload de logo da loja (Cloudflare R2).** Destrava a infra de mídia
+> e o cabeçalho com logo dos comprovantes (o `ReceiptPrint` já exibe `logoUrl` quando existe).
+> Esboço para a próxima sessão:
+> - **R2:** criar bucket + credenciais (S3 API) e domínio público de leitura; segredos no
+>   worker via `wrangler secret` (nunca no repo).
+> - **API:** endpoint que gera **URL de upload assinada (presigned PUT)** para o cliente
+>   subir a imagem direto no R2 (sem passar o binário pela API), + `PATCH /tenant` para
+>   salvar a `logoUrl` final. **Proibido BLOB/Base64 no banco** (CLAUDE.md) — só a URL.
+> - **Web:** na tela da loja (a criar) ou em Configurações, campo de upload da logo
+>   (preview + validação de tipo/tamanho) que usa a URL assinada e grava `logoUrl`.
+> - **Validar:** logo aparece no cabeçalho do comprovante (80mm/A4) e na tela.
+> - *Decisões a alinhar no início:* onde fica o upload (nova tela "Loja/Configurações" vs.
+>   dentro de outra), limite de tamanho/formatos, e se haverá redimensionamento.
 > Estado atual: PDV completo (carrinho → revisão → confirmar → impressão, com layout
 > 80mm/A4 validado no navegador), **cancelamento de venda** (estorno de estoque/caixa +
 > auditoria, restrito ao caixa aberto), **gestão de estoque** (entrada/ajuste/histórico),
@@ -85,10 +93,19 @@
       histórico de fechamentos de caixa com divergência; UI `/relatorios` com atalhos
       (Hoje/7d/30d) e período De–Até. Core: `calcAverageTicket` + `withPaymentShare`
       (testes Vitest). **Sem migration** — usa `Order`/`Payment`/`CashSession`. *(2.L)*
-- [ ] **Devolução / estorno de caixa fechado** — fluxo separado do cancelamento: repõe
-      estoque (StockMovement INCOME) e lança a saída no caixa **de hoje** (não no caixa
-      original já fechado), preservando o histórico. Reaproveita o motor do cancelamento.
-- [ ] Upload de logo da loja (Cloudflare R2)
+- [x] **Devolução de venda de caixa fechado** (ADR-006) — fluxo separado do cancelamento:
+      repõe estoque (StockMovement INCOME reverso) e lança a **saída no caixa de hoje**
+      (nova tabela `CashMovement`, `EXPENSE/RETURN`), sem tocar no caixa original já
+      fechado; marca o pedido como `RETURNED` e registra `AuditEvent RETURN_ORDER`. O
+      esperado do caixa passa a descontar saídas (`netCashMovements` no core). UI: botão
+      **Devolver** no Histórico (vendas de caixas fechados) + linha de saídas no Caixa.
+      Migration `0003_cash_movements_and_return` (tabela + enum + RLS). *(2.L2)*
+  - [ ] **Devolução parcial** (itens/quantidades específicas com rateio de valor) — melhoria
+        futura; hoje a devolução é sempre da venda inteira.
+- [ ] **Upload de logo da loja (Cloudflare R2)** — ⏭️ **próximo passo**. Bucket R2 +
+      URL de upload assinada (presigned PUT) gerada pela API; cliente sobe a imagem direto
+      no R2; `PATCH /tenant` salva só a `logoUrl` (nunca BLOB/Base64 no banco). UI de upload
+      (preview + validação) e logo no cabeçalho do comprovante (já suportado no `ReceiptPrint`).
 - [ ] **NFC-e fiscal** (SEFAZ + certificado) — fase futura dedicada
 - [ ] Convite de funcionários por e-mail (`inviteUserByEmail`)
 - [ ] Vínculo formal `users.id` ↔ `auth.users.id` (FK cross-schema)

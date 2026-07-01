@@ -12,6 +12,7 @@ import {
   reconcileStock,
   calcAverageTicket,
   withPaymentShare,
+  netCashMovements,
 } from './index';
 
 describe('calcSubtotal', () => {
@@ -163,6 +164,32 @@ describe('calcAverageTicket', () => {
 
   it('retorna 0 quando não há vendas (sem divisão por zero)', () => {
     expect(calcAverageTicket(0, 0)).toBe(0);
+  });
+});
+
+describe('netCashMovements', () => {
+  it('saldo líquido = Σ INCOME − Σ EXPENSE', () => {
+    expect(
+      netCashMovements([
+        { type: 'INCOME', amount: 50 }, // suprimento
+        { type: 'EXPENSE', amount: 30 }, // sangria
+        { type: 'EXPENSE', amount: 74 }, // devolução
+      ]),
+    ).toBe(-54);
+  });
+
+  it('só devolução (saída) reduz o esperado', () => {
+    expect(netCashMovements([{ type: 'EXPENSE', amount: 74 }])).toBe(-74);
+  });
+
+  it('sem movimentações → 0', () => {
+    expect(netCashMovements([])).toBe(0);
+  });
+
+  it('combina com calcExpectedCash (abertura + vendas + movimentações)', () => {
+    const net = netCashMovements([{ type: 'EXPENSE', amount: 74 }]);
+    // abertura 100 + vendas 74 + devolução -74 = 100
+    expect(calcExpectedCash(100, [74, net])).toBe(100);
   });
 });
 

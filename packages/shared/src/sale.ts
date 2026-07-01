@@ -43,3 +43,14 @@ export const cancelOrderSchema = z.object({
   reason: z.string().min(3, 'Informe o motivo do cancelamento.').max(300),
 });
 export type CancelOrderInput = z.infer<typeof cancelOrderSchema>;
+
+/**
+ * Payload para devolver uma venda de caixa já fechado (ADR-006). Diferente do
+ * cancelamento (que estorna dentro do caixa aberto), a devolução repõe o estoque
+ * e lança a SAÍDA de dinheiro no caixa de HOJE, sem tocar no caixa original.
+ * O motivo é obrigatório porque é um evento crítico auditado (`RETURN_ORDER`).
+ */
+export const returnOrderSchema = z.object({
+  reason: z.string().min(3, 'Informe o motivo da devolução.').max(300),
+});
+export type ReturnOrderInput = z.infer<typeof returnOrderSchema>;
