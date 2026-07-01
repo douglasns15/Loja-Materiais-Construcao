@@ -7,6 +7,8 @@ export type Bindings = {
   DATABASE_URL?: string;
   /** URL do projeto Supabase (para verificar o JWT via JWKS). */
   SUPABASE_URL?: string;
+  /** Bucket de mídia no Cloudflare R2 — logo da loja (ADR-007). */
+  MEDIA?: R2Bucket;
 };
 
 /** Dados do usuário autenticado, populados pelo middleware `requireAuth`. */

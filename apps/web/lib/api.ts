@@ -42,3 +42,21 @@ export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
   });
   return handle<T>(res);
 }
+
+export async function apiDelete<T>(path: string): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'DELETE',
+    headers: await authHeaders(),
+  });
+  return handle<T>(res);
+}
+
+/** Envia um arquivo como corpo cru da requisição (ex.: upload de logo, ADR-007). */
+export async function apiUpload<T>(path: string, file: File): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': file.type, ...(await authHeaders()) },
+    body: file,
+  });
+  return handle<T>(res);
+}

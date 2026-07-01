@@ -26,6 +26,26 @@ app.use(
 
 app.get('/health', (c) => c.json({ ok: true, service: 'nexoloja-api' }));
 
+/**
+ * Leitura pública da logo da loja servida pelo próprio Worker a partir do R2
+ * (ADR-007). Sem autenticação — a URL é referenciada em <img> (comprovantes,
+ * tela de configurações). A `logoUrl` gravada no banco carrega `?v=<ts>` para
+ * invalidar cache a cada novo upload, por isso o cache pode ser longo.
+ */
+app.get('/public/logo/:tenantId', async (c) => {
+  const bucket = c.env.MEDIA;
+  if (!bucket) return c.notFound();
+  const obj = await bucket.get(`logos/${c.req.param('tenantId')}`);
+  if (!obj) return c.notFound();
+  return new Response(obj.body, {
+    headers: {
+      'Content-Type': obj.httpMetadata?.contentType ?? 'application/octet-stream',
+      'Cache-Control': 'public, max-age=31536000, immutable',
+      ETag: obj.httpEtag,
+    },
+  });
+});
+
 // Rotas de recursos
 app.route('/products', products);
 app.route('/customers', customers);
