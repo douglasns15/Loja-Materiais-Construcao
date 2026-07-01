@@ -498,11 +498,20 @@ UI nova `/configuracoes` (preview + validação + Salvar/Remover). **Sem migrati
 | Botão "Salvar logo" desabilitado sem arquivo | ✅ (cinza) |
 | Botão "Remover" oculto quando não há logo | ✅ |
 
-> ⏭️ **Pendente (passos de nuvem + E2E do usuário):** criar o bucket
-> (`npx wrangler r2 bucket create nexoloja-media`) e publicar o Worker
-> (`npx wrangler deploy`). Depois: subir logo → aparece na tela, persiste em `GET /tenant`
-> e sai no **cabeçalho do comprovante** (80mm/A4); testar Remover e os limites
-> (> 1 MB / formato inválido → erro amigável).
+**Nuvem + E2E (usuário) — 2026-07-01**
+
+R2 ativado no painel · bucket `nexoloja-media` criado (`wrangler r2 bucket create`) ·
+Worker publicado (`wrangler deploy`) com as rotas novas.
+
+| Teste | Resultado |
+|---|---|
+| `wrangler r2 bucket create nexoloja-media` | ✅ criado (após ativar o R2 no painel) |
+| `wrangler deploy` (rotas `/tenant/logo`, `/public/logo/:tenantId`) | ✅ publicado |
+| Upload de logo em `/configuracoes` → aparece na tela e persiste | ✅ validado no navegador pelo usuário |
+| Logo no **cabeçalho do comprovante** (80mm/A4) | ✅ validado no navegador pelo usuário |
+
+> Erro inicial `code: 10042` ("enable R2 through the Cloudflare Dashboard") resolvido
+> ativando o R2 no painel da conta (aceitar termos) antes de criar o bucket.
 
 ### 2.D — Convite de funcionários por e-mail — ⏭️ pendente
 ### 2.I — NFC-e fiscal (SEFAZ) — ⏭️ fase futura dedicada

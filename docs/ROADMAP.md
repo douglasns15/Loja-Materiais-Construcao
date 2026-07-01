@@ -3,24 +3,22 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-01 (Fase 2 — Upload de logo da loja (Cloudflare R2 /
-> ADR-007): binding `[[r2_buckets]]` no Worker (sem chaves S3/CORS); `POST /tenant/logo`
-> valida tipo/tamanho e grava a imagem no R2 salvando SÓ a `logoUrl`; `DELETE /tenant/logo`
-> remove; leitura pública servida pelo próprio Worker em `GET /public/logo/:tenantId` com
-> cache longo + cache-bust por versão. Validação pura em `packages/shared` (`validateLogo`).
-> Nova tela `/configuracoes` (upload + preview + validação). **Sem migration** — `logoUrl`
-> já existia. Código + build/typecheck/UI validados localmente; **falta você criar o bucket
-> e publicar o Worker** para o E2E — ver bloco abaixo)
+> **Última atualização:** 2026-07-01 (Fase 2 — Upload de logo da loja **concluído**
+> (Cloudflare R2 / ADR-007): binding `[[r2_buckets]]` no Worker (sem chaves S3/CORS);
+> `POST /tenant/logo` valida tipo/tamanho e grava a imagem no R2 salvando SÓ a `logoUrl`;
+> `DELETE /tenant/logo` remove; leitura pública servida pelo próprio Worker em
+> `GET /public/logo/:tenantId` com cache longo + cache-bust por versão. Validação pura em
+> `packages/shared` (`validateLogo`). Nova tela `/configuracoes`. **Sem migration**. Bucket
+> `nexoloja-media` criado, Worker publicado e **E2E validado no navegador** pelo usuário)
 
-> ▶️ **Próximo passo — Provisionar o R2 + publicar e validar o upload de logo.** O código
-> está pronto; faltam os passos de nuvem (conta Cloudflare do usuário) + o E2E:
-> - **Criar o bucket** (uma vez): `cd apps/api && npx wrangler r2 bucket create nexoloja-media`.
-> - **Publicar o Worker** com as rotas novas: `cd apps/api && npx wrangler deploy`.
-> - **Validar E2E:** subir uma logo em `/configuracoes` → conferir que aparece na tela,
->   persiste (`GET /tenant` retorna `logoUrl`) e sai no **cabeçalho do comprovante** (80mm/A4).
->   Testar **Remover** (volta a "Sem logo") e limites (arquivo > 1 MB / formato inválido → erro).
-> - *Depois disso:* editar **dados da loja** (nome/CNPJ/telefone via `PATCH /tenant`) — a tela
->   `/configuracoes` já tem o espaço reservado (hoje só leitura).
+> ▶️ **Próximo passo — Editar os dados da loja (nome/CNPJ/telefone).** A tela
+> `/configuracoes` já mostra esses campos em modo leitura; falta torná-los editáveis:
+> - **API:** `PATCH /tenant` (validação Zod dos campos: nome obrigatório, CNPJ/telefone
+>   opcionais) atualizando o `Tenant`.
+> - **Web:** transformar o card "Dados da loja" num formulário (editar + salvar), reusando
+>   o padrão das outras telas de cadastro.
+> - *Também em aberto na Fase 2:* devolução **parcial** (itens/quantidades) e, mais à frente,
+>   gestão de usuários (convite de funcionários) e NFC-e fiscal.
 > Estado atual: PDV completo (carrinho → revisão → confirmar → impressão, com layout
 > 80mm/A4 validado no navegador), **cancelamento de venda** (estorno de estoque/caixa +
 > auditoria, restrito ao caixa aberto), **gestão de estoque** (entrada/ajuste/histórico),
@@ -102,14 +100,13 @@
       Migration `0003_cash_movements_and_return` (tabela + enum + RLS). *(2.L2)*
   - [ ] **Devolução parcial** (itens/quantidades específicas com rateio de valor) — melhoria
         futura; hoje a devolução é sempre da venda inteira.
-- [x] **Upload de logo da loja (Cloudflare R2)** — 🟡 **código pronto; falta deploy+E2E**.
-      **R2 binding** no Worker (ADR-007, não presigned): `POST /tenant/logo` valida
-      tipo/tamanho (`validateLogo` em `packages/shared`), grava no R2 (`env.MEDIA.put`) e
-      salva só a `logoUrl` (nunca BLOB/Base64); `DELETE /tenant/logo` remove; leitura pública
-      pelo próprio Worker em `GET /public/logo/:tenantId` (cache longo + cache-bust `?v=`).
-      UI nova `/configuracoes` (upload + preview + validação). **Sem migration** — `logoUrl`
-      já existia. Build/typecheck/UI OK localmente; **pendente:** criar bucket `nexoloja-media`
-      + `wrangler deploy` + E2E (logo no cabeçalho do comprovante).
+- [x] **Upload de logo da loja (Cloudflare R2)** — **concluído**. **R2 binding** no Worker
+      (ADR-007, não presigned): `POST /tenant/logo` valida tipo/tamanho (`validateLogo` em
+      `packages/shared`), grava no R2 (`env.MEDIA.put`) e salva só a `logoUrl` (nunca
+      BLOB/Base64); `DELETE /tenant/logo` remove; leitura pública pelo próprio Worker em
+      `GET /public/logo/:tenantId` (cache longo + cache-bust `?v=`). UI nova `/configuracoes`
+      (upload + preview + validação). **Sem migration** — `logoUrl` já existia. Bucket
+      `nexoloja-media` criado + Worker publicado + E2E validado no navegador. *(2.M)*
 - [ ] **NFC-e fiscal** (SEFAZ + certificado) — fase futura dedicada
 - [ ] Convite de funcionários por e-mail (`inviteUserByEmail`)
 - [ ] Vínculo formal `users.id` ↔ `auth.users.id` (FK cross-schema)
