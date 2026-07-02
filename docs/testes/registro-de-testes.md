@@ -728,3 +728,43 @@ alternativas: Custom SMTP, Pro ou Send Email hook). Como a edição do template 
 
 ### 2.D — Convite de funcionários por e-mail — ✅ concluído (ver 2.Q)
 ### 2.I — NFC-e fiscal (SEFAZ) — ⏭️ fase futura dedicada
+
+---
+
+## 2.R — Publicar o web no Cloudflare (OpenNext) — 2026-07-01
+
+> Front `apps/web` (Next.js 15.1.3) publicado no Cloudflare Workers via
+> `@opennextjs/cloudflare` (Pages descontinuado, ADR-005). URL gerada, sem domínio próprio:
+> **https://nexoloja-web.imortal.workers.dev**. As três `NEXT_PUBLIC_*` são embutidas no
+> bundle no `next build` (a partir do `.env.local`) — não são vars/secrets de runtime.
+
+**Config + build (código) — 2026-07-01**
+
+| O que foi testado | Método | Resultado |
+|---|---|---|
+| Deps OpenNext + wrangler 4 (`apps/web`) | `npm install -D @opennextjs/cloudflare wrangler@4` | ✅ instaladas |
+| `open-next.config.ts` + `wrangler.jsonc` (`nodejs_compat`, assets) | criados | ✅ |
+| Build do adaptador (Next build + bundle Worker) | `opennextjs-cloudflare build` | ✅ 12 rotas, `worker.js` gerado |
+
+**Deploy + smoke automatizado (Claude, wrangler autenticado) — 2026-07-01**
+
+| Passo | Método | Resultado |
+|---|---|---|
+| Deploy do web | `opennextjs-cloudflare deploy` | ✅ `nexoloja-web.imortal.workers.dev` |
+| Redeploy da API com CORS da nova origem | `wrangler deploy` (`apps/api`) | ✅ publicado |
+| `GET /login` (web) | `curl` | ✅ HTTP 200 |
+| `GET /` (web, redireciona p/ login) | `curl` | ✅ HTTP 307 |
+| `NEXT_PUBLIC_SUPABASE_URL` embutida no bundle servido | `curl` chunk JS | ✅ presente |
+| `NEXT_PUBLIC_API_URL` embutida no bundle servido | `curl` chunk JS | ✅ presente |
+| CORS preflight da API com `Origin: nexoloja-web.imortal.workers.dev` | `curl -X OPTIONS /me` | ✅ 204 + `access-control-allow-origin` correto |
+
+**Config Supabase + E2E de convite pela URL publicada (usuário) — 2026-07-01**
+
+| Passo | Resultado |
+|---|---|
+| Supabase *URL Configuration*: Site URL → `https://nexoloja-web.imortal.workers.dev` | ✅ configurado |
+| Supabase *Redirect URLs*: `https://nexoloja-web.imortal.workers.dev/**` (cobre `/definir-senha`) + `http://localhost:3000/**` mantido p/ dev | ✅ 2 URLs |
+| E2E convite pela URL publicada (convite → e-mail → `/definir-senha` → login) | ✅ validado pelo usuário no navegador |
+
+> **2.R concluída** — web em produção na edge (`nexoloja-web.imortal.workers.dev`), com convite
+> de usuário validado ponta a ponta pela URL publicada. Fase 2 100% operacional em produção.

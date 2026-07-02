@@ -147,8 +147,14 @@ O schema **já nasce preparado** para offline (UUIDs no cliente, `syncStatus`, v
 
 ## 7. Implantação (deploy)
 
-- **Web:** `apps/web` → Cloudflare Workers via **adaptador OpenNext** (`npx opennextjs-cloudflare`).
-- **API:** `apps/api` → Cloudflare Workers via **Wrangler**.
+- **Web:** `apps/web` → Cloudflare Workers via **adaptador OpenNext** (`@opennextjs/cloudflare`).
+  Config em `apps/web/wrangler.jsonc` (+ `open-next.config.ts`). Deploy: `npm run deploy` (roda
+  `opennextjs-cloudflare build && deploy`). Publicado em **https://nexoloja-web.imortal.workers.dev**
+  (sem domínio próprio por ora). As `NEXT_PUBLIC_*` são **embutidas no build** (não são secrets
+  de runtime). Ao mudar a URL, atualizar Site URL / Redirect URLs no Supabase Auth (wildcard
+  `/**` cobre `/definir-senha`) e o CORS da API.
+- **API:** `apps/api` → Cloudflare Workers via **Wrangler** (`wrangler deploy`). Publicada em
+  **https://nexoloja-api.imortal.workers.dev**. CORS libera as origens do web (dev + produção).
 - **Banco:** migrações Prisma aplicadas ao Supabase (`prisma migrate deploy`) no pipeline de CI.
 - **Pooling:** Hyperdrive configurado apontando para o pooler do Supabase (Supavisor).
 - **CI/CD:** GitHub Actions roda lint + testes (`turbo run lint test`), depois aplica migrações e publica os dois Workers.

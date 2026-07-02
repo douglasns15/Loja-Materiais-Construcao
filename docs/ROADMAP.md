@@ -3,7 +3,9 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-01 (**Fase 2 CONCLUÍDA** — **Convite de usuário por e-mail —
+> **Última atualização:** 2026-07-01 (**Web publicado no Cloudflare via OpenNext e validado** →
+> `nexoloja-web.imortal.workers.dev` (convite E2E OK pela URL publicada); ver bloco abaixo.
+> Antes: **Fase 2 CONCLUÍDA** — **Convite de usuário por e-mail —
 > fatia 2 do ADR-008 (2.Q)**: `POST /users/invite` (Supabase `inviteUserByEmail` via
 > `service_role` + linha em `users` + `AuditEvent CHANGE_ROLE`), botão **Convidar** em
 > `/configuracoes` e página `/definir-senha`; binding `SUPABASE_SERVICE_ROLE_KEY` provisionado
@@ -28,9 +30,17 @@
 > **remetente próprio**, template + branding + campo de e-mail da loja ficaram todos como
 > **melhorias futuras** (ver item da fatia 2). Hoje o convite funciona com o template padrão.
 >
-> ▶️ **Próximo passo (fora do ADR-008):** **Publicar o web no Cloudflare** (OpenNext → URL
-> `*.workers.dev`, sem domínio por ora) — hoje o front só roda local (`npm run dev`). Depois,
-> avançar para a **Fase 2.5 (plataforma, ADR-009)** ou **Fase 3**.
+> ✅ **Web publicado no Cloudflare (OpenNext) — 2026-07-01 — validado:** `apps/web` roda na edge
+> em **https://nexoloja-web.imortal.workers.dev** (Workers via `@opennextjs/cloudflare`; Pages
+> descontinuado, ADR-005), sem domínio próprio por ora. As `NEXT_PUBLIC_*` são embutidas no
+> build (não são secrets de runtime). CORS da API liberado para a nova origem + API republicada;
+> Supabase *URL Configuration* atualizado (Site URL + Redirect `.../**` cobrindo `/definir-senha`,
+> localhost mantido p/ dev). Smoke automatizado ✅ (login 200, env embutidas, preflight CORS 204)
+> e **E2E de convite pela URL publicada validado pelo usuário no navegador** (convite → e-mail →
+> `/definir-senha` → login). Ver 2.R no registro de testes.
+>
+> ▶️ **Próximo passo:** **Fase 2.5 (plataforma / multi-loja / Super Usuário / onboarding,
+> ADR-009)** — *ainda não iniciada, aguardando decisão*. Alternativa: **Fase 3** (offline-first).
 > - *Melhoria futura na Fase 2:* devolução **parcial** (itens/quantidades com rateio).
 > - *Fase própria (Plataforma, ver abaixo):* **multi-loja + Super Usuário + onboarding** (ADR-009).
 > - *Fase futura dedicada:* **NFC-e fiscal** (SEFAZ + certificado).

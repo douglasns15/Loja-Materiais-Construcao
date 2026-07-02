@@ -1,0 +1,5 @@
+# Artefatos de build do OpenNext / Cloudflare (gerados por `npm run deploy`)
+.open-next/
+.wrangler/
+# Tipos gerados pelo wrangler (cf-typegen)
+cloudflare-env.d.ts

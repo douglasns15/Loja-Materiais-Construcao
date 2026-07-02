@@ -1,3 +1,9 @@
+## PRODUÇÃO (Cloudflare, OpenNext) — validado em 2026-07-01
+Web: https://nexoloja-web.imortal.workers.dev
+API: https://nexoloja-api.imortal.workers.dev
+Deploy do web: cd apps/web && npm run deploy   (wrangler autenticado)
+Deploy da API: cd apps/api && npx wrangler deploy
+
 ## O servidor de dev está rodando — você pode abrir http://localhost:3000 e testar você mesmo:
 
 Login: owner@lojademo.com / NexoLoja#2026

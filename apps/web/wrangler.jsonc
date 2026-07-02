@@ -1,0 +1,18 @@
+{
+  // PWA Next.js publicada no Cloudflare Workers via OpenNext (ADR-005).
+  // URL gerada: https://nexoloja-web.imortal.workers.dev (sem domínio próprio por ora).
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nexoloja-web",
+  // Worker gerado pelo build do OpenNext.
+  "main": ".open-next/worker.js",
+  // nodejs_compat é exigido pelo runtime do OpenNext; a data precisa ser >= 2024-09-23.
+  "compatibility_date": "2024-12-30",
+  "compatibility_flags": ["nodejs_compat"],
+  // Assets estáticos (_next/static, public/) servidos direto pelo CDN da Cloudflare.
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  }
+  // Sem [vars]/secrets: as três NEXT_PUBLIC_* são embutidas no bundle durante o
+  // `next build` (a partir do .env.local), não são variáveis de runtime do Worker.
+}

@@ -16,11 +16,15 @@ import usersRoute from './routes/users';
 
 const app = new Hono<Env>();
 
-// CORS: libera a PWA (dev local; origens de produção entram aqui depois).
+// CORS: libera a PWA (dev local + web publicado no Cloudflare via OpenNext).
 app.use(
   '*',
   cors({
-    origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+    origin: [
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      'https://nexoloja-web.imortal.workers.dev',
+    ],
     allowHeaders: ['Authorization', 'Content-Type'],
     allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
   }),
