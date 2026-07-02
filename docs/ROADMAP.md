@@ -3,7 +3,12 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-01 (Fase 2 — **Perfil "Meus dados" (2.P)**: menu de conta
+> **Última atualização:** 2026-07-01 (**Fase 2 CONCLUÍDA** — **Convite de usuário por e-mail —
+> fatia 2 do ADR-008 (2.Q)**: `POST /users/invite` (Supabase `inviteUserByEmail` via
+> `service_role` + linha em `users` + `AuditEvent CHANGE_ROLE`), botão **Convidar** em
+> `/configuracoes` e página `/definir-senha`; binding `SUPABASE_SERVICE_ROLE_KEY` provisionado
+> + Worker publicado + **E2E validado pelo usuário no navegador**. Antes: **Perfil "Meus
+> dados" (2.P)**: menu de conta
 > no rodapé (ícone + nome, popover com Meus dados/Sair); painel edita nome + **telefone**
 > (`PATCH /me`) e troca **senha** via Supabase Auth com **reautenticação**. Migration
 > `0004_user_phone` (coluna `phone` opcional em `users`) aplicada; Worker publicado (versão
@@ -12,12 +17,20 @@
 > `/users`, gate de Configurações; E2E de RBAC 14/14. Falta a **fatia 2** do ADR-008 (convite
 > por e-mail via `service_role`), que **fecha a Fase 2**, e a conferência visual no navegador)
 
-> ▶️ **Próximo passo — fatia 2 (FECHA a Fase 2): convite de usuário por e-mail**
-> (`inviteUserByEmail`). Pré-requisito do usuário: provisionar a `SUPABASE_SERVICE_ROLE_KEY`
-> como **secret do Worker** (`wrangler secret put SUPABASE_SERVICE_ROLE_KEY`). A implementar:
-> `POST /users/invite` (cria no Supabase Auth + linha em `users` com papel) e botão
-> **Convidar** na seção Usuários de `/configuracoes`. RBAC (2.O) e perfil (2.P) já validados
-> pelo usuário no navegador — logins: Admin `owner@lojademo.com`, Usuário `caixa@lojademo.com`.
+> ✅ **Fase 2 fechada** — a fatia 2 do ADR-008 (convite de usuário por e-mail) foi validada
+> ponta a ponta pelo usuário no navegador (convite → e-mail → `/definir-senha` → login). Com
+> ela, gestão de usuários + RBAC concluídos. Logins de teste: Admin `owner@lojademo.com`,
+> Usuário `caixa@lojademo.com`.
+>
+> ℹ️ **E-mail de convite — personalização adiada.** O convite já envia o nome da loja
+> (`data.store_name`), pronto para uso, mas **editar o template de e-mail é bloqueado no free
+> tier do Supabase** (exige Custom SMTP, Pro ou Send Email hook). Como isso se acopla ao
+> **remetente próprio**, template + branding + campo de e-mail da loja ficaram todos como
+> **melhorias futuras** (ver item da fatia 2). Hoje o convite funciona com o template padrão.
+>
+> ▶️ **Próximo passo (fora do ADR-008):** **Publicar o web no Cloudflare** (OpenNext → URL
+> `*.workers.dev`, sem domínio por ora) — hoje o front só roda local (`npm run dev`). Depois,
+> avançar para a **Fase 2.5 (plataforma, ADR-009)** ou **Fase 3**.
 > - *Melhoria futura na Fase 2:* devolução **parcial** (itens/quantidades com rateio).
 > - *Fase própria (Plataforma, ver abaixo):* **multi-loja + Super Usuário + onboarding** (ADR-009).
 > - *Fase futura dedicada:* **NFC-e fiscal** (SEFAZ + certificado).
@@ -62,7 +75,12 @@
 
 ---
 
-## 🔵 Fase 2 — Autenticação, Segurança (RLS) e MVP funcional — **Em andamento**
+## 🔵 Fase 2 — Autenticação, Segurança (RLS) e MVP funcional — **Concluída (MVP)**
+
+> Fechada pelo item que a define (gestão de usuários + RBAC, ADR-008), validado no navegador.
+> Itens ainda desmarcados abaixo **não** travam o fechamento: **NFC-e** é fase futura dedicada;
+> o **vínculo FK cross-schema** é endurecimento opcional (o `users.id = auth.users.id` já é
+> garantido em código); **devolução parcial** e **melhorias de e-mail** são melhorias futuras.
 
 - [x] **API protegida por JWT do Supabase** (middleware `requireAuth`) — aposenta o `x-tenant-id`
 - [x] Bootstrap de loja + OWNER (`users.id` = `auth.users.id`)
@@ -118,7 +136,7 @@
       banco guarda **só dígitos** (canônico → índice único de `cnpj` robusto). Typecheck da
       API + build do web ✅. **Worker publicado** (`wrangler deploy`) + **editar→salvar e
       máscara validados pelo usuário no navegador**. *(2.N)*
-- 🟡 **Gestão de usuários da loja + RBAC (ADR-008)** — *item que fecha a Fase 2*. Papéis
+- [x] **Gestão de usuários da loja + RBAC (ADR-008)** — *fecha a Fase 2*. Papéis
       **Admin** (`OWNER`/`MANAGER`) e **Usuário** (`CASHIER`/`STOCK`) derivados do `UserRole`
       atual — **sem migration** (funções puras em `packages/shared/roles.ts`). Convenção de
       escrita: Admin→`MANAGER`, dono→`OWNER` (preservado), Usuário→`CASHIER`.
@@ -127,17 +145,29 @@
         `PATCH /tenant` e logo agora exigem Admin; front esconde **Configurações** do menu e
         bloqueia a tela para não-Admin + seção de **Usuários** em `/configuracoes`. Typecheck
         API + build web ✅; **Worker publicado** (versão `909427d2`) + smoke 401 OK. *(2.O)*
-  - [ ] **Fatia 2:** convite por e-mail (`inviteUserByEmail`) — exige a
-        `SUPABASE_SERVICE_ROLE_KEY` como **secret do Worker** (provisionar + deploy) e um
-        `POST /users/invite`. Até lá, novos usuários nascem pelo script de bootstrap.
+  - [x] **Fatia 2 (feita):** convite por e-mail (`inviteUserByEmail`). `inviteUserSchema`
+        (shared), `POST /users/invite` (cria/recupera no Supabase Auth + linha em `users` com
+        papel + `AuditEvent CHANGE_ROLE`), formulário **Convidar** em `/configuracoes` e página
+        pública `/definir-senha`. Secret `SUPABASE_SERVICE_ROLE_KEY` provisionado + Worker
+        publicado; **E2E no navegador validado pelo usuário** (convite → e-mail → definir senha
+        → login). Ver 2.Q. O convite já envia o **nome da loja** (`data.store_name`), pronto
+        para o template — mas hoje usa o **template padrão** do Supabase (ver melhoria abaixo).
+    - [ ] *Melhorias futuras de e-mail (fora do ADR-008):* **(a)** **personalizar o template**
+          do convite (PT-BR + `{{ .Data.store_name }}`) — **bloqueado no free tier** (exige
+          Custom SMTP, Pro ou Send Email hook); **(b)** **remetente próprio (branded)** via
+          **Custom SMTP** (Resend/SES) — exige **domínio** com SPF/DKIM; **(c)** campo `email`
+          no cadastro da loja (migration em `Tenant`) para **Reply-To**/contato no e-mail e no
+          comprovante. Padrão de SaaS: envio pela plataforma, com nome de exibição = loja e
+          Reply-To = e-mail da loja. (a) e (b) andam juntos: editar o template requer o SMTP.
 - [x] **Perfil do usuário ("Meus dados")** — menu de conta no rodapé do menu lateral (ícone +
       nome; abre popover com nome/e-mail/papel, **Meus dados** e **Sair**). Painel edita nome
       e **telefone** (via `PATCH /me`) e troca a **senha** pelo Supabase Auth no cliente **com
       reautenticação** (pede a senha atual). E-mail é somente leitura. **Migration
       `0004_user_phone`** (coluna `phone` opcional em `users`; sem alteração de RLS). API+build
       ✅; Worker publicado (versão `685109c2`); E2E do `PATCH /me` 6/6. *(2.P)*
-- [ ] Vínculo formal `users.id` ↔ `auth.users.id` (FK cross-schema)
-- [ ] **NFC-e fiscal** (SEFAZ + certificado) — fase futura dedicada
+- [ ] Vínculo formal `users.id` ↔ `auth.users.id` (FK cross-schema) — *endurecimento opcional;
+      não bloqueia o MVP (o vínculo já é garantido em código)*
+- [ ] **NFC-e fiscal** (SEFAZ + certificado) — *fase futura dedicada (não é Fase 2)*
 
 > **Gestão de usuários fecha a Fase 2 (ADR-008):** foi deixada por último de propósito —
 > só faz sentido depois do núcleo do MVP (login → cadastros → venda → caixa → estoque →

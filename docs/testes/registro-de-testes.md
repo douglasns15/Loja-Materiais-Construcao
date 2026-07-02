@@ -666,5 +666,65 @@ Worker republicado (versão `685109c2`). Login real do `caixa@lojademo.com`.
 > A troca de senha é client-side (Supabase Auth) com reautenticação — só o usuário digita
 > as senhas. Fluxo confirmado ponta a ponta pelo usuário.
 
-### 2.D — Convite de funcionários por e-mail — ⏭️ pendente (fatia 2 do ADR-008)
+### 2.Q — Convite de usuário por e-mail — fatia 2 do ADR-008 (2026-07-01)
+
+ADR-008, fatia 2. Convite por e-mail via `inviteUserByEmail` do Supabase Auth
+(`POST /auth/v1/invite` com a `service_role`). Novo `inviteUserSchema` em
+`packages/shared/roles.ts` (e-mail + papel Admin/Usuário + `redirectTo` opcional). API:
+`POST /users/invite` (Admin) cria/recupera o usuário no Auth, envia o e-mail e grava a linha
+em `users` com o papel (upsert por `id = auth.users.id`, ADR-005), com guardas de
+multi-tenancy (não sequestra e-mail de outra loja; 409 se já existe na loja) e `AuditEvent
+CHANGE_ROLE` (ADR-004). Front: formulário **Convidar** na seção Usuários de `/configuracoes`
+e nova página pública `/definir-senha` (o convidado define a senha via `updateUser` e entra).
+**Sem migration** — opera sobre `users`/`AuditEvent` existentes. **Novo secret do Worker:**
+`SUPABASE_SERVICE_ROLE_KEY` (binding em `request.ts`; provisionado pelo usuário via
+`wrangler secret put`).
+
+**Build / typecheck / core (local)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Typecheck `apps/api` (`tsc --noEmit`, após `prisma generate`) | sem erros | ✅ |
+| Build de produção (`next build`) | rotas `/configuracoes` + `/definir-senha` | ✅ 14 rotas (`/configuracoes` 5.47 kB, `/definir-senha` 1.64 kB) |
+| Core (Vitest) — regressão (nada quebrou) | 35/35 | ✅ 35/35 |
+
+**Provisionamento + deploy (usuário) — 2026-07-01**
+
+| Passo | Resultado |
+|---|---|
+| `wrangler secret put SUPABASE_SERVICE_ROLE_KEY` (secret do Worker) | ✅ provisionado |
+| `wrangler deploy` (publica `POST /users/invite`) | ✅ publicado |
+| Supabase *URL Configuration*: Site URL `http://localhost:3000` + Redirect `http://localhost:3000/**` | ✅ configurado |
+
+**E2E no navegador (usuário) — `http://localhost:3000`, 2026-07-01**
+
+| Teste | Resultado |
+|---|---|
+| Login Admin → **Configurações → Usuários → Convidar** (e-mail + papel) | ✅ "Convite enviado" + surge na lista |
+| E-mail de convite chega (SMTP do Supabase) | ✅ recebido |
+| Link do e-mail → `/definir-senha` → definir senha → entra na loja | ✅ |
+| Logout → login com o **novo usuário + senha definida** | ✅ entrou |
+
+> Fatia 2 do ADR-008 **concluída** — fecha a gestão de usuários (RBAC + convite) da Fase 2.
+
+**Personalização do e-mail — nome da loja (2026-07-01)**
+
+O `POST /users/invite` passou a enviar `data: { store_name }` (nome do `Tenant`), que ficaria
+disponível no template como `{{ .Data.store_name }}`. Typecheck `apps/api` ✅. **Porém**, ao
+tentar editar o template no painel, constatou-se que **o free tier do Supabase bloqueia a
+edição** de assunto/corpo dos e-mails de auth (aviso "Set up custom SMTP to edit templates" —
+alternativas: Custom SMTP, Pro ou Send Email hook). Como a edição do template se acopla ao
+**remetente próprio**, toda a personalização do e-mail foi **adiada** para a melhoria futura.
+
+| Item | Resultado |
+|---|---|
+| API envia `data.store_name` no convite (código pronto p/ o futuro template) | ✅ código + typecheck |
+| Editar template "Invite user" (assunto/corpo) | ⚠️ bloqueado no free tier (exige Custom SMTP/Pro/hook) |
+| Redeploy do Worker p/ enviar o `data` | ⏭️ opcional (sem efeito visível sem template editável) |
+
+> Convite **funciona hoje** com o template padrão do Supabase (em inglês). Personalização do
+> template, remetente branded (Custom SMTP) e campo `email` da loja (Reply-To) = **melhorias
+> futuras** (ROADMAP). Deploy do **web** no Cloudflare é o próximo passo, fora do ADR-008.
+
+### 2.D — Convite de funcionários por e-mail — ✅ concluído (ver 2.Q)
 ### 2.I — NFC-e fiscal (SEFAZ) — ⏭️ fase futura dedicada

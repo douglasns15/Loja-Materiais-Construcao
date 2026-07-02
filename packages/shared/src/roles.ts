@@ -68,3 +68,17 @@ export const updateUserSchema = z
     message: 'Nada para atualizar.',
   });
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
+
+/**
+ * Payload do convite de um novo usuário por e-mail (ADR-008, fatia 2). O convite cria o
+ * usuário no Supabase Auth (`inviteUserByEmail`) e a linha em `users` com o papel escolhido.
+ * `name` é opcional (default: parte local do e-mail); `redirectTo` é para onde o link do
+ * e-mail leva (a página de definição de senha do app) — validado pelo allowlist do Supabase.
+ */
+export const inviteUserSchema = z.object({
+  email: z.string().trim().toLowerCase().email('E-mail inválido.'),
+  storeRole: z.enum(['ADMIN', 'USER']).default('USER'),
+  name: z.string().trim().min(1).max(100).optional(),
+  redirectTo: z.string().url().optional(),
+});
+export type InviteUserInput = z.infer<typeof inviteUserSchema>;

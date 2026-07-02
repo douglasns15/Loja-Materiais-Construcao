@@ -7,6 +7,12 @@ export type Bindings = {
   DATABASE_URL?: string;
   /** URL do projeto Supabase (para verificar o JWT via JWKS). */
   SUPABASE_URL?: string;
+  /**
+   * Chave `service_role` do Supabase (secret do Worker) — usada só para operações
+   * administrativas do Auth (convite de usuário por e-mail, ADR-008 fatia 2). NUNCA
+   * expor ao cliente: ignora o RLS. Provisionar com `wrangler secret put`.
+   */
+  SUPABASE_SERVICE_ROLE_KEY?: string;
   /** Bucket de mídia no Cloudflare R2 — logo da loja (ADR-007). */
   MEDIA?: R2Bucket;
 };
