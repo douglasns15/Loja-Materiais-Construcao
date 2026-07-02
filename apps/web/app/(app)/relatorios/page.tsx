@@ -148,7 +148,7 @@ export default function RelatoriosPage() {
       </div>
 
       {/* Totais por forma de pagamento */}
-      <div className="mt-6 overflow-hidden rounded-2xl bg-white shadow-sm">
+      <div className="mt-6 overflow-x-auto rounded-2xl bg-white shadow-sm">
         <h2 className="px-4 py-3 font-semibold">Por forma de pagamento</h2>
         <table className="w-full text-sm">
           <thead className="bg-gray-100 text-left text-gray-600">
@@ -183,7 +183,7 @@ export default function RelatoriosPage() {
       </div>
 
       {/* Fechamentos de caixa */}
-      <div className="mt-6 overflow-hidden rounded-2xl bg-white shadow-sm">
+      <div className="mt-6 overflow-x-auto rounded-2xl bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
           <h2 className="font-semibold">Fechamentos de caixa</h2>
           {sessions.length > 0 && (

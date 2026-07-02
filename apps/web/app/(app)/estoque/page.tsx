@@ -306,7 +306,7 @@ export default function EstoquePage() {
       </div>
 
       {/* Estoque atual por produto */}
-      <div className="mt-6 overflow-hidden rounded-2xl bg-white shadow-sm">
+      <div className="mt-6 overflow-x-auto rounded-2xl bg-white shadow-sm">
         <div className="flex items-center justify-between px-4 py-3">
           <h2 className="font-semibold">Estoque atual</h2>
           {lowStock.length > 0 && (
@@ -361,7 +361,7 @@ export default function EstoquePage() {
       </div>
 
       {/* Histórico de movimentações */}
-      <div className="mt-6 overflow-hidden rounded-2xl bg-white shadow-sm">
+      <div className="mt-6 overflow-x-auto rounded-2xl bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
           <h2 className="font-semibold">Movimentações recentes</h2>
           <span className="text-xs text-gray-400">

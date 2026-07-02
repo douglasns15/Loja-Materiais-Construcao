@@ -19,6 +19,9 @@ const NAV = [
   { href: '/configuracoes', label: 'Configurações', adminOnly: true },
 ];
 
+// Lembra a preferência de recolher a barra no desktop entre sessões.
+const COLLAPSE_KEY = 'nexoloja:sidebar-collapsed';
+
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -26,6 +29,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { me, setMe, isAdmin } = useMe();
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  // Gaveta no celular/tablet (overlay) e recolher no desktop (esconde a barra).
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   const accountRef = useRef<HTMLDivElement>(null);
 
   // Fecha o menu de conta ao clicar fora dele.
@@ -40,6 +46,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return () => document.removeEventListener('mousedown', onClickOutside);
   }, [menuOpen]);
 
+  // Restaura a preferência de recolher (desktop) salva no navegador.
+  useEffect(() => {
+    setCollapsed(localStorage.getItem(COLLAPSE_KEY) === '1');
+  }, []);
+
+  // Ao navegar, fecha a gaveta do celular (evita ficar aberta sobre a tela nova).
+  useEffect(() => {
+    setDrawerOpen(false);
+  }, [pathname]);
+
   useEffect(() => {
     (async () => {
       const { data } = await supabase.auth.getSession();
@@ -51,6 +67,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     })();
   }, [router]);
 
+  function toggleCollapsed() {
+    setCollapsed((v) => {
+      const next = !v;
+      localStorage.setItem(COLLAPSE_KEY, next ? '1' : '0');
+      return next;
+    });
+  }
+
   async function logout() {
     await supabase.auth.signOut();
     router.replace('/login');
@@ -60,10 +84,38 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return <div className="p-8 text-gray-500">Carregando…</div>;
   }
 
+  const currentLabel = NAV.find((item) => item.href === pathname)?.label ?? 'NexoLoja';
+
   return (
-    <div className="flex h-screen">
-      <aside className="flex h-screen w-56 shrink-0 flex-col border-r border-gray-200 bg-white p-4">
-        <div className="mb-6 px-2 text-xl font-bold">NexoLoja</div>
+    <div className="flex h-dvh">
+      {/* Fundo escuro por trás da gaveta (só no celular/tablet). */}
+      {drawerOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/40 md:hidden"
+          onClick={() => setDrawerOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      <aside
+        className={`fixed left-0 top-0 z-40 flex h-dvh w-64 shrink-0 flex-col border-r border-gray-200 bg-white p-4 transition-transform duration-200 md:static md:z-auto md:translate-x-0 ${
+          drawerOpen ? 'translate-x-0 shadow-xl' : '-translate-x-full'
+        } ${collapsed ? 'md:hidden' : ''}`}
+      >
+        <div className="mb-6 flex items-center justify-between px-2">
+          <span className="text-xl font-bold">NexoLoja</span>
+          {/* Recolher a barra (desktop). No celular a gaveta fecha pelo fundo/atalho. */}
+          <button
+            onClick={toggleCollapsed}
+            className="hidden rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 md:inline-flex"
+            title="Recolher menu"
+            aria-label="Recolher menu"
+          >
+            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+          </button>
+        </div>
         <nav className="flex-1 space-y-1 overflow-y-auto">
           {NAV.filter((item) => !item.adminOnly || isAdmin).map((item) => {
             const active = pathname === item.href;
@@ -151,7 +203,38 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </button>
         </div>
       </aside>
-      <main className="flex-1 overflow-y-auto p-6">{children}</main>
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Barra superior: hambúrguer (celular) + abrir menu recolhido (desktop). */}
+        <header className="flex items-center gap-3 border-b border-gray-200 bg-white px-4 py-3">
+          {/* Celular/tablet: abre a gaveta */}
+          <button
+            onClick={() => setDrawerOpen(true)}
+            className="rounded-lg p-1 text-gray-600 hover:bg-gray-100 md:hidden"
+            aria-label="Abrir menu"
+          >
+            <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M3 12h18M3 6h18M3 18h18" />
+            </svg>
+          </button>
+          {/* Desktop: aparece só quando a barra está recolhida, para reabrir */}
+          {collapsed && (
+            <button
+              onClick={toggleCollapsed}
+              className="hidden rounded-lg p-1 text-gray-600 hover:bg-gray-100 md:inline-flex"
+              aria-label="Expandir menu"
+              title="Expandir menu"
+            >
+              <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M3 12h18M3 6h18M3 18h18" />
+              </svg>
+            </button>
+          )}
+          <span className="truncate font-semibold text-gray-800">{currentLabel}</span>
+        </header>
+
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</main>
+      </div>
 
       {profileOpen && me && (
         <ProfileModal

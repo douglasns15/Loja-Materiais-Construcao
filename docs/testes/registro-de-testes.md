@@ -768,3 +768,67 @@ alternativas: Custom SMTP, Pro ou Send Email hook). Como a edição do template 
 
 > **2.R concluída** — web em produção na edge (`nexoloja-web.imortal.workers.dev`), com convite
 > de usuário validado ponta a ponta pela URL publicada. Fase 2 100% operacional em produção.
+
+---
+
+## 2.S — UI responsiva (celular/tablet) + recolher menu lateral — 2026-07-02
+
+> Correção de usabilidade após o uso real no celular (a barra lateral fixa espremia a tela e
+> nada se ajustava). Exigência do CLAUDE.md ("100% responsivo, PC/tablet/celular"). Mudança
+> **100% no front** — sem migration, sem mudança de API.
+
+**Causas de raiz corrigidas**
+
+| # | Problema | Correção |
+|---|---|---|
+| 1 | Sem `<meta viewport>` → celular renderiza na largura de desktop e dá zoom-out | `export const viewport` (`width=device-width, initial-scale=1`) em `app/layout.tsx` |
+| 2 | Menu lateral `w-56` fixo e sempre visível (roubava metade da tela do celular) | Shell reescrito (`app/(app)/layout.tsx`): **gaveta** (drawer overlay) no celular/tablet via botão ☰ + fundo escuro; **recolher** no desktop (botão ‹) com preferência salva em `localStorage` |
+| 3 | 7 tabelas com `overflow-hidden` (cortavam no celular) | Trocado por `overflow-x-auto` (rolam lateralmente): produtos, clientes, venda, estoque ×2, relatórios ×2 |
+
+**Build / smoke (Claude, `npm run dev` → preview mobile 375px)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| `<meta viewport>` no HTML servido | presente | ✅ `width=device-width, initial-scale=1` |
+| Página de login no celular (375px) | card no tamanho certo, sem zoom-out | ✅ |
+| Rotas do shell compilam (`/products`, `/venda`, `/estoque`, `/relatorios`, `/customers`, `/configuracoes`) | 200 | ✅ 6/6 |
+| Console do navegador + logs do dev server | sem erros | ✅ |
+
+**Build + deploy do web (OpenNext → Cloudflare) — 2026-07-02**
+
+| Passo | Resultado |
+|---|---|
+| `opennextjs-cloudflare build` (via `npm run deploy`) | ✅ 12 rotas, `.open-next/worker.js` gerado |
+| `opennextjs-cloudflare deploy` (passo de deploy do wrapper) | ❌ quebra no Windows (`workerd.exe serve --debug-port: unrecognized option`) |
+| **Contorno:** `wrangler deploy` direto do artefato já buildado | ✅ publicado (Version `c13b1755`) |
+| Reinstalar deps (`@opennextjs/cloudflare`/`wrangler` tinham sumido do node_modules) | ✅ `npm install` na raiz |
+| Smoke na URL publicada: `/login` 200 + viewport no HTML | ✅ |
+| Smoke: chunk do layout publicado contém o novo shell (`Abrir menu`/`Recolher menu`/`sidebar-collapsed`) | ✅ |
+
+**E2E no navegador (usuário) — pendente**
+
+O menu (gaveta/recolher) só aparece após login (protegido por senha, como nos E2E anteriores):
+
+| Teste | Resultado |
+|---|---|
+| Celular: ☰ abre/fecha a gaveta; tocar num item navega e fecha; tocar fora fecha | ✅ usuário (celular) |
+| Desktop: ‹ recolhe o menu e o estado persiste ao recarregar | ⏭️ usuário |
+| Telas (produtos/venda/estoque/relatórios) usáveis no celular sem corte | ✅ usuário (celular) |
+
+**Ajuste 2.S.2 — `dvh` (viewport dinâmica) — 2026-07-02**
+
+Após o teste no celular, dois defeitos com a **mesma raiz** (`h-screen` = `100vh`): (1) o rodapé
+da gaveta (**Sair**) caía **atrás da barra do navegador** no celular; (2) no **Safari** a tela
+"sambava" ao rolar (a barra do Safari aparece/some e o `100vh` muda de tamanho). Correção: trocar
+`h-screen`/`min-h-screen` por **`h-dvh`/`min-h-dvh`** (mede só a área visível). No shell, `inset-y-0`
+virou `top-0` (senão `top+bottom` fixaria a altura e o `h-dvh` seria ignorado). Aplicado em: `app/layout.tsx`
+(body), `app/(app)/layout.tsx` (container + aside), `login` e `definir-senha`.
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Tailwind gera as classes (`.h-dvh`/`min-h-dvh`/`100dvh`) | presentes no CSS | ✅ (Tailwind 3.4) |
+| `opennextjs-cloudflare build` | worker gerado | ✅ |
+| `wrangler deploy` (contorno Windows) | publicado | ✅ Version `31d3df21` |
+| `100dvh` no CSS servido em produção | presente | ✅ |
+| Celular: **Sair** visível na gaveta (não fica atrás da barra) | visível | ⏭️ usuário |
+| Safari: sem "samba" ao rolar | estável | ⏭️ usuário |

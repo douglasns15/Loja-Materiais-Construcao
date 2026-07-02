@@ -3,7 +3,13 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-01 (**Web publicado no Cloudflare via OpenNext e validado** →
+> **Última atualização:** 2026-07-02 (**UI responsiva + recolher menu (2.S)** — correção de
+> usabilidade no celular/tablet: `<meta viewport>` adicionado, menu lateral vira **gaveta**
+> no celular (☰) e **recolhe** no desktop (persistido em `localStorage`), 7 tabelas passam a
+> rolar (`overflow-x-auto`). Front puro, sem migration/API. Build + **deploy publicado**
+> (Version `c13b1755`); falta só o E2E visual do usuário no celular. ⚠️ No Windows o
+> `opennextjs-cloudflare deploy` quebra (workerd `--debug-port`); contorno = `wrangler deploy`
+> do artefato já buildado. Antes: **Web publicado no Cloudflare via OpenNext e validado** →
 > `nexoloja-web.imortal.workers.dev` (convite E2E OK pela URL publicada); ver bloco abaixo.
 > Antes: **Fase 2 CONCLUÍDA** — **Convite de usuário por e-mail —
 > fatia 2 do ADR-008 (2.Q)**: `POST /users/invite` (Supabase `inviteUserByEmail` via

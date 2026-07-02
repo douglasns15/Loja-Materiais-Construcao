@@ -432,7 +432,7 @@ export default function VendaPage() {
         </button>
       </div>
 
-      <div className="mb-4 overflow-hidden rounded-2xl bg-white shadow-sm">
+      <div className="mb-4 overflow-x-auto rounded-2xl bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="bg-gray-100 text-left text-gray-600">
             <tr>
