@@ -15,14 +15,6 @@ http://localhost:3000/
 ## Leia docs/ROADMAP.md e docs/testes/registro-de-testes.md e vamos continuar
 vamos para o próximo passo
 
-Fatia 2 do ADR-008 — convite de usuário por e-mail (fecha a Fase 2).
-
-Você provisiona o secret (uma vez): wrangler secret put SUPABASE_SERVICE_ROLE_KEY no diretório apps/api.
-Eu implemento: POST /users/invite (cria no Supabase Auth via inviteUserByEmail + linha em users com o papel) e o botão Convidar na seção Usuários de /configuracoes; depois deploy do Worker.
-Quer que eu faça o push da branch (e/ou abra um PR para a main) antes de encerrar, ou prefere manter o commit só local?
-
-Leia docs/ROADMAP.md e docs/testes/registro-de-testes.md e vamos implementar a fatia 2 do ADR-008 (convite de usuário por e-mail). Já provisionei a SUPABASE_SERVICE_ROLE_KEY como secret do Worker.
-
 ## Subir servidor
 
 cd C:\Users\Douglas\Documents\GitHub\Loja-Materiais-Construcao
