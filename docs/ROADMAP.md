@@ -70,8 +70,12 @@
 > e **E2E de convite pela URL publicada validado pelo usuário no navegador** (convite → e-mail →
 > `/definir-senha` → login). Ver 2.R no registro de testes.
 >
-> ▶️ **Próximo passo:** **Fase 2.5 (plataforma / multi-loja / Super Usuário / onboarding,
-> ADR-009)** — *ainda não iniciada, aguardando decisão*. Alternativa: **Fase 3** (offline-first).
+> ▶️ **Próximo passo (decisão para a próxima sessão):** a **Fase 2.5 (A–D) está concluída e no ar**
+> (plataforma/onboarding/Super Usuário + endurecimentos: exclusão de usuário, bloqueio de loja
+> desativada; wrangler das duas apps unificado na v4). O **fork** agora é entre:
+> **(a) Fatia E** — Super Usuário entrar no contexto da loja para suporte (impersonation auditada;
+> desenho pronto no ADR-009 → "Status de implementação"); ou **(b) Fase 3** — offline-first (PWA/
+> service worker + fila de sincronização). *Nada bloqueia: produção roda a Fase 2.5 completa.*
 > - *Melhoria futura na Fase 2:* devolução **parcial** (itens/quantidades com rateio).
 > - *Fase própria (Plataforma, ver abaixo):* **multi-loja + Super Usuário + onboarding** (ADR-009).
 > - *Fase futura dedicada:* **NFC-e fiscal** (SEFAZ + certificado).
