@@ -1002,11 +1002,18 @@ solta). Front: botão **Excluir** (vermelho) ao lado de Desativar/Ativar na seç
 | Typecheck `apps/api` (`tsc --noEmit`) | sem erros | ✅ exit 0 |
 | Typecheck `apps/web` (`tsc --noEmit`) | sem erros | ✅ exit 0 |
 
-**Deploy + E2E de navegador (usuário) — pendente**
+**Deploy (Claude) — 2026-07-03**
+
+| Passo | Resultado |
+|---|---|
+| `wrangler deploy` API (rota `DELETE /users/:id`) | ✅ Version `9f86b36c` |
+| Smoke `DELETE /users/:id` sem token | ✅ 401 (rota existe, exige auth) |
+| Build + deploy do **web** (botão Excluir) | ✅ Version `41ca16a3` (chunk `configuracoes` contém "Excluir") |
+
+**E2E de navegador (usuário) — pendente**
 
 | Teste | Resultado |
 |---|---|
-| `wrangler deploy` (rota `DELETE /users/:id`) | ⏭️ usuário |
 | Login Admin → `/configuracoes` → **Excluir** `dougns100@gmail.com` (sem histórico) → some da lista | ⏭️ usuário |
 | Excluir usuário **com** histórico de venda/caixa → **409** "use Desativar" | ⏭️ usuário |
 | `AuditEvent DELETE_USER` gravado (via service_role) | ⏭️ usuário |
@@ -1028,6 +1035,39 @@ eventos de loja (`CANCEL_ORDER`, `RETURN_ORDER`, `CHANGE_PRICE`, `ADJUST_STOCK`,
 | ADR-004 — Action Items marcados como concluídos | ✅ |
 | ADR-009 — status "Implementado — Fatias A–D" + esboço da Fatia E | ✅ |
 | ROADMAP — Fatia D marcada; Fatia E listada como futura | ✅ |
+
+### Infra.Deploy-Win — Correção do deploy do web no Windows (workerd) — 2026-07-03
+
+Resolve de vez o bloqueio registrado em **2.S** (`opennextjs-cloudflare deploy` quebrava com
+`workerd.exe serve: --debug-port: unrecognized option`). **Causa raiz:** o `apps/web` usa
+**wrangler 4.106**, que depende de `workerd@1.20260630.1` e passa `--debug-port` ao `workerd serve`
+(validação de startup). O pacote meta `workerd@1.20260630.1` estava instalado, mas o **binário de
+plataforma** `@cloudflare/workerd-windows-64` só existia na versão **antiga** `1.20250718.0` (hoisted
+na raiz, puxada pelo wrangler 3.114 da API) — que **não conhece** `--debug-port`. Por resolução de
+módulos, o workerd novo acabava executando o binário velho → erro. (A API não sofria: usa wrangler
+3.114, que não passa `--debug-port`.)
+
+**Correção:** fixar o binário Windows na versão que casa com o workerd novo, como
+**`optionalDependency` do workspace `apps/web`**:
+
+```
+npm install @cloudflare/workerd-windows-64@1.20260630.1 -w apps/web --save-optional
+```
+
+O npm aninha o binário novo em `apps/web/node_modules` (o antigo permanece na raiz para a API). É
+`optional` + gated por `os: ['win32']`, então em Linux/macOS/CI é ignorado sem erro.
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Binário novo aninhado no web + antigo na raiz | 2 cópias coexistindo | ✅ `apps/web` 1.20260630.1 · raiz 1.20250718.0 |
+| `npx wrangler deploy` (4.106) no web — antes falhava no `--debug-port` | publica | ✅ Version `5da5c671` (Startup 27 ms) |
+| **`npm run deploy`** (canônico: `opennextjs-cloudflare build && deploy`) | publica sem o erro do Windows | ✅ Version `41ca16a3` (Startup 21 ms) |
+| Deploy da API (wrangler 3.114) segue funcionando | intacto | ✅ Version `9f86b36c` |
+
+> A partir de agora o **`npm run deploy` do web funciona direto no Windows** — o contorno manual do
+> 2.S (`wrangler deploy` do artefato) deixa de ser necessário. Se um upgrade futuro do wrangler
+> subir a versão do `workerd`, repetir o `npm install` do `@cloudflare/workerd-windows-64` na versão
+> correspondente.
 
 > **Fase 2.5 (A–D) fechada.** Resta o E2E de navegador do usuário (Fatia C: criar loja com e-mail
 > real; 2.5.Del: excluir usuário) e o deploy do Worker com o `DELETE /users/:id`. **Fatia E**

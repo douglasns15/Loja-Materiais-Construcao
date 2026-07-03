@@ -29,5 +29,8 @@
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.2",
     "wrangler": "^4.106.0"
+  },
+  "optionalDependencies": {
+    "@cloudflare/workerd-windows-64": "^1.20260630.1"
   }
 }

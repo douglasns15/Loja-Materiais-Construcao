@@ -31,8 +31,10 @@
 > no celular (☰) e **recolhe** no desktop (persistido em `localStorage`), 7 tabelas passam a
 > rolar (`overflow-x-auto`). Front puro, sem migration/API. Build + **deploy publicado**
 > (Version `c13b1755`); falta só o E2E visual do usuário no celular. ⚠️ No Windows o
-> `opennextjs-cloudflare deploy` quebra (workerd `--debug-port`); contorno = `wrangler deploy`
-> do artefato já buildado. Antes: **Web publicado no Cloudflare via OpenNext e validado** →
+> `opennextjs-cloudflare deploy` quebrava (workerd `--debug-port`) — **corrigido em 2026-07-03**
+> fixando `@cloudflare/workerd-windows-64@1.20260630.1` como optionalDependency do `apps/web`
+> (casa com o workerd do wrangler 4); `npm run deploy` do web agora funciona direto. Ver
+> "Infra.Deploy-Win" no registro de testes. Antes: **Web publicado no Cloudflare via OpenNext e validado** →
 > `nexoloja-web.imortal.workers.dev` (convite E2E OK pela URL publicada); ver bloco abaixo.
 > Antes: **Fase 2 CONCLUÍDA** — **Convite de usuário por e-mail —
 > fatia 2 do ADR-008 (2.Q)**: `POST /users/invite` (Supabase `inviteUserByEmail` via
