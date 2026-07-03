@@ -16,7 +16,10 @@ http://localhost:3000/
 
 ## Leia docs/ROADMAP.md e docs/testes/registro-de-testes.md e vamos continuar
 vamos para o próximo passo
-depois desse push, sim — nada pendente de documentação. Na próxima sessão é só decidir o fork: Fatia E (suporte/impersonation auditada) ou Fase 3 (offline-first).
+Para a próxima sessão, é só decidir o fork (já está anotado no topo do ROADMAP):
+
+Fatia E — Super Usuário entrar na loja para suporte (impersonation auditada; desenho pronto no ADR-009), ou
+Fase 3 — offline-first (PWA + fila de sincronização).
 
 ## Subir servidor
 
