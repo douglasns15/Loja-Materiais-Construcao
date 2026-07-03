@@ -1069,6 +1069,76 @@ O npm aninha o binário novo em `apps/web/node_modules` (o antigo permanece na r
 > subir a versão do `workerd`, repetir o `npm install` do `@cloudflare/workerd-windows-64` na versão
 > correspondente.
 
+### 2.5.Inact — Bloqueio de loja desativada (ADR-009) — 2026-07-03
+
+Achado no E2E do usuário: ao **desativar** uma loja pelo painel (`SET_TENANT_ACTIVE`), o usuário
+dela ainda logava e operava normalmente — a flag `Tenant.isActive` não tinha efeito. Corrigido:
+desativar passa a ter consequência real, sem trancar o usuário para fora (ele ainda consulta e
+encerra pendências).
+
+**Servidor (a barreira de verdade):** `requireAuth` passou a carregar `tenant.isActive` (sem query
+extra — join no `findUnique` do usuário) e a setar `tenantActive` no contexto. `GET /me` devolve o
+flag. Novo middleware `requireActiveTenant` (em `middleware/auth.ts`) barra com **403**, quando a
+loja está inativa: **`POST /orders`** (venda nova), **`POST /cash-sessions/open`** (abrir caixa) e
+**`POST /stock/movements`** (entrada de estoque). Fechar caixa, ajuste de inventário (`/stock/adjust`),
+cancelar/devolver e todas as consultas seguem liberados de propósito (encerramento/correção).
+**Front:** `useMe` expõe `tenantActive`; `(app)/layout` mostra um **aviso vermelho no topo** de toda
+tela (lista as três operações bloqueadas). Componente reutilizável `<StoreDisabledNotice>` (caixa
+vermelha padronizada) exibido **proativamente** (guiado por `me.tenantActive` — aparece já ao abrir a
+tela, sem depender de um 403): **Nova Venda** troca o PDV pela caixa; **Caixa** troca o form "Abrir
+caixa" pela caixa (fechar caixa continua na tela); **Estoque** troca o card "Entrada de estoque" pela
+caixa (Ajuste de inventário + históricos continuam). **Sem migration.** *(refino 2026-07-03: antes as
+telas de Caixa/Estoque só mostravam o erro 403 após tentar a ação; passaram a avisar na entrada, com o
+mesmo layout da Nova Venda.)*
+
+**Build + deploy (Claude) — 2026-07-03**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Typecheck `apps/api` (`tsc --noEmit`) | sem erros | ✅ exit 0 |
+| Typecheck `apps/web` (`tsc --noEmit`) | sem erros | ✅ exit 0 |
+| `wrangler deploy` API — 1ª fatia (só vendas) | publicado | ✅ Version `5ea4cf30` |
+| `wrangler deploy` API — estende p/ abrir caixa + entrada de estoque | publicado | ✅ Version `daf90038` |
+| `npm run deploy` web (aviso + bloqueio da Nova Venda) | publicado | ✅ Versions `239ed369` → `533c1921` |
+
+**E2E de navegador (usuário) — pendente**
+
+| Teste | Resultado |
+|---|---|
+| Super Usuário **inativa** a loja no painel `/plataforma` | ⏭️ usuário |
+| Login com usuário da loja inativa → **aviso vermelho no topo** em todas as telas | ⏭️ usuário |
+| Abrir **Nova Venda** → tela bloqueada ("Loja desativada") | ⏭️ usuário |
+| **Abrir caixa** → 403 "Loja desativada" (fechar caixa continua funcionando) | ⏭️ usuário |
+| **Entrada de estoque** → 403 "Loja desativada" (ajuste de inventário continua) | ⏭️ usuário |
+| Tentar `POST /orders` direto (fora da UI) → **403** "Loja desativada" | ⏭️ usuário |
+| **Reativar** a loja → aviso some e as três operações voltam | ⏭️ usuário |
+
+> Bloqueio server-enforced nas 3 rotas de escrita "de negócio". Correções/encerramentos (fechar
+> caixa, ajuste, cancelar, devolver) permanecem liberados por design — uma loja suspensa ainda
+> precisa conseguir encerrar pendências.
+
 > **Fase 2.5 (A–D) fechada.** Resta o E2E de navegador do usuário (Fatia C: criar loja com e-mail
 > real; 2.5.Del: excluir usuário) e o deploy do Worker com o `DELETE /users/:id`. **Fatia E**
 > (entrar no contexto da loja para suporte) fica como fatia futura, com direção travada no ADR-009.
+
+### Infra.Retry — Retry de leitura no cliente (cold start) — 2026-07-03
+
+Achado no uso: ao abrir **Estoque** após ociosidade, a 1ª carga demorou e deu **`Failed to fetch`**;
+o retry manual funcionou. Causa: **cold start** da stack no free tier (Supabase pausa/esfria +
+Hyperdrive/Worker frios) — a 1ª requisição depois de parada falha no nível de **rede**/timeout e a
+seguinte já funciona (conexão quente). Não é bug do app.
+
+Correção (front, `apps/web/lib/api.ts`): `apiGet` ganhou **retry com backoff** — até 2 re-tentativas
+(400 ms, 1200 ms) + timeout de 12 s por tentativa (`AbortController`). Re-tenta **só GET**
+(idempotente) e **só em falha de rede/timeout** (`fetch` lançou `TypeError`/`AbortError`); erro HTTP
+(401/403/404/409/500) é resposta válida e **não** é re-tentado. POST/PATCH/DELETE ficam de fora (não
+idempotentes). Web publicado (Version `750ea631`).
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Typecheck `apps/web` (`tsc --noEmit`) | sem erros | ✅ exit 0 |
+| `apiGet` re-tenta em falha de rede; propaga erro HTTP sem re-tentar | lógica | ✅ (código) |
+| E2E: 1ª carga após ociosidade não falha mais (ou se recupera sozinha) | — | ⏭️ usuário (observar no uso) |
+
+> Mitigações mais fortes seguem no ROADMAP como futuro de produção: **Supabase Pro** (remove a pausa)
+> e/ou keep-warm. O retry é a camada barata que resolve a maioria dos cold starts de leitura.

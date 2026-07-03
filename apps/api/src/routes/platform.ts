@@ -173,8 +173,9 @@ platform.post('/tenants', async (c) => {
 /**
  * Ativa/inativa uma loja (`Tenant.isActive`) pelo painel de plataforma (ADR-009). Registra
  * `AuditEvent SET_TENANT_ACTIVE` (evento de plataforma; a loja-alvo dá o `tenantId`, o ator é
- * o Super Usuário). Não apaga dados — uma loja inativa apenas fica marcada (o corte de acesso
- * de login para lojas inativas é endurecimento futuro).
+ * o Super Usuário). Não apaga dados — uma loja inativa fica marcada e, a partir daí, os usuários
+ * dela ainda entram (consultam/fecham caixa) mas veem um aviso no topo e ficam **bloqueados de
+ * registrar novas vendas** (`requireActiveTenant` no `POST /orders`; ver `middleware/auth.ts`).
  */
 platform.patch('/tenants/:id', async (c) => {
   const connectionString = getConnectionString(c.env);

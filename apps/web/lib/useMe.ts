@@ -11,6 +11,9 @@ export type Me = {
   phone: string | null;
   role: string;
   storeRole: StoreRole;
+  /** `false` quando a loja foi desativada pelo Super Usuário (ADR-009). Opcional para
+   * tolerar respostas antigas da API (ausente = tratado como ativa). */
+  tenantActive?: boolean;
 };
 
 /**

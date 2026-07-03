@@ -9,7 +9,9 @@ import {
 } from '@nexoloja/shared';
 import { calcMarginPercent, calcSaleTotals } from '@nexoloja/core';
 import { apiGet, apiPost } from '@/lib/api';
+import { useMe } from '@/lib/useMe';
 import { ReceiptPrint, type Store } from '@/components/ReceiptPrint';
+import { StoreDisabledNotice } from '@/components/StoreDisabledNotice';
 
 type Product = { id: string; name: string; sku: string; salePrice: string; costPrice: string; stockQty: string };
 type CartItem = {
@@ -64,6 +66,7 @@ function Summary({ items, total, discount }: { items: CartItem[]; total: number;
 }
 
 export default function VendaPage() {
+  const { me } = useMe();
   const [ready, setReady] = useState(false);
   const [caixaOpen, setCaixaOpen] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
@@ -256,6 +259,16 @@ export default function VendaPage() {
   }
 
   if (!ready) return <p className="text-gray-500">Carregando…</p>;
+
+  // Loja desativada pelo Super Usuário (ADR-009): venda nova bloqueada (a API também barra).
+  if (me?.tenantActive === false) {
+    return (
+      <div className="mx-auto max-w-xl">
+        <h1 className="mb-4 text-2xl font-bold">Venda</h1>
+        <StoreDisabledNotice message="O registro de novas vendas está bloqueado. Fale com o suporte para reativar a loja." />
+      </div>
+    );
+  }
 
   if (!caixaOpen) {
     return (

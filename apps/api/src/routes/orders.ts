@@ -3,7 +3,7 @@ import { createPrismaClient } from '@nexoloja/db';
 import { calcSaleItemTotal, calcSaleTotals } from '@nexoloja/core';
 import { cancelOrderSchema, createSaleSchema, returnOrderSchema } from '@nexoloja/shared';
 import { type Env, getConnectionString, getTenantId } from '../lib/request';
-import { requireAuth } from '../middleware/auth';
+import { requireActiveTenant, requireAuth } from '../middleware/auth';
 
 const orders = new Hono<Env>();
 orders.use('*', requireAuth);
@@ -71,9 +71,10 @@ orders.get('/', async (c) => {
  * Registra uma venda. Em uma única transação (ADR-001):
  *  - cria o Order (vinculado ao caixa aberto) + OrderItems (snapshot) + Payments;
  *  - para cada item: grava StockMovement (saída) e decrementa Product.stockQty.
- * Exige caixa aberto e bloqueia venda sem estoque.
+ * Exige caixa aberto e bloqueia venda sem estoque. `requireActiveTenant` barra vendas novas
+ * quando a loja está inativa (ADR-009) antes de qualquer trabalho.
  */
-orders.post('/', async (c) => {
+orders.post('/', requireActiveTenant, async (c) => {
   const tenantId = getTenantId(c);
   const userId = c.get('userId');
   const connectionString = getConnectionString(c.env);

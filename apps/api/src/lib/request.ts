@@ -27,6 +27,9 @@ export type Variables = {
   tenantId: string;
   userId: string;
   role: string;
+  /** `Tenant.isActive` da loja do usuário (populado por `requireAuth`). Uma loja
+   * inativada pelo Super Usuário (ADR-009) bloqueia operações novas (ex.: vendas). */
+  tenantActive: boolean;
   platformAdminId: string;
   platformAdminName: string;
   platformAdminEmail: string;

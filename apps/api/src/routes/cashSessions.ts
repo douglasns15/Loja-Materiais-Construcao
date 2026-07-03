@@ -3,7 +3,7 @@ import { createPrismaClient } from '@nexoloja/db';
 import { calcCashDivergence, calcExpectedCash, netCashMovements } from '@nexoloja/core';
 import { closeCashSessionSchema, openCashSessionSchema } from '@nexoloja/shared';
 import { type Env, getConnectionString, getTenantId } from '../lib/request';
-import { requireAuth } from '../middleware/auth';
+import { requireActiveTenant, requireAuth } from '../middleware/auth';
 
 const cashSessions = new Hono<Env>();
 cashSessions.use('*', requireAuth);
@@ -76,8 +76,9 @@ cashSessions.get('/current', async (c) => {
   }
 });
 
-/** Abre uma sessão de caixa (uma por operador por vez). */
-cashSessions.post('/open', async (c) => {
+/** Abre uma sessão de caixa (uma por operador por vez). Bloqueado em loja inativa (ADR-009);
+ * fechar o caixa segue liberado (ação de encerramento). */
+cashSessions.post('/open', requireActiveTenant, async (c) => {
   const tenantId = getTenantId(c);
   const userId = c.get('userId');
   const connectionString = getConnectionString(c.env);

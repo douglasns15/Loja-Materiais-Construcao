@@ -23,7 +23,12 @@ me.get('/', async (c) => {
     if (!user) {
       return c.json({ ok: false, error: 'Usuário não encontrado.' }, 404);
     }
-    return c.json({ ok: true, data: { ...user, storeRole: toStoreRole(user.role) } });
+    // `tenantActive` (ADR-009): o front usa para avisar no topo e bloquear vendas novas quando
+    // a loja está desativada. Vem do `requireAuth` (sem query extra).
+    return c.json({
+      ok: true,
+      data: { ...user, storeRole: toStoreRole(user.role), tenantActive: c.get('tenantActive') },
+    });
   } catch (err) {
     console.error('GET /me falhou:', err);
     return c.json({ ok: false, error: 'Falha ao carregar o perfil.' }, 500);

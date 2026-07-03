@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { openCashSessionSchema, closeCashSessionSchema } from '@nexoloja/shared';
 import { apiGet, apiPost } from '@/lib/api';
+import { useMe } from '@/lib/useMe';
+import { StoreDisabledNotice } from '@/components/StoreDisabledNotice';
 
 type CashSession = {
   id: string;
@@ -17,6 +19,7 @@ const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 export default function CaixaPage() {
+  const { me } = useMe();
   const [session, setSession] = useState<CashSession | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -156,6 +159,9 @@ export default function CaixaPage() {
             </button>
           </form>
         </div>
+      ) : me?.tenantActive === false ? (
+        // Loja desativada (ADR-009): abrir caixa bloqueado. Aviso já ao abrir a tela.
+        <StoreDisabledNotice message="A abertura de caixa está bloqueada. Fale com o suporte para reativar a loja." />
       ) : (
         <form onSubmit={onOpen} className="space-y-3 rounded-2xl bg-white p-5 shadow-sm">
           <div className="mb-1 inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1 text-sm font-medium text-gray-600">

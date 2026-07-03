@@ -56,7 +56,12 @@ export const requireAuth = createMiddleware<Env>(async (c, next) => {
     const prisma = createPrismaClient(connectionString);
     const user = await prisma.user.findUnique({
       where: { id: sub },
-      select: { tenantId: true, role: true, isActive: true },
+      select: {
+        tenantId: true,
+        role: true,
+        isActive: true,
+        tenant: { select: { isActive: true } },
+      },
     });
     if (!user || !user.isActive) {
       return c.json({ ok: false, error: 'Usuário sem acesso a este sistema.' }, 403);
@@ -64,6 +69,10 @@ export const requireAuth = createMiddleware<Env>(async (c, next) => {
     c.set('tenantId', user.tenantId);
     c.set('userId', sub);
     c.set('role', user.role);
+    // Loja inativada pelo Super Usuário (ADR-009): não barra o login (o usuário ainda vê
+    // relatórios/fecha caixa), mas o front avisa e operações novas são bloqueadas via
+    // `requireActiveTenant`. Não achar o tenant é tratado como inativo (conservador).
+    c.set('tenantActive', user.tenant?.isActive ?? false);
   } catch (err) {
     console.error('requireAuth: falha ao resolver usuário:', err);
     return c.json({ ok: false, error: 'Falha na autenticação.' }, 500);
@@ -80,6 +89,22 @@ export const requireAuth = createMiddleware<Env>(async (c, next) => {
 export const requireAdmin = createMiddleware<Env>(async (c, next) => {
   if (!isAdminRole(c.get('role'))) {
     return c.json({ ok: false, error: 'Ação restrita a administradores.' }, 403);
+  }
+  await next();
+});
+
+/**
+ * Bloqueia operações quando a loja está **inativa** (`Tenant.isActive = false`, desativada pelo
+ * Super Usuário — ADR-009). Deve rodar DEPOIS de `requireAuth` (que popula `tenantActive`). Não é
+ * aplicado globalmente: o usuário de uma loja inativa ainda entra e consulta (relatórios, caixa),
+ * mas ações que geram novo movimento (ex.: `POST /orders`) usam este guard. Retorna 403.
+ */
+export const requireActiveTenant = createMiddleware<Env>(async (c, next) => {
+  if (c.get('tenantActive') === false) {
+    return c.json(
+      { ok: false, error: 'Loja desativada — operação indisponível. Fale com o suporte.' },
+      403,
+    );
   }
   await next();
 });

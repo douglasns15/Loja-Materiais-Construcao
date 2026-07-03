@@ -264,6 +264,16 @@
       (e `DELETE_USER`, de loja) **formalizados na lista fechada do ADR-004** (`meta.platform = true`;
       `userId` = Super Usuário; `tenantId` = loja-alvo) e **ADR-009 fechado** (Fatias A–D). **Sem
       migration, sem deploy** (só documentação).
+- [x] **Endurecimento — bloqueio de loja desativada (ADR-009)** — desativar a loja (`SET_TENANT_ACTIVE`)
+      passou a ter efeito real: `requireAuth` carrega `Tenant.isActive` → `tenantActive` no contexto;
+      `GET /me` devolve o flag; novo middleware `requireActiveTenant` barra `POST /orders` (nova venda)
+      com **403** quando inativa. Front: **aviso vermelho no topo** de toda tela (`(app)/layout`) +
+      tela de **Nova Venda bloqueada**. Consultas/fechar caixa/cancelar/devolver seguem liberados (a
+      loja ainda "encerra" pendências). Bloqueio aplicado a **novas vendas** (`POST /orders`),
+      **abertura de caixa** (`POST /cash-sessions/open`) e **entrada de estoque** (`POST
+      /stock/movements`); fechar caixa, ajuste de inventário, cancelar/devolver e consultas seguem
+      liberados (ações de encerramento/correção). O aviso do topo lista as três operações. **Sem
+      migration.** API `daf90038` + web `533c1921`; typecheck API+web ✅. *Falta E2E no navegador (usuário).*
 - [ ] **Fatia E — Entrar no contexto da loja para suporte (impersonation auditada)** — *futura*.
       Sessão de suporte temporária de escopo `{ platformAdminId, targetTenantId, exp }` (token
       próprio, não login do lojista), somente-leitura por padrão, auditada (`meta.support = true`,
@@ -284,5 +294,6 @@
 ## 📌 Notas / decisões em aberto
 
 - **Prisma 6 (não 7):** mantido de propósito por estabilidade de conexão. Não subir sem revalidar a conexão pela edge.
+- **Atualizar o wrangler da API (3.114 → 4.x) — adiado:** decisão de 2026-07-03. A API funciona na 3.114; a v3 está defasada (aviso de deprecação no deploy). Fazer **depois de fechar os testes da Fase 2.5 + a Fatia D**, junto com o web (uniformizar as duas apps na mesma major/`workerd`, deixando um binário só na raiz). Ao atualizar: revalidar config `wrangler.toml` + bindings (Hyperdrive/R2/secret) com `deploy --dry-run` antes de publicar. Contexto do descasamento de `workerd` no Windows em "Infra.Deploy-Win" (registro de testes).
 - **Migrations no Supabase:** usar `migrate diff` + `migrate deploy` (o `migrate dev` tropeça no *shadow database* do free tier).
 - **Auth:** credenciais são do Supabase Auth; a tabela `users` não guarda senha.

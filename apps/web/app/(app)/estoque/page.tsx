@@ -6,6 +6,8 @@ import {
   inventoryAdjustmentSchema,
 } from '@nexoloja/shared';
 import { apiGet, apiPost } from '@/lib/api';
+import { useMe } from '@/lib/useMe';
+import { StoreDisabledNotice } from '@/components/StoreDisabledNotice';
 
 type Product = {
   id: string;
@@ -38,6 +40,7 @@ const DATETIME = (iso: string) =>
 const EMPTY_FILTERS = { productId: '', type: '', reason: '', dateFrom: '', dateTo: '' };
 
 export default function EstoquePage() {
+  const { me } = useMe();
   const [products, setProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [movements, setMovements] = useState<Movement[]>([]);
@@ -191,7 +194,10 @@ export default function EstoquePage() {
       {notice && <p className="mb-4 text-sm text-green-700">{notice}</p>}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {/* Entrada de estoque */}
+        {/* Entrada de estoque — bloqueada em loja desativada (ADR-009); ajuste segue liberado. */}
+        {me?.tenantActive === false ? (
+          <StoreDisabledNotice message="A entrada de estoque está bloqueada. Fale com o suporte para reativar a loja." />
+        ) : (
         <form onSubmit={onEntry} className="rounded-2xl bg-white p-4 shadow-sm">
           <h2 className="mb-3 font-semibold">Entrada de estoque</h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -252,6 +258,7 @@ export default function EstoquePage() {
             {savingEntry ? 'Registrando…' : 'Registrar entrada'}
           </button>
         </form>
+        )}
 
         {/* Ajuste de inventário */}
         <form onSubmit={onAdjust} className="rounded-2xl bg-white p-4 shadow-sm">

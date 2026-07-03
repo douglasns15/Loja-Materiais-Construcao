@@ -3,7 +3,7 @@ import { createPrismaClient, Prisma } from '@nexoloja/db';
 import { applyStockMovement, calcInventoryAdjustment } from '@nexoloja/core';
 import { createStockMovementSchema, inventoryAdjustmentSchema } from '@nexoloja/shared';
 import { type Env, getConnectionString, getTenantId } from '../lib/request';
-import { requireAuth } from '../middleware/auth';
+import { requireActiveTenant, requireAuth } from '../middleware/auth';
 
 const stock = new Hono<Env>();
 stock.use('*', requireAuth);
@@ -43,8 +43,10 @@ stock.get('/movements', async (c) => {
  * Entrada/saída de estoque (compra, recebimento). Transação atômica (ADR-001):
  * grava StockMovement + atualiza `Product.stockQty`. Bloqueia saída que deixaria
  * o estoque negativo. Auditoria natural pelo próprio StockMovement (sem AuditEvent).
+ * Bloqueado em loja inativa (ADR-009); o ajuste de inventário (`/adjust`) segue liberado
+ * (correção de contagem, como cancelar/devolver).
  */
-stock.post('/movements', async (c) => {
+stock.post('/movements', requireActiveTenant, async (c) => {
   const tenantId = getTenantId(c);
   const connectionString = getConnectionString(c.env);
   if (!tenantId || !connectionString) {

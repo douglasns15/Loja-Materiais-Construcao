@@ -239,6 +239,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <span className="truncate font-semibold text-gray-800">{currentLabel}</span>
         </header>
 
+        {/* Aviso de loja desativada pelo Super Usuário (ADR-009): visível no topo de toda tela.
+            As vendas novas ficam bloqueadas (a API barra e a tela de Nova Venda também). */}
+        {me?.tenantActive === false && (
+          <div className="flex items-start gap-2 border-b border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <svg className="mt-0.5 h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+              <line x1="12" y1="9" x2="12" y2="13" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+            <span>
+              <strong>Loja desativada.</strong> Estão bloqueados: <strong>novas vendas</strong>,{' '}
+              <strong>abertura de caixa</strong> e <strong>entrada de estoque</strong>. Fale com o
+              suporte para reativar a loja.
+            </span>
+          </div>
+        )}
+
         <main className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</main>
       </div>
 
