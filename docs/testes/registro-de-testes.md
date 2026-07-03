@@ -1069,6 +1069,10 @@ O npm aninha o binário novo em `apps/web/node_modules` (o antigo permanece na r
 > subir a versão do `workerd`, repetir o `npm install` do `@cloudflare/workerd-windows-64` na versão
 > correspondente.
 
+> **Superado por "Infra.WranglerV4" (2026-07-03):** com a API também migrada para o wrangler 4, a
+> raiz passou a ter um `workerd` único e correto, e os binários aninhados (inclusive este do web)
+> foram **removidos** — não são mais necessários.
+
 ### 2.5.Inact — Bloqueio de loja desativada (ADR-009) — 2026-07-03
 
 Achado no E2E do usuário: ao **desativar** uma loja pelo painel (`SET_TENANT_ACTIVE`), o usuário
@@ -1142,3 +1146,42 @@ idempotentes). Web publicado (Version `750ea631`).
 
 > Mitigações mais fortes seguem no ROADMAP como futuro de produção: **Supabase Pro** (remove a pausa)
 > e/ou keep-warm. O retry é a camada barata que resolve a maioria dos cold starts de leitura.
+
+### Infra.WranglerV4 — API migrada para wrangler 4 + toolchain unificada — 2026-07-03
+
+Fechamento do item que estava adiado: a **API** saiu do wrangler 3.114 (defasado) para o **4.107.0**,
+igualando o web. Feito na branch `chore/wrangler-v4-api`. A config `wrangler.toml` da API **não
+precisou de mudança** (só chaves padrão: `name`/`main`/`compatibility_date`/`compatibility_flags`/
+`[vars]`/`[[hyperdrive]]`/`[[r2_buckets]]`). Como efeito colateral bom, a raiz do `node_modules`
+passou a ter **um único `workerd 1.20260701.1`** (meta + binário) e os `@cloudflare/workerd-windows-64`
+**aninhados** (o do web, criado em Infra.Deploy-Win, e um que eu cheguei a adicionar por engano na
+API) foram **removidos** — deixaram de ser necessários com os dois apps na mesma versão.
+
+**Estado final da toolchain**
+
+| Item | Resultado |
+|---|---|
+| `apps/api` wrangler | ✅ `^4.107.0` (era `^3.95.0`) |
+| `apps/web` wrangler | ✅ `^4.107.0` (era `^4.106.0`) |
+| `workerd` (meta + binário Windows) | ✅ **um só na raiz**: `1.20260701.1` |
+| binários `@cloudflare/workerd-windows-64` aninhados | ✅ nenhum (removidos de api e web) |
+
+**Validação (API)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| `wrangler deploy --dry-run` (bindings + build) | sem erro; lista Hyperdrive/R2/`SUPABASE_URL` | ✅ (sem erro de `--debug-port`) |
+| `wrangler deploy` (real) | publica | ✅ Version `97929c6f` (Startup 38 ms) |
+| `GET /health` | ok | ✅ `{ok:true}` |
+| `GET /db-check` (Hyperdrive→Supabase, workerd novo) | conecta | ✅ `{tenants:2}` |
+| `GET /me` e `/products` sem token | 401 | ✅ ambos 401 |
+| secret `SUPABASE_SERVICE_ROLE_KEY` preservado | segue no Worker (não some no deploy) | ✅ (não é config; persiste) |
+
+**Validação (WEB — regressão do deploy no Windows com o binário unificado)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| `npm run deploy` (OpenNext build + deploy) | publica sem o bug do Windows | ✅ Version `8e275410` (Startup 23 ms) |
+
+> Item do ROADMAP "atualizar o wrangler da API" **fechado**. As duas apps agora sobem com
+> `npm run deploy`/`npx wrangler deploy` de forma idêntica no Windows.

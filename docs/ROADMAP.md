@@ -294,6 +294,6 @@
 ## 📌 Notas / decisões em aberto
 
 - **Prisma 6 (não 7):** mantido de propósito por estabilidade de conexão. Não subir sem revalidar a conexão pela edge.
-- **Atualizar o wrangler da API (3.114 → 4.x) — adiado:** decisão de 2026-07-03. A API funciona na 3.114; a v3 está defasada (aviso de deprecação no deploy). Fazer **depois de fechar os testes da Fase 2.5 + a Fatia D**, junto com o web (uniformizar as duas apps na mesma major/`workerd`, deixando um binário só na raiz). Ao atualizar: revalidar config `wrangler.toml` + bindings (Hyperdrive/R2/secret) com `deploy --dry-run` antes de publicar. Contexto do descasamento de `workerd` no Windows em "Infra.Deploy-Win" (registro de testes).
+- **Atualizar o wrangler da API (3.114 → 4.x) — ✅ concluído (2026-07-03):** as **duas apps** agora usam **wrangler `4.107.0`** e um **único `workerd 1.20260701.1`** na raiz (meta + binário), **sem binários aninhados** (os `optionalDependencies` de workerd que existiam no web foram removidos — deixaram de ser necessários). A config `wrangler.toml` da API não precisou de mudança (chaves padrão). Validado com `deploy --dry-run` (bindings Hyperdrive/R2/`SUPABASE_URL` ok; secret `SUPABASE_SERVICE_ROLE_KEY` persiste no Worker) + smoke (`/health`, `/db-check` → tenants:2, `/me` 401). Ver "Infra.WranglerV4" no registro de testes.
 - **Migrations no Supabase:** usar `migrate diff` + `migrate deploy` (o `migrate dev` tropeça no *shadow database* do free tier).
 - **Auth:** credenciais são do Supabase Auth; a tabela `users` não guarda senha.
