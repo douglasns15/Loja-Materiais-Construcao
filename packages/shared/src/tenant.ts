@@ -66,3 +66,40 @@ export const updateTenantSchema = z.object({
     .refine((v) => v === null || v.length <= 11, { message: 'Telefone inválido.' }),
 });
 export type UpdateTenantInput = z.infer<typeof updateTenantSchema>;
+
+/**
+ * Onboarding de loja pelo Super Usuário (ADR-009, Fatia B): cria a loja e convida o
+ * primeiro Admin (papel `OWNER`) por e-mail. `slug` é opcional — quando ausente, a API
+ * deriva do nome (`slugify`). CNPJ/telefone opcionais e canônicos (só dígitos). `redirectTo`
+ * é para onde o link do convite leva (a página de definição de senha do app publicado).
+ */
+export const createTenantSchema = z.object({
+  name: z.string().trim().min(1, 'O nome da loja é obrigatório.').max(120),
+  slug: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .max(60)
+    .regex(/^[a-z0-9-]+$/, 'Identificador (slug) inválido: use letras, números e hífen.')
+    .optional(),
+  cnpj: z
+    .string()
+    .nullish()
+    .transform((v) => onlyDigits(v) || null)
+    .refine((v) => v === null || v.length <= 14, { message: 'CNPJ inválido.' }),
+  phone: z
+    .string()
+    .nullish()
+    .transform((v) => onlyDigits(v) || null)
+    .refine((v) => v === null || v.length <= 11, { message: 'Telefone inválido.' }),
+  adminEmail: z.string().trim().toLowerCase().email('E-mail do admin inválido.'),
+  adminName: z.string().trim().min(1).max(100).optional(),
+  redirectTo: z.string().url().optional(),
+});
+export type CreateTenantInput = z.infer<typeof createTenantSchema>;
+
+/** Ativar/inativar uma loja pelo painel de plataforma (`PATCH /platform/tenants/:id`). */
+export const setTenantActiveSchema = z.object({
+  isActive: z.boolean(),
+});
+export type SetTenantActiveInput = z.infer<typeof setTenantActiveSchema>;

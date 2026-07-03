@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { STORE_ROLE_LABELS } from '@nexoloja/shared';
 import { supabase } from '@/lib/supabase';
+import { isPlatformAdmin } from '@/lib/session';
 import { useMe } from '@/lib/useMe';
 import { ProfileModal } from './ProfileModal';
 
@@ -61,6 +62,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       const { data } = await supabase.auth.getSession();
       if (!data.session) {
         router.replace('/login');
+        return;
+      }
+      // Super Usuário não pertence a loja — não fica preso no shell de loja.
+      if (await isPlatformAdmin()) {
+        router.replace('/plataforma');
         return;
       }
       setReady(true);

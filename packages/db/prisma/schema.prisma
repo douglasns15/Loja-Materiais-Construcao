@@ -156,6 +156,23 @@ model User {
   @@map("users")
 }
 
+/// Super Usuário (fabricante) — identidade de PLATAFORMA, acima de qualquer loja (ADR-009).
+/// NÃO pertence a um tenant (sem `tenantId`/FK): é cross-tenant. `id` = `auth.users.id`
+/// (Supabase Auth), como em `User`. O acesso a várias lojas é feito por rotas `/platform/*`
+/// dedicadas (API dona do banco), nunca relaxando o RLS. RLS ligado sem política de cliente
+/// (só a API-dono lê); o access token hook (supabase_auth_admin) lê esta tabela para injetar
+/// o claim `is_platform_admin` no JWT — atalho de UI; a autorização confia na tabela.
+model PlatformAdmin {
+  id        String   @id @db.Uuid       // = Supabase Auth user id (auth.users.id)
+  email     String   @unique @db.VarChar(150)
+  name      String   @db.VarChar(100)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("platform_admins")
+}
+
 // =============================================================================
 // MÓDULO CORE — Catálogo de Produtos
 // =============================================================================

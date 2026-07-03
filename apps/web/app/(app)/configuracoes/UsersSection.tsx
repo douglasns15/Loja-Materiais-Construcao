@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { STORE_ROLE_LABELS, type StoreRole } from '@nexoloja/shared';
-import { apiGet, apiPatch, apiPost } from '@/lib/api';
+import { apiDelete, apiGet, apiPatch, apiPost } from '@/lib/api';
 
 type StoreUser = {
   id: string;
@@ -49,6 +49,27 @@ export function UsersSection({ currentUserId }: { currentUserId: string | null }
     try {
       const updated = await apiPatch<StoreUser>(`/users/${id}`, body);
       setUsers((list) => list.map((u) => (u.id === id ? updated : u)));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function remove(u: StoreUser) {
+    if (
+      !window.confirm(
+        `Excluir o usuário "${u.name}" (${u.email})? Esta ação remove o acesso de vez e libera o e-mail. ` +
+          `Se o usuário tiver histórico de vendas/caixa, use "Desativar".`,
+      )
+    ) {
+      return;
+    }
+    setBusyId(u.id);
+    setError(null);
+    try {
+      await apiDelete(`/users/${u.id}`);
+      setUsers((list) => list.filter((x) => x.id !== u.id));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -149,13 +170,22 @@ export function UsersSection({ currentUserId }: { currentUserId: string | null }
                       <span className="text-gray-400">Inativo</span>
                     )}
                     {!isOwner(u) && u.id !== currentUserId && (
-                      <button
-                        onClick={() => patch(u.id, { isActive: !u.isActive })}
-                        disabled={busyId === u.id}
-                        className="ml-3 text-xs font-medium text-gray-600 underline hover:text-gray-900 disabled:opacity-50"
-                      >
-                        {u.isActive ? 'Desativar' : 'Ativar'}
-                      </button>
+                      <>
+                        <button
+                          onClick={() => patch(u.id, { isActive: !u.isActive })}
+                          disabled={busyId === u.id}
+                          className="ml-3 text-xs font-medium text-gray-600 underline hover:text-gray-900 disabled:opacity-50"
+                        >
+                          {u.isActive ? 'Desativar' : 'Ativar'}
+                        </button>
+                        <button
+                          onClick={() => remove(u)}
+                          disabled={busyId === u.id}
+                          className="ml-3 text-xs font-medium text-red-600 underline hover:text-red-800 disabled:opacity-50"
+                        >
+                          Excluir
+                        </button>
+                      </>
                     )}
                   </td>
                 </tr>

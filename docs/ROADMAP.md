@@ -3,7 +3,30 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-02 (**UI responsiva + recolher menu (2.S)** — correção de
+> **Última atualização:** 2026-07-03 (**Fase 2.5 — Fatias A–D concluídas**: exclusão de usuário
+> da loja adicionada — `DELETE /users/:id` apaga a linha em `users` + revoga a identidade no
+> Supabase Auth (`deleteAuthUser`, libera o e-mail) + `AuditEvent DELETE_USER`; bloqueia
+> self/`OWNER` e usuários com histórico (→ 409 *Desativar*); botão **Excluir** em
+> `/configuracoes`. **Fatia D (documental)**: `CREATE_TENANT`/`SET_TENANT_ACTIVE`/`DELETE_USER`
+> formalizados na lista fechada do **ADR-004** e **ADR-009 fechado** (Fatias A–D). Sem migration.
+> Typecheck API + web ✅; falta deploy do Worker + E2E do usuário. **Fatia E** (entrar no contexto
+> da loja p/ suporte, impersonation auditada) fica como futura — direção no ADR-009. Antes:
+> **Fatia C (painel `/plataforma`) no ar**: UI do
+> Super Usuário (listar/criar/ativar lojas), `PATCH /platform/tenants/:id` + `SET_TENANT_ACTIVE`,
+> login roteia por papel. API `76fe3134` + web `05a05fc4`; E2E PATCH 7/7 + UI validada no navegador
+> (super usuário → painel, lista Loja Demo). Falta E2E de e-mail real (usuário) e a **Fatia D**
+> (formalizar auditoria no ADR-004 + fechar ADR-009). Antes: **Fatia B (onboarding) no ar**: `POST
+> /platform/tenants` cria loja + convida 1º Admin (`OWNER`); `createTenantSchema`+`slugify`,
+> `inviteAuthUser` extraído p/ `lib/authAdmin.ts`, `AuditEvent CREATE_TENANT`; sem migration.
+> API publicada (Version `ff3889d4`); E2E 12/12 (loja de teste criada e removida). Falta o E2E do
+> e-mail real → cai na Fatia C. Antes: **Fatia A (ADR-009) no ar**: identidade
+> de plataforma. Migration `0005_platform_admin` aplicada (tabela cross-tenant `platform_admins` +
+> RLS + hook estendido p/ claim `is_platform_admin`), middleware `requirePlatformAuth`, rotas
+> `/platform/me` e `/platform/tenants`, script `create-platform-admin.mjs`. API publicada (Version
+> `7f7fcd7e`); E2E 10/10 (super usuário lista lojas cross-tenant; owner de loja barrado com 403;
+> hook não quebrou a auth de loja). 1º super usuário: `super_owner@nexoloja.local`. Plano completo
+> em `docs/plano-fase-2.5.md`. Próximo: **Fatia B (onboarding)**. Antes: **UI responsiva (2.S)** —
+> correção de
 > usabilidade no celular/tablet: `<meta viewport>` adicionado, menu lateral vira **gaveta**
 > no celular (☰) e **recolhe** no desktop (persistido em `localStorage`), 7 tabelas passam a
 > rolar (`overflow-x-auto`). Front puro, sem migration/API. Build + **deploy publicado**
@@ -199,21 +222,50 @@
 
 ---
 
-## 🟠 Fase 2.5 — Plataforma: multi-loja, Super Usuário e onboarding — **Pendente**
+## 🟠 Fase 2.5 — Plataforma: multi-loja, Super Usuário e onboarding — **Fatias A–D concluídas** (E futura)
 
 > Capacidades de **plataforma** que **cruzam o limite do tenant** (a fronteira de segurança
 > via RLS). Separadas da Fase 2 de propósito: não são necessárias para uma loja operar e
 > mexem no modelo de isolamento — ver **ADR-009**. Assentam sobre o RBAC da Fase 2 (ADR-008).
 
-- [ ] **Super Usuário (fabricante)** — papel de plataforma **fora** do `UserRole` por-tenant
-      (tabela `PlatformAdmin` e/ou claim `is_platform_admin`), com acesso **cross-tenant
-      controlado** (rotas de plataforma dedicadas na API, não relaxamento do RLS) e auditoria.
-- [ ] **Onboarding de loja** — criar `Tenant` + primeiro **Admin** (substitui o script de
-      bootstrap). Decidir gatilho: **provisionado pelo Super Usuário** (recomendado) vs.
-      signup self-service. A unicidade `Tenant.cnpj` (`@unique`, 409) passa a ter uso real.
-- [ ] **Painel de gestão de lojas** (exclusivo do Super Usuário) — listar/ativar/inativar
-      lojas (`Tenant.isActive`) e entrar no contexto de uma loja para suporte.
-- [ ] Estender a **auditoria (ADR-004)** para eventos de plataforma.
+> **Decisões travadas (2026-07-02, ver `docs/plano-fase-2.5.md`):** onboarding **provisionado
+> pelo Super Usuário** (sem signup público); identidade = **tabela `platform_admins` + claim
+> `is_platform_admin`**; acesso cross-tenant por **rotas `/platform/*` dedicadas** (RLS de loja
+> intacto). Execução em fatias A–D.
+
+- [x] **Fatia A — Super Usuário (identidade + acesso cross-tenant)** — papel de plataforma **fora**
+      do `UserRole` por-tenant: tabela `platform_admins` (verdade) + claim `is_platform_admin`
+      (atalho de UI, via hook estendido). Middleware `requirePlatformAuth` (autoriza pela tabela),
+      rotas `/platform/me` e `/platform/tenants`, script `create-platform-admin.mjs`. Migration
+      `0005_platform_admin` (aditiva) aplicada + Worker publicado + **E2E 10/10** (2.5.A). Falta a
+      **auditoria de plataforma** (Fatia D).
+- [x] **Fatia B — Onboarding de loja (API)** — `POST /platform/tenants` cria `Tenant` + convida o
+      primeiro **Admin** (`OWNER`) reusando o convite por e-mail (`inviteAuthUser` extraído p/
+      `lib/authAdmin.ts`). `createTenantSchema` + `slugify` (shared); unicidade `slug`/`cnpj` (409);
+      transação com `AuditEvent CREATE_TENANT`. **Sem migration.** API publicada (Version `ff3889d4`)
+      + **E2E 12/12** (2.5.B). Falta o E2E do **e-mail real** (fica na Fatia C, com o navegador).
+- [x] **Fatia C — Painel de gestão de lojas** (UI `/plataforma`, exclusivo do Super Usuário) —
+      área separada do shell `(app)` com guard próprio (`GET /platform/me`); lista lojas + form
+      "Nova loja" (`POST /platform/tenants`) + ativar/inativar (`PATCH /platform/tenants/:id` +
+      `AuditEvent SET_TENANT_ACTIVE`). Login roteia por papel (`tokenIsPlatformAdmin`): super
+      usuário → `/plataforma`. API Version `76fe3134` + web `05a05fc4`; E2E PATCH 7/7 + UI validada
+      no navegador (2.5.C). *Entrar no contexto de uma loja p/ suporte = futuro (fatia própria).*
+      Falta o E2E de navegador do usuário (criar loja com e-mail real).
+- [x] **Exclusão de usuário da loja (ADR-008)** — `DELETE /users/:id` (Admin): apaga a linha em
+      `users` **+ revoga a identidade no Supabase Auth** (`deleteAuthUser`, libera o e-mail para
+      novo convite) **+ `AuditEvent DELETE_USER`**. Bloqueia excluir a si mesmo/o `OWNER`; usuário
+      **com histórico** (pedidos/caixa — FKs sem cascade) → **409** orientando a *Desativar*
+      (preserva integridade + auditoria). Botão **Excluir** na seção Usuários de `/configuracoes`.
+      **Sem migration.** Typecheck API + web ✅. *Falta: deploy do Worker + E2E no navegador (login)
+      pelo usuário.* Pré-requisito pedido antes da Fatia D (liberar o e-mail de teste).
+- [x] **Fatia D — Auditoria de plataforma** — eventos `CREATE_TENANT` e `SET_TENANT_ACTIVE`
+      (e `DELETE_USER`, de loja) **formalizados na lista fechada do ADR-004** (`meta.platform = true`;
+      `userId` = Super Usuário; `tenantId` = loja-alvo) e **ADR-009 fechado** (Fatias A–D). **Sem
+      migration, sem deploy** (só documentação).
+- [ ] **Fatia E — Entrar no contexto da loja para suporte (impersonation auditada)** — *futura*.
+      Sessão de suporte temporária de escopo `{ platformAdminId, targetTenantId, exp }` (token
+      próprio, não login do lojista), somente-leitura por padrão, auditada (`meta.support = true`,
+      `SUPPORT_SESSION_START/END`). Direção detalhada no **ADR-009 → "Status de implementação"**.
 
 ---
 

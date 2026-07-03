@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { tokenIsPlatformAdmin } from '@/lib/session';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -15,13 +16,16 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
-    if (error) {
+    if (error || !data.session) {
       setError('E-mail ou senha inválidos.');
       return;
     }
-    router.push('/products');
+    // Roteia pelo token recém-emitido (sem depender de getSession, que pode vir defasado):
+    // Super Usuário (fabricante) → painel de plataforma; usuário de loja → app.
+    const toPlatform = tokenIsPlatformAdmin(data.session.access_token);
+    router.push(toPlatform ? '/plataforma' : '/products');
   }
 
   return (

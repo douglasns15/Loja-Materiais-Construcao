@@ -13,6 +13,7 @@ import tenant from './routes/tenant';
 import reports from './routes/reports';
 import me from './routes/me';
 import usersRoute from './routes/users';
+import platform from './routes/platform';
 
 const app = new Hono<Env>();
 
@@ -64,6 +65,7 @@ app.route('/tenant', tenant);
 app.route('/reports', reports);
 app.route('/me', me);
 app.route('/users', usersRoute);
+app.route('/platform', platform);
 
 /**
  * Validação do item 3: confirma que o Prisma roda no Cloudflare Worker via driver

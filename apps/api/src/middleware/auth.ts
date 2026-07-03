@@ -83,3 +83,59 @@ export const requireAdmin = createMiddleware<Env>(async (c, next) => {
   }
   await next();
 });
+
+/**
+ * Exige um Super Usuário de PLATAFORMA (fabricante, ADR-009). É SEPARADO do
+ * `requireAuth`: o super usuário não pertence a loja (não tem linha em `users`),
+ * então a autorização é feita contra a tabela `platform_admins` (fonte de verdade),
+ * não contra o claim do JWT (que é só atalho de UI). Protege as rotas `/platform/*`,
+ * onde o acesso cross-tenant acontece de forma explícita e auditável.
+ */
+export const requirePlatformAuth = createMiddleware<Env>(async (c, next) => {
+  const header = c.req.header('Authorization');
+  const token = header?.startsWith('Bearer ') ? header.slice(7) : null;
+  if (!token) {
+    return c.json({ ok: false, error: 'Token de autenticação ausente.' }, 401);
+  }
+
+  const supabaseUrl = c.env.SUPABASE_URL;
+  if (!supabaseUrl) {
+    return c.json({ ok: false, error: 'SUPABASE_URL não configurada.' }, 500);
+  }
+
+  let sub: string;
+  try {
+    const { payload } = await jwtVerify(token, getJwks(supabaseUrl), {
+      issuer: `${supabaseUrl}/auth/v1`,
+      audience: 'authenticated',
+    });
+    if (!payload.sub) throw new Error('JWT sem sub');
+    sub = payload.sub;
+  } catch {
+    return c.json({ ok: false, error: 'Token inválido ou expirado.' }, 401);
+  }
+
+  const connectionString = getConnectionString(c.env);
+  if (!connectionString) {
+    return c.json({ ok: false, error: 'Sem conexão com o banco.' }, 500);
+  }
+
+  try {
+    const prisma = createPrismaClient(connectionString);
+    const admin = await prisma.platformAdmin.findUnique({
+      where: { id: sub },
+      select: { id: true, name: true, email: true, isActive: true },
+    });
+    if (!admin || !admin.isActive) {
+      return c.json({ ok: false, error: 'Acesso restrito à administração da plataforma.' }, 403);
+    }
+    c.set('platformAdminId', admin.id);
+    c.set('platformAdminName', admin.name);
+    c.set('platformAdminEmail', admin.email);
+  } catch (err) {
+    console.error('requirePlatformAuth: falha ao resolver super usuário:', err);
+    return c.json({ ok: false, error: 'Falha na autenticação.' }, 500);
+  }
+
+  await next();
+});

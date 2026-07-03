@@ -17,11 +17,19 @@ export type Bindings = {
   MEDIA?: R2Bucket;
 };
 
-/** Dados do usuário autenticado, populados pelo middleware `requireAuth`. */
+/**
+ * Dados do usuário autenticado, populados pelos middlewares de auth.
+ * `tenantId`/`userId`/`role` vêm do `requireAuth` (usuário de loja).
+ * Os campos `platformAdmin*` vêm do `requirePlatformAuth` (Super Usuário, ADR-009)
+ * e só existem nas rotas `/platform/*` — usuário de loja não os popula, e vice-versa.
+ */
 export type Variables = {
   tenantId: string;
   userId: string;
   role: string;
+  platformAdminId: string;
+  platformAdminName: string;
+  platformAdminEmail: string;
 };
 
 export type Env = { Bindings: Bindings; Variables: Variables };

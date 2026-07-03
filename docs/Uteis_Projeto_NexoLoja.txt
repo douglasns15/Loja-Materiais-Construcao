@@ -10,6 +10,8 @@ Login: owner@lojademo.com / NexoLoja#2026
        
        caixa@lojademo.com / NexoLoja##2026
 
+       super_owner@nexoloja.local
+
 http://localhost:3000/
 
 ## Leia docs/ROADMAP.md e docs/testes/registro-de-testes.md e vamos continuar

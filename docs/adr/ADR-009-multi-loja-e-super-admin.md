@@ -1,7 +1,7 @@
 # ADR-009 — Multi-loja, onboarding e Super Usuário (plataforma)
 
-- **Status:** Proposto
-- **Data:** 2026-07-01
+- **Status:** Aceito (2026-07-02) · **Implementado — Fatias A–D concluídas (2026-07-03)**; execução em `docs/plano-fase-2.5.md`
+- **Data:** 2026-07-01 (proposto) · 2026-07-02 (aceito)
 - **Contexto de fase:** Fase nova dedicada — "Plataforma / Administração" (após a Fase 2)
 
 > ⚠️ **Implica alteração de schema (migration) e mexe no modelo de segurança (RLS).**
@@ -65,6 +65,9 @@ várias lojas é feito de forma **explícita e auditável**, não relaxando as p
 - Área exclusiva de Super Usuário para **listar lojas**, ver estado (ativa/inativa,
   `Tenant.isActive`), e entrar no contexto de uma loja para suporte. **Nunca** exposta a
   Admin/Usuário de loja.
+- **Entregue (Fatia C):** UI `/plataforma` (listar/criar/ativar-inativar lojas).
+  **Entrar no contexto de uma loja para suporte** é a maior superfície de risco e fica
+  como **Fatia E** (impersonation auditada) — ver "Status de implementação".
 
 ## Consequências
 
@@ -76,12 +79,39 @@ várias lojas é feito de forma **explícita e auditável**, não relaxando as p
   self-service (se escolhido) abre vetor de abuso e precisaria de verificação.
 - **Dependências:** assenta sobre o RBAC do ADR-008 (papéis de loja) já existente.
 
-## Decisões em aberto (a resolver antes de implementar)
+## Decisões resolvidas (2026-07-02)
 
-- Onboarding **self-service** vs. **provisionado** (recomendação: provisionado).
-- Forma da identidade de plataforma: tabela `PlatformAdmin` vs. claim no JWT (ou ambos).
-- Estratégia de acesso cross-tenant: rotas de plataforma dedicadas (preferido) vs. policies
-  RLS específicas para o claim de plataforma.
+As três decisões em aberto foram resolvidas com o usuário e fixam a execução
+(ver `docs/plano-fase-2.5.md`):
+
+- **Onboarding: provisionado pelo Super Usuário.** Sem signup público — a equipe cria a loja e
+  convida o primeiro Admin (`OWNER`).
+- **Identidade de plataforma: tabela `platform_admins` (verdade) + claim `is_platform_admin` no
+  JWT (atalho de UI).** A autorização no servidor confia **na tabela** (middleware
+  `requirePlatformAuth`); o claim (injetado estendendo o access token hook da 0002) serve só para
+  o front rotear/mostrar o painel.
+- **Acesso cross-tenant: rotas `/platform/*` dedicadas** (API como dono do banco). O RLS das
+  tabelas de loja **não muda**.
+
+## Status de implementação (Fase 2.5)
+
+Executado em fatias (ver `docs/plano-fase-2.5.md` e `docs/testes/registro-de-testes.md`):
+
+- **Fatia A — identidade + acesso cross-tenant:** ✅ migration `0005_platform_admin`, `requirePlatformAuth`, rotas `/platform/me` e `/platform/tenants`, claim `is_platform_admin` no hook, script `create-platform-admin.mjs`.
+- **Fatia B — onboarding:** ✅ `POST /platform/tenants` cria loja + convida 1º Admin (`OWNER`); `AuditEvent CREATE_TENANT`.
+- **Fatia C — painel de gestão de lojas:** ✅ UI `/plataforma` (listar/criar/ativar-inativar); `PATCH /platform/tenants/:id` + `AuditEvent SET_TENANT_ACTIVE`; login roteia por papel.
+- **Fatia D — auditoria de plataforma:** ✅ `CREATE_TENANT` e `SET_TENANT_ACTIVE` **formalizados na lista fechada do [ADR-004](./ADR-004-soft-delete-e-auditoria.md)** (`meta.platform = true`). Sem migration.
+
+### Fatia E (futura) — entrar no contexto da loja para suporte (impersonation auditada)
+
+Maior superfície de risco do sistema; fica como fatia própria. Direção pretendida (a detalhar num plano quando priorizada):
+
+- **Sessão de suporte explícita e temporária, não um login "como" o dono.** O Super Usuário abre uma sessão de suporte sobre uma loja-alvo pelo painel; a API emite um **token de suporte de curta duração** com escopo `{ platformAdminId, targetTenantId, exp }` — **não** um JWT de usuário da loja. Nada de logar com a senha do lojista nem reaproveitar o `requireAuth` de loja.
+- **Autorização continua na plataforma.** As rotas de loja usadas em modo suporte passam por um middleware que aceita **ou** um usuário da loja (`requireAuth`) **ou** um super usuário com sessão de suporte válida para *aquele* `tenantId` — a fronteira nunca é o RLS relaxado, é a checagem explícita (como já é em `/platform/*`).
+- **Somente-leitura por padrão; escrita é exceção auditada.** O suporte enxerga a loja; qualquer ação de escrita exige um passo a mais e gera auditoria por operação.
+- **Tudo auditado com `meta.support = true`.** Abrir e encerrar a sessão de suporte gera `AuditEvent` (novos `action`s, ex. `SUPPORT_SESSION_START`/`SUPPORT_SESSION_END`, `tenantId` = loja-alvo, `userId` = super usuário) e cada escrita feita em modo suporte carrega `meta.support = true` + o `platformAdminId`, para separar no relato "foi o lojista" de "foi o suporte".
+- **Visível para o lojista.** Idealmente a loja vê um aviso/registro de que houve acesso de suporte (transparência), e a sessão tem expiração curta.
+- **Migration provável:** nenhuma para o mecanismo de token; apenas os novos `action`s de auditoria (strings, sem migration). Um `tenantId` nullable em `AuditEvent` só seria necessário se quisermos auditar suporte "sem loja" — não é o caso aqui.
 
 ## Relacionadas
 

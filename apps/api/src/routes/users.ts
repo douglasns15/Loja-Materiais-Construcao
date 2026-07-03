@@ -7,7 +7,8 @@ import {
   toStoreRole,
   updateUserSchema,
 } from '@nexoloja/shared';
-import { type Bindings, type Env, getConnectionString, getTenantId } from '../lib/request';
+import { type Env, getConnectionString, getTenantId } from '../lib/request';
+import { deleteAuthUser, inviteAuthUser } from '../lib/authAdmin';
 import { requireAdmin, requireAuth } from '../middleware/auth';
 
 const users = new Hono<Env>();
@@ -15,53 +16,6 @@ const users = new Hono<Env>();
 // Gestão de usuários é sempre restrita a administradores (ADR-008).
 users.use('*', requireAuth);
 users.use('*', requireAdmin);
-
-/**
- * Convida (ou reaproveita) o usuário no Supabase Auth via `inviteUserByEmail`
- * (`POST /auth/v1/invite`) usando a `service_role`. Envia o e-mail com o link de
- * convite e devolve o `id` (= `auth.users.id`). Se o e-mail já existir no Auth,
- * recupera o `id` pela API admin (mesma estratégia do `create-user.mjs`).
- */
-async function inviteAuthUser(
-  env: Bindings,
-  email: string,
-  redirectTo?: string,
-  data?: Record<string, unknown>,
-): Promise<string> {
-  const supabaseUrl = env.SUPABASE_URL!;
-  const serviceRole = env.SUPABASE_SERVICE_ROLE_KEY!;
-  const headers = {
-    apikey: serviceRole,
-    Authorization: `Bearer ${serviceRole}`,
-    'Content-Type': 'application/json',
-  };
-
-  const inviteUrl = new URL(`${supabaseUrl}/auth/v1/invite`);
-  if (redirectTo) inviteUrl.searchParams.set('redirect_to', redirectTo);
-  const res = await fetch(inviteUrl, {
-    method: 'POST',
-    headers,
-    // `data` vira user_metadata e fica disponível no template do e-mail como
-    // `{{ .Data.store_name }}` — usado para personalizar o convite (ADR-008).
-    body: JSON.stringify({ email, ...(data ? { data } : {}) }),
-  });
-  if (res.ok) {
-    const created = (await res.json()) as { id: string };
-    return created.id;
-  }
-
-  // Já registrado no Auth: recupera o id para vincular à loja.
-  const errText = await res.text();
-  if (res.status === 422 || /registered|exists/i.test(errText)) {
-    const list = await fetch(`${supabaseUrl}/auth/v1/admin/users`, { headers });
-    const { users: authUsers = [] } = (await list.json()) as {
-      users?: Array<{ id: string; email?: string }>;
-    };
-    const found = authUsers.find((u) => u.email?.toLowerCase() === email.toLowerCase());
-    if (found) return found.id;
-  }
-  throw new Error(`Supabase invite falhou (${res.status}): ${errText}`);
-}
 
 /** Lista os usuários da loja (com o papel derivado Admin/Usuário). */
 users.get('/', async (c) => {
@@ -164,6 +118,105 @@ users.patch('/:id', async (c) => {
   } catch (err) {
     console.error('PATCH /users/:id falhou:', err);
     return c.json({ ok: false, error: 'Falha ao atualizar o usuário.' }, 500);
+  }
+});
+
+/**
+ * Exclui um usuário da loja (ADR-008). Diferente de desativar (`PATCH`): remove de vez a linha
+ * em `users` E revoga a identidade no Supabase Auth (libera o e-mail para um convite novo).
+ * Guardas: não exclui a si mesmo nem o `OWNER` (dono, preservado). Um usuário com **histórico
+ * transacional** (pedidos/caixas — FKs sem cascade) NÃO pode ser apagado: retorna 409 orientando
+ * a **desativar** (preserva integridade referencial + auditoria). A trilha `AuditEvent` sobrevive
+ * à exclusão (o `userId` de auditoria é referência solta, sem FK — ADR-004). Registra
+ * `AuditEvent DELETE_USER` (evento crítico, ADR-004).
+ */
+users.delete('/:id', async (c) => {
+  const tenantId = getTenantId(c);
+  const actorId = c.get('userId');
+  const connectionString = getConnectionString(c.env);
+  if (!tenantId || !connectionString) {
+    return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
+  }
+
+  const targetId = c.req.param('id');
+  if (targetId === actorId) {
+    return c.json({ ok: false, error: 'Você não pode excluir o próprio usuário.' }, 400);
+  }
+
+  try {
+    const prisma = createPrismaClient(connectionString);
+    const target = await prisma.user.findFirst({
+      where: { id: targetId, tenantId },
+      select: { id: true, email: true, name: true, role: true },
+    });
+    if (!target) {
+      return c.json({ ok: false, error: 'Usuário não encontrado.' }, 404);
+    }
+    if (isOwnerRole(target.role)) {
+      return c.json({ ok: false, error: 'O dono da loja não pode ser excluído.' }, 400);
+    }
+
+    // Histórico transacional trava o hard-delete (FKs sem cascade em Order/CashSession).
+    const [orders, cashSessions] = await Promise.all([
+      prisma.order.count({ where: { tenantId, userId: targetId } }),
+      prisma.cashSession.count({ where: { tenantId, userId: targetId } }),
+    ]);
+    if (orders > 0 || cashSessions > 0) {
+      return c.json(
+        {
+          ok: false,
+          error:
+            'Este usuário tem histórico de vendas/caixa e não pode ser excluído. Use "Desativar" para revogar o acesso preservando o histórico.',
+        },
+        409,
+      );
+    }
+
+    // Parte crítica em transação: apaga a linha em `users` e grava a auditoria juntas.
+    await prisma.$transaction(async (tx) => {
+      await tx.user.delete({ where: { id: targetId } });
+      await tx.auditEvent.create({
+        data: {
+          tenantId,
+          userId: actorId,
+          entity: 'User',
+          entityId: targetId,
+          action: 'DELETE_USER',
+          meta: { email: target.email, name: target.name, roleBefore: target.role },
+        },
+      });
+    });
+
+    // Best-effort: revoga a identidade no Auth para liberar o e-mail (fora da transação do banco —
+    // a exclusão da linha em `users` já cortou o acesso). Não apagar se o id for um Super Usuário.
+    let authDeleted = false;
+    try {
+      const isPlatformAdmin = await prisma.platformAdmin.findUnique({
+        where: { id: targetId },
+        select: { id: true },
+      });
+      if (!isPlatformAdmin) {
+        authDeleted = await deleteAuthUser(c.env, targetId);
+      }
+    } catch (authErr) {
+      console.error('DELETE /users/:id: falha ao revogar identidade no Auth:', authErr);
+    }
+
+    return c.json({ ok: true, data: { id: targetId, authDeleted } });
+  } catch (err) {
+    // Rede de segurança: qualquer FK remanescente que trave o delete vira 409 amigável.
+    if (err && typeof err === 'object' && 'code' in err && err.code === 'P2003') {
+      return c.json(
+        {
+          ok: false,
+          error:
+            'Este usuário tem registros vinculados e não pode ser excluído. Use "Desativar" para revogar o acesso.',
+        },
+        409,
+      );
+    }
+    console.error('DELETE /users/:id falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao excluir o usuário.' }, 500);
   }
 });
 

@@ -30,3 +30,19 @@ export function formatPhoneBr(value: string | null | undefined): string {
   if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
   return d;
 }
+
+/**
+ * Gera um identificador amigável (slug) a partir de um texto: remove acentos, baixa
+ * a caixa e troca tudo que não é alfanumérico por hífen. Usado no onboarding para
+ * derivar o `Tenant.slug` do nome da loja quando não informado (ADR-009). Função PURA.
+ * Ex.: "Loja do Zé & Cia" → "loja-do-ze-cia". Limitado a 60 chars (limite do schema).
+ */
+export function slugify(value: string | null | undefined): string {
+  return (value ?? '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '') // remove acentos (diacriticos combinantes)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-') // não-alfanumérico → hífen
+    .replace(/^-+|-+$/g, '') // remove hífens das pontas
+    .slice(0, 60);
+}

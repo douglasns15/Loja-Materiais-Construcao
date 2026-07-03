@@ -26,10 +26,37 @@ Adotar uma estratégia **em camadas**, proporcional ao valor de cada dado:
 
 1. **Soft-delete leve e padronizado** nas entidades de cadastro: manter `isActive` e adicionar `deletedAt DateTime?` (nulo = ativo). Isso preserva integridade referencial histórica (um produto desativado ainda é referenciado por vendas antigas).
 2. **Carimbos de criação/atualização** já existentes (`createdAt`/`updatedAt`) mantidos; não criar tabela de histórico genérica de todas as alterações no Postgres.
-3. **Auditoria seletiva de eventos críticos** apenas, gravada em uma tabela enxuta `AuditEvent` (multi-tenant), restrita a um conjunto fechado de ações sensíveis: cancelamento de venda, alteração de preço de produto, ajuste manual de estoque, fechamento de caixa com divergência, mudança de papel de usuário. Campos mínimos: `tenantId`, `userId`, `entity`, `entityId`, `action`, `at`, e um `meta Json?` compacto.
+3. **Auditoria seletiva de eventos críticos** apenas, gravada em uma tabela enxuta `AuditEvent` (multi-tenant), restrita a um **conjunto fechado** de ações sensíveis (ver a lista abaixo). Campos mínimos: `tenantId`, `userId`, `entity`, `entityId`, `action`, `at`, e um `meta Json?` compacto.
 4. **Logs operacionais/volumosos NÃO vão para o Postgres** (cumprindo a diretriz): ficam em log externo ou descartáveis.
 
 `StockMovement` já funciona como auditoria natural do estoque e não precisa ser duplicado no `AuditEvent` — apenas eventos de **ajuste manual** são registrados.
+
+### Lista fechada de ações auditadas
+
+A tabela `AuditEvent` é a fonte da trilha. `action` é uma string estável (não um enum de banco, para não exigir migration a cada novo evento); o conjunto abaixo é a lista **fechada** que a aplicação está autorizada a emitir. Duas famílias:
+
+**Eventos de loja** (`userId` = usuário da loja que agiu; `tenantId` = a própria loja):
+
+| `action` | Quando | `entity` |
+|---|---|---|
+| `CANCEL_ORDER` | Cancelamento de venda (caixa aberto) | `Order` |
+| `RETURN_ORDER` | Devolução de venda de caixa fechado (ADR-006) | `Order` |
+| `CHANGE_PRICE` | Alteração de preço de produto | `Product` |
+| `ADJUST_STOCK` | Ajuste manual de estoque | `Product` |
+| `CLOSE_CASH_WITH_DIVERGENCE` | Fechamento de caixa com divergência | `CashSession` |
+| `CHANGE_ROLE` | Mudança de papel / (re)convite de usuário (ADR-008) | `User` |
+| `DELETE_USER` | Exclusão de usuário da loja (ADR-008) | `User` |
+
+**Eventos de plataforma** (ADR-009 — o Super Usuário **não pertence a nenhuma loja**, então o `userId` é o `id` dele em `platform_admins`, uma **referência solta** — `AuditEvent.userId` não tem FK; o `tenantId` é a **loja-alvo** da ação, e `meta.platform = true` marca a origem de plataforma):
+
+| `action` | Quando | `entity` |
+|---|---|---|
+| `CREATE_TENANT` | Criação de loja + convite do 1º Admin pelo Super Usuário | `Tenant` |
+| `SET_TENANT_ACTIVE` | Ativação/inativação de loja pelo painel de plataforma | `Tenant` |
+
+> **Observação (ADR-009, Fatia D):** eventos de plataforma **sem** loja-alvo (ex.: conceder/revogar Super Usuário) exigiriam `AuditEvent.tenantId` *nullable* — mudança em tabela core + RLS. Por ora, conceder Super Usuário é feito por **script auditável no servidor** (`create-platform-admin.mjs`), fora da tabela; tornar `tenantId` opcional fica adiado para quando houver necessidade real.
+>
+> **Integridade x exclusão:** como `AuditEvent.userId`/`entityId` são referências **soltas** (sem FK), a trilha **sobrevive** à exclusão do usuário/loja que ela descreve — por isso `DELETE_USER` registra `email`/`name`/`roleBefore` no `meta` (o alvo pode deixar de existir).
 
 ## Opções Consideradas
 
@@ -81,8 +108,9 @@ A questão é **quanto rastrear sem violar custo-zero**. A Opção B daria rastr
 
 ## Action Items
 
-1. [ ] Adicionar `deletedAt DateTime?` às entidades de cadastro com soft-delete.
-2. [ ] Padronizar consultas para filtrar `deletedAt IS NULL` (helper/escopo no Prisma).
-3. [ ] Criar modelo enxuto `AuditEvent` (multi-tenant) e definir a lista fechada de ações sensíveis.
-4. [ ] Emitir eventos de auditoria nos serviços de: cancelamento de venda, alteração de preço, ajuste manual de estoque, fechamento de caixa com divergência, mudança de papel de usuário.
-5. [ ] Gerar migração (`npx prisma migrate dev`) — **requer aprovação prévia conforme regra 1 do CLAUDE.md**.
+1. [x] Adicionar `deletedAt DateTime?` às entidades de cadastro com soft-delete.
+2. [x] Padronizar consultas para filtrar `deletedAt IS NULL` (helper/escopo no Prisma).
+3. [x] Criar modelo enxuto `AuditEvent` (multi-tenant) e definir a lista fechada de ações sensíveis (ver "Lista fechada de ações auditadas").
+4. [x] Emitir eventos de auditoria nos serviços de: cancelamento/devolução de venda, ajuste manual de estoque, fechamento de caixa com divergência, mudança de papel/exclusão de usuário.
+5. [x] Eventos de **plataforma** (ADR-009): `CREATE_TENANT` e `SET_TENANT_ACTIVE` reusando `AuditEvent` (`meta.platform = true`; `userId` = Super Usuário; `tenantId` = loja-alvo). Formalizado na Fatia D da Fase 2.5.
+6. [x] Migração do `AuditEvent` (`0002_rls_and_auth_hook`) aplicada — **aprovada conforme regra 1 do CLAUDE.md**.

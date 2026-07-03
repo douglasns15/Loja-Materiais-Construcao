@@ -830,5 +830,205 @@ virou `top-0` (senão `top+bottom` fixaria a altura e o `h-dvh` seria ignorado).
 | `opennextjs-cloudflare build` | worker gerado | ✅ |
 | `wrangler deploy` (contorno Windows) | publicado | ✅ Version `31d3df21` |
 | `100dvh` no CSS servido em produção | presente | ✅ |
-| Celular: **Sair** visível na gaveta (não fica atrás da barra) | visível | ⏭️ usuário |
-| Safari: sem "samba" ao rolar | estável | ⏭️ usuário |
+| Celular: **Sair** visível na gaveta (não fica atrás da barra) | visível | ✅ usuário (celular) |
+| Safari: sem "samba" ao rolar | estável | ✅ usuário (celular) |
+
+> **2.S concluída** — UI responsiva (gaveta no celular/tablet + recolher no desktop), tabelas
+> roláveis e viewport dinâmica (`dvh`) validados no celular pelo usuário. A exigência de "100%
+> responsivo" do CLAUDE.md está atendida em produção (`nexoloja-web.imortal.workers.dev`).
+
+---
+
+## Fase 2.5 — Plataforma (ADR-009)
+
+### 2.5.A — Fundação de identidade de plataforma (Super Usuário) — 2026-07-02
+
+ADR-009, Fatia A (ver `docs/plano-fase-2.5.md`). Migration **`0005_platform_admin`** (tabela
+cross-tenant `platform_admins`, RLS ligado sem policy de cliente, e **extensão do access token
+hook** para injetar `is_platform_admin`). Middleware `requirePlatformAuth` (autoriza pela tabela,
+não pelo claim), rotas `/platform/me` e `/platform/tenants` (acesso cross-tenant controlado),
+script `create-platform-admin.mjs`. Identidade dupla: tabela = verdade, claim = atalho de UI.
+
+**Build / migration (local + Supabase)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| `prisma validate` + `generate` (modelo `PlatformAdmin`) | schema válido | ✅ |
+| `CREATE TABLE` escrito à mão == SQL canônico do Prisma (sem drift) | igual | ✅ (conferido via `migrate diff --from-empty`) |
+| Typecheck `apps/api` (`tsc --noEmit`) | sem erros | ✅ exit 0 |
+| `prisma migrate deploy` (0005) no Supabase | aplicada | ✅ |
+| `prisma migrate status` | up to date | ✅ |
+| Drift schema × banco (`migrate diff --exit-code`) | sem diferença | ✅ |
+| `wrangler deploy` (rotas `/platform/*`) | publicado | ✅ Version `7f7fcd7e` |
+
+**E2E contra a API publicada (script `e2e-platform`, 10/10)**
+
+Super usuário `super_owner@nexoloja.local` provisionado pelo script (e-mail sintético não-entregável;
+senha inicial `super123`, a trocar pelo usuário). Login real via Supabase Auth (anon key → JWT).
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Login do super usuário | 200 + token | ✅ |
+| JWT traz `is_platform_admin=true` e `tenant_id=null` | claim de plataforma, sem tenant | ✅ |
+| `GET /platform/me` | 200, `isPlatformAdmin` | ✅ `super_owner@nexoloja.local` |
+| `GET /platform/tenants` (cross-tenant) | 200 + lista | ✅ 1 loja (Loja Demo, 5 usuários) |
+| Campos da loja (slug/isActive/userCount) | presentes | ✅ |
+| Login do owner de loja | 200 + token | ✅ |
+| JWT do owner **sem** `is_platform_admin`, `tenant_id` intacto | hook não quebrou a loja | ✅ |
+| owner em `/platform/me` e `/platform/tenants` | 403 | ✅ 403/403 |
+| Rotas `/platform/*` sem token | 401 | ✅ |
+
+> **Fatia A concluída.** O hook estendido preserva 100% o comportamento dos usuários de loja
+> (owner mantém `tenant_id` e não ganha claim de plataforma). Próximo: **Fatia B** (onboarding —
+> `POST /platform/tenants` cria loja + convida 1º Admin). Falta a confirmação visual do painel
+> (Fatia C, UI) — ainda não implementada.
+
+### 2.5.B — Onboarding: criar loja + 1º Admin (Super Usuário) — 2026-07-02
+
+ADR-009, Fatia B. `POST /platform/tenants` cria `Tenant` + convida o 1º Admin (`OWNER`) por
+e-mail (reusa `inviteAuthUser`, agora extraído p/ `apps/api/src/lib/authAdmin.ts` e compartilhado
+com o convite de loja). `createTenantSchema` + helper puro `slugify` (`packages/shared`): `slug`
+derivado do nome quando ausente. Unicidade slug/cnpj → 409; tudo em transação com `AuditEvent
+CREATE_TENANT`. **Sem migration** (usa `Tenant`/`User`/`AuditEvent`). Substitui o `bootstrap-tenant.mjs`
+como operação de produto.
+
+**Build (local)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| `slugify` (acentos/símbolos/espaços → kebab) | puro, correto | ✅ ("Loja do Zé & Cia" → `loja-do-ze-cia`) |
+| Typecheck `apps/api` (`tsc --noEmit`, após refactor do `inviteAuthUser`) | sem erros | ✅ exit 0 |
+| `wrangler deploy` (rota `POST /platform/tenants`) | publicado | ✅ Version `ff3889d4` |
+
+**E2E contra a API publicada (script `e2e-onboarding`, 12/12)**
+
+Loja de teste criada e **removida ao final** (cascade nos usuários + conta throwaway no Auth
+apagada) — banco limpo. Para não esbarrar no rate limit de e-mail do free tier, o admin é
+pré-criado via `admin/users` (sem envio) e o convite cai no ramo "já registrado" (recupera o id).
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| `POST /platform/tenants` (super usuário) | 201 | ✅ |
+| `slug` derivado do nome | kebab-case | ✅ `loja-teste-b-…` |
+| 1º admin vinculado como `OWNER` | dono da loja nova | ✅ |
+| Loja nasce ativa | `isActive=true` | ✅ |
+| Nova loja aparece em `GET /platform/tenants` | com `userCount=1` | ✅ |
+| Slug repetido | bloqueado | ✅ 409 |
+| `adminEmail` inválido | bloqueado (Zod) | ✅ 400 |
+| Usuário de loja em `POST /platform/tenants` | barrado | ✅ 403 |
+| `AuditEvent CREATE_TENANT` gravado (meta com slug/adminEmail/OWNER) | sim | ✅ |
+| Limpeza (tenant + auth user de teste) | removidos | ✅ |
+
+> O **envio real do e-mail de convite** (para um endereço real) não é automatizável aqui — rate
+> limit de e-mail do free tier + precisa de inbox real. Fica para o E2E de navegador na **Fatia C**
+> (criar loja pelo painel com um e-mail seu → convite chega → 1º Admin define senha → entra na loja
+> nova), como no ADR-008 fatia 2. A lógica do endpoint (validação, unicidade, transação, auditoria)
+> está provada acima.
+
+> **Fatia B concluída (API).** Próximo: **Fatia C** — painel `/plataforma` (UI do Super Usuário:
+> listar/criar/ativar lojas + roteamento de login por papel).
+
+### 2.5.C — Painel de gestão de lojas (UI `/plataforma`) — 2026-07-02
+
+ADR-009, Fatia C. Nova API `PATCH /platform/tenants/:id` (ativar/inativar `Tenant.isActive` +
+`AuditEvent SET_TENANT_ACTIVE`) e `setTenantActiveSchema` (shared). Front: área **`/plataforma`**
+separada do shell de loja `(app)`, com layout/guard próprios (`GET /platform/me`); página lista
+lojas + form "Nova loja" (→ `POST /platform/tenants`) + botão ativar/inativar por linha.
+**Roteamento por papel no login** (`tokenIsPlatformAdmin` lê o claim do token recém-emitido):
+super usuário → `/plataforma`; usuário de loja → `/products`. O shell `(app)` também redireciona
+super usuário para `/plataforma` (não fica preso no app de loja). **Sem migration.**
+
+**Build (local)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Typecheck `apps/api` (`tsc --noEmit`) | sem erros | ✅ exit 0 |
+| Build de produção (`next build`) | rota `/plataforma` gerada | ✅ 13 rotas, sem erros (3.93 kB) |
+| `wrangler deploy` API (rota `PATCH /platform/tenants/:id`) | publicado | ✅ Version `76fe3134` |
+| Deploy web (OpenNext + `wrangler deploy`) | publicado | ✅ Version `05a05fc4` |
+
+**E2E `PATCH /platform/tenants/:id` (script `e2e-tenant-active`, 7/7)** — loja de teste criada e removida.
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| `PATCH isActive=false` (super usuário) | 200, `isActive=false` | ✅ |
+| `PATCH isActive=true` | 200, `isActive=true` | ✅ |
+| `isActive` inválido | bloqueado (Zod) | ✅ 400 |
+| Loja inexistente | não encontrada | ✅ 404 |
+| Usuário de loja em `PATCH` | barrado | ✅ 403 |
+| `AuditEvent SET_TENANT_ACTIVE` gravado (2×: off+on) | sim | ✅ count=2 |
+
+**UI no navegador (Claude, preview → API publicada; login real `super_owner`)**
+
+| Teste | Resultado |
+|---|---|
+| Login `super_owner@nexoloja.local` roteia direto p/ `/plataforma` | ✅ (sem passar por `/products`) |
+| Painel renderiza (header "Plataforma" + form "Nova loja" + tabela) | ✅ console sem erros |
+| Lista lê `GET /platform/tenants` | ✅ Loja Demo (CNPJ formatado, 5 usuários, criada 25/06/2026, "Ativa", botão "Inativar") |
+| Responsivo no celular (375px): form em coluna única, tabela rolável | ✅ |
+
+> **Ajuste — bounce no login:** a 1ª tentativa roteava `/products` ↔ `/plataforma` porque
+> `getSession()` logo após o `signInWithPassword` vinha defasado. Corrigido lendo o claim do
+> **token retornado diretamente** pelo login (`tokenIsPlatformAdmin`). Reteste: vai direto p/ `/plataforma`.
+
+**E2E de navegador (usuário) — pendente**
+
+| Teste | Resultado |
+|---|---|
+| Login `super_owner` (senha `super123`) → painel; **trocar a senha** | ⏭️ usuário |
+| **Criar loja** pelo painel com um e-mail real → convite chega → 1º Admin define senha → entra na loja nova | ⏭️ usuário |
+| Ativar/inativar uma loja pelo painel | ⏭️ usuário |
+
+> **Fatia C concluída (código + validação técnica).** Falta só o E2E de navegador do usuário (envio
+> real de e-mail, protegido por senha). Próximo: **Fatia D** — auditoria de plataforma já emitida
+> (`CREATE_TENANT`, `SET_TENANT_ACTIVE`); resta formalizar no ADR-004 e fechar o ADR-009.
+
+### 2.5.Del — Exclusão de usuário da loja (ADR-008) — 2026-07-03
+
+Pré-requisito pedido antes da Fatia D (liberar um e-mail de teste). `DELETE /users/:id` (Admin):
+apaga a linha em `users` **+ revoga a identidade no Supabase Auth** (`deleteAuthUser` — `DELETE
+/auth/v1/admin/users/{id}` via `service_role`, o que **libera o e-mail** para um convite novo) **+
+`AuditEvent DELETE_USER`** (na mesma transação do banco; a revogação no Auth é best-effort, fora da
+tx, pois a exclusão da linha já corta o acesso). Guardas: não exclui a si mesmo nem o `OWNER`;
+usuário **com histórico** (`Order`/`CashSession` — FKs sem cascade) → **409** orientando a
+*Desativar* (preserva integridade + auditoria; a trilha sobrevive porque `AuditEvent.userId` é ref.
+solta). Front: botão **Excluir** (vermelho) ao lado de Desativar/Ativar na seção Usuários de
+`/configuracoes`, com `window.confirm`. **Sem migration.**
+
+**Build (local)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Typecheck `apps/api` (`tsc --noEmit`) | sem erros | ✅ exit 0 |
+| Typecheck `apps/web` (`tsc --noEmit`) | sem erros | ✅ exit 0 |
+
+**Deploy + E2E de navegador (usuário) — pendente**
+
+| Teste | Resultado |
+|---|---|
+| `wrangler deploy` (rota `DELETE /users/:id`) | ⏭️ usuário |
+| Login Admin → `/configuracoes` → **Excluir** `dougns100@gmail.com` (sem histórico) → some da lista | ⏭️ usuário |
+| Excluir usuário **com** histórico de venda/caixa → **409** "use Desativar" | ⏭️ usuário |
+| `AuditEvent DELETE_USER` gravado (via service_role) | ⏭️ usuário |
+| Recriar a loja de teste reusando o e-mail liberado (convite chega) | ⏭️ usuário |
+
+### 2.5.D — Auditoria de plataforma (documental) — 2026-07-03
+
+ADR-009, Fatia D. **Sem código de produto, sem migration, sem deploy** — formaliza a auditoria já
+emitida. **ADR-004** ganhou a subseção **"Lista fechada de ações auditadas"** com as duas famílias:
+eventos de loja (`CANCEL_ORDER`, `RETURN_ORDER`, `CHANGE_PRICE`, `ADJUST_STOCK`,
+`CLOSE_CASH_WITH_DIVERGENCE`, `CHANGE_ROLE`, `DELETE_USER`) e eventos de **plataforma**
+(`CREATE_TENANT`, `SET_TENANT_ACTIVE`, com `meta.platform = true`, `userId` = Super Usuário e
+`tenantId` = loja-alvo). **ADR-009** marcado como **Implementado (Fatias A–D)**, com o design da
+**Fatia E** (impersonation auditada) registrado em "Status de implementação". ROADMAP atualizado.
+
+| Item | Resultado |
+|---|---|
+| ADR-004 — lista fechada de ações (loja + plataforma) formalizada | ✅ |
+| ADR-004 — Action Items marcados como concluídos | ✅ |
+| ADR-009 — status "Implementado — Fatias A–D" + esboço da Fatia E | ✅ |
+| ROADMAP — Fatia D marcada; Fatia E listada como futura | ✅ |
+
+> **Fase 2.5 (A–D) fechada.** Resta o E2E de navegador do usuário (Fatia C: criar loja com e-mail
+> real; 2.5.Del: excluir usuário) e o deploy do Worker com o `DELETE /users/:id`. **Fatia E**
+> (entrar no contexto da loja para suporte) fica como fatia futura, com direção travada no ADR-009.
