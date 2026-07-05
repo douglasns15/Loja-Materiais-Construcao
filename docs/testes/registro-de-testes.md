@@ -1325,17 +1325,23 @@ alteração", Caixa "Aberto por"; painel de suporte também mostra a autoria. N�
 | Build de produção (`next build`) | sem erros | ✅ 15 rotas |
 | Core (Vitest) — regressão | 35/35 | ✅ 35/35 |
 
-**Aplicação + deploy + E2E — pendente**
+**Aplicação + deploy (Claude) — 2026-07-05**
 
 | Passo | Resultado |
 |---|---|
-| `prisma migrate deploy` (0006) no Supabase — **aguarda "ok" de aplicar (Regra 1)** | ⏭️ |
-| Deploy da API (grava a autoria) — **depois da migration** | ⏭️ |
-| Deploy do web (exibe "Registrado por"/"Última alteração"/"Aberto por") | ⏭️ |
-| E2E: criar/editar produto e cliente → "Última alteração" mostra o operador + data | ⏭️ usuário |
-| E2E: registrar venda / entrada de estoque / abrir caixa → "Registrado por" aparece | ⏭️ usuário |
-| E2E: registros antigos (pré-0006) mostram "—" (sem quebrar) | ⏭️ usuário |
+| `prisma migrate deploy` (0006) no Supabase (autorizado — Regra 1) | ✅ aplicada · *up to date* · sem drift |
+| Deploy da API (grava a autoria) — depois da migration | ✅ Version `a3503411` |
+| Deploy do web (exibe "Registrado por"/"Última alteração"/"Aberto por") | ✅ Version `93c9a95e` |
+| Smoke: `/health` 200 · `/db-check` `{tenants:2}` (Prisma no schema migrado) · `/login` 200 | ✅ |
 
-> **Ordem obrigatória:** aplicar a **migration 0006 ANTES** de publicar a API nova (a API passa a
-> gravar colunas que só existem após a migration). A migration é aditiva/nullable → aplicá-la não
-> quebra a API atualmente publicada (que só não preenche os campos).
+**E2E de navegador (usuário) — validado (2026-07-05)**
+
+| Teste | Resultado |
+|---|---|
+| Criar/editar produto e cliente → "Última alteração" mostra o operador + data | ✅ usuário |
+| Registrar venda / entrada de estoque / abrir caixa → "Registrado por" aparece | ✅ usuário |
+| Registros antigos (pré-0006) mostram "—" (sem quebrar) | ✅ usuário |
+
+> **Ordem obrigatória (cumprida):** a **migration 0006** foi aplicada ANTES de publicar a API nova
+> (que grava colunas que só existem após a migration). Sendo aditiva/nullable, não quebrou a API
+> anterior. **Melhoria "Registrado por" (ADR-010) concluída e validada ponta a ponta.**
