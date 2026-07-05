@@ -143,6 +143,8 @@ orders.post('/', requireActiveTenant, async (c) => {
         data: {
           tenantId,
           userId,
+          // Autoria (ADR-010): snapshot do nome de quem registrou a venda.
+          registeredByName: c.get('userName'),
           customerId: sale.customerId,
           cashSessionId: session.id,
           status: 'CONFIRMED',
@@ -187,6 +189,8 @@ orders.post('/', requireActiveTenant, async (c) => {
             quantity: item.quantity,
             reason: `Venda ${created.id}`,
             syncStatus: 'SYNCED',
+            userId, // autoria (ADR-010)
+            registeredByName: c.get('userName'),
           },
         });
         await tx.product.update({
@@ -276,6 +280,8 @@ orders.post('/:id/cancel', async (c) => {
             quantity: item.quantity,
             reason: `Cancelamento da venda ${order.id}`,
             syncStatus: 'SYNCED',
+            userId, // autoria (ADR-010): quem cancelou/estornou
+            registeredByName: c.get('userName'),
           },
         });
         await tx.product.update({
@@ -398,6 +404,8 @@ orders.post('/:id/return', async (c) => {
             quantity: item.quantity,
             reason: `Devolução da venda ${order.id}`,
             syncStatus: 'SYNCED',
+            userId, // autoria (ADR-010): quem devolveu/estornou
+            registeredByName: c.get('userName'),
           },
         });
         await tx.product.update({
@@ -418,6 +426,7 @@ orders.post('/:id/return', async (c) => {
           reason: reason,
           relatedOrderId: order.id,
           syncStatus: 'SYNCED',
+          registeredByName: c.get('userName'), // autoria (ADR-010)
         },
       });
 

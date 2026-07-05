@@ -85,10 +85,12 @@
 > e **E2E de convite pela URL publicada validado pelo usuário no navegador** (convite → e-mail →
 > `/definir-senha` → login). Ver 2.R no registro de testes.
 >
-> ▶️ **Próximo passo:** a **Fase 2.5 está 100% concluída (A–E) e no ar**, com E2E do usuário validado
-> em todas as fatias. A **Fatia E** (suporte read-only, com painel navegável — abas/filtros/detalhes)
-> foi implementada, publicada e **validada ponta a ponta pelo usuário (2026-07-05)**. O caminho
-> natural agora é a **Fase 3 — offline-first** (PWA/service worker +
+> ▶️ **Próximo passo:** **Fase 2.5 concluída (A–E) e no ar**. Em andamento uma **melhoria transversal
+> antes da Fase 3 — "Registrado por" (atribuição de autoria, ADR-010)**: cada registro guarda quem
+> executou (snapshot do nome + id solto) e mostra em tela; migration `0006` (aditiva) **escrita e
+> validada localmente**, aguardando o **"ok" para aplicar no Supabase** (Regra 1) antes do deploy.
+> Cobre Produtos, Clientes, Vendas, Estoque e Caixa (+ painel de suporte). Depois dela, a
+> **Fase 3 — offline-first** (PWA/service worker +
 > fila de sincronização IndexedDB → Supabase). *Nada bloqueia: produção roda a Fase 2.5 completa.*
 > - *Melhoria futura na Fatia E:* **escrita em modo suporte** (exceção auditada, `meta.support=true`)
 >   — hoje o suporte é somente-leitura (direção no ADR-009).

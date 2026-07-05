@@ -1298,3 +1298,44 @@ seção promove a **sessão expirada** (volta ao painel). Nenhuma ação de escr
 
 > **2.5.E.2 concluída e validada** — painel de suporte navegável (abas + filtros + detalhes),
 > somente-leitura, validado no navegador pelo usuário em 2026-07-05.
+
+---
+
+## Melhoria — "Registrado por" (atribuição de autoria, ADR-010) — 2026-07-05
+
+ADR-010. Cada registro passa a guardar **quem** executou (id solto, sem FK + **snapshot do nome**)
+e reusa o **quando** já existente, exibindo "Registrado por … em <data>" nas telas. Migration
+**`0006_authorship_attribution`** (aditiva, colunas nullable, sem RLS): `products`/`customers`
+ganham `createdBy/updatedBy/deletedBy {Id,Name}`; `orders`/`cash_movements` ganham
+`registeredByName`; `stock_movements` ganha `userId` (**antes não tinha**) + `registeredByName`;
+`cash_sessions` ganha `openedByName` + `closedBy{Id,Name}`. `requireAuth` passou a expor `userName`
+(snapshot). Write-path (produtos, clientes, estoque, vendas, caixa) grava a autoria; UI exibe:
+Vendas "Registrado por", Estoque coluna "Registrado por", Produtos/Clientes coluna "Última
+alteração", Caixa "Aberto por"; painel de suporte também mostra a autoria. Nível **"quem fez por
+último"** (não histórico completo) — complementar ao ADR-004 (cost-zero), não um log de eventos.
+
+**Build / validação local (Claude)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| `prisma validate` + `generate` (campos novos) | schema válido | ✅ |
+| SQL canônico via `migrate diff` (banco vivo → schema) == só as colunas novas (sem drift) | igual | ✅ |
+| Typecheck `apps/api` (`tsc --noEmit`, após generate) | sem erros | ✅ exit 0 |
+| Typecheck `apps/web` (`tsc --noEmit`) | sem erros | ✅ exit 0 |
+| Build de produção (`next build`) | sem erros | ✅ 15 rotas |
+| Core (Vitest) — regressão | 35/35 | ✅ 35/35 |
+
+**Aplicação + deploy + E2E — pendente**
+
+| Passo | Resultado |
+|---|---|
+| `prisma migrate deploy` (0006) no Supabase — **aguarda "ok" de aplicar (Regra 1)** | ⏭️ |
+| Deploy da API (grava a autoria) — **depois da migration** | ⏭️ |
+| Deploy do web (exibe "Registrado por"/"Última alteração"/"Aberto por") | ⏭️ |
+| E2E: criar/editar produto e cliente → "Última alteração" mostra o operador + data | ⏭️ usuário |
+| E2E: registrar venda / entrada de estoque / abrir caixa → "Registrado por" aparece | ⏭️ usuário |
+| E2E: registros antigos (pré-0006) mostram "—" (sem quebrar) | ⏭️ usuário |
+
+> **Ordem obrigatória:** aplicar a **migration 0006 ANTES** de publicar a API nova (a API passa a
+> gravar colunas que só existem após a migration). A migration é aditiva/nullable → aplicá-la não
+> quebra a API atualmente publicada (que só não preenche os campos).

@@ -33,6 +33,9 @@ export type Variables = {
   tenantId: string;
   userId: string;
   role: string;
+  /** Nome do usuário autenticado (populado por `requireAuth`). Usado como snapshot na
+   * atribuição de autoria ("Registrado por", ADR-010) ao criar/editar/movimentar registros. */
+  userName: string;
   /** `Tenant.isActive` da loja do usuário (populado por `requireAuth`). Uma loja
    * inativada pelo Super Usuário (ADR-009) bloqueia operações novas (ex.: vendas). */
   tenantActive: boolean;

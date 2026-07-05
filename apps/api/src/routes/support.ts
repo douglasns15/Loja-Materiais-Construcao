@@ -222,6 +222,7 @@ support.get('/:tenantId/orders', async (c) => {
         freightAmount: num(o.freightAmount),
         total: num(o.total),
         customerName: o.customer?.name ?? null,
+        registeredByName: o.registeredByName, // autoria (ADR-010)
         cashClosed: o.cashSession ? o.cashSession.closedAt !== null : null,
         items: o.items.map((it) => ({
           id: it.id,
@@ -296,6 +297,10 @@ support.get('/:tenantId/products', async (c) => {
           minStockQty,
           isActive: p.isActive,
           low: minStockQty > 0 && stockQty <= minStockQty,
+          // Autoria (ADR-010): quem cadastrou/alterou por último + quando (para exibição).
+          createdByName: p.createdByName,
+          updatedByName: p.updatedByName,
+          updatedAt: p.updatedAt.toISOString(),
         };
       })
       .filter((p) => (lowOnly ? p.low : true));
@@ -348,6 +353,7 @@ support.get('/:tenantId/stock-movements', async (c) => {
         productName: m.product?.name ?? null,
         unit: m.product?.unit ?? null,
         supplierName: m.supplier?.name ?? null,
+        registeredByName: m.registeredByName, // autoria (ADR-010)
       })),
     });
   } catch (err) {

@@ -82,8 +82,18 @@ customers.post('/', async (c) => {
 
   try {
     const prisma = createPrismaClient(connectionString);
+    // Autoria (ADR-010): na criação, criado = alterado (mesmo operador/nome-snapshot).
+    const userId = c.get('userId');
+    const userName = c.get('userName');
     const created = await prisma.customer.create({
-      data: { ...parsed.data, tenantId },
+      data: {
+        ...parsed.data,
+        tenantId,
+        createdById: userId,
+        createdByName: userName,
+        updatedById: userId,
+        updatedByName: userName,
+      },
     });
     return c.json({ ok: true, data: created }, 201);
   } catch (err) {
@@ -126,7 +136,8 @@ customers.patch('/:id', async (c) => {
     // updateMany garante o escopo do tenant (proteção antes do RLS da Fase 2).
     const result = await prisma.customer.updateMany({
       where: { id, tenantId, deletedAt: null },
-      data: parsed.data,
+      // Autoria (ADR-010): registra quem alterou por último + snapshot do nome.
+      data: { ...parsed.data, updatedById: c.get('userId'), updatedByName: c.get('userName') },
     });
     if (result.count === 0) {
       return c.json({ ok: false, error: 'Cliente não encontrado.' }, 404);
@@ -157,7 +168,8 @@ customers.delete('/:id', async (c) => {
     const prisma = createPrismaClient(connectionString);
     const result = await prisma.customer.updateMany({
       where: { id: c.req.param('id'), tenantId, deletedAt: null },
-      data: { deletedAt: new Date() },
+      // Autoria (ADR-010): quem excluiu + snapshot (o "quando" é o próprio deletedAt).
+      data: { deletedAt: new Date(), deletedById: c.get('userId'), deletedByName: c.get('userName') },
     });
     if (result.count === 0) {
       return c.json({ ok: false, error: 'Cliente não encontrado.' }, 404);

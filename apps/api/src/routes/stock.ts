@@ -94,6 +94,9 @@ stock.post('/movements', requireActiveTenant, async (c) => {
           unitCost: mov.unitCost,
           reason: mov.reason,
           syncStatus: 'SYNCED',
+          // Autoria (ADR-010): quem registrou a entrada/saída (antes não era registrado).
+          userId: c.get('userId'),
+          registeredByName: c.get('userName'),
         },
       });
       await tx.product.update({
@@ -163,6 +166,9 @@ stock.post('/adjust', async (c) => {
           quantity,
           reason: `Ajuste de inventário: ${adj.reason}`,
           syncStatus: 'SYNCED',
+          // Autoria (ADR-010): quem fez o ajuste (mesmo operador do AuditEvent abaixo).
+          userId,
+          registeredByName: c.get('userName'),
         },
       });
       const p = await tx.product.update({

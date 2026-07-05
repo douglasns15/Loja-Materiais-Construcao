@@ -60,6 +60,7 @@ export const requireAuth = createMiddleware<Env>(async (c, next) => {
       select: {
         tenantId: true,
         role: true,
+        name: true,
         isActive: true,
         tenant: { select: { isActive: true } },
       },
@@ -70,6 +71,9 @@ export const requireAuth = createMiddleware<Env>(async (c, next) => {
     c.set('tenantId', user.tenantId);
     c.set('userId', sub);
     c.set('role', user.role);
+    // Nome do operador para a atribuição de autoria (ADR-010): gravado como snapshot em
+    // vendas/estoque/caixa/cadastros ("Registrado por …"). Congela o nome no momento da ação.
+    c.set('userName', user.name);
     // Loja inativada pelo Super Usuário (ADR-009): não barra o login (o usuário ainda vê
     // relatórios/fecha caixa), mas o front avisa e operações novas são bloqueadas via
     // `requireActiveTenant`. Não achar o tenant é tratado como inativo (conservador).

@@ -221,6 +221,14 @@ model Product {
   syncStatus      SyncStatus @default(SYNCED)
   updatedAt       DateTime   @updatedAt
   createdAt       DateTime   @default(now())
+  // Autoria (ADR-010): quem criou/alterou/excluiu. `*Id` é referência SOLTA (sem FK, sobrevive à
+  // exclusão do usuário); `*Name` é snapshot congelado do nome no momento (exibido em tela).
+  createdById     String?    @db.Uuid
+  createdByName   String?    @db.VarChar(100)
+  updatedById     String?    @db.Uuid
+  updatedByName   String?    @db.VarChar(100)
+  deletedById     String?    @db.Uuid
+  deletedByName   String?    @db.VarChar(100)
 
   tenant          Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   category        Category?  @relation(fields: [categoryId], references: [id])
@@ -252,6 +260,13 @@ model Customer {
   syncStatus  SyncStatus @default(SYNCED)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  // Autoria (ADR-010): quem criou/alterou/excluiu. `*Id` referência solta (sem FK); `*Name` snapshot.
+  createdById   String?  @db.Uuid
+  createdByName String?  @db.VarChar(100)
+  updatedById   String?  @db.Uuid
+  updatedByName String?  @db.VarChar(100)
+  deletedById   String?  @db.Uuid
+  deletedByName String?  @db.VarChar(100)
 
   tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   orders      Order[]
@@ -300,6 +315,10 @@ model CashSession {
   notes         String?   @db.VarChar(500)
   // Campos de sincronização offline
   syncStatus    SyncStatus @default(SYNCED)
+  // Autoria (ADR-010): `userId` (com FK) é quem abriu; snapshot do nome + quem fechou (solto).
+  openedByName  String?   @db.VarChar(100)
+  closedById    String?   @db.Uuid
+  closedByName  String?   @db.VarChar(100)
 
   tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user          User      @relation(fields: [userId], references: [id])
@@ -327,6 +346,8 @@ model Order {
   syncStatus     SyncStatus  @default(PENDING)  // Vendas nascem como PENDING no caixa offline
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
+  // Autoria (ADR-010): `userId` (com FK) é o operador; `registeredByName` é o snapshot do nome.
+  registeredByName String?   @db.VarChar(100)
 
   tenant         Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   cashSession    CashSession? @relation(fields: [cashSessionId], references: [id])
@@ -396,6 +417,8 @@ model CashMovement {
   // Campos de sincronização offline
   syncStatus     SyncStatus       @default(SYNCED)
   createdAt      DateTime         @default(now())
+  // Autoria (ADR-010): `userId` (solto, sem FK) é o operador; `registeredByName` é o snapshot.
+  registeredByName String?        @db.VarChar(100)
 
   tenant         Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   cashSession    CashSession      @relation(fields: [cashSessionId], references: [id], onDelete: Cascade)
@@ -455,6 +478,9 @@ model StockMovement {
   // Campos de sincronização offline
   syncStatus  SyncStatus      @default(SYNCED)
   createdAt   DateTime        @default(now())
+  // Autoria (ADR-010): quem movimentou. Antes NÃO existia — referência solta (sem FK) + snapshot.
+  userId          String?     @db.Uuid
+  registeredByName String?    @db.VarChar(100)
 
   tenant      Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   product     Product         @relation(fields: [productId], references: [id])

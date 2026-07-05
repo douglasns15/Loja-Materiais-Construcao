@@ -27,6 +27,7 @@ type Movement = {
   unitCost: string | null;
   reason: string | null;
   createdAt: string;
+  registeredByName: string | null;
   product: { name: string; unit: string } | null;
   supplier: { name: string } | null;
 };
@@ -451,12 +452,13 @@ export default function EstoquePage() {
               <th className="px-4 py-2">Tipo</th>
               <th className="px-4 py-2 text-right">Qtd</th>
               <th className="px-4 py-2">Motivo</th>
+              <th className="px-4 py-2">Registrado por</th>
             </tr>
           </thead>
           <tbody>
             {filteredMovements.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={6} className="px-4 py-6 text-center text-gray-400">
                   {movements.length === 0
                     ? 'Nenhuma movimentação ainda.'
                     : 'Nenhuma movimentação para os filtros selecionados.'}
@@ -483,6 +485,7 @@ export default function EstoquePage() {
                     {m.reason ?? '—'}
                     {m.supplier?.name ? ` · ${m.supplier.name}` : ''}
                   </td>
+                  <td className="px-4 py-2 text-gray-500">{m.registeredByName ?? '—'}</td>
                 </tr>
               ))
             )}

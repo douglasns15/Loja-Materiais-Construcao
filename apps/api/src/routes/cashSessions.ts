@@ -101,7 +101,13 @@ cashSessions.post('/open', requireActiveTenant, async (c) => {
       return c.json({ ok: false, error: 'Já existe um caixa aberto.' }, 409);
     }
     const created = await prisma.cashSession.create({
-      data: { tenantId, userId, openingAmount: parsed.data.openingAmount },
+      // Autoria (ADR-010): `userId` (com FK) é quem abriu; `openedByName` é o snapshot do nome.
+      data: {
+        tenantId,
+        userId,
+        openingAmount: parsed.data.openingAmount,
+        openedByName: c.get('userName'),
+      },
     });
     return c.json({ ok: true, data: created }, 201);
   } catch (err) {
@@ -146,6 +152,9 @@ cashSessions.post('/close', async (c) => {
           closingAmount: parsed.data.closingAmount,
           expectedAmount,
           notes: parsed.data.notes,
+          // Autoria (ADR-010): quem fechou o caixa (pode ser outro operador que o abriu).
+          closedById: userId,
+          closedByName: c.get('userName'),
         },
       });
       // Auditoria seletiva: só registra fechamento COM divergência (ADR-004).

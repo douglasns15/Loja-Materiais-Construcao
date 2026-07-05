@@ -13,7 +13,13 @@ type Product = {
   stockQty: string;
   minStockQty: string;
   marginPercent: number;
+  updatedByName: string | null;
+  updatedAt: string;
 };
+
+/** Autoria (ADR-010): "por <nome> · <data>", ou "—" quando não há registro (dados antigos). */
+const byLine = (name: string | null, iso?: string) =>
+  name ? `${name}${iso ? ` · ${new Date(iso).toLocaleDateString('pt-BR')}` : ''}` : '—';
 
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -169,13 +175,14 @@ export default function ProductsPage() {
               <th className="px-4 py-2 text-right">Custo</th>
               <th className="px-4 py-2 text-right">Venda</th>
               <th className="px-4 py-2 text-right">Margem</th>
+              <th className="px-4 py-2">Última alteração</th>
               <th className="px-4 py-2 text-right">Estoque mín.</th>
             </tr>
           </thead>
           <tbody>
             {products.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={7} className="px-4 py-6 text-center text-gray-400">
                   Nenhum produto cadastrado.
                 </td>
               </tr>
@@ -192,6 +199,9 @@ export default function ProductsPage() {
                     <td className="px-4 py-2 text-right">{BRL(p.costPrice)}</td>
                     <td className="px-4 py-2 text-right">{BRL(p.salePrice)}</td>
                     <td className="px-4 py-2 text-right">{p.marginPercent}%</td>
+                    <td className="px-4 py-2 text-xs text-gray-500">
+                      {byLine(p.updatedByName, p.updatedAt)}
+                    </td>
                     <td className="px-4 py-2">
                       <div className="flex items-center justify-end gap-1">
                         <input

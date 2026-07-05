@@ -44,6 +44,7 @@ type Order = {
   freightAmount: number;
   total: number;
   customerName: string | null;
+  registeredByName: string | null;
   cashClosed: boolean | null;
   items: OrderItem[];
   payments: { id: string; method: string; amount: number }[];
@@ -62,6 +63,9 @@ type Product = {
   minStockQty: number;
   isActive: boolean;
   low: boolean;
+  createdByName: string | null;
+  updatedByName: string | null;
+  updatedAt: string;
 };
 
 type Movement = {
@@ -74,6 +78,7 @@ type Movement = {
   productName: string | null;
   unit: string | null;
   supplierName: string | null;
+  registeredByName: string | null;
 };
 
 // --- Formatação --------------------------------------------------------------------------------
@@ -509,6 +514,7 @@ function VendasTab({
                           Venda #{o.id.slice(0, 8)}
                           {o.cashClosed !== null &&
                             ` · caixa ${o.cashClosed ? 'fechado' : 'aberto'}`}
+                          {o.registeredByName && ` · registrado por ${o.registeredByName}`}
                         </div>
                         <table className="w-full text-xs">
                           <thead className="text-left text-gray-500">
@@ -688,6 +694,11 @@ function ProdutosTab({
                         {p.sku} · {p.unit}
                         {!p.isActive && ' · inativo'}
                       </div>
+                      {p.updatedByName && (
+                        <div className="text-xs text-gray-400">
+                          alterado por {p.updatedByName}
+                        </div>
+                      )}
                     </td>
                     <td className="px-3 py-2 text-gray-500">{p.categoryName ?? '—'}</td>
                     <td className="px-3 py-2 text-right">
@@ -734,6 +745,7 @@ function ProdutosTab({
                                 <th className="py-1 text-right">Qtd</th>
                                 <th className="py-1">Motivo</th>
                                 <th className="py-1">Fornecedor</th>
+                                <th className="py-1">Registrado por</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -752,6 +764,7 @@ function ProdutosTab({
                                   <td className="py-1 text-right">{QTY(m.quantity)}</td>
                                   <td className="py-1 text-gray-500">{m.reason ?? '—'}</td>
                                   <td className="py-1 text-gray-500">{m.supplierName ?? '—'}</td>
+                                  <td className="py-1 text-gray-500">{m.registeredByName ?? '—'}</td>
                                 </tr>
                               ))}
                             </tbody>

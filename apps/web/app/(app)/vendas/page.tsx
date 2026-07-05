@@ -21,6 +21,7 @@ type Order = {
   discountAmount: string;
   total: string;
   createdAt: string;
+  registeredByName: string | null;
   cashSession: { id: string; closedAt: string | null } | null;
   items: OrderItem[];
   payments: Payment[];
@@ -216,6 +217,9 @@ export default function VendasPage() {
                       )}
                     </div>
                     <div className="mt-0.5 text-xs text-gray-500">{time}</div>
+                    {o.registeredByName && (
+                      <div className="text-xs text-gray-400">Registrado por {o.registeredByName}</div>
+                    )}
                   </div>
                   <div className="text-right">
                     <div className={`text-lg font-bold ${inactive ? 'line-through' : ''}`}>

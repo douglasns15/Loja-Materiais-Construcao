@@ -10,7 +10,13 @@ type Customer = {
   cpfCnpj: string | null;
   phone: string | null;
   email: string | null;
+  updatedByName: string | null;
+  updatedAt: string;
 };
+
+/** Autoria (ADR-010): "por <nome> · <data>", ou "—" quando não há registro (dados antigos). */
+const byLine = (name: string | null, iso?: string) =>
+  name ? `${name}${iso ? ` · ${new Date(iso).toLocaleDateString('pt-BR')}` : ''}` : '—';
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -111,12 +117,13 @@ export default function CustomersPage() {
               <th className="px-4 py-2">CPF/CNPJ</th>
               <th className="px-4 py-2">Telefone</th>
               <th className="px-4 py-2">E-mail</th>
+              <th className="px-4 py-2">Última alteração</th>
             </tr>
           </thead>
           <tbody>
             {customers.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={5} className="px-4 py-6 text-center text-gray-400">
                   Nenhum cliente cadastrado.
                 </td>
               </tr>
@@ -127,6 +134,9 @@ export default function CustomersPage() {
                   <td className="px-4 py-2 text-gray-500">{c.cpfCnpj ?? '—'}</td>
                   <td className="px-4 py-2 text-gray-500">{c.phone ?? '—'}</td>
                   <td className="px-4 py-2 text-gray-500">{c.email ?? '—'}</td>
+                  <td className="px-4 py-2 text-xs text-gray-500">
+                    {byLine(c.updatedByName, c.updatedAt)}
+                  </td>
                 </tr>
               ))
             )}

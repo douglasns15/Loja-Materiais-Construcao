@@ -10,6 +10,7 @@ type CashSession = {
   id: string;
   openedAt: string;
   openingAmount: string;
+  openedByName: string | null;
   cashInflow: number;
   cashMovementsNet: number; // entradas − saídas de caixa (devolução, sangria, suprimento)
   expectedAmount: number;
@@ -118,6 +119,12 @@ export default function CaixaPage() {
             <dl className="grid grid-cols-2 gap-3 text-sm">
               <dt className="text-gray-500">Aberto em</dt>
               <dd className="text-right">{new Date(session.openedAt).toLocaleString('pt-BR')}</dd>
+              {session.openedByName && (
+                <>
+                  <dt className="text-gray-500">Aberto por</dt>
+                  <dd className="text-right">{session.openedByName}</dd>
+                </>
+              )}
               <dt className="text-gray-500">Valor de abertura</dt>
               <dd className="text-right">{BRL(session.openingAmount)}</dd>
               <dt className="text-gray-500">Entradas em dinheiro</dt>
