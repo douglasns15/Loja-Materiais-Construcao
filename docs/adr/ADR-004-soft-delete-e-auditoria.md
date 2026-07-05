@@ -53,7 +53,11 @@ A tabela `AuditEvent` é a fonte da trilha. `action` é uma string estável (nã
 |---|---|---|
 | `CREATE_TENANT` | Criação de loja + convite do 1º Admin pelo Super Usuário | `Tenant` |
 | `SET_TENANT_ACTIVE` | Ativação/inativação de loja pelo painel de plataforma | `Tenant` |
+| `SUPPORT_SESSION_START` | Início de sessão de suporte (impersonation read-only, ADR-009 Fatia E) | `Tenant` |
+| `SUPPORT_SESSION_END` | Encerramento da sessão de suporte | `Tenant` |
 
+> **Sessão de suporte (ADR-009, Fatia E):** `SUPPORT_SESSION_START`/`SUPPORT_SESSION_END` carregam `meta.support = true` (além de `meta.platform = true`) para separar, no relato, o que foi ação do lojista do que foi acesso do suporte. Nesta fatia a sessão é **somente-leitura**, então não há escritas em modo suporte a marcar; se uma futura fatia permitir escrita, cada operação carrega `meta.support = true` + o `platformAdminId`.
+>
 > **Observação (ADR-009, Fatia D):** eventos de plataforma **sem** loja-alvo (ex.: conceder/revogar Super Usuário) exigiriam `AuditEvent.tenantId` *nullable* — mudança em tabela core + RLS. Por ora, conceder Super Usuário é feito por **script auditável no servidor** (`create-platform-admin.mjs`), fora da tabela; tornar `tenantId` opcional fica adiado para quando houver necessidade real.
 >
 > **Integridade x exclusão:** como `AuditEvent.userId`/`entityId` são referências **soltas** (sem FK), a trilha **sobrevive** à exclusão do usuário/loja que ela descreve — por isso `DELETE_USER` registra `email`/`name`/`roleBefore` no `meta` (o alvo pode deixar de existir).

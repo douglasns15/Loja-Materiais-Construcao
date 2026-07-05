@@ -3,7 +3,22 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-03 (**Fase 2.5 — Fatias A–D concluídas**: exclusão de usuário
+> **Última atualização:** 2026-07-05 (**Fase 2.5 — Fatia E (impersonation auditada) no ar, read-only**:
+> Super Usuário entra na loja para **suporte somente-leitura** sem virar usuário dela. Token de
+> suporte assinado e curto (`lib/supportToken.ts`, HS256 com secret `SUPPORT_TOKEN_SECRET`, TTL 30 min,
+> escopo `{ platformAdminId, targetTenantId, exp }`) emitido por `POST /platform/tenants/:id/support`
+> (+ `AuditEvent SUPPORT_SESSION_START`). Rotas **`/support/*`** fora de `/platform/*` (o Bearer é o
+> token de suporte, não JWT do Supabase), com `requireSupportSession` que verifica o token **e**
+> revalida `platform_admins.isActive`: `GET /support/:tenantId/overview` (dados da loja read-only) +
+> `POST /support/end` (`SUPPORT_SESSION_END`). RLS de loja **intacto**. UI: botão **Entrar (suporte)**
+> em `/plataforma` → `/plataforma/suporte/[tenantId]` (banner "somente leitura"). ADR-004 (2 novos
+> `action`s, `meta.support=true`) + ADR-009 (Fatia E ✅ read-only) atualizados. **Sem migration.**
+> Typecheck API+web ✅; build ✅; core 35/35. **No ar:** secret provisionado + API + web publicados +
+> smoke em produção ✅ + **E2E do usuário validado (2026-07-05)**. Painel de suporte depois evoluiu para
+> **navegável** (2.5.E.2): abas Resumo/Vendas/Produtos & Estoque com filtros e detalhes, também
+> read-only e validado pelo usuário (API `1397654d` + web `d3f54d16`). Também marcados como validados pelo usuário
+> os E2E que estavam pendentes (Fatia C criar loja, 2.5.Del excluir usuário, 2.5.Inact loja desativada).
+> **Antes:** (**Fatias A–D concluídas**: exclusão de usuário
 > da loja adicionada — `DELETE /users/:id` apaga a linha em `users` + revoga a identidade no
 > Supabase Auth (`deleteAuthUser`, libera o e-mail) + `AuditEvent DELETE_USER`; bloqueia
 > self/`OWNER` e usuários com histórico (→ 409 *Desativar*); botão **Excluir** em
@@ -70,12 +85,13 @@
 > e **E2E de convite pela URL publicada validado pelo usuário no navegador** (convite → e-mail →
 > `/definir-senha` → login). Ver 2.R no registro de testes.
 >
-> ▶️ **Próximo passo (decisão para a próxima sessão):** a **Fase 2.5 (A–D) está concluída e no ar**
-> (plataforma/onboarding/Super Usuário + endurecimentos: exclusão de usuário, bloqueio de loja
-> desativada; wrangler das duas apps unificado na v4). O **fork** agora é entre:
-> **(a) Fatia E** — Super Usuário entrar no contexto da loja para suporte (impersonation auditada;
-> desenho pronto no ADR-009 → "Status de implementação"); ou **(b) Fase 3** — offline-first (PWA/
-> service worker + fila de sincronização). *Nada bloqueia: produção roda a Fase 2.5 completa.*
+> ▶️ **Próximo passo:** a **Fase 2.5 está 100% concluída (A–E) e no ar**, com E2E do usuário validado
+> em todas as fatias. A **Fatia E** (suporte read-only, com painel navegável — abas/filtros/detalhes)
+> foi implementada, publicada e **validada ponta a ponta pelo usuário (2026-07-05)**. O caminho
+> natural agora é a **Fase 3 — offline-first** (PWA/service worker +
+> fila de sincronização IndexedDB → Supabase). *Nada bloqueia: produção roda a Fase 2.5 completa.*
+> - *Melhoria futura na Fatia E:* **escrita em modo suporte** (exceção auditada, `meta.support=true`)
+>   — hoje o suporte é somente-leitura (direção no ADR-009).
 > - *Melhoria futura na Fase 2:* devolução **parcial** (itens/quantidades com rateio).
 > - *Fase própria (Plataforma, ver abaixo):* **multi-loja + Super Usuário + onboarding** (ADR-009).
 > - *Fase futura dedicada:* **NFC-e fiscal** (SEFAZ + certificado).
@@ -228,7 +244,7 @@
 
 ---
 
-## 🟠 Fase 2.5 — Plataforma: multi-loja, Super Usuário e onboarding — **Fatias A–D concluídas** (E futura)
+## 🟠 Fase 2.5 — Plataforma: multi-loja, Super Usuário e onboarding — **Concluída (A–E, Fatia E read-only)**
 
 > Capacidades de **plataforma** que **cruzam o limite do tenant** (a fronteira de segurança
 > via RLS). Separadas da Fase 2 de propósito: não são necessárias para uma loja operar e
@@ -256,14 +272,17 @@
       `AuditEvent SET_TENANT_ACTIVE`). Login roteia por papel (`tokenIsPlatformAdmin`): super
       usuário → `/plataforma`. API Version `76fe3134` + web `05a05fc4`; E2E PATCH 7/7 + UI validada
       no navegador (2.5.C). *Entrar no contexto de uma loja p/ suporte = futuro (fatia própria).*
-      Falta o E2E de navegador do usuário (criar loja com e-mail real).
+      **E2E do usuário validado (2026-07-05):** criar loja com e-mail real → convite → 1º Admin
+      define senha → entra; ativar/inativar por linha.
 - [x] **Exclusão de usuário da loja (ADR-008)** — `DELETE /users/:id` (Admin): apaga a linha em
       `users` **+ revoga a identidade no Supabase Auth** (`deleteAuthUser`, libera o e-mail para
       novo convite) **+ `AuditEvent DELETE_USER`**. Bloqueia excluir a si mesmo/o `OWNER`; usuário
       **com histórico** (pedidos/caixa — FKs sem cascade) → **409** orientando a *Desativar*
       (preserva integridade + auditoria). Botão **Excluir** na seção Usuários de `/configuracoes`.
-      **Sem migration.** Typecheck API + web ✅. *Falta: deploy do Worker + E2E no navegador (login)
-      pelo usuário.* Pré-requisito pedido antes da Fatia D (liberar o e-mail de teste).
+      **Sem migration.** Typecheck API + web ✅. Worker publicado (Version `9f86b36c`) + **E2E no
+      navegador validado pelo usuário (2026-07-05)**: excluir sem histórico some da lista + libera o
+      e-mail; com histórico → 409 *Desativar*; `DELETE_USER` gravado. Pré-requisito da Fatia D (liberar
+      o e-mail de teste).
 - [x] **Fatia D — Auditoria de plataforma** — eventos `CREATE_TENANT` e `SET_TENANT_ACTIVE`
       (e `DELETE_USER`, de loja) **formalizados na lista fechada do ADR-004** (`meta.platform = true`;
       `userId` = Super Usuário; `tenantId` = loja-alvo) e **ADR-009 fechado** (Fatias A–D). **Sem
@@ -277,11 +296,27 @@
       **abertura de caixa** (`POST /cash-sessions/open`) e **entrada de estoque** (`POST
       /stock/movements`); fechar caixa, ajuste de inventário, cancelar/devolver e consultas seguem
       liberados (ações de encerramento/correção). O aviso do topo lista as três operações. **Sem
-      migration.** API `daf90038` + web `533c1921`; typecheck API+web ✅. *Falta E2E no navegador (usuário).*
-- [ ] **Fatia E — Entrar no contexto da loja para suporte (impersonation auditada)** — *futura*.
-      Sessão de suporte temporária de escopo `{ platformAdminId, targetTenantId, exp }` (token
-      próprio, não login do lojista), somente-leitura por padrão, auditada (`meta.support = true`,
-      `SUPPORT_SESSION_START/END`). Direção detalhada no **ADR-009 → "Status de implementação"**.
+      migration.** API `daf90038` + web `533c1921`; typecheck API+web ✅. **E2E no navegador validado
+      pelo usuário (2026-07-05)**: inativar no painel → aviso vermelho + 3 operações bloqueadas (403) →
+      reativar → volta ao normal.
+- [x] **Fatia E — Entrar no contexto da loja para suporte (impersonation auditada)** — **read-only
+      (2026-07-05)**. Token de suporte assinado e curto (HS256, secret `SUPPORT_TOKEN_SECRET`, TTL
+      30 min) de escopo `{ platformAdminId, targetTenantId, exp }` — **não** login do lojista;
+      emitido por `POST /platform/tenants/:id/support`. Rotas **`/support/*`** (fora de `/platform/*`)
+      com `requireSupportSession` (verifica o token + revalida `platform_admins.isActive`): `GET
+      /support/:tenantId/overview` + `POST /support/end`; RLS de loja **intacto** (fronteira =
+      checagem explícita). Auditoria `SUPPORT_SESSION_START/END` (`meta.support = true`) na lista do
+      ADR-004. UI: botão **Entrar (suporte)** em `/plataforma` → `/plataforma/suporte/[tenantId]`
+      (banner "somente leitura" + overview + encerrar). **Sem migration.** Typecheck API+web ✅;
+      build ✅ (nova rota); core 35/35. **No ar:** secret `SUPPORT_TOKEN_SECRET` provisionado + API
+      (Version `1e323a22`) + web (Version `c13a34de`) publicados + smoke em produção ✅ (rotas exigem
+      auth; `Bearer` inválido → 401, não 503, confirmando o secret). **Painel de suporte navegável
+      (2.5.E.2, read-only):** a tela virou **3 abas** — Resumo, **Vendas** (filtro período/status +
+      "Ver" itens/pagamentos) e **Produtos & Estoque** (busca nome/SKU + "só estoque baixo" +
+      movimentações por material). 3 rotas de leitura novas (`/support/:id/orders|products|
+      stock-movements`), API Version `1397654d` + web `d3f54d16`. **E2E no navegador validado pelo
+      usuário (2026-07-05)** — sessão de suporte, abas/filtros/detalhes e read-only conferidos.
+      **Escrita em modo suporte** (exceção auditada) fica como fatia futura — ADR-009.
 
 ---
 

@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { createTenantSchema, formatCnpj } from '@nexoloja/shared';
 import { apiGet, apiPatch, apiPost } from '@/lib/api';
+import { saveSupportSession } from '@/lib/support';
 
 type Tenant = {
   id: string;
@@ -25,11 +27,13 @@ type CreatedTenant = {
 const DATE = (v: string) => new Date(v).toLocaleDateString('pt-BR');
 
 export default function PlataformaPage() {
+  const router = useRouter();
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [supportingId, setSupportingId] = useState<string | null>(null);
   const [form, setForm] = useState({
     name: '',
     adminEmail: '',
@@ -83,6 +87,31 @@ export default function PlataformaPage() {
       setError((e as Error).message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  /**
+   * Entra no contexto de uma loja em MODO SUPORTE (ADR-009, Fatia E — somente-leitura). Pede à
+   * API um token de sessão de suporte, guarda no `sessionStorage` e abre o painel de suporte.
+   */
+  async function enterSupport(t: Tenant) {
+    setError(null);
+    setSuccess(null);
+    setSupportingId(t.id);
+    try {
+      const data = await apiPost<{ token: string; expiresAt: string; tenant: { name: string } }>(
+        `/platform/tenants/${t.id}/support`,
+        {},
+      );
+      saveSupportSession(t.id, {
+        token: data.token,
+        expiresAt: data.expiresAt,
+        tenantName: data.tenant.name,
+      });
+      router.push(`/plataforma/suporte/${t.id}`);
+    } catch (e) {
+      setError((e as Error).message);
+      setSupportingId(null);
     }
   }
 
@@ -203,18 +232,28 @@ export default function PlataformaPage() {
                       {t.isActive ? 'Ativa' : 'Inativa'}
                     </span>
                   </td>
-                  <td className="px-4 py-2 text-right">
-                    <button
-                      onClick={() => toggleActive(t)}
-                      disabled={togglingId === t.id}
-                      className={`rounded-lg border px-3 py-1 text-xs font-medium disabled:opacity-50 ${
-                        t.isActive
-                          ? 'border-gray-300 text-gray-700 hover:bg-gray-100'
-                          : 'border-green-600 text-green-700 hover:bg-green-50'
-                      }`}
-                    >
-                      {togglingId === t.id ? '…' : t.isActive ? 'Inativar' : 'Ativar'}
-                    </button>
+                  <td className="px-4 py-2">
+                    <div className="flex justify-end gap-2">
+                      <button
+                        onClick={() => enterSupport(t)}
+                        disabled={supportingId === t.id}
+                        className="rounded-lg border border-blue-600 px-3 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                        title="Entrar na loja em modo suporte (somente leitura)"
+                      >
+                        {supportingId === t.id ? '…' : 'Entrar (suporte)'}
+                      </button>
+                      <button
+                        onClick={() => toggleActive(t)}
+                        disabled={togglingId === t.id}
+                        className={`rounded-lg border px-3 py-1 text-xs font-medium disabled:opacity-50 ${
+                          t.isActive
+                            ? 'border-gray-300 text-gray-700 hover:bg-gray-100'
+                            : 'border-green-600 text-green-700 hover:bg-green-50'
+                        }`}
+                      >
+                        {togglingId === t.id ? '…' : t.isActive ? 'Inativar' : 'Ativar'}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))

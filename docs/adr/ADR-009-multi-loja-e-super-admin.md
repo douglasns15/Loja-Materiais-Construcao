@@ -1,6 +1,6 @@
 # ADR-009 — Multi-loja, onboarding e Super Usuário (plataforma)
 
-- **Status:** Aceito (2026-07-02) · **Implementado — Fatias A–D concluídas (2026-07-03)**; execução em `docs/plano-fase-2.5.md`
+- **Status:** Aceito (2026-07-02) · **Implementado — Fatias A–D (2026-07-03) + Fatia E read-only (2026-07-05)**; execução em `docs/plano-fase-2.5.md`
 - **Data:** 2026-07-01 (proposto) · 2026-07-02 (aceito)
 - **Contexto de fase:** Fase nova dedicada — "Plataforma / Administração" (após a Fase 2)
 
@@ -102,9 +102,16 @@ Executado em fatias (ver `docs/plano-fase-2.5.md` e `docs/testes/registro-de-tes
 - **Fatia C — painel de gestão de lojas:** ✅ UI `/plataforma` (listar/criar/ativar-inativar); `PATCH /platform/tenants/:id` + `AuditEvent SET_TENANT_ACTIVE`; login roteia por papel.
 - **Fatia D — auditoria de plataforma:** ✅ `CREATE_TENANT` e `SET_TENANT_ACTIVE` **formalizados na lista fechada do [ADR-004](./ADR-004-soft-delete-e-auditoria.md)** (`meta.platform = true`). Sem migration.
 
-### Fatia E (futura) — entrar no contexto da loja para suporte (impersonation auditada)
+### Fatia E — entrar no contexto da loja para suporte (impersonation auditada) — ✅ read-only (2026-07-05)
 
-Maior superfície de risco do sistema; fica como fatia própria. Direção pretendida (a detalhar num plano quando priorizada):
+Implementada em **modo somente-leitura** (a escrita em modo suporte fica para uma fatia futura, conforme o princípio "somente-leitura por padrão; escrita é exceção auditada"). O que foi entregue:
+
+- **Token de suporte assinado e curto** (`lib/supportToken.ts`, HS256 com o secret `SUPPORT_TOKEN_SECRET` do Worker, TTL 30 min), escopo `{ platformAdminId, targetTenantId, exp }` — **não** um JWT de usuário da loja. Emitido por `POST /platform/tenants/:id/support`.
+- **Rotas `/support/*`** (fora de `/platform/*` de propósito) protegidas por `requireSupportSession`, que verifica o token **e revalida `platform_admins.isActive`** (desativar o super usuário corta a sessão na hora, antes do TTL). `GET /support/:tenantId/overview` (read-only) e `POST /support/end`. O RLS de loja **não** é relaxado — a fronteira é a checagem explícita do escopo, como nas rotas `/platform/*`.
+- **Auditoria:** `SUPPORT_SESSION_START`/`SUPPORT_SESSION_END` (`meta.support = true`), formalizados na lista fechada do [ADR-004](./ADR-004-soft-delete-e-auditoria.md). Sem migration.
+- **UI:** botão "Entrar (suporte)" no painel `/plataforma` → `/plataforma/suporte/[tenantId]` (banner "Modo suporte — somente leitura", overview da loja, "Encerrar sessão").
+
+Direção original (mantida para referência e para a fatia futura de escrita):
 
 - **Sessão de suporte explícita e temporária, não um login "como" o dono.** O Super Usuário abre uma sessão de suporte sobre uma loja-alvo pelo painel; a API emite um **token de suporte de curta duração** com escopo `{ platformAdminId, targetTenantId, exp }` — **não** um JWT de usuário da loja. Nada de logar com a senha do lojista nem reaproveitar o `requireAuth` de loja.
 - **Autorização continua na plataforma.** As rotas de loja usadas em modo suporte passam por um middleware que aceita **ou** um usuário da loja (`requireAuth`) **ou** um super usuário com sessão de suporte válida para *aquele* `tenantId` — a fronteira nunca é o RLS relaxado, é a checagem explícita (como já é em `/platform/*`).

@@ -3,6 +3,7 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { createPrismaClient } from '@nexoloja/db';
 import { isAdminRole } from '@nexoloja/shared';
 import { type Env, getConnectionString } from '../lib/request';
+import { verifySupportToken } from '../lib/supportToken';
 
 // O conjunto de chaves públicas (JWKS) do Supabase é cacheado no isolate do Worker.
 let jwks: ReturnType<typeof createRemoteJWKSet> | undefined;
@@ -162,5 +163,59 @@ export const requirePlatformAuth = createMiddleware<Env>(async (c, next) => {
     return c.json({ ok: false, error: 'Falha na autenticação.' }, 500);
   }
 
+  await next();
+});
+
+/**
+ * Exige uma SESSÃO DE SUPORTE válida (ADR-009, Fatia E). Protege as rotas `/support/*` —
+ * mantidas FORA de `/platform/*` de propósito, para não passar pelo `requirePlatformAuth`
+ * (que verificaria o header como um JWT do Supabase). Aqui o `Authorization: Bearer` carrega
+ * o **token de suporte** (assinado pela API, ver `lib/supportToken.ts`). Além de checar a
+ * assinatura/validade, revalida `platform_admins.isActive` (desativar o super usuário corta a
+ * sessão imediatamente, independente do TTL). Popula o escopo `supportPlatformAdminId`/
+ * `supportTenantId` no contexto. É a fronteira explícita — o RLS de loja NÃO é relaxado.
+ */
+export const requireSupportSession = createMiddleware<Env>(async (c, next) => {
+  const header = c.req.header('Authorization');
+  const token = header?.startsWith('Bearer ') ? header.slice(7) : null;
+  if (!token) {
+    return c.json({ ok: false, error: 'Sessão de suporte ausente.' }, 401);
+  }
+
+  const secret = c.env.SUPPORT_TOKEN_SECRET;
+  if (!secret) {
+    return c.json({ ok: false, error: 'Suporte indisponível: segredo não configurado.' }, 503);
+  }
+
+  let scope: { platformAdminId: string; targetTenantId: string };
+  try {
+    scope = await verifySupportToken(secret, token);
+  } catch {
+    return c.json({ ok: false, error: 'Sessão de suporte inválida ou expirada.' }, 401);
+  }
+
+  const connectionString = getConnectionString(c.env);
+  if (!connectionString) {
+    return c.json({ ok: false, error: 'Sem conexão com o banco.' }, 500);
+  }
+
+  try {
+    // Revalida o super usuário na fonte de verdade (a tabela, não o token): se foi desativado,
+    // a sessão de suporte deixa de valer na hora — mesmo antes de o token expirar.
+    const prisma = createPrismaClient(connectionString);
+    const admin = await prisma.platformAdmin.findUnique({
+      where: { id: scope.platformAdminId },
+      select: { isActive: true },
+    });
+    if (!admin || !admin.isActive) {
+      return c.json({ ok: false, error: 'Acesso de suporte revogado.' }, 403);
+    }
+  } catch (err) {
+    console.error('requireSupportSession: falha ao revalidar super usuário:', err);
+    return c.json({ ok: false, error: 'Falha na autenticação de suporte.' }, 500);
+  }
+
+  c.set('supportPlatformAdminId', scope.platformAdminId);
+  c.set('supportTenantId', scope.targetTenantId);
   await next();
 });

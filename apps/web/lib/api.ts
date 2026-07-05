@@ -96,6 +96,28 @@ export async function apiDelete<T>(path: string): Promise<T> {
   return handle<T>(res);
 }
 
+/**
+ * Igual a `apiGet`, mas com um Bearer token EXPLÍCITO em vez do access token do Supabase.
+ * Usado pela SESSÃO DE SUPORTE (ADR-009, Fatia E): o Super Usuário lê a loja-alvo com o token
+ * de suporte emitido pela API, não com a própria sessão. Sem retry (chamadas pontuais do painel).
+ */
+export async function apiGetWithToken<T>(path: string, token: string): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return handle<T>(res);
+}
+
+/** POST com Bearer token explícito (ex.: encerrar a sessão de suporte). Corpo opcional. */
+export async function apiPostWithToken<T>(path: string, token: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  return handle<T>(res);
+}
+
 /** Envia um arquivo como corpo cru da requisição (ex.: upload de logo, ADR-007). */
 export async function apiUpload<T>(path: string, file: File): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {

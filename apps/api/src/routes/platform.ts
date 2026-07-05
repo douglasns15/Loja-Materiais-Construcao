@@ -3,6 +3,7 @@ import { createPrismaClient } from '@nexoloja/db';
 import { createTenantSchema, setTenantActiveSchema, slugify } from '@nexoloja/shared';
 import { type Env, getConnectionString } from '../lib/request';
 import { inviteAuthUser } from '../lib/authAdmin';
+import { signSupportToken } from '../lib/supportToken';
 import { requirePlatformAuth } from '../middleware/auth';
 
 // Rotas de PLATAFORMA (Super Usuário / fabricante, ADR-009). Cruzam o limite do
@@ -220,6 +221,59 @@ platform.patch('/tenants/:id', async (c) => {
   } catch (err) {
     console.error('PATCH /platform/tenants/:id falhou:', err);
     return c.json({ ok: false, error: 'Falha ao atualizar a loja.' }, 500);
+  }
+});
+
+/**
+ * Inicia uma SESSÃO DE SUPORTE sobre uma loja (ADR-009, Fatia E — impersonation auditada,
+ * **somente-leitura** nesta fatia). O Super Usuário não vira usuário da loja: a API emite um
+ * token curto e assinado (ver `lib/supportToken.ts`) com escopo `{ platformAdminId,
+ * targetTenantId, exp }`, que autoriza as rotas `/support/*` (não as rotas de loja). Registra
+ * `AuditEvent SUPPORT_SESSION_START` (`meta.support = true`; `tenantId` = loja-alvo; `userId` =
+ * Super Usuário). O front guarda o token e o usa para ler o overview da loja.
+ */
+platform.post('/tenants/:id/support', async (c) => {
+  const secret = c.env.SUPPORT_TOKEN_SECRET;
+  if (!secret) {
+    return c.json({ ok: false, error: 'Suporte indisponível: segredo não configurado.' }, 503);
+  }
+  const connectionString = getConnectionString(c.env);
+  if (!connectionString) {
+    return c.json({ ok: false, error: 'Sem conexão com o banco.' }, 500);
+  }
+
+  const id = c.req.param('id');
+  const platformAdminId = c.get('platformAdminId');
+  try {
+    const prisma = createPrismaClient(connectionString);
+    const tenant = await prisma.tenant.findUnique({
+      where: { id },
+      select: { id: true, name: true, slug: true, isActive: true },
+    });
+    if (!tenant) {
+      return c.json({ ok: false, error: 'Loja não encontrada.' }, 404);
+    }
+
+    const { token, expiresAt } = await signSupportToken(secret, {
+      platformAdminId,
+      targetTenantId: tenant.id,
+    });
+
+    await prisma.auditEvent.create({
+      data: {
+        tenantId: tenant.id,
+        userId: platformAdminId,
+        entity: 'Tenant',
+        entityId: tenant.id,
+        action: 'SUPPORT_SESSION_START',
+        meta: { platform: true, support: true, mode: 'read-only', expiresAt },
+      },
+    });
+
+    return c.json({ ok: true, data: { token, expiresAt, tenant } });
+  } catch (err) {
+    console.error('POST /platform/tenants/:id/support falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao iniciar a sessão de suporte.' }, 500);
   }
 });
 

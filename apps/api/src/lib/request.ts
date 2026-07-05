@@ -13,6 +13,12 @@ export type Bindings = {
    * expor ao cliente: ignora o RLS. Provisionar com `wrangler secret put`.
    */
   SUPABASE_SERVICE_ROLE_KEY?: string;
+  /**
+   * Segredo (secret do Worker) que assina/verifica o token de SESSÃO DE SUPORTE (ADR-009,
+   * Fatia E). Simétrico (HS256), nunca sai do Worker. Provisionar com `wrangler secret put
+   * SUPPORT_TOKEN_SECRET`. Sem ele, iniciar suporte responde 503 (recurso indisponível).
+   */
+  SUPPORT_TOKEN_SECRET?: string;
   /** Bucket de mídia no Cloudflare R2 — logo da loja (ADR-007). */
   MEDIA?: R2Bucket;
 };
@@ -33,6 +39,10 @@ export type Variables = {
   platformAdminId: string;
   platformAdminName: string;
   platformAdminEmail: string;
+  /** Escopo da SESSÃO DE SUPORTE (ADR-009, Fatia E), populado por `requireSupportSession` nas
+   * rotas `/support/*`. `supportTenantId` é a loja-alvo que o token autoriza (read-only). */
+  supportPlatformAdminId: string;
+  supportTenantId: string;
 };
 
 export type Env = { Bindings: Bindings; Variables: Variables };

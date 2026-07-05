@@ -971,17 +971,17 @@ super usuário para `/plataforma` (não fica preso no app de loja). **Sem migrat
 > `getSession()` logo após o `signInWithPassword` vinha defasado. Corrigido lendo o claim do
 > **token retornado diretamente** pelo login (`tokenIsPlatformAdmin`). Reteste: vai direto p/ `/plataforma`.
 
-**E2E de navegador (usuário) — pendente**
+**E2E de navegador (usuário) — validado (2026-07-05)**
 
 | Teste | Resultado |
 |---|---|
-| Login `super_owner` (senha `super123`) → painel; **trocar a senha** | ⏭️ usuário |
-| **Criar loja** pelo painel com um e-mail real → convite chega → 1º Admin define senha → entra na loja nova | ⏭️ usuário |
-| Ativar/inativar uma loja pelo painel | ⏭️ usuário |
+| Login `super_owner` (senha `super123`) → painel; **trocar a senha** | ✅ usuário |
+| **Criar loja** pelo painel com um e-mail real → convite chega → 1º Admin define senha → entra na loja nova | ✅ usuário |
+| Ativar/inativar uma loja pelo painel | ✅ usuário |
 
-> **Fatia C concluída (código + validação técnica).** Falta só o E2E de navegador do usuário (envio
-> real de e-mail, protegido por senha). Próximo: **Fatia D** — auditoria de plataforma já emitida
-> (`CREATE_TENANT`, `SET_TENANT_ACTIVE`); resta formalizar no ADR-004 e fechar o ADR-009.
+> **Fatia C concluída (código + validação técnica + E2E do usuário).** O fluxo de onboarding
+> (criar loja pelo painel → convite por e-mail real → 1º Admin define senha → entra na loja nova)
+> e o ativar/inativar por linha foram validados no navegador pelo usuário em 2026-07-05.
 
 ### 2.5.Del — Exclusão de usuário da loja (ADR-008) — 2026-07-03
 
@@ -1010,14 +1010,18 @@ solta). Front: botão **Excluir** (vermelho) ao lado de Desativar/Ativar na seç
 | Smoke `DELETE /users/:id` sem token | ✅ 401 (rota existe, exige auth) |
 | Build + deploy do **web** (botão Excluir) | ✅ Version `41ca16a3` (chunk `configuracoes` contém "Excluir") |
 
-**E2E de navegador (usuário) — pendente**
+**E2E de navegador (usuário) — validado (2026-07-05)**
 
 | Teste | Resultado |
 |---|---|
-| Login Admin → `/configuracoes` → **Excluir** `dougns100@gmail.com` (sem histórico) → some da lista | ⏭️ usuário |
-| Excluir usuário **com** histórico de venda/caixa → **409** "use Desativar" | ⏭️ usuário |
-| `AuditEvent DELETE_USER` gravado (via service_role) | ⏭️ usuário |
-| Recriar a loja de teste reusando o e-mail liberado (convite chega) | ⏭️ usuário |
+| Login Admin → `/configuracoes` → **Excluir** `dougns100@gmail.com` (sem histórico) → some da lista | ✅ usuário |
+| Excluir usuário **com** histórico de venda/caixa → **409** "use Desativar" | ✅ usuário |
+| `AuditEvent DELETE_USER` gravado (via service_role) | ✅ usuário |
+| Recriar a loja de teste reusando o e-mail liberado (convite chega) | ✅ usuário |
+
+> **2.5.Del concluída (E2E do usuário).** Exclusão de usuário sem histórico remove da lista +
+> libera o e-mail; usuário com histórico cai no **409** orientando a *Desativar*; auditoria
+> `DELETE_USER` gravada. Validado no navegador pelo usuário em 2026-07-05.
 
 ### 2.5.D — Auditoria de plataforma (documental) — 2026-07-03
 
@@ -1105,17 +1109,17 @@ mesmo layout da Nova Venda.)*
 | `wrangler deploy` API — estende p/ abrir caixa + entrada de estoque | publicado | ✅ Version `daf90038` |
 | `npm run deploy` web (aviso + bloqueio da Nova Venda) | publicado | ✅ Versions `239ed369` → `533c1921` |
 
-**E2E de navegador (usuário) — pendente**
+**E2E de navegador (usuário) — validado (2026-07-05)**
 
 | Teste | Resultado |
 |---|---|
-| Super Usuário **inativa** a loja no painel `/plataforma` | ⏭️ usuário |
-| Login com usuário da loja inativa → **aviso vermelho no topo** em todas as telas | ⏭️ usuário |
-| Abrir **Nova Venda** → tela bloqueada ("Loja desativada") | ⏭️ usuário |
-| **Abrir caixa** → 403 "Loja desativada" (fechar caixa continua funcionando) | ⏭️ usuário |
-| **Entrada de estoque** → 403 "Loja desativada" (ajuste de inventário continua) | ⏭️ usuário |
-| Tentar `POST /orders` direto (fora da UI) → **403** "Loja desativada" | ⏭️ usuário |
-| **Reativar** a loja → aviso some e as três operações voltam | ⏭️ usuário |
+| Super Usuário **inativa** a loja no painel `/plataforma` | ✅ usuário |
+| Login com usuário da loja inativa → **aviso vermelho no topo** em todas as telas | ✅ usuário |
+| Abrir **Nova Venda** → tela bloqueada ("Loja desativada") | ✅ usuário |
+| **Abrir caixa** → 403 "Loja desativada" (fechar caixa continua funcionando) | ✅ usuário |
+| **Entrada de estoque** → 403 "Loja desativada" (ajuste de inventário continua) | ✅ usuário |
+| Tentar `POST /orders` direto (fora da UI) → **403** "Loja desativada" | ✅ usuário |
+| **Reativar** a loja → aviso some e as três operações voltam | ✅ usuário |
 
 > Bloqueio server-enforced nas 3 rotas de escrita "de negócio". Correções/encerramentos (fechar
 > caixa, ajuste, cancelar, devolver) permanecem liberados por design — uma loja suspensa ainda
@@ -1185,3 +1189,112 @@ API) foram **removidos** — deixaram de ser necessários com os dois apps na me
 
 > Item do ROADMAP "atualizar o wrangler da API" **fechado**. As duas apps agora sobem com
 > `npm run deploy`/`npx wrangler deploy` de forma idêntica no Windows.
+
+### 2.5.E — Entrar no contexto da loja para suporte (impersonation read-only) — 2026-07-05
+
+ADR-009, Fatia E, em **modo somente-leitura**. O Super Usuário entra numa loja para suporte **sem
+virar usuário dela**: a API emite um **token de suporte assinado e curto** (`apps/api/src/lib/
+supportToken.ts`, HS256 com o secret `SUPPORT_TOKEN_SECRET` do Worker, TTL 30 min) de escopo
+`{ platformAdminId, targetTenantId, exp }`. Fluxo: `POST /platform/tenants/:id/support`
+(`requirePlatformAuth`) emite o token + `AuditEvent SUPPORT_SESSION_START`. As rotas de leitura
+ficam em **`/support/*`** (montadas FORA de `/platform/*` de propósito — ali o `Authorization: Bearer`
+é o token de suporte, não um JWT do Supabase), protegidas por `requireSupportSession`, que **verifica
+o token e revalida `platform_admins.isActive`** (desativar o super usuário corta a sessão na hora,
+antes do TTL). `GET /support/:tenantId/overview` (dados da loja, contadores, caixa aberto, estoque
+baixo, últimas vendas, auditoria recente) confere o `:tenantId` contra o escopo do token (403 se
+divergir). `POST /support/end` grava `SUPPORT_SESSION_END`. **RLS de loja intacto** — a fronteira é a
+checagem explícita do escopo, como nas rotas `/platform/*`. Front: botão **Entrar (suporte)** por linha
+em `/plataforma` → guarda o token no `sessionStorage` (`lib/support.ts`) → `/plataforma/suporte/
+[tenantId]` (banner "Modo suporte — somente leitura", overview read-only, **Encerrar sessão**).
+Auditoria (`SUPPORT_SESSION_START/END`, `meta.support = true`) formalizada no ADR-004. **Sem migration.**
+
+**Build / typecheck / core (local)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| `prisma generate` (client c/ `platformAdmin`) | ok | ✅ |
+| Typecheck `apps/api` (`tsc --noEmit`) | sem erros | ✅ exit 0 |
+| Typecheck `apps/web` (`tsc --noEmit`) | sem erros | ✅ exit 0 |
+| Build de produção (`next build`) | rota `/plataforma/suporte/[tenantId]` gerada (dinâmica) | ✅ 15 rotas, sem erros (2.36 kB) |
+| Core (Vitest) — regressão (nada quebrou) | 35/35 | ✅ 35/35 |
+| `wrangler deploy --dry-run` (API) | build ok, bindings intactos (Hyperdrive/R2/`SUPABASE_URL`) | ✅ sem erro |
+
+> ⚠️ **Observação (toolchain):** o `npx wrangler` do `apps/api` resolveu **3.114.17** no dry-run,
+> apesar do commit de migração para a v4 (Infra.WranglerV4). Não bloqueia (o dry-run passou); vale
+> conferir se o `node_modules` foi reinstalado após o bump de versão.
+
+**Provisionamento + deploy (Claude) — 2026-07-05**
+
+| Passo | Resultado |
+|---|---|
+| `wrangler secret put SUPPORT_TOKEN_SECRET` (48 bytes aleatórios via stdin) | ✅ "Uploaded secret" |
+| `wrangler deploy` (API — rotas `/platform/tenants/:id/support` + `/support/*`) | ✅ Version `1e323a22` |
+| `npm run deploy` (web — botão "Entrar (suporte)" + painel de suporte) | ✅ Version `c13a34de` (chunk `suporte/[tenantId]` publicado) |
+
+**Smoke na API/web publicadas (Claude)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| `POST /platform/tenants/:id/support` sem token | 401 (existe + exige auth) | ✅ 401 |
+| `GET /support/:tenantId/overview` sem token | 401 | ✅ 401 |
+| `POST /support/end` sem token | 401 | ✅ 401 |
+| `POST /support/end` com `Bearer` inválido | 401 (não 503 → o secret ESTÁ configurado; `verifySupportToken` rejeitou) | ✅ 401 |
+| `GET /login` (web) | 200 | ✅ 200 |
+| Chunk publicado de `/plataforma` contém "Entrar (suporte)" | presente | ✅ |
+
+**E2E de navegador (usuário) — validado (2026-07-05)**
+
+| Teste | Resultado |
+|---|---|
+| Login `super_owner` → `/plataforma` → **Entrar (suporte)** numa loja → abre o overview read-only | ✅ usuário |
+| Overview lê dados reais da loja-alvo (contadores, caixa, vendas, auditoria) | ✅ usuário |
+| **Encerrar sessão** → volta ao painel; `AuditEvent SUPPORT_SESSION_START/END` gravados | ✅ usuário |
+| Token expirado / super usuário desativado → `/support/*` responde 401/403 | ✅ usuário |
+
+> **Fatia E (read-only) concluída e validada** — código + validação técnica + deploy (API/web) +
+> secret provisionado + smoke em produção + **E2E no navegador validado pelo usuário (2026-07-05)**.
+> **Escrita em modo suporte** fica como fatia futura (ADR-009).
+
+### 2.5.E.2 — Painel de suporte navegável: abas + filtros + detalhes (read-only) — 2026-07-05
+
+Evolução da tela de suporte a pedido do usuário — **tudo somente-leitura**. A página
+`/plataforma/suporte/[tenantId]` virou **3 abas**: **Resumo** (o overview anterior), **Vendas** e
+**Produtos & Estoque**. Três endpoints de leitura novos em `apps/api/src/routes/support.ts` (todos
+sob `requireSupportSession`, com o `:tenantId` conferido contra o escopo do token → 403 se divergir):
+
+- `GET /support/:tenantId/orders?from=&to=&status=` — vendas com **filtro de período** (fuso da loja,
+  UTC-3, igual aos relatórios) e **status** (`CONFIRMED`/`CANCELLED`/`RETURNED`/`DRAFT`); traz itens +
+  pagamentos + cliente por venda (expandir "Ver" mostra o detalhe sem 2ª chamada). Cap 200.
+- `GET /support/:tenantId/products?q=&lowStock=1` — materiais cadastrados com **busca** (nome/SKU) e
+  **"só estoque baixo"**; traz preço/custo/**margem** (core `calcMarginPercent`), estoque atual/mínimo,
+  categoria e flag de baixo. Cap 300.
+- `GET /support/:tenantId/stock-movements?productId=` — **movimentações** de um material (entrada/saída,
+  motivo, fornecedor), abertas inline pela linha do produto. Cap 100.
+
+Front: abas com estado próprio (cada uma carrega sob demanda), filtros com "Filtrar"/"Limpar", linhas
+expansíveis (`Fragment` com `key`) para detalhe de venda e movimentações de produto. Erro 401/403 numa
+seção promove a **sessão expirada** (volta ao painel). Nenhuma ação de escrita na tela.
+
+**Build / typecheck / deploy (Claude)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Typecheck `apps/api` (`tsc --noEmit`) | sem erros | ✅ exit 0 |
+| Typecheck `apps/web` (`tsc --noEmit`) | sem erros | ✅ exit 0 |
+| Build de produção (`next build`) | `/plataforma/suporte/[tenantId]` 4.61 kB | ✅ 15 rotas, sem erros |
+| `wrangler deploy` (API — 3 rotas de leitura novas) | publicado | ✅ Version `1397654d` |
+| `npm run deploy` (web — abas/filtros/detalhes) | publicado | ✅ Version `d3f54d16` |
+| Smoke: `/support/:id/orders`, `/products`, `/stock-movements` sem token | 401 | ✅ 401/401/401 |
+| Smoke: `GET /login` (web) | 200 | ✅ 200 |
+
+**E2E de navegador (usuário) — validado (2026-07-05)**
+
+| Teste | Resultado |
+|---|---|
+| Aba **Vendas**: filtrar por período/status → lista atualiza; **Ver** abre itens + pagamentos | ✅ usuário |
+| Aba **Produtos & Estoque**: buscar por nome/SKU + "só estoque baixo" → lista filtra | ✅ usuário |
+| Produto → **Ver** movimentações (entrada/saída, motivo, fornecedor) | ✅ usuário |
+| Tudo somente-leitura (nenhum botão de escrita nas abas) | ✅ usuário |
+
+> **2.5.E.2 concluída e validada** — painel de suporte navegável (abas + filtros + detalhes),
+> somente-leitura, validado no navegador pelo usuário em 2026-07-05.

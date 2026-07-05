@@ -14,6 +14,7 @@ import reports from './routes/reports';
 import me from './routes/me';
 import usersRoute from './routes/users';
 import platform from './routes/platform';
+import support from './routes/support';
 
 const app = new Hono<Env>();
 
@@ -66,6 +67,9 @@ app.route('/reports', reports);
 app.route('/me', me);
 app.route('/users', usersRoute);
 app.route('/platform', platform);
+// Sessão de suporte (ADR-009, Fatia E). Fora de `/platform/*` de propósito: o Bearer aqui é o
+// token de suporte (não um JWT do Supabase), verificado por `requireSupportSession`.
+app.route('/support', support);
 
 /**
  * Validação do item 3: confirma que o Prisma roda no Cloudflare Worker via driver
