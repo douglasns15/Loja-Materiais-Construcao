@@ -3,7 +3,11 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-05 (**"Registrado por" (ADR-010) + estoque inicial no cadastro —
+> **Última atualização:** 2026-07-06 (**Fase 3 iniciada — Fatia 3.A: PWA instalável (manifest,
+> ícones, service worker de app-shell só-GET-same-origin, prompt "Instalar", página `/offline`);
+> só front, sem migration; typecheck + build (17 rotas) + smoke ✅; **no ar** (web Version
+> `1f290a7d`) + **instalação validada pelo usuário nas 3 plataformas (Android/iPhone/PC) → 3.A
+> concluída**. Antes:** **"Registrado por" (ADR-010) + estoque inicial no cadastro —
 > no ar e validados pelo usuário**: (1) **atribuição de autoria** — cada registro guarda quem executou
 > (id solto + **snapshot do nome**, congelado) e reusa o "quando"; migration **`0006`** aplicada
 > (aditiva, nullable): `products`/`customers` (`createdBy/updatedBy/deletedBy`), `orders`/`cash_movements`
@@ -97,14 +101,20 @@
 > e **E2E de convite pela URL publicada validado pelo usuário no navegador** (convite → e-mail →
 > `/definir-senha` → login). Ver 2.R no registro de testes.
 >
-> ▶️ **Próximo passo:** **Fase 2.5 concluída (A–E) e no ar**. Duas melhorias transversais entraram
-> depois, ambas **concluídas, no ar e validadas pelo usuário (2026-07-05)**: **(1) "Registrado por"
-> (ADR-010)** — atribuição de autoria por snapshot; migration `0006` aplicada (API `a3503411` + web
-> `93c9a95e`); mostra quem executou em Produtos, Clientes, Vendas, Estoque, Caixa (+ suporte).
-> **(2) Estoque inicial no cadastro** — campo opcional que gera a Entrada atômica no cadastro
-> (ADR-001), fechando a brecha do `stockQty` solto; sem migration (API `cad0fe6e` + web `ef59a575`).
-> O próximo é a **Fase 3 — offline-first** (PWA/service worker +
-> fila de sincronização IndexedDB → Supabase). *Nada bloqueia: produção roda a Fase 2.5 completa.*
+> ▶️ **Próximo passo:** **Fase 3 iniciada — Fatia 3.A (PWA instalável) concluída no código
+> (2026-07-06)**. O `apps/web` agora é **instalável** (manifest + ícones + service worker de
+> app-shell + prompt "Instalar" + página `/offline`); o SW intercepta **só GET same-origin**
+> (API/Supabase nunca são cacheados) e o registro é gated a produção. Sem migration, sem API;
+> typecheck + build (17 rotas) + smoke no navegador ✅. **No ar (2026-07-06):** web publicado
+> (Version `1f290a7d`) + smoke em produção ✅ + **instalação validada pelo usuário nas 3 plataformas
+> (Android, iPhone, PC)** → **Fatia 3.A concluída**. (PWA atualiza sozinho a cada deploy — não
+> precisa reinstalar; ver nota na Fase 3.) **Depois de 3.A:** a **fila de sincronização
+> offline** (IndexedDB → Supabase) — parte difícil, que **exige um ADR próprio** (ex. ADR-011:
+> idempotência, resolução de conflito, atomicidade do ADR-001/RLS) antes de codar. *Nada bloqueia:
+> produção roda a Fase 2.5 completa.* Antes: **Fase 2.5 concluída (A–E) e no ar**; duas melhorias
+> transversais **validadas pelo usuário (2026-07-05)**: **(1) "Registrado por" (ADR-010)** —
+> autoria por snapshot; migration `0006` (API `a3503411` + web `93c9a95e`). **(2) Estoque inicial
+> no cadastro** — Entrada atômica no cadastro (ADR-001); sem migration (API `cad0fe6e` + web `ef59a575`).
 > - *Melhoria futura na Fatia E:* **escrita em modo suporte** (exceção auditada, `meta.support=true`)
 >   — hoje o suporte é somente-leitura (direção no ADR-009).
 > - *Melhoria futura na Fase 2:* devolução **parcial** (itens/quantidades com rateio).
@@ -335,10 +345,30 @@
 
 ---
 
-## 🟣 Fase 3 — Recursos Avançados e Produção — **Pendente**
+## 🟣 Fase 3 — Recursos Avançados e Produção — **Em andamento**
 
-- [ ] Suporte offline (PWA / Service Worker no Next.js)
-- [ ] Fila de sincronização (IndexedDB → Supabase)
+- [x] **Fatia 3.A — PWA instalável + cache de app-shell** — `apps/web` virou PWA instalável
+      (adicionar à tela inicial no celular/desktop). `app/manifest.ts` (`/manifest.webmanifest`),
+      ícones (192/512 + maskable + apple-touch, gerados via sharp: "N" verde sobre `#111827`),
+      metadata PWA (theme-color/apple-web-app) no `layout`, **service worker** (`public/sw.js`)
+      de casca — **só GET same-origin** (API/Supabase passam direto pela rede, nunca cacheados;
+      navegações network-first), registro **gated a produção** (`RegisterSW`), botão **"Instalar
+      app"** (`beforeinstallprompt`) e página **`/offline`**. **Sem migration, sem API.** Typecheck
+      web ✅; build ✅ (17 rotas: `/manifest.webmanifest` + `/offline`); smoke no navegador (manifest/
+      ícones/meta/sw.js/offline) ✅. **No ar:** `npm run deploy` (web Version `1f290a7d`) + smoke em
+      produção ✅. **E2E de instalação validado pelo usuário (2026-07-06)** — instalou com sucesso nas
+      **3 plataformas** (Android, iPhone e PC). *(3.A)* **Fatia 3.A concluída.**
+
+  > **ℹ️ Atualização do PWA (não precisa reinstalar):** um PWA instalado é um atalho para o app no
+  > ar, não um pacote congelado. Todo `npm run deploy` é pego no **próximo carregamento** com
+  > internet, porque as navegações são *network-first* e os assets do Next têm nome com hash (build
+  > novo = arquivo novo). O `sw.js` se atualiza sozinho (`skipWaiting` + `clients.claim`); às vezes
+  > a versão nova só "assume" no **2º abrir** (a 1ª abertura baixa em segundo plano). **Única
+  > exceção:** trocar **ícone/nome** (vêm do manifest) pode exigir remover e readicionar à tela
+  > inicial — sobretudo no **iPhone**, que segura o ícone antigo. Mudanças de código/tela/API: só
+  > reabrir o app.
+- [ ] Fila de sincronização (IndexedDB → Supabase) — **exige ADR próprio** (ex. ADR-011:
+      idempotência, conflito, atomicidade ADR-001/RLS) antes de codar
 - [ ] Módulo de estoque fino (estoque mínimo, notificações, movimentações detalhadas)
 - [ ] Otimização do pooler (6543) para limites do free tier
 - [ ] Avaliar upgrade Supabase Pro p/ produção

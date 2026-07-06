@@ -1382,3 +1382,90 @@ saldo direto no cadastro. **Sem migration.**
 |---|---|
 | Cadastrar produto com "Estoque inicial" 10 → saldo 10 + Entrada "Estoque inicial (cadastro)" no Estoque com "Registrado por" | ⏭️ usuário |
 | Cadastrar produto sem estoque inicial → nasce com 0 (sem Entrada) | ⏭️ usuário |
+
+---
+
+## Fase 3 — Offline-first e produção
+
+### 3.A — PWA instalável + cache de app-shell (2026-07-06)
+
+Primeira fatia da Fase 3: tornar o `apps/web` **instalável** (adicionar à tela inicial no
+celular e no desktop) e carregar rápido/estável com um **service worker** de casca. Escopo
+**só front** — sem migration, sem API. A sincronização de escrita (fila IndexedDB → Supabase)
+fica para fatia futura, com ADR próprio.
+
+**O que entrou**
+
+| Peça | Arquivo |
+|---|---|
+| Manifest dinâmico (`/manifest.webmanifest`) | `apps/web/app/manifest.ts` |
+| Ícones (192/512 + maskable 192/512 + apple-touch 180) | `apps/web/public/icons/*` (gerados via sharp; "N" verde sobre `#111827`) |
+| Metadata PWA (theme-color, apple-web-app, ícones) | `apps/web/app/layout.tsx` |
+| Service worker (app-shell; só GET same-origin) | `apps/web/public/sw.js` |
+| Registro do SW (gated a produção) | `apps/web/app/RegisterSW.tsx` |
+| Botão "Instalar app" (`beforeinstallprompt`) | `apps/web/app/InstallPrompt.tsx` |
+| Página de fallback offline | `apps/web/app/offline/page.tsx` |
+
+> **Regra de segurança do SW num ERP/POS:** intercepta **só GET e só mesma origem**. As
+> chamadas à API (`nexoloja-api.*`) e ao Supabase Auth são cross-origin e passam **direto pela
+> rede** — nunca cacheadas (não serve estoque/venda/caixa velhos). Navegações = network-first.
+
+**Build / typecheck (local, Claude)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Typecheck `apps/web` (`tsc --noEmit`) | sem erros | ✅ exit 0 |
+| Build de produção (`next build`) | rotas `/manifest.webmanifest` + `/offline` geradas | ✅ 17 rotas, sem erros |
+
+**Smoke no navegador (Claude, `npm run dev` → preview)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| `<link rel="manifest">` no HTML (injetado 1× pelo `app/manifest.ts`) | presente, sem duplicar | ✅ `/manifest.webmanifest` |
+| `GET /manifest.webmanifest` | 200 + JSON válido (name/icons/display/theme) | ✅ |
+| Ícones 192 / 512 / maskable-512 / apple-touch | 200 `image/png` | ✅ 4/4 |
+| Meta `theme-color` / `mobile-web-app-capable` / `apple-mobile-web-app-*` | presentes | ✅ (`theme-color=#111827`, `mobile-web-app-capable=yes`) |
+| `GET /sw.js` | 200 `application/javascript` | ✅ |
+| Rota `/offline` renderiza (marca + mensagem + "Tentar novamente") | ok | ✅ (screenshot) |
+| Console (login + offline) | sem erros/avisos | ✅ |
+
+> **Nota:** o registro do service worker é **gated para produção** (em dev o SW atrapalha o
+> HMR/cache). Portanto o comportamento de **cache/offline em runtime** e o **prompt "Instalar"**
+> (exigem contexto instalável real: HTTPS + engajamento) só se manifestam no ambiente publicado.
+
+**Deploy (Claude) — 2026-07-06**
+
+| Passo | Resultado |
+|---|---|
+| `npm run deploy` (web — OpenNext → Cloudflare) | ✅ Version `1f290a7d` (23 assets novos: `/sw.js`, ícones, chunk `/offline`) |
+| Smoke prod: `GET /manifest.webmanifest` | ✅ 200 `application/manifest+json` (name/display/theme corretos) |
+| Smoke prod: `GET /sw.js` | ✅ 200 `text/javascript` |
+| Smoke prod: ícones 192/512/maskable-512/apple-touch | ✅ 4/4 200 |
+| Smoke prod: `GET /offline` | ✅ 200 |
+| Smoke prod: HTML do `/login` tem `<link rel="manifest">` + `theme-color` + apple-touch-icon | ✅ |
+
+**E2E do usuário — 2026-07-06 (link oficial: `https://nexoloja-web.imortal.workers.dev`)**
+
+| Teste | Resultado |
+|---|---|
+| **Android** (Chrome): instalar → app abre standalone com ícone/nome | ✅ usuário |
+| **iPhone** (Safari): "Adicionar à Tela de Início" → abre standalone | ✅ usuário |
+| **PC** (Chrome/Edge): instalar → abre em janela própria | ✅ usuário |
+| Recarregar offline uma tela já visitada → casca carrega; página nova → `/offline` | ⏭️ usuário (opcional) |
+
+> **Instalação validada nas 3 plataformas pelo usuário.** Fatia 3.A concluída.
+
+**Comportamento de atualização do PWA (esclarecido com o usuário — 2026-07-06)**
+
+Dúvida do usuário: "a cada ajuste na aplicação precisa reinstalar?" **Não.** Um PWA instalado é um
+atalho para o app no ar, não um pacote congelado (como `.apk`/`.exe`).
+
+| Situação | Precisa reinstalar? | Por quê |
+|---|---|---|
+| Correção de bug / nova tela / novo campo / lógica / API | ❌ Não — só reabrir | Navegações são *network-first*: o app busca a versão nova no próximo carregamento com internet |
+| Mudança de estilo/layout | ❌ Não — só reabrir | Assets do Next têm nome com hash (build novo = arquivo novo; nunca fica preso em cache velho) |
+| Atualização do próprio `sw.js` | ❌ Não | `skipWaiting` + `clients.claim` fazem a versão nova assumir sozinha (às vezes só no 2º abrir) |
+| Trocar **ícone** ou **nome** do app (vêm do manifest) | ⚠️ Às vezes (sobretudo iPhone) | iOS mantém o ícone/nome antigos até remover e readicionar à tela inicial |
+
+> Regra prática: para pegar uma atualização, **fechar e reabrir o app** (a 1ª abertura baixa em
+> segundo plano; a seguinte já roda com ela). Só mudança de ícone/nome pode pedir reinstalar no iPhone.
