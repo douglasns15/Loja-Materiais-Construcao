@@ -367,8 +367,15 @@
   > exceção:** trocar **ícone/nome** (vêm do manifest) pode exigir remover e readicionar à tela
   > inicial — sobretudo no **iPhone**, que segura o ícone antigo. Mudanças de código/tela/API: só
   > reabrir o app.
-- [ ] Fila de sincronização (IndexedDB → Supabase) — **exige ADR próprio** (ex. ADR-011:
-      idempotência, conflito, atomicidade ADR-001/RLS) antes de codar
+- [ ] Fila de sincronização (IndexedDB → Supabase) — **ADR-011 escrito e ACEITO (2026-07-06)**:
+      estratégia travada (Outbox no cliente; **idempotência pela PK UUID do cliente**, sem tabela
+      nova no 1º corte; servidor reaplica cada mutação em transação única e debita estoque no sync,
+      ADR-001; append-only=dedup / cadastro=last-write-wins+`CONFLICT`; `tenantId` validado contra o
+      JWT, RLS intacto). **Decisões de produto aprovadas:** (a) estoque — trava **na venda** (cache
+      local, como online); no resíduo do sync, **registrar e deixar negativo** p/ reconciliação
+      (não rejeitar venda física concluída); (b) **1ª fatia = venda**, depois estoque e caixa;
+      cadastros mutáveis por último. Próximo = implementação (envelope de mutação + worker de fila +
+      endpoint de venda idempotente por PK)
 - [ ] Módulo de estoque fino (estoque mínimo, notificações, movimentações detalhadas)
 - [ ] Otimização do pooler (6543) para limites do free tier
 - [ ] Avaliar upgrade Supabase Pro p/ produção
