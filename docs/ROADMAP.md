@@ -3,7 +3,19 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-05 (**Fase 2.5 — Fatia E (impersonation auditada) no ar, read-only**:
+> **Última atualização:** 2026-07-05 (**"Registrado por" (ADR-010) + estoque inicial no cadastro —
+> no ar e validados pelo usuário**: (1) **atribuição de autoria** — cada registro guarda quem executou
+> (id solto + **snapshot do nome**, congelado) e reusa o "quando"; migration **`0006`** aplicada
+> (aditiva, nullable): `products`/`customers` (`createdBy/updatedBy/deletedBy`), `orders`/`cash_movements`
+> (`registeredByName`), `stock_movements` (`userId` — antes inexistente — + `registeredByName`),
+> `cash_sessions` (`openedByName`/`closedBy`). `requireAuth` expõe `userName`; write-path grava a
+> autoria; UI mostra "Registrado por"/"Última alteração"/"Aberto por" em Vendas, Estoque, Produtos,
+> Clientes, Caixa (+ painel de suporte). Nível "quem fez por último" (complementar ao ADR-004,
+> cost-zero). API `a3503411` + web `93c9a95e`. (2) **Estoque inicial no cadastro** — campo opcional que,
+> se > 0, cria o produto **e** gera a Entrada (`StockMovement` INCOME, "Estoque inicial (cadastro)")
+> na mesma transação (ADR-001), com autoria; fecha a brecha do `stockQty` solto no schema. Sem
+> migration. API `cad0fe6e` + web `ef59a575`. Typecheck API+web ✅; build ✅; core 35/35.
+> **Antes:** (**Fase 2.5 — Fatia E (impersonation auditada) no ar, read-only**:
 > Super Usuário entra na loja para **suporte somente-leitura** sem virar usuário dela. Token de
 > suporte assinado e curto (`lib/supportToken.ts`, HS256 com secret `SUPPORT_TOKEN_SECRET`, TTL 30 min,
 > escopo `{ platformAdminId, targetTenantId, exp }`) emitido por `POST /platform/tenants/:id/support`
@@ -85,12 +97,13 @@
 > e **E2E de convite pela URL publicada validado pelo usuário no navegador** (convite → e-mail →
 > `/definir-senha` → login). Ver 2.R no registro de testes.
 >
-> ▶️ **Próximo passo:** **Fase 2.5 concluída (A–E) e no ar**. A **melhoria transversal "Registrado
-> por" (atribuição de autoria, ADR-010)** está **concluída, no ar e validada pelo usuário
-> (2026-07-05)**: migration `0006` aplicada (API `a3503411` + web `93c9a95e`); cada registro guarda
-> quem executou (snapshot do nome + id solto) e mostra em tela em Produtos, Clientes, Vendas, Estoque
-> e Caixa (+ painel de suporte). O próximo é a
-> **Fase 3 — offline-first** (PWA/service worker +
+> ▶️ **Próximo passo:** **Fase 2.5 concluída (A–E) e no ar**. Duas melhorias transversais entraram
+> depois, ambas **concluídas, no ar e validadas pelo usuário (2026-07-05)**: **(1) "Registrado por"
+> (ADR-010)** — atribuição de autoria por snapshot; migration `0006` aplicada (API `a3503411` + web
+> `93c9a95e`); mostra quem executou em Produtos, Clientes, Vendas, Estoque, Caixa (+ suporte).
+> **(2) Estoque inicial no cadastro** — campo opcional que gera a Entrada atômica no cadastro
+> (ADR-001), fechando a brecha do `stockQty` solto; sem migration (API `cad0fe6e` + web `ef59a575`).
+> O próximo é a **Fase 3 — offline-first** (PWA/service worker +
 > fila de sincronização IndexedDB → Supabase). *Nada bloqueia: produção roda a Fase 2.5 completa.*
 > - *Melhoria futura na Fatia E:* **escrita em modo suporte** (exceção auditada, `meta.support=true`)
 >   — hoje o suporte é somente-leitura (direção no ADR-009).
