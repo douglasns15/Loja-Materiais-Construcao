@@ -94,16 +94,44 @@ products.post('/', async (c) => {
     // Autoria (ADR-010): na criação, criado = alterado (mesmo operador/nome-snapshot).
     const userId = c.get('userId');
     const userName = c.get('userName');
-    const created = await prisma.product.create({
-      data: {
-        ...parsed.data,
-        tenantId,
-        createdById: userId,
-        createdByName: userName,
-        updatedById: userId,
-        updatedByName: userName,
-      },
-    });
+    // `initialStock` NÃO é coluna do produto — é convenição de cadastro (ver abaixo). Separa.
+    const { initialStock, ...productData } = parsed.data;
+    const authorship = {
+      createdById: userId,
+      createdByName: userName,
+      updatedById: userId,
+      updatedByName: userName,
+    };
+
+    let created;
+    if (initialStock && initialStock > 0) {
+      // Estoque inicial (ADR-001): cria o produto E gera a Entrada (StockMovement INCOME) na
+      // MESMA transação — o saldo nunca é escrito "solto" no cache. `stockQty` e a soma dos
+      // movimentos ficam consistentes (reconciliação bate). A entrada carrega a autoria (ADR-010).
+      created = await prisma.$transaction(async (tx) => {
+        const p = await tx.product.create({
+          data: { ...productData, tenantId, stockQty: initialStock, ...authorship },
+        });
+        await tx.stockMovement.create({
+          data: {
+            tenantId,
+            productId: p.id,
+            type: 'INCOME',
+            quantity: initialStock,
+            unitCost: productData.costPrice, // custo do cadastro como custo da entrada inicial
+            reason: 'Estoque inicial (cadastro)',
+            syncStatus: 'SYNCED',
+            userId,
+            registeredByName: userName,
+          },
+        });
+        return p;
+      });
+    } else {
+      created = await prisma.product.create({
+        data: { ...productData, tenantId, ...authorship },
+      });
+    }
     return c.json({ ok: true, data: withMargin(created) }, 201);
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError) {

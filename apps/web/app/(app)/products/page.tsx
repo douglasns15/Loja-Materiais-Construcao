@@ -36,6 +36,7 @@ export default function ProductsPage() {
     costPrice: '',
     salePrice: '',
     minStockQty: '',
+    initialStock: '',
   });
   const [saving, setSaving] = useState(false);
 
@@ -66,6 +67,8 @@ export default function ProductsPage() {
       costPrice: Number(form.costPrice),
       salePrice: Number(form.salePrice),
       minStockQty: form.minStockQty ? Number(form.minStockQty) : undefined,
+      // Se preenchido, a API gera a Entrada de estoque atomicamente (ADR-001); vazio = nasce em 0.
+      initialStock: form.initialStock ? Number(form.initialStock) : undefined,
     });
     if (!parsed.success) {
       setError('Confira os campos: nome, SKU e preços são obrigatórios.');
@@ -75,7 +78,7 @@ export default function ProductsPage() {
     setSaving(true);
     try {
       await apiPost<Product>('/products', parsed.data);
-      setForm({ name: '', sku: '', costPrice: '', salePrice: '', minStockQty: '' });
+      setForm({ name: '', sku: '', costPrice: '', salePrice: '', minStockQty: '', initialStock: '' });
       await load();
     } catch (e) {
       setError((e as Error).message);
@@ -154,6 +157,16 @@ export default function ProductsPage() {
           value={form.minStockQty}
           onChange={(e) => setForm({ ...form, minStockQty: e.target.value })}
           className="rounded-lg border border-gray-300 px-3 py-2"
+        />
+        <input
+          placeholder="Estoque inicial (opcional)"
+          type="number"
+          step="any"
+          min="0"
+          value={form.initialStock}
+          onChange={(e) => setForm({ ...form, initialStock: e.target.value })}
+          title="Se preenchido, gera uma Entrada de estoque no cadastro (aparece no Estoque como 'Estoque inicial'). Deixe vazio para o produto nascer com 0."
+          className="rounded-lg border border-gray-300 px-3 py-2 sm:col-span-2"
         />
         <button
           type="submit"

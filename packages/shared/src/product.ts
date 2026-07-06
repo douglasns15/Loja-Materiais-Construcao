@@ -29,13 +29,20 @@ export const createProductSchema = z.object({
   unit: unitTypeSchema.default('UNIT'),
   costPrice: z.number().nonnegative(),
   salePrice: z.number().nonnegative(),
-  stockQty: z.number().optional(),
   minStockQty: z.number().nonnegative().optional(),
   weightKg: z.number().positive().optional(),
   conversionFactor: z.number().positive().optional(),
+  /**
+   * Estoque inicial (opcional). Quando > 0, o cadastro NÃO grava o saldo direto no produto:
+   * a API cria o produto e gera a **Entrada** (`StockMovement` INCOME) na MESMA transação
+   * (ADR-001 — `stockQty` é cache; a movimentação é a fonte de verdade), já com a autoria
+   * (ADR-010). É exclusivo da criação — não existe no update (ver `updateProductSchema`).
+   */
+  initialStock: z.number().nonnegative().optional(),
 });
 export type CreateProductInput = z.infer<typeof createProductSchema>;
 
-/// Payload para atualizar — todos os campos opcionais.
-export const updateProductSchema = createProductSchema.partial();
+/// Payload para atualizar — todos os campos opcionais. `initialStock` é só de criação
+/// (mudar estoque é sempre via movimentação, nunca por edição do cadastro — ADR-001).
+export const updateProductSchema = createProductSchema.omit({ initialStock: true }).partial();
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;
