@@ -17,6 +17,9 @@ http://localhost:3000/
 ## Leia docs/ROADMAP.md e docs/testes/registro-de-testes.md e vamos continuar
 vamos para o próximo passo
 
+Próxima sessão: começamos pelo passo 1 (o flag) — é o mais barato, não mexe no núcleo transacional e já entrega valor visível (o Super Usuário liga/desliga por loja). Topa começar por aí?
+
+A memória de estado já está atualizada, então quando você abrir a próxima sessão é só dizer "vamos continuar" que eu retomo exatamente no passo 1 — o flag OFFLINE_SALES (expor no GET /me + toggle em /plataforma + gate no PDV), que é o mais barato e não toca no núcleo transacional.
 
 ## Subir servidor
 
