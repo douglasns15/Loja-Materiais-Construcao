@@ -145,6 +145,36 @@ Nada de tabela de "eventos de sync" crescendo sem limite. A idempotência mora n
 um ledger dedicado for necessário no futuro (item 2), ele terá **expurgo por janela** (ex.: 90
 dias), coerente com a auditoria seletiva da ADR-004.
 
+### 9. Ativação por loja — feature flag `OFFLINE_SALES`, **nasce desligado**
+
+O offline **não** é ligado para todas as lojas por padrão. Ele é um **módulo ativável por loja**,
+controlado pelo **Super Usuário** (Fase 2.5, painel `/plataforma`), reusando a tabela
+**`TenantModule`** que **já existe** (`moduleKey` + `isActive` + `config Json?`, único por
+`[tenantId, moduleKey]`) — **sem migration**.
+
+- **`moduleKey = "OFFLINE_SALES"`.** Regra: **ausência da linha (ou `isActive = false`) = OFF**.
+  Assim o default é **desligado** de graça (uma loja só tem offline se o Super Usuário criar/ligar
+  a linha). Não depende do `isActive` da linha ser `true` por padrão — o gate é a **existência
+  ativa** do módulo.
+- **Escopo do gate:** o flag habilita a fila offline **apenas para venda** (a 1ª e, por ora, única
+  fatia). O flag chega ao cliente via `GET /me` (que já devolve dados da loja).
+- **Gate no cliente (onde importa):** com o flag **ON**, o PDV mantém a `outbox` ativa e registra a
+  venda mesmo sem rede. Com o flag **OFF**, sem conexão o PDV **não** enfileira — orienta o
+  operador a usar **nota manual** e lançar depois (plano B humano; ver §6 e o racional de negócio
+  abaixo). O servidor não precisa de lógica especial: a venda sincronizada passa pelo mesmo
+  `POST /orders` idempotente por PK (§2).
+
+**Por que um interruptor (e não "sempre ligado"):**
+
+1. **Rollout gradual + botão de pânico** — mexe no código mais crítico (dinheiro + estoque);
+   liga-se em poucas lojas, observa-se, expande-se; se um bug de sync surgir, **desliga na hora**
+   sem redeploy.
+2. **Realidade do público-alvo** — pequeno/médio comércio quase sempre tem 4G/5G de reserva;
+   queda **total** de internet é rara. O caso que ainda machuca é **falta de energia sem gerador**
+   (aí a alternativa real é a nota manual). Isso não justifica ligar offline para todos por padrão.
+3. **Alavanca de monetização** — o offline nasce como **recurso de plano superior (pago)**. O flag
+   por loja já deixa isso pronto: é a fronteira comercial do recurso, não só técnica.
+
 ---
 
 ## Opções Consideradas
@@ -205,17 +235,23 @@ ela é, delegando a correção à reconciliação que a ADR-001 já exige.
 
 ## Consequências
 
-- **Fica mais fácil:** operar o caixa sem internet; reenvio seguro (dedup pela PK); manter ADR-001
-  (o servidor é o único a debitar estoque, na transação do sync); RLS intacto.
-- **Fica mais difícil:** o servidor precisa aplicar **toda** criação de forma idempotente (checar a
-  PK antes de efeitos colaterais); o cliente precisa de um worker de fila robusto (retry com
-  backoff, parar na 1ª falha dura, estados na UI: pendente/sincronizado/conflito).
-- **Novos requisitos de UI:** indicador de "X operações pendentes de sincronização", estado por
-  venda (`PENDING`/`SYNCED`/`CONFLICT`) e uma tela mínima para resolver `CONFLICT` de cadastro.
-- **Impacto no banco (a aprovar como migration separada):** provavelmente **nenhuma tabela nova** no
-  primeiro corte. Pode ser necessária **1 constraint/índice** de reforço de idempotência e,
-  eventualmente, o ledger `SyncMutation` (Opção B) — **tudo isso vira ADR/migration própria só após
-  sua aprovação** (regra 1).
+- **Fica mais fácil:** operar o caixa sem internet (nas lojas com o flag ON); reenvio seguro (dedup
+  pela PK); manter ADR-001 (o servidor é o único a debitar estoque, na transação do sync); RLS
+  intacto; ligar/desligar o recurso por loja **sem redeploy** (rollout gradual + botão de pânico).
+- **Fica mais difícil:** o servidor precisa aplicar a criação de venda de forma idempotente (checar
+  a PK antes de efeitos colaterais); o cliente precisa de um worker de fila robusto (retry com
+  backoff, parar na 1ª falha dura) e de ler o flag para decidir enfileirar vs. orientar nota manual.
+- **Novos requisitos de UI:** indicador de "X vendas pendentes de sincronização" e estado por venda
+  (`PENDING`/`SYNCED`); toggle **OFFLINE_SALES** por loja no painel do Super Usuário
+  (`/plataforma`). *Resolução de `CONFLICT` de cadastro **não** entra neste corte* — a 1ª fatia é só
+  venda (append-only), que não gera conflito; a tela de conflito só nasce quando cadastros mutáveis
+  forem para offline (por último).
+- **Monetização:** o flag por loja é a **fronteira comercial** do recurso — offline nasce como
+  **plano superior (pago)**, ligável por loja quando contratado.
+- **Impacto no banco:** **nenhuma tabela nova** no primeiro corte. O flag reusa **`TenantModule`**
+  (já existe; sem migration). Pode vir a ser necessária **1 constraint/índice** de reforço de
+  idempotência e, eventualmente, o ledger `SyncMutation` (Opção B) — **isso vira ADR/migration
+  própria só após aprovação** (regra 1).
 - **Revisar no futuro:** se surgir mutação composta sem PK-única, promover para o ledger dedicado;
   se o produto ganhar edição colaborativa em tempo real, reavaliar a Opção C.
 
@@ -230,17 +266,24 @@ ela é, delegando a correção à reconciliação que a ADR-001 já exige.
        negativo** para a reconciliação da ADR-001 (não rejeitar venda física concluída).
 2. [x] **Escopo da fatia offline decidido:** 1ª fatia **venda**, depois **estoque** e **caixa**;
        cadastros mutáveis (`Product`/`Customer`) por último.
-3. [ ] Especificar o **formato do envelope de mutação** (tipo, `id` da entidade, payload, versão de
+3. [x] **Ativação decidida (§9):** flag por loja `OFFLINE_SALES` via `TenantModule` (sem migration),
+       **default OFF** (ausência da linha = OFF), toggle no painel do Super Usuário; recurso de
+       **plano pago**.
+4. [ ] Ligar o flag na ponta: expor `OFFLINE_SALES` no `GET /me`; toggle em `/plataforma`
+       (`TenantModule` upsert) com `AuditEvent` (ADR-004); gate no cliente (PDV) — ON enfileira,
+       OFF orienta nota manual.
+5. [ ] Especificar o **formato do envelope de mutação** (tipo, `id` da entidade, payload, versão de
        schema) e a store `outbox` no IndexedDB.
-4. [ ] Definir o **worker de sincronização** (gatilhos: `online`, foreground, botão manual; retry
+6. [ ] Definir o **worker de sincronização** (gatilhos: `online`, foreground, botão manual; retry
        com backoff; parar na 1ª falha dura).
-5. [ ] Tornar o endpoint de venda **idempotente por PK** (checar `orders.id` dentro da transação
-       antes dos efeitos colaterais) — e replicar o padrão para estoque/caixa.
-6. [ ] Funções puras em `packages/core` para a máquina de estados da fila (testes Vitest, como pede
+7. [ ] Tornar o `POST /orders` **idempotente por PK** (checar `orders.id` dentro da transação antes
+       dos efeitos colaterais).
+8. [ ] Funções puras em `packages/core` para a máquina de estados da fila (testes Vitest, como pede
        o `CLAUDE.md`).
-7. [ ] UI: indicador de pendências + estados por registro + tela mínima de resolução de `CONFLICT`.
-8. [ ] Só então: avaliar se alguma **migration** (constraint/índice ou ledger) é necessária →
-       **explicar impacto e pedir aprovação** (regra 1).
+9. [ ] UI: indicador de "vendas pendentes" + estado por venda (`PENDING`/`SYNCED`). *(Resolução de
+       `CONFLICT` fica para a fatia futura de cadastros offline.)*
+10. [ ] Só então: avaliar se alguma **migration** (constraint/índice ou ledger) é necessária →
+        **explicar impacto e pedir aprovação** (regra 1).
 
 ---
 
