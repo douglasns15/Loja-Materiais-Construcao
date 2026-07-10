@@ -79,6 +79,21 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   return handle<T>(res);
 }
 
+/**
+ * POST para o **worker de sincronização** (ADR-011): devolve o **status HTTP bruto** sem lançar em
+ * erro HTTP, para o worker classificar 2xx/409/5xx/4xx (`classifyHttpOutcome` do core). Lança
+ * **apenas** em falha de REDE (offline/timeout) — que o worker trata como transitória. Reaproveita
+ * o `authHeaders` (Bearer do Supabase); a autoria/tenant são resolvidos no servidor pelo JWT.
+ */
+export async function apiPostForSync(path: string, body: unknown): Promise<{ status: number }> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+    body: JSON.stringify(body),
+  });
+  return { status: res.status };
+}
+
 export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     method: 'PATCH',

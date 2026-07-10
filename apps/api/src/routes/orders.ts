@@ -69,10 +69,18 @@ orders.get('/', async (c) => {
 
 /**
  * Registra uma venda. Em uma única transação (ADR-001):
- *  - cria o Order (vinculado ao caixa aberto) + OrderItems (snapshot) + Payments;
+ *  - cria o Order (vinculado ao caixa) + OrderItems (snapshot) + Payments;
  *  - para cada item: grava StockMovement (saída) e decrementa Product.stockQty.
- * Exige caixa aberto e bloqueia venda sem estoque. `requireActiveTenant` barra vendas novas
- * quando a loja está inativa (ADR-009) antes de qualquer trabalho.
+ * `requireActiveTenant` barra vendas novas quando a loja está inativa (ADR-009) antes de tudo.
+ *
+ * Dois caminhos, decididos pela presença de `id` no payload (ADR-011):
+ *  - **Online (sem `id`):** o servidor gera a PK e deriva o caixa do **caixa aberto** do operador;
+ *    estoque insuficiente é **bloqueado** (regra de sempre).
+ *  - **Offline/sync (com `id` + `cashSessionId`):** **idempotente por PK** — se `orders.id` já
+ *    existe, é no-op e devolve a venda já persistida (dedup do reenvio pós-crash, ADR-011 §2). O
+ *    caixa é o informado no envelope (o que estava aberto na venda), validado contra tenant+user; e
+ *    o estoque insuficiente **não bloqueia** — registra e deixa negativo para a reconciliação da
+ *    ADR-001 (§6: a venda física já aconteceu). O débito de estoque ocorre aqui, no sync (§3).
  */
 orders.post('/', requireActiveTenant, async (c) => {
   const tenantId = getTenantId(c);
@@ -90,20 +98,57 @@ orders.post('/', requireActiveTenant, async (c) => {
     );
   }
   const sale = parsed.data;
+  const isOffline = !!sale.id; // `id` gerado no cliente ⇒ venda de origem offline (ADR-011)
 
   try {
     const prisma = createPrismaClient(connectionString);
 
-    // Caixa aberto é obrigatório para vender.
-    const session = await prisma.cashSession.findFirst({
-      where: { tenantId, userId, closedAt: null },
-      select: { id: true },
-    });
-    if (!session) {
-      return c.json({ ok: false, error: 'Abra o caixa antes de registrar uma venda.' }, 400);
+    // Idempotência (ADR-011 §2): venda offline já sincronizada = no-op. Devolve a persistida.
+    if (sale.id) {
+      const existing = await prisma.order.findFirst({
+        where: { id: sale.id, tenantId },
+        include: { items: true, payments: true },
+      });
+      if (existing) {
+        const paidExisting = existing.payments.reduce((acc, p) => acc + Number(p.amount), 0);
+        return c.json(
+          {
+            ok: true,
+            data: {
+              ...existing,
+              change: Number((paidExisting - Number(existing.total)).toFixed(2)),
+              deduped: true,
+            },
+          },
+          200,
+        );
+      }
     }
 
-    // Carrega os produtos do tenant e valida existência + estoque.
+    // Caixa da venda: no offline, o do envelope (pode já estar fechado no momento do sync — a venda
+    // pertence àquela sessão); no online, o caixa aberto do operador. Sempre validado tenant+user.
+    const session = isOffline
+      ? await prisma.cashSession.findFirst({
+          where: { id: sale.cashSessionId, tenantId, userId },
+          select: { id: true },
+        })
+      : await prisma.cashSession.findFirst({
+          where: { tenantId, userId, closedAt: null },
+          select: { id: true },
+        });
+    if (!session) {
+      return c.json(
+        {
+          ok: false,
+          error: isOffline
+            ? 'Caixa da venda offline não encontrado para esta loja/operador.'
+            : 'Abra o caixa antes de registrar uma venda.',
+        },
+        400,
+      );
+    }
+
+    // Carrega os produtos do tenant e valida existência (sempre) + estoque (só bloqueia online).
     const ids = sale.items.map((i) => i.productId);
     const products = await prisma.product.findMany({
       where: { id: { in: ids }, tenantId, deletedAt: null },
@@ -115,7 +160,8 @@ orders.post('/', requireActiveTenant, async (c) => {
       if (!p) {
         return c.json({ ok: false, error: 'Produto inexistente na venda.' }, 400);
       }
-      if (Number(p.stockQty) < item.quantity) {
+      // Estoque insuficiente: bloqueia no online; no offline registra e deixa negativo (§6).
+      if (!isOffline && Number(p.stockQty) < item.quantity) {
         return c.json(
           {
             ok: false,
@@ -141,6 +187,8 @@ orders.post('/', requireActiveTenant, async (c) => {
     const order = await prisma.$transaction(async (tx) => {
       const created = await tx.order.create({
         data: {
+          // Offline: usa a PK gerada no cliente (idempotência). Online: deixa o @default(uuid).
+          ...(sale.id ? { id: sale.id } : {}),
           tenantId,
           userId,
           // Autoria (ADR-010): snapshot do nome de quem registrou a venda.
@@ -179,7 +227,8 @@ orders.post('/', requireActiveTenant, async (c) => {
         include: { items: true, payments: true },
       });
 
-      // ADR-001: cada item gera saída de estoque + decremento atômico do cache.
+      // ADR-001: cada item gera saída de estoque + decremento atômico do cache (pode ficar
+      // negativo no sync offline — sinaliza cadastro desatualizado, vai p/ reconciliação, §6).
       for (const item of sale.items) {
         await tx.stockMovement.create({
           data: {
@@ -204,6 +253,10 @@ orders.post('/', requireActiveTenant, async (c) => {
 
     return c.json({ ok: true, data: { ...order, change: Number((paid - total).toFixed(2)) } }, 201);
   } catch (err) {
+    // Corrida rara: dois syncs do mesmo `id` ao mesmo tempo → o 2º viola a PK. Trata como dedup.
+    if (isOffline && err instanceof Error && (err as { code?: string }).code === 'P2002') {
+      return c.json({ ok: true, data: { id: sale.id, deduped: true } }, 200);
+    }
     console.error('POST /orders falhou:', err);
     return c.json({ ok: false, error: 'Falha ao registrar a venda.' }, 500);
   }

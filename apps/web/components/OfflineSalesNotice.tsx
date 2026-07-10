@@ -7,8 +7,8 @@ import { useOnline } from '@/lib/useOnline';
  * O texto depende do flag `OFFLINE_SALES` da loja e do `context`:
  *
  * - **OFF** (padrão): a loja não tem o recurso pago. Sem internet, o plano B é a **nota manual**.
- * - **ON**: a loja tem o módulo habilitado. A fila de sincronização (Outbox) chega na próxima
- *   fatia da Fase 3; por ora o aviso só sinaliza que o recurso está ligado.
+ * - **ON**: a loja tem o módulo habilitado. A venda é registrada no aparelho (fila Outbox) e
+ *   sincroniza sozinha quando a conexão volta (ADR-011).
  *
  * `context`:
  * - `'sale'` (padrão): tela de venda com caixa já aberto.
@@ -34,7 +34,7 @@ export function OfflineSalesNotice({
         <p className="text-sm text-indigo-700">
           {context === 'cash-open'
             ? 'A abertura de caixa ainda precisa de internet nesta versão — a venda offline cobre quedas depois do caixa aberto. Abra o caixa assim que a conexão voltar.'
-            : 'Esta loja tem o recurso de vendas offline. A sincronização automática entra na próxima atualização; por ora, aguarde a conexão voltar para registrar.'}
+            : 'Pode concluir a venda normalmente — ela é salva neste aparelho e sincroniza sozinha quando a conexão voltar.'}
         </p>
       </div>
     );

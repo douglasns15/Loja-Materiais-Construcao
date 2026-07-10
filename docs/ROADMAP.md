@@ -3,11 +3,22 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-09 (**Fase 3 — Fila de sync offline, Fatia 1 (flag `OFFLINE_SALES`
-> + avisos) CONCLUÍDA e validada**: interruptor por loja via `TenantModule` (sem migration, default
+> **Última atualização:** 2026-07-10 (**Fase 3 — Fila de sync offline, Fatias 3–6 (round-trip da
+> venda offline) NO AR e VALIDADO em produção**: PDV enfileira offline → worker (`syncWorker.ts` +
+> `useOutboxSync`) drena FIFO ao voltar a rede, para na 1ª falha, retry só transitório → servidor
+> `POST /orders` **idempotente por PK** (dedup do reenvio; caixa do envelope; estoque insuficiente
+> registra e deixa negativo p/ reconciliação, §6). Máquina de estados pura em `packages/core`
+> (+12 testes → **47/47**) + indicador "X vendas pendentes" no PDV. **Sem migration** (AI 10:
+> dedup usa a PK existente). **E2E validado**: offline→enfileira→online→sincroniza; venda com a
+> mesma PK, estoque 258→256; **reenvio não duplica**. 2 achados corrigidos (3.D.1). API `897d5524`
+> + web `c74bbc5f`. Ver 3.D no registro de testes. **Próximo:** refinos do offline (drenagem global,
+> tela `FAILED`, caminho OFF) ou as próximas naturezas de mutação (estoque/caixa offline). **Antes:**
+> Fatia 2 (envelope + store
+> `outbox` + flag em `localStorage`) — código pronto (ver 3.C). **Antes:** Fatia 1 (flag `OFFLINE_SALES`
+> + avisos) CONCLUÍDA e validada: interruptor por loja via `TenantModule` (sem migration, default
 > OFF, plano pago), `GET /me` expõe o flag, toggle no painel `/plataforma` (`AuditEvent
 > SET_TENANT_MODULE`), avisos offline no PDV/Caixa (abrir caixa segue online-only); API `0b8c0348`
-> + web `c35f8592`, E2E do usuário OK. Próximo = Fatia 2: envelope + `outbox` no IndexedDB. Ver 3.B
+> + web `c35f8592`, E2E do usuário OK. Ver 3.B
 > no registro de testes. **Antes:** **Fatia 3.A: PWA instalável (manifest,
 > ícones, service worker de app-shell só-GET-same-origin, prompt "Instalar", página `/offline`);
 > só front, sem migration; typecheck + build (17 rotas) + smoke ✅; **no ar** (web Version
@@ -106,7 +117,15 @@
 > e **E2E de convite pela URL publicada validado pelo usuário no navegador** (convite → e-mail →
 > `/definir-senha` → login). Ver 2.R no registro de testes.
 >
-> ▶️ **Próximo passo:** **Fase 3 — Fila de sync offline, Fatia 1 (flag `OFFLINE_SALES` + avisos)
+> ▶️ **Próximo passo:** **venda offline concluída e validada (Fatias 3–6, ver 3.D).** Ciclo
+> enfileirar→drenar→aplicar idempotente confirmado em produção (inclui idempotência do reenvio).
+> Direções possíveis a seguir: (a) **refinos do offline** — drenagem global (fora do PDV), tela de
+> itens `FAILED`, poda de `SYNCED`, e testar o caminho **OFF** (nota manual); (b) **próximas
+> naturezas de mutação** — estoque e caixa offline (depois cadastros mutáveis, que trazem a tela de
+> `CONFLICT`); (c) outros itens da Fase 3 (módulo de estoque fino, pooler, avaliar Supabase Pro).
+> **Antes:** Fatia 2 (envelope + `outbox` + flag em `localStorage`) — código pronto (2026-07-10, ver
+> 3.C). **Antes:**
+> **Fatia 1 (flag `OFFLINE_SALES` + avisos)
 > CONCLUÍDA e validada (2026-07-09)**. Interruptor por loja via `TenantModule` (sem migration,
 > default OFF, plano pago), `GET /me` expõe o flag, toggle no painel `/plataforma` (`AuditEvent
 > SET_TENANT_MODULE`), e avisos offline no PDV/Caixa (`OfflineSalesNotice` + `useOnline`; abrir
@@ -379,7 +398,8 @@
   > exceção:** trocar **ícone/nome** (vêm do manifest) pode exigir remover e readicionar à tela
   > inicial — sobretudo no **iPhone**, que segura o ícone antigo. Mudanças de código/tela/API: só
   > reabrir o app.
-- [ ] **Fila de sincronização offline — só VENDA, atrás de flag por loja** — **ADR-011 escrito e
+- [x] **Fila de sincronização offline — só VENDA, atrás de flag por loja — CONCLUÍDA e validada
+      (2026-07-10)**. **ADR-011 escrito e
       ACEITO (2026-07-06)**. Estratégia travada (Outbox no cliente; **idempotência pela PK UUID do
       cliente**, sem tabela nova no 1º corte; servidor reaplica a venda em transação única e debita
       estoque no sync, ADR-001; append-only=dedup; `tenantId` validado contra o JWT, RLS intacto).
@@ -390,8 +410,10 @@
       **nasce DESLIGADO** (ausência da linha = OFF), ligável pelo Super Usuário no painel
       `/plataforma` — recurso de **plano pago**; com o flag OFF e sem energia/internet, o plano B é
       **nota manual**. Como a fatia é só venda (append-only), **não há tela de resolução de
-      conflito** neste corte. Próximo = implementação (flag na ponta → envelope de mutação → worker
-      de fila → `POST /orders` idempotente por PK → core+testes → UI de pendências)
+      conflito** neste corte. **Implementada e validada em produção (Fatias 1–6):** flag na ponta →
+      envelope + `outbox` → worker de fila → `POST /orders` idempotente por PK → core+testes (47/47) →
+      indicador de pendentes. **Sem migration** (AI 10). E2E ON + OFF + idempotência conferidos. Ver
+      3.B/3.C/3.D no registro de testes.
   - [x] **Fatia 1 — flag `OFFLINE_SALES` + avisos (AI 4) — CONCLUÍDA e validada (2026-07-09)**.
         Interruptor por loja reusando `TenantModule` (**sem migration**; ausência/inativa = OFF).
         `packages/shared/modules.ts` (`MODULE_OFFLINE_SALES` + `isOfflineSalesOn` + `setTenantModuleSchema`);
@@ -403,23 +425,40 @@
         desabilitado offline (abrir caixa é online-only nesta fatia); erro cru de rede
         ("Failed to fetch") escondido offline (3.B.1/3.B.2). **No ar + E2E validado pelo usuário:**
         API `0b8c0348` + web `c35f8592`. Ver 3.B no registro de testes.
-  - [ ] **Fatia 2 — envelope de mutação + store `outbox` no IndexedDB (AI 5)** — formato do envelope
-        (tipo, `id` UUID da entidade, payload, versão de schema) e a store `outbox` (FIFO por
-        dispositivo). Persistir o **flag `OFFLINE_SALES` em `localStorage`** para o *cold start offline*
-        ser confiável (hoje, sem `/me`, o aviso cai no padrão OFF). Só cliente.
-  - [ ] **Fatia 3 — worker de sincronização (AI 6)** — drena a fila quando há rede (gatilhos:
-        `online`, foreground, botão manual); **retry com backoff**; **para na 1ª falha dura** (não
-        reordena/pula) para respeitar dependências (venda ⇢ caixa).
-  - [ ] **Fatia 4 — `POST /orders` idempotente por PK (AI 7)** — checar `orders.id` **dentro da
-        transação** antes dos efeitos colaterais: se a venda já existe, no-op e devolve `SYNCED`
-        (dedup do reenvio pós-crash). Servidor debita estoque no sync (ADR-001); resíduo negativo →
-        reconciliação. `tenantId` validado contra o JWT (ADR-011 §7). *Pode exigir migration de
-        reforço (constraint/índice) → **explicar impacto e pedir aprovação** (regra 1, AI 10).*
-  - [ ] **Fatia 5 — máquina de estados da fila em `packages/core` (AI 8)** — funções puras +
-        **testes Vitest** (CLAUDE.md): transições `PENDING → SYNCED`/erro, política de retry.
-  - [ ] **Fatia 6 — UI de vendas pendentes (AI 9)** — indicador "X vendas pendentes" + estado por
-        venda (`PENDING`/`SYNCED`). *Tela de resolução de `CONFLICT` fica para a fatia futura de
-        cadastros offline — a 1ª fatia é só venda (append-only), sem conflito.*
+  - [x] **Fatia 2 — envelope de mutação + store `outbox` no IndexedDB (AI 5) — CÓDIGO PRONTO
+        (2026-07-10)**. Infra do cliente (sem migration, sem API). Formato do envelope
+        (`kind`/`entityId` UUID/`schemaVersion`/`payload`/`createdAt`) + `mutationEnvelopeSchema` +
+        builder puro `buildSaleMutation` em `packages/shared/src/outbox.ts` (contrato compartilhado,
+        idempotência pela PK, ADR-011 §2). Store `outbox` no IndexedDB (`apps/web/lib/outbox.ts`):
+        FIFO por `seq` autoincremental, índice único `entityId` (dedup de enfileiramento), índice
+        `status`; `enqueue`/`list`/`peekPending`/`countPending`/`markSynced`/`markError`/`remove`.
+        Flag `OFFLINE_SALES` persistido em `localStorage` (`offlineFlag.ts` + `useMe` expõe
+        `offlineSales` efetivo com fallback no cold start offline; `/venda` e `/caixa` usam-no).
+        **Infra dormente/aditiva** — o PDV **ainda não enfileira** (isso pareia com o worker, Fatia 3),
+        então o caminho vivo da venda não muda. Typecheck shared/api/web + build (17 rotas) + core
+        35/35 ✅. **Deploy opcional** (nada user-observable ainda). Ver 3.C no registro de testes.
+  - [x] **Fatias 3–6 — round-trip da venda offline NO AR e VALIDADO (2026-07-10).**
+        Ciclo completo: PDV enfileira offline → worker drena ao voltar a rede → servidor aplica
+        idempotente por PK. **Sem migration** (AI 10 avaliado: dedup usa a PK existente; estoque
+        negativo permitido pelo tipo). **E2E validado em produção** (loja-demo ON): offline→enfileira→
+        online→sincroniza; venda `#981d99d6` com a mesma PK, autoria "owner", estoque 258→256;
+        **reenvio não duplica** (dedup por PK, estoque segue 256). Dois achados corrigidos (3.D.1):
+        indicador de pendentes atualiza após enfileirar; copy do aviso ON. API `897d5524` + web
+        `c74bbc5f`; core 47/47. Ver 3.D no registro de testes. Detalhe por fatia:
+    - [x] **Fatia 3 — worker de sincronização (AI 6)** — `apps/web/lib/syncWorker.ts` drena FIFO
+          (gatilhos `online`/foreground/montagem/botão via `useOutboxSync`), **para na 1ª falha**,
+          retry só transitório. PDV enfileira quando **offline + recurso ON** (UUID no cliente +
+          baixa otimista no cache local + tela "Salva offline — pendente").
+    - [x] **Fatia 4 — `POST /orders` idempotente por PK (AI 7)** — `id` presente ⇒ venda offline:
+          dedup por `orders.id` (no-op devolve a persistida), caixa vem do envelope (validado
+          tenant+user), **estoque insuficiente não bloqueia** (registra e deixa negativo p/
+          reconciliação, §6). Online intacto (gera PK, mantém bloqueio de estoque). `tenantId`/autoria
+          do JWT (§7). **Sem migration.**
+    - [x] **Fatia 5 — máquina de estados em `packages/core` (AI 8)** — `classifyHttpOutcome`
+          (409=dedup=SYNCED), `classifyNetworkError`, `shouldRetry`/`MAX_SYNC_ATTEMPTS`,
+          `syncBackoffMs` (exp., teto 30s), `haltsQueue` — **+12 testes Vitest** (47/47).
+    - [x] **Fatia 6 — indicador de pendentes (AI 9)** — "X vendas pendentes" + "Sincronizar agora"
+          no PDV + rótulo por venda offline. *Tela de `CONFLICT` segue adiada (venda é append-only).*
 - [ ] Módulo de estoque fino (estoque mínimo, notificações, movimentações detalhadas)
 - [ ] Otimização do pooler (6543) para limites do free tier
 - [ ] Avaliar upgrade Supabase Pro p/ produção

@@ -1566,3 +1566,126 @@ Correção: o banner de `error` só aparece **quando online** (`error && online`
 | `npm run deploy` (web) | publicado | ✅ Version `c35f8592` |
 | Smoke web: `/login` `/caixa` `/venda` | 200 | ✅ 200/200/200 |
 | Offline: "Failed to fetch" some; só o aviso amigável fica | — | ⏭️ usuário |
+
+### 3.C — Envelope de mutação + store `outbox` (IndexedDB) + flag em `localStorage` (ADR-011, AI 5) — 2026-07-10
+
+Segunda fatia da fila de sync offline: a **infraestrutura do cliente**. Define o **formato do
+envelope de mutação** (o contrato de sync), cria a store **`outbox`** no IndexedDB (FIFO por
+dispositivo) e persiste o flag **`OFFLINE_SALES` em `localStorage`** para o *cold start offline*.
+**Só cliente** — sem migration, sem API. O envelope **ainda não é enfileirado** por nenhuma ação:
+ligar o PDV para enfileirar pareia com o **worker de sync** (Fatia 3) e o `POST /orders`
+idempotente (Fatia 4); esta fatia entrega a infra **dormente e aditiva** (o caminho vivo da venda
+não muda).
+
+**O que entrou**
+
+| Peça | Arquivo |
+|---|---|
+| Formato do envelope (`kind`, `entityId` UUID, `schemaVersion`, `payload`, `createdAt`) + `mutationEnvelopeSchema` (Zod) + builder puro `buildSaleMutation` + `OUTBOX_SCHEMA_VERSION=1` | `packages/shared/src/outbox.ts` (exportado no `index.ts`) |
+| Store `outbox` no IndexedDB — FIFO por `seq` autoincremental, índice único `entityId` (dedup de enfileiramento), índice `status`; `enqueueMutation`/`listOutbox`/`peekPending`/`countPending`/`markSynced`/`markError`/`markConflict`/`removeMutation` + guarda `hasOutbox()` (SSR) | `apps/web/lib/outbox.ts` |
+| Cache do flag em `localStorage` (`cacheOfflineSales`/`readCachedOfflineSales`) | `apps/web/lib/offlineFlag.ts` |
+| `useMe` grava o flag a cada `/me` OK e expõe `offlineSales` efetivo (com fallback do cache no cold start offline) | `apps/web/lib/useMe.ts` |
+| `/venda` e `/caixa` usam o `offlineSales` efetivo do `useMe` (em vez de `me?.offlineSales`) | `apps/web/app/(app)/{venda,caixa}/page.tsx` |
+
+> **Idempotência (ADR-011 §2):** a chave é o `entityId` = PK UUID gerada no cliente; o payload da
+> venda carrega o mesmo `id`. O servidor deduplica pela PK na Fatia 4. O índice único `entityId` da
+> `outbox` cobre a idempotência de **enfileiramento** no cliente (clique duplo/reabrir a tela).
+> **RLS/segurança:** nada novo — `tenantId`/`userId` continuam vindo do JWT no sync (ADR-011 §7).
+
+**Build / typecheck / core (Claude)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Typecheck `packages/shared` (`tsc --noEmit`) | sem erros | ✅ |
+| Typecheck `apps/api` (`tsc --noEmit`, após `prisma generate`) | sem erros | ✅ |
+| Typecheck `apps/web` (`tsc --noEmit`) | sem erros | ✅ |
+| Build de produção (`next build`) | 17 rotas, `/venda` 5.34 kB · `/caixa` 2.57 kB | ✅ sem erros |
+| Core (Vitest) — regressão (nada quebrou) | 35/35 | ✅ 35/35 |
+
+**Deploy / E2E**
+
+| Passo | Resultado |
+|---|---|
+| Deploy | ⏭️ opcional nesta fatia — infra **dormente** (nada user-observable ainda); pode ir junto com o worker (Fatia 3) |
+| E2E do usuário | ⏭️ n/a nesta fatia — sem ação de UI que exercite a `outbox`; a validação vem quando o PDV enfileirar (Fatia 3) |
+
+> **3.C: infra da fila pronta** — envelope (contrato compartilhado) + store `outbox` + flag em
+> `localStorage`. Typecheck (shared/api/web) + build (17 rotas) + core 35/35 ✅. Próxima fatia do
+> ADR-011: **worker de sincronização** (AI 6) — drena a `outbox` quando há rede e liga o PDV para
+> enfileirar venda offline.
+
+### 3.D — Round-trip da venda offline: worker + `POST /orders` idempotente + máquina de estados (ADR-011 AI 6–9) — 2026-07-10
+
+Fecha o **ciclo completo da venda offline**: o PDV enfileira sem rede, o worker drena quando a
+conexão volta e o servidor aplica de forma **idempotente por PK** (dedup do reenvio). Cobre as
+Fatias 3 (worker), 4 (POST idempotente), 5 (máquina de estados pura + testes) e o essencial da 6
+(indicador de pendentes). **Sem migration** (ver AI 10 abaixo). No ar; **E2E do usuário pendente**.
+
+**O que entrou**
+
+| Peça | Arquivo |
+|---|---|
+| Máquina de estados PURA da fila (`classifyHttpOutcome` — **409 = dedup = SYNCED**; `classifyNetworkError`; `shouldRetry`/`MAX_SYNC_ATTEMPTS`; `syncBackoffMs` exp. c/ teto 30s; `haltsQueue`) + **12 testes Vitest** | `packages/core/src/index.ts` (+ `index.test.ts`) |
+| `createSaleSchema` ganhou `id`/`cashSessionId` **opcionais** (online omite; offline envia); `saleMutationPayloadSchema` os torna obrigatórios; `buildSaleMutation(id, cashSessionId, sale)` | `packages/shared/src/{sale,outbox}.ts` |
+| `POST /orders` **idempotente por PK** (ADR-011 §2–3/6): `id` presente ⇒ venda offline → dedup por `orders.id` (no-op devolve a persistida), caixa vem do envelope (validado tenant+user), **estoque insuficiente não bloqueia** (registra e deixa negativo p/ reconciliação); online segue igual (gera PK, bloqueia sem estoque). Corrida de PK → trata como dedup | `apps/api/src/routes/orders.ts` |
+| Worker de sync (drena FIFO, **para na 1ª falha**, retry só transitório; delega decisão ao core) + helper `apiPostForSync` (status bruto) | `apps/web/lib/syncWorker.ts` · `apps/web/lib/api.ts` |
+| Estado `FAILED` terminal + `markFailed` na `outbox` | `apps/web/lib/outbox.ts` |
+| Hook `useOutboxSync` (gatilhos: `online`, foreground, montagem, botão manual; contador de pendentes) | `apps/web/lib/useOutboxSync.ts` |
+| PDV: `onConfirmar` enfileira quando **offline + recurso ON** (UUID no cliente, baixa otimista no cache local, tela "Salva offline — pendente"); online igual; indicador "X vendas pendentes" + "Sincronizar agora" | `apps/web/app/(app)/venda/page.tsx` |
+
+> **Idempotência (ADR-011 §2):** a chave é a PK UUID gerada no cliente; reenvio pós-crash é no-op
+> (200 `deduped`). **§6:** venda offline que não "cabe" no estoque ao sincronizar é **registrada**
+> (saldo negativo → reconciliação da ADR-001), não rejeitada. **§7/RLS:** `tenantId`/`userId`/autoria
+> vêm do JWT; o `cashSessionId` do envelope é validado contra tenant+user. **Online intacto:** sem
+> `id` no payload, o caminho é byte-a-byte o de antes (bloqueio de estoque mantido).
+
+**Build / typecheck / core (Claude)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Typecheck `packages/shared` + `apps/api` (após `prisma generate`) + `apps/web` | sem erros | ✅ |
+| Build de produção (`next build`) | 17 rotas, `/venda` 6.91 kB | ✅ sem erros |
+| Core (Vitest) — 12 testes novos da fila + regressão | 47/47 | ✅ 47/47 |
+
+**Deploy + smoke em produção (Claude) — 2026-07-10**
+
+| Passo | Resultado |
+|---|---|
+| `npm run deploy` (API — `POST /orders` idempotente) | ✅ Version `897d5524` |
+| `npm run deploy` (web — worker + PDV enfileira + indicador) | ✅ Version `afb6bd71` |
+| Smoke API: `/health` 200 · `/db-check` `{tenants:2}` · `POST /orders` sem token 401 (sem regressão) | ✅ |
+| Smoke web: `/login` 200 · `/` 307 · `/venda` 200 · `/manifest.webmanifest` 200 | ✅ |
+| Smoke navegador (dev): `/login` sem erros de console (novos módulos carregam) | ✅ |
+
+**AI 10 — migration?** Avaliado: **nenhuma migration necessária** neste corte. A idempotência usa a
+**PK existente** (`orders.id`, já única, `@default(uuid)`) — o dedup é um `findUnique` na transação,
+sem constraint nova; e o estoque negativo é permitido pelo tipo atual (sem CHECK). Um índice de
+reforço só entraria se surgisse contenção real → aí vira migration própria com aprovação (regra 1).
+
+**E2E no navegador (Claude + usuário, produção, 2026-07-10)** — loja-demo com flag **ON**, caixa
+aberto, offline simulado via console (`navigator.onLine=false` + eventos `offline`/`online` — mesmo
+código do `useOnline`/worker, sem derrubar a rede real).
+
+| Teste | Resultado |
+|---|---|
+| Loja **ON**, offline → aviso índigo "vendas offline habilitadas" | ✅ |
+| Confirmar offline (2× Cimento) → **enfileira** (não vai à rede) + tela "Salva offline — pendente" | ✅ (`outbox` seq 1 PENDING; envelope com `kind`/`entityId`/`cashSessionId`/itens corretos) |
+| Voltar **online** → worker drena → item `SYNCED` | ✅ (0 tentativas, sem erro) |
+| Servidor aplica: pedido com a **mesma PK** (`#981d99d6`), autoria "owner", estoque **258→256** | ✅ (Histórico + estoque recarregado do servidor) |
+| **Reenvio/idempotência**: remarcar PENDING + drenar de novo → **dedup por PK** | ✅ 1 pedido no Histórico, estoque **continua 256** (sem duplicar/re-baixar) |
+| Indicador "1 venda pendente" após enfileirar (2ª venda, Tijolo) | ✅ (após o fix 3.D.1) |
+| Voltar online → indicador **zera** + aviso some | ✅ (`outbox` seq 1/2 `SYNCED`) |
+| Loja **OFF** offline → aviso **âmbar** "nota manual"; Confirmar mostra "Use nota manual." e **não enfileira** (fila inalterada) | ✅ (2026-07-10; flag desligado no painel do Super Usuário e religado ao fim) |
+
+**3.D.1 — Dois achados do E2E, corrigidos e republicados (web `c74bbc5f`)**
+
+| Achado | Correção |
+|---|---|
+| Indicador "X pendentes" não atualizava após enfileirar (contador do React só recarregava ao remontar/sincronizar; dado na fila estava certo) | `venda/page.tsx`: `void refreshPending()` após o `enqueueMutation` |
+| Texto do aviso ON ainda dizia "aguarde a conexão voltar para registrar" (copy da Fatia 1, antes de o PDV enfileirar) | `OfflineSalesNotice`: "Pode concluir a venda normalmente — ela é salva neste aparelho e sincroniza sozinha quando a conexão voltar." |
+
+> **3.D validada ✅** — ciclo completo da venda offline (enfileirar → drenar → aplicar idempotente)
+> confirmado em produção, incluindo **idempotência** (reenvio não duplica) e o servidor como único a
+> debitar estoque no sync (§3). API `897d5524` + web `c74bbc5f`; sem migration; core 47/47. Refinos
+> possíveis (fatia futura): drenagem global (fora do PDV), tela de itens `FAILED`, poda de itens
+> `SYNCED` da fila, e estoque/caixa offline (as próximas naturezas de mutação).

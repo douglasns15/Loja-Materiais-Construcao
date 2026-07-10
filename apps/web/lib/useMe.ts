@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import type { StoreRole } from '@nexoloja/shared';
 import { apiGet } from './api';
+import { cacheOfflineSales, readCachedOfflineSales } from './offlineFlag';
 
 export type Me = {
   id: string;
@@ -31,7 +32,11 @@ export function useMe() {
 
   async function refresh() {
     try {
-      setMe(await apiGet<Me>('/me'));
+      const data = await apiGet<Me>('/me');
+      setMe(data);
+      // Persiste o flag p/ o cold start offline (ADR-011 §9): se o app abrir sem rede depois,
+      // `/me` falha e o aviso usa este último valor conhecido em vez de cair no padrão OFF.
+      cacheOfflineSales(data.offlineSales === true);
     } catch {
       setMe(null);
     } finally {
@@ -43,5 +48,9 @@ export function useMe() {
     refresh();
   }, []);
 
-  return { me, setMe, loading, refresh, isAdmin: me?.storeRole === 'ADMIN' };
+  // Flag efetivo p/ a UI: o valor do `/me` quando disponível; senão, o cache do último `/me` OK
+  // (cold start offline). Nunca liga o recurso "por engano" — sem cache, cai em OFF.
+  const offlineSales = me ? me.offlineSales === true : readCachedOfflineSales();
+
+  return { me, setMe, loading, refresh, isAdmin: me?.storeRole === 'ADMIN', offlineSales };
 }

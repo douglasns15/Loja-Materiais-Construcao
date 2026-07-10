@@ -208,3 +208,71 @@ export function withPaymentShare(rows: PaymentMethodTotal[]): PaymentMethodShare
     }))
     .sort((a, b) => b.total - a.total);
 }
+
+// =============================================================================
+// SINCRONIZAÇÃO OFFLINE (Outbox) — ADR-011
+// =============================================================================
+//
+// Máquina de estados PURA da fila de sync (funções `(entrada) => saída`, sem I/O). O worker no
+// cliente (apps/web) faz o I/O (IndexedDB + fetch) e delega TODA a decisão a estas funções, que
+// são testadas com Vitest (CLAUDE.md). Regras (ADR-011 §5–6): drenar em FIFO, **parar na 1ª falha
+// dura** (não reordenar/pular) e re-tentar só falhas transitórias com backoff.
+
+/**
+ * Desfecho de uma tentativa de sincronizar um item da fila:
+ * - `SYNCED`: aplicado no servidor (ou já estava — dedup idempotente). Remover da fila.
+ * - `RETRY`: falha transitória (rede/servidor 5xx). Manter na fila e re-tentar depois.
+ * - `FAILED`: falha dura (4xx — payload inválido, dependência ausente). Parar a fila; exige atenção.
+ */
+export type SyncOutcome = 'SYNCED' | 'RETRY' | 'FAILED';
+
+/** Máximo de tentativas antes de um item transitório virar falha dura (evita loop infinito). */
+export const MAX_SYNC_ATTEMPTS = 5;
+
+/**
+ * Classifica o resultado HTTP de um envio da fila. Idempotência (ADR-011 §2): **409 = já aplicado**
+ * (a PK já existia) → tratamos como `SYNCED`, não como erro. 2xx = aplicado agora. 5xx = servidor
+ * transitório → `RETRY`. Demais 4xx = erro de cliente (payload/dependência) → `FAILED` (falha dura).
+ */
+export function classifyHttpOutcome(status: number): SyncOutcome {
+  if (status === 409) return 'SYNCED'; // dedup: a venda já existe no servidor
+  if (status >= 200 && status < 300) return 'SYNCED';
+  if (status >= 500) return 'RETRY';
+  return 'FAILED';
+}
+
+/**
+ * Desfecho quando o próprio `fetch` falhou (sem resposta HTTP): offline/DNS/timeout. É sempre
+ * transitório — a rede volta — então `RETRY` (a fila drena de novo no próximo gatilho `online`).
+ */
+export function classifyNetworkError(): SyncOutcome {
+  return 'RETRY';
+}
+
+/**
+ * Dado o desfecho e quantas tentativas o item JÁ acumulou (antes desta), decide se ainda vale
+ * re-tentar. Só `RETRY` re-tenta, e só enquanto não estourar `MAX_SYNC_ATTEMPTS` — depois disso
+ * o item transitório é promovido a falha dura (para não travar a fila para sempre).
+ */
+export function shouldRetry(outcome: SyncOutcome, attempts: number): boolean {
+  return outcome === 'RETRY' && attempts < MAX_SYNC_ATTEMPTS;
+}
+
+/**
+ * Backoff exponencial (ms) para a próxima tentativa a partir do nº de tentativas já feitas:
+ * 1s, 2s, 4s, 8s… com teto de 30s. Puro e determinístico (sem jitter) para ser testável; o
+ * jitter, se necessário, fica no worker.
+ */
+export function syncBackoffMs(attempts: number): number {
+  const base = 1000 * 2 ** Math.max(0, attempts);
+  return Math.min(base, 30000);
+}
+
+/**
+ * `true` quando a fila deve **parar** de drenar após este desfecho — ou seja, tudo que não foi
+ * `SYNCED`. Falha dura (`FAILED`) e transitória (`RETRY`) ambas param o avanço FIFO (ADR-011 §5:
+ * não pular itens); a diferença é que `RETRY` volta a tentar no próximo gatilho e `FAILED` não.
+ */
+export function haltsQueue(outcome: SyncOutcome): boolean {
+  return outcome !== 'SYNCED';
+}

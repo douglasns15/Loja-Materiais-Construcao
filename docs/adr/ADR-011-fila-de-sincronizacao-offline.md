@@ -1,6 +1,8 @@
 # ADR-011 — Fila de sincronização offline (IndexedDB → Supabase)
 
-- **Status:** Aceito (2026-07-06) — estratégia travada; implementação nas fatias da Fase 3
+- **Status:** Aceito (2026-07-06) e **Implementado (2026-07-10)** — venda offline (Fatias 1–6) no ar
+  e validada em produção (ON + OFF + idempotência); **sem migration** (AI 10). Ver 3.B/3.C/3.D no
+  registro de testes. Próximas naturezas (estoque/caixa/cadastros offline) ficam para fatias futuras.
 - **Data:** 2026-07-06
 - **Contexto de fase:** Fase 3, logo após a Fatia 3.A (PWA instalável concluída e no ar)
 - **Deciders:** Owner do produto (aprovado em 2026-07-06)
@@ -274,18 +276,28 @@ ela é, delegando a correção à reconciliação que a ADR-001 já exige.
        SET_TENANT_MODULE` (ADR-004); gate no cliente (PDV) — nesta fatia **só lê o flag + aviso**
        (OFF orienta nota manual; ON sinaliza recurso habilitado). O *enfileirar* real vem no AI 5–6.
        *Falta deploy + E2E do usuário.*
-5. [ ] Especificar o **formato do envelope de mutação** (tipo, `id` da entidade, payload, versão de
-       schema) e a store `outbox` no IndexedDB.
-6. [ ] Definir o **worker de sincronização** (gatilhos: `online`, foreground, botão manual; retry
-       com backoff; parar na 1ª falha dura).
-7. [ ] Tornar o `POST /orders` **idempotente por PK** (checar `orders.id` dentro da transação antes
-       dos efeitos colaterais).
-8. [ ] Funções puras em `packages/core` para a máquina de estados da fila (testes Vitest, como pede
-       o `CLAUDE.md`).
-9. [ ] UI: indicador de "vendas pendentes" + estado por venda (`PENDING`/`SYNCED`). *(Resolução de
-       `CONFLICT` fica para a fatia futura de cadastros offline.)*
-10. [ ] Só então: avaliar se alguma **migration** (constraint/índice ou ledger) é necessária →
-        **explicar impacto e pedir aprovação** (regra 1).
+5. [x] **Envelope + store `outbox` (código pronto, 2026-07-10 — ver 3.C no registro de testes):**
+       formato do envelope (`kind`, `entityId` UUID, `schemaVersion`, `payload`, `createdAt`) +
+       `mutationEnvelopeSchema` + builder puro `buildSaleMutation` em `packages/shared/src/outbox.ts`;
+       store `outbox` no IndexedDB (`apps/web/lib/outbox.ts`, FIFO por `seq`, índice único `entityId`
+       p/ dedup de enfileiramento); flag `OFFLINE_SALES` persistido em `localStorage` p/ o cold start
+       offline. **Só cliente, infra dormente** — o PDV ainda não enfileira (pareia com o worker, AI 6).
+6. [x] **Worker de sincronização (2026-07-10 — ver 3.D):** `apps/web/lib/syncWorker.ts` drena FIFO
+       (gatilhos `online`/foreground/montagem/botão via `useOutboxSync`), **para na 1ª falha**
+       (não reordena/pula), retry só transitório com backoff. Decisão delegada ao core (AI 8).
+7. [x] **`POST /orders` idempotente por PK (2026-07-10 — ver 3.D):** `id` presente ⇒ venda offline →
+       dedup por `orders.id` (no-op devolve a persistida), caixa do envelope (validado tenant+user),
+       estoque insuficiente **não bloqueia** (registra e deixa negativo, §6); online intacto.
+       `tenantId`/autoria do JWT (§7). **Sem migration** (AI 10).
+8. [x] **Máquina de estados pura em `packages/core` (2026-07-10):** `classifyHttpOutcome`
+       (409=dedup=SYNCED), `classifyNetworkError`, `shouldRetry`/`MAX_SYNC_ATTEMPTS`, `syncBackoffMs`,
+       `haltsQueue` — **+12 testes Vitest** (total 47/47).
+9. [x] **Indicador de "vendas pendentes" (2026-07-10):** "X pendentes" + "Sincronizar agora" no PDV
+       + rótulo por venda offline. *(Resolução de `CONFLICT` segue adiada — venda é append-only.)*
+10. [x] **Migration avaliada (2026-07-10): nenhuma necessária neste corte.** O dedup usa a **PK
+        existente** (`orders.id`, já única, `@default(uuid)`) — checagem `findUnique` na transação,
+        sem constraint nova; estoque negativo é permitido pelo tipo atual (sem CHECK). Um índice de
+        reforço/ledger só entra se surgir contenção real → vira migration própria com aprovação.
 
 ---
 

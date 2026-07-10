@@ -22,7 +22,7 @@ const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 export default function CaixaPage() {
-  const { me } = useMe();
+  const { me, offlineSales } = useMe();
   const online = useOnline();
   const [session, setSession] = useState<CashSession | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -177,7 +177,7 @@ export default function CaixaPage() {
       ) : (
         <>
           {/* Abrir caixa ainda é online-only nesta fatia (ADR-011): avisa e desabilita offline. */}
-          <OfflineSalesNotice offlineSales={me?.offlineSales === true} context="cash-open" />
+          <OfflineSalesNotice offlineSales={offlineSales} context="cash-open" />
           <form onSubmit={onOpen} className="space-y-3 rounded-2xl bg-white p-5 shadow-sm">
             <div className="mb-1 inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1 text-sm font-medium text-gray-600">
               <span className="h-2 w-2 rounded-full bg-gray-400" /> Caixa fechado

@@ -24,8 +24,23 @@ export const salePaymentSchema = z.object({
   amount: z.number().positive(),
 });
 
-/** Payload para registrar uma venda. `tenantId`/`userId`/caixa vêm do contexto. */
+/**
+ * Payload para registrar uma venda. `tenantId`/`userId` vêm sempre do contexto (JWT).
+ *
+ * `id` e `cashSessionId` são **opcionais** e existem para a venda **offline** (ADR-011):
+ *  - **Online (padrão):** ambos ausentes — o servidor gera o `id` (PK) e deriva o caixa do
+ *    caixa aberto do operador; estoque insuficiente é **bloqueado** (regra de sempre).
+ *  - **Offline (sync):** o cliente envia o `id` UUID gerado por ele (chave de idempotência,
+ *    ADR-011 §2) e o `cashSessionId` da venda (o caixa que estava aberto no momento). Nesse
+ *    caminho o servidor **deduplica pela PK** e **registra mesmo com estoque negativo** (§6:
+ *    a venda física já aconteceu; o negativo vai para a reconciliação da ADR-001).
+ *
+ * Ou seja, **`id` presente ⇔ venda de origem offline** — é o sinal que o servidor usa para
+ * escolher o comportamento (dedup + permitir negativo) sem um campo extra.
+ */
 export const createSaleSchema = z.object({
+  id: z.string().uuid().optional(),
+  cashSessionId: z.string().uuid().optional(),
   customerId: z.string().uuid().optional(),
   items: z.array(saleItemSchema).min(1),
   payments: z.array(salePaymentSchema).min(1),

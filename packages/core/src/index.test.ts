@@ -13,6 +13,12 @@ import {
   calcAverageTicket,
   withPaymentShare,
   netCashMovements,
+  classifyHttpOutcome,
+  classifyNetworkError,
+  shouldRetry,
+  syncBackoffMs,
+  haltsQueue,
+  MAX_SYNC_ATTEMPTS,
 } from './index';
 
 describe('calcSubtotal', () => {
@@ -213,5 +219,76 @@ describe('withPaymentShare', () => {
 
   it('lista vazia → array vazio', () => {
     expect(withPaymentShare([])).toEqual([]);
+  });
+});
+
+// --- Sincronização offline (Outbox) — ADR-011 ---
+
+describe('classifyHttpOutcome', () => {
+  it('2xx = aplicado agora (SYNCED)', () => {
+    expect(classifyHttpOutcome(200)).toBe('SYNCED');
+    expect(classifyHttpOutcome(201)).toBe('SYNCED');
+  });
+
+  it('409 = dedup idempotente, já existia (SYNCED, não erro)', () => {
+    expect(classifyHttpOutcome(409)).toBe('SYNCED');
+  });
+
+  it('5xx = servidor transitório (RETRY)', () => {
+    expect(classifyHttpOutcome(500)).toBe('RETRY');
+    expect(classifyHttpOutcome(503)).toBe('RETRY');
+  });
+
+  it('4xx (exceto 409) = falha dura de cliente (FAILED)', () => {
+    expect(classifyHttpOutcome(400)).toBe('FAILED');
+    expect(classifyHttpOutcome(401)).toBe('FAILED');
+    expect(classifyHttpOutcome(404)).toBe('FAILED');
+  });
+});
+
+describe('classifyNetworkError', () => {
+  it('falha de rede é sempre transitória (RETRY)', () => {
+    expect(classifyNetworkError()).toBe('RETRY');
+  });
+});
+
+describe('shouldRetry', () => {
+  it('re-tenta RETRY enquanto não estourar o limite', () => {
+    expect(shouldRetry('RETRY', 0)).toBe(true);
+    expect(shouldRetry('RETRY', MAX_SYNC_ATTEMPTS - 1)).toBe(true);
+  });
+
+  it('para de re-tentar RETRY ao atingir o limite', () => {
+    expect(shouldRetry('RETRY', MAX_SYNC_ATTEMPTS)).toBe(false);
+  });
+
+  it('nunca re-tenta SYNCED nem FAILED', () => {
+    expect(shouldRetry('SYNCED', 0)).toBe(false);
+    expect(shouldRetry('FAILED', 0)).toBe(false);
+  });
+});
+
+describe('syncBackoffMs', () => {
+  it('cresce exponencialmente a partir de 1s', () => {
+    expect(syncBackoffMs(0)).toBe(1000);
+    expect(syncBackoffMs(1)).toBe(2000);
+    expect(syncBackoffMs(2)).toBe(4000);
+    expect(syncBackoffMs(3)).toBe(8000);
+  });
+
+  it('satura no teto de 30s', () => {
+    expect(syncBackoffMs(10)).toBe(30000);
+  });
+
+  it('trata tentativas negativas como 0', () => {
+    expect(syncBackoffMs(-5)).toBe(1000);
+  });
+});
+
+describe('haltsQueue', () => {
+  it('só SYNCED deixa a fila avançar', () => {
+    expect(haltsQueue('SYNCED')).toBe(false);
+    expect(haltsQueue('RETRY')).toBe(true);
+    expect(haltsQueue('FAILED')).toBe(true);
   });
 });

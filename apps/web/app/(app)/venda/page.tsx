@@ -4,11 +4,14 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   PAYMENT_METHOD_LABELS,
+  buildSaleMutation,
   createSaleSchema,
   type PaymentMethod,
 } from '@nexoloja/shared';
 import { calcMarginPercent, calcSaleTotals } from '@nexoloja/core';
 import { apiGet, apiPost } from '@/lib/api';
+import { enqueueMutation } from '@/lib/outbox';
+import { useOutboxSync } from '@/lib/useOutboxSync';
 import { useMe } from '@/lib/useMe';
 import { useOnline } from '@/lib/useOnline';
 import { ReceiptPrint, type Store } from '@/components/ReceiptPrint';
@@ -26,7 +29,17 @@ type CartItem = {
 };
 type View =
   | { kind: 'review' }
-  | { kind: 'done'; total: number; discount: number; change: number; method: PaymentMethod; items: CartItem[]; date: string }
+  | {
+      kind: 'done';
+      total: number;
+      discount: number;
+      change: number;
+      method: PaymentMethod;
+      items: CartItem[];
+      date: string;
+      /** `true` quando a venda foi salva na fila offline (pendente de sincronização), ADR-011. */
+      pending?: boolean;
+    }
   | { kind: 'quote'; total: number; discount: number; items: CartItem[]; date: string };
 
 const BRL = (v: string | number) =>
@@ -68,10 +81,13 @@ function Summary({ items, total, discount }: { items: CartItem[]; total: number;
 }
 
 export default function VendaPage() {
-  const { me } = useMe();
+  const { me, offlineSales } = useMe();
   const online = useOnline();
+  const { pending, syncing, syncNow, refresh: refreshPending } = useOutboxSync();
   const [ready, setReady] = useState(false);
   const [caixaOpen, setCaixaOpen] = useState(false);
+  // Caixa aberto no momento (guardado para carimbar a venda offline — ADR-011 §5).
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selected, setSelected] = useState('');
@@ -95,6 +111,7 @@ export default function VendaPage() {
         apiGet<Store>('/tenant').then(setStore).catch(() => {});
         const session = await apiGet<{ id: string } | null>('/cash-sessions/current');
         setCaixaOpen(!!session);
+        setSessionId(session?.id ?? null);
         if (session) await loadProducts();
       } catch (e) {
         setError((e as Error).message);
@@ -194,9 +211,66 @@ export default function VendaPage() {
     setView({ kind: 'review' });
   }
 
-  /** Confirmação: AQUI a venda é gravada de fato (estoque baixa, caixa recebe). */
+  /** Confirmação: AQUI a venda é efetivada. Online → grava direto na API (estoque baixa, caixa
+   *  recebe). Offline com o recurso ligado → enfileira na `outbox` (ADR-011) e o worker sincroniza
+   *  quando a rede voltar. Offline sem o recurso → orienta nota manual (não enfileira). */
   async function onConfirmar() {
     setError(null);
+    const localChange = method === 'CASH' && received ? Math.max(0, Number(received) - totals.total) : 0;
+    const doneBase = {
+      kind: 'done' as const,
+      total: totals.total,
+      discount: discountValue,
+      method,
+      items: cart,
+      date: new Date().toLocaleString('pt-BR'),
+    };
+
+    // --- Offline: enfileira a venda (só com o recurso OFFLINE_SALES ligado) ---
+    if (!online) {
+      if (!offlineSales) {
+        setError('Sem conexão e as vendas offline não estão habilitadas. Use nota manual.');
+        return;
+      }
+      if (!sessionId) {
+        setError('Não foi possível identificar o caixa aberto para salvar a venda offline.');
+        return;
+      }
+      const id = crypto.randomUUID();
+      const sale = {
+        id,
+        cashSessionId: sessionId,
+        items: cart.map((c) => ({ productId: c.productId, quantity: c.quantity, unitPrice: c.unitPrice })),
+        payments: [{ method, amount: totals.total }],
+        ...(discountValue > 0 ? { discountAmount: discountValue } : {}),
+      };
+      const parsed = createSaleSchema.safeParse(sale);
+      if (!parsed.success) {
+        setError('Não foi possível montar a venda. Verifique o carrinho.');
+        return;
+      }
+      setBusy(true);
+      try {
+        await enqueueMutation(buildSaleMutation(id, sessionId, parsed.data));
+        // Baixa otimista no cache LOCAL (sem rede não dá para recarregar do servidor): mantém a
+        // trava de estoque coerente para as próximas vendas offline. O débito real é no sync (§3).
+        setProducts((prev) =>
+          prev.map((p) => {
+            const item = cart.find((c) => c.productId === p.id);
+            return item ? { ...p, stockQty: String(Number(p.stockQty) - item.quantity) } : p;
+          }),
+        );
+        setView({ ...doneBase, change: localChange, pending: true });
+        void refreshPending(); // atualiza o indicador "X pendentes" logo após enfileirar
+      } catch (e) {
+        setError((e as Error).message);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    // --- Online: grava direto na API (caminho de sempre) ---
     const payload = {
       items: cart.map((c) => ({ productId: c.productId, quantity: c.quantity, unitPrice: c.unitPrice })),
       payments: [{ method, amount: totals.total }],
@@ -210,15 +284,7 @@ export default function VendaPage() {
     setBusy(true);
     try {
       const res = await apiPost<{ change: number }>('/orders', parsed.data);
-      setView({
-        kind: 'done',
-        total: totals.total,
-        discount: discountValue,
-        change: res.change,
-        method,
-        items: cart,
-        date: new Date().toLocaleString('pt-BR'),
-      });
+      setView({ ...doneBase, change: res.change });
       await loadProducts();
     } catch (e) {
       setError((e as Error).message);
@@ -278,7 +344,7 @@ export default function VendaPage() {
       <div className="mx-auto max-w-xl">
         <h1 className="mb-4 text-2xl font-bold">Venda</h1>
         {/* Sem caixa aberto + offline: abrir caixa ainda exige internet (ADR-011). */}
-        <OfflineSalesNotice offlineSales={me?.offlineSales === true} context="cash-open" />
+        <OfflineSalesNotice offlineSales={offlineSales} context="cash-open" />
         <div className="rounded-2xl bg-white p-6 text-center shadow-sm">
           <p className="mb-3 text-gray-600">É preciso ter um caixa aberto para vender.</p>
           <Link href="/caixa" className="inline-block rounded-lg bg-gray-900 px-4 py-2 font-medium text-white hover:bg-gray-800">
@@ -339,11 +405,17 @@ export default function VendaPage() {
     const isQuote = view.kind === 'quote';
     return (
       <div className="mx-auto max-w-xl">
-        <h1 className="mb-4 text-2xl font-bold">{isQuote ? 'Orçamento' : 'Venda concluída'}</h1>
+        <h1 className="mb-4 text-2xl font-bold">
+          {isQuote ? 'Orçamento' : view.kind === 'done' && view.pending ? 'Venda salva offline' : 'Venda concluída'}
+        </h1>
         <div className="space-y-3 rounded-2xl bg-white p-6 shadow-sm">
           {isQuote ? (
             <p className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-sm font-medium text-amber-700">
               Orçamento (não é venda)
+            </p>
+          ) : view.kind === 'done' && view.pending ? (
+            <p className="inline-flex items-center gap-2 rounded-full bg-indigo-100 px-3 py-1 text-sm font-medium text-indigo-700">
+              Salva offline — pendente de sincronização
             </p>
           ) : (
             <p className="inline-flex items-center gap-2 rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-700">
@@ -423,10 +495,29 @@ export default function VendaPage() {
       <h1 className="mb-6 text-2xl font-bold">Venda</h1>
 
       {/* Aviso de conexão (ADR-011 §9): só aparece offline; texto depende do flag OFFLINE_SALES. */}
-      <OfflineSalesNotice offlineSales={me?.offlineSales === true} />
+      <OfflineSalesNotice offlineSales={offlineSales} />
 
-      {/* Offline: esconde o erro cru de rede — o aviso acima já explica. */}
-      {error && online && <p className="mb-4 text-sm text-red-600">{error}</p>}
+      {/* Indicador de vendas pendentes de sincronização (ADR-011 AI 6/9). */}
+      {pending > 0 && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3">
+          <p className="text-sm font-medium text-indigo-800">
+            {pending} {pending === 1 ? 'venda pendente' : 'vendas pendentes'} de sincronização
+          </p>
+          {online && (
+            <button
+              onClick={() => void syncNow()}
+              disabled={syncing}
+              className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+            >
+              {syncing ? 'Sincronizando…' : 'Sincronizar agora'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Mostra erros quando online ou com o recurso offline ligado (aí o operador precisa vê-los);
+          offline sem o recurso, esconde o ruído de rede — o aviso acima já orienta a nota manual. */}
+      {error && (online || offlineSales) && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
       <div className="mb-4 flex flex-wrap gap-2 rounded-2xl bg-white p-4 shadow-sm">
         <select

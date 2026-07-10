@@ -18,5 +18,6 @@ export * from './stock';
 export * from './report';
 export * from './tenant';
 export * from './modules';
+export * from './outbox';
 export * from './format';
 export * from './roles';
