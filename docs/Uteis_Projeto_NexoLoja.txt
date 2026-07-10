@@ -15,9 +15,12 @@ Login: owner@lojademo.com / NexoLoja#2026
 http://localhost:3000/
 
 ## Leia docs/ROADMAP.md e docs/testes/registro-de-testes.md e vamos continuar
-vamos para o próximo passo
+Onde retomar (na próxima sessão)
+A venda offline está completa e validada. As direções abertas, em ordem natural:
 
-quando retomar, o ponto de entrada é a Fatia 2 (envelope + outbox).
+Refinos do offline — drenagem global (fora do PDV), tela de itens FAILED, poda de SYNCED, e cold-start-offline (persistir sessionId).
+Próximas naturezas de mutação — estoque e caixa offline; cadastros mutáveis por último (aí entra a tela de CONFLICT).
+Outros da Fase 3 — módulo de estoque fino, otimização do pooler, avaliar Supabase Pro.
 
 ## Subir servidor
 
