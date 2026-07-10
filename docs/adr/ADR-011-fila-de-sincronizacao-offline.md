@@ -269,9 +269,11 @@ ela é, delegando a correção à reconciliação que a ADR-001 já exige.
 3. [x] **Ativação decidida (§9):** flag por loja `OFFLINE_SALES` via `TenantModule` (sem migration),
        **default OFF** (ausência da linha = OFF), toggle no painel do Super Usuário; recurso de
        **plano pago**.
-4. [ ] Ligar o flag na ponta: expor `OFFLINE_SALES` no `GET /me`; toggle em `/plataforma`
-       (`TenantModule` upsert) com `AuditEvent` (ADR-004); gate no cliente (PDV) — ON enfileira,
-       OFF orienta nota manual.
+4. [x] **Ligar o flag na ponta (código, 2026-07-09 — ver 3.B no registro de testes):** `OFFLINE_SALES`
+       exposto no `GET /me`; toggle em `/plataforma` (`TenantModule` upsert) com `AuditEvent
+       SET_TENANT_MODULE` (ADR-004); gate no cliente (PDV) — nesta fatia **só lê o flag + aviso**
+       (OFF orienta nota manual; ON sinaliza recurso habilitado). O *enfileirar* real vem no AI 5–6.
+       *Falta deploy + E2E do usuário.*
 5. [ ] Especificar o **formato do envelope de mutação** (tipo, `id` da entidade, payload, versão de
        schema) e a store `outbox` no IndexedDB.
 6. [ ] Definir o **worker de sincronização** (gatilhos: `online`, foreground, botão manual; retry

@@ -3,7 +3,12 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-06 (**Fase 3 iniciada — Fatia 3.A: PWA instalável (manifest,
+> **Última atualização:** 2026-07-09 (**Fase 3 — Fila de sync offline, Fatia 1 (flag `OFFLINE_SALES`
+> + avisos) CONCLUÍDA e validada**: interruptor por loja via `TenantModule` (sem migration, default
+> OFF, plano pago), `GET /me` expõe o flag, toggle no painel `/plataforma` (`AuditEvent
+> SET_TENANT_MODULE`), avisos offline no PDV/Caixa (abrir caixa segue online-only); API `0b8c0348`
+> + web `c35f8592`, E2E do usuário OK. Próximo = Fatia 2: envelope + `outbox` no IndexedDB. Ver 3.B
+> no registro de testes. **Antes:** **Fatia 3.A: PWA instalável (manifest,
 > ícones, service worker de app-shell só-GET-same-origin, prompt "Instalar", página `/offline`);
 > só front, sem migration; typecheck + build (17 rotas) + smoke ✅; **no ar** (web Version
 > `1f290a7d`) + **instalação validada pelo usuário nas 3 plataformas (Android/iPhone/PC) → 3.A
@@ -101,8 +106,15 @@
 > e **E2E de convite pela URL publicada validado pelo usuário no navegador** (convite → e-mail →
 > `/definir-senha` → login). Ver 2.R no registro de testes.
 >
-> ▶️ **Próximo passo:** **Fase 3 iniciada — Fatia 3.A (PWA instalável) concluída no código
-> (2026-07-06)**. O `apps/web` agora é **instalável** (manifest + ícones + service worker de
+> ▶️ **Próximo passo:** **Fase 3 — Fila de sync offline, Fatia 1 (flag `OFFLINE_SALES` + avisos)
+> CONCLUÍDA e validada (2026-07-09)**. Interruptor por loja via `TenantModule` (sem migration,
+> default OFF, plano pago), `GET /me` expõe o flag, toggle no painel `/plataforma` (`AuditEvent
+> SET_TENANT_MODULE`), e avisos offline no PDV/Caixa (`OfflineSalesNotice` + `useOnline`; abrir
+> caixa segue online-only). No ar: API `0b8c0348` + web `c35f8592`; E2E do usuário validado. **A
+> seguir (quebrado em sub-passos no item da Fase 3):** Fatia 2 = envelope de mutação + store
+> `outbox` (IndexedDB) + persistir o flag em `localStorage`; depois worker de fila, `POST /orders`
+> idempotente por PK, core+testes e UI de pendentes. Ver 3.B no registro de testes. **Antes:**
+> **Fatia 3.A (PWA instalável) concluída (2026-07-06)**. O `apps/web` é **instalável** (manifest + ícones + service worker de
 > app-shell + prompt "Instalar" + página `/offline`); o SW intercepta **só GET same-origin**
 > (API/Supabase nunca são cacheados) e o registro é gated a produção. Sem migration, sem API;
 > typecheck + build (17 rotas) + smoke no navegador ✅. **No ar (2026-07-06):** web publicado
@@ -380,6 +392,34 @@
       **nota manual**. Como a fatia é só venda (append-only), **não há tela de resolução de
       conflito** neste corte. Próximo = implementação (flag na ponta → envelope de mutação → worker
       de fila → `POST /orders` idempotente por PK → core+testes → UI de pendências)
+  - [x] **Fatia 1 — flag `OFFLINE_SALES` + avisos (AI 4) — CONCLUÍDA e validada (2026-07-09)**.
+        Interruptor por loja reusando `TenantModule` (**sem migration**; ausência/inativa = OFF).
+        `packages/shared/modules.ts` (`MODULE_OFFLINE_SALES` + `isOfflineSalesOn` + `setTenantModuleSchema`);
+        `GET /me` devolve `offlineSales`; `PATCH /platform/tenants/:id/modules` (upsert + `AuditEvent
+        SET_TENANT_MODULE`, formalizado no ADR-004); toggle "Offline (pago)" no painel `/plataforma`;
+        aviso de conexão no PDV/Caixa (`OfflineSalesNotice` + hook `useOnline`, só offline —
+        OFF=nota manual / ON=recurso habilitado). Escopo: **só ler o flag + aviso** (a `outbox` real
+        é a Fatia 2). Refinos após o E2E: aviso também no **caixa fechado** + botão "Abrir caixa"
+        desabilitado offline (abrir caixa é online-only nesta fatia); erro cru de rede
+        ("Failed to fetch") escondido offline (3.B.1/3.B.2). **No ar + E2E validado pelo usuário:**
+        API `0b8c0348` + web `c35f8592`. Ver 3.B no registro de testes.
+  - [ ] **Fatia 2 — envelope de mutação + store `outbox` no IndexedDB (AI 5)** — formato do envelope
+        (tipo, `id` UUID da entidade, payload, versão de schema) e a store `outbox` (FIFO por
+        dispositivo). Persistir o **flag `OFFLINE_SALES` em `localStorage`** para o *cold start offline*
+        ser confiável (hoje, sem `/me`, o aviso cai no padrão OFF). Só cliente.
+  - [ ] **Fatia 3 — worker de sincronização (AI 6)** — drena a fila quando há rede (gatilhos:
+        `online`, foreground, botão manual); **retry com backoff**; **para na 1ª falha dura** (não
+        reordena/pula) para respeitar dependências (venda ⇢ caixa).
+  - [ ] **Fatia 4 — `POST /orders` idempotente por PK (AI 7)** — checar `orders.id` **dentro da
+        transação** antes dos efeitos colaterais: se a venda já existe, no-op e devolve `SYNCED`
+        (dedup do reenvio pós-crash). Servidor debita estoque no sync (ADR-001); resíduo negativo →
+        reconciliação. `tenantId` validado contra o JWT (ADR-011 §7). *Pode exigir migration de
+        reforço (constraint/índice) → **explicar impacto e pedir aprovação** (regra 1, AI 10).*
+  - [ ] **Fatia 5 — máquina de estados da fila em `packages/core` (AI 8)** — funções puras +
+        **testes Vitest** (CLAUDE.md): transições `PENDING → SYNCED`/erro, política de retry.
+  - [ ] **Fatia 6 — UI de vendas pendentes (AI 9)** — indicador "X vendas pendentes" + estado por
+        venda (`PENDING`/`SYNCED`). *Tela de resolução de `CONFLICT` fica para a fatia futura de
+        cadastros offline — a 1ª fatia é só venda (append-only), sem conflito.*
 - [ ] Módulo de estoque fino (estoque mínimo, notificações, movimentações detalhadas)
 - [ ] Otimização do pooler (6543) para limites do free tier
 - [ ] Avaliar upgrade Supabase Pro p/ produção

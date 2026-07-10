@@ -10,8 +10,10 @@ import {
 import { calcMarginPercent, calcSaleTotals } from '@nexoloja/core';
 import { apiGet, apiPost } from '@/lib/api';
 import { useMe } from '@/lib/useMe';
+import { useOnline } from '@/lib/useOnline';
 import { ReceiptPrint, type Store } from '@/components/ReceiptPrint';
 import { StoreDisabledNotice } from '@/components/StoreDisabledNotice';
+import { OfflineSalesNotice } from '@/components/OfflineSalesNotice';
 
 type Product = { id: string; name: string; sku: string; salePrice: string; costPrice: string; stockQty: string };
 type CartItem = {
@@ -67,6 +69,7 @@ function Summary({ items, total, discount }: { items: CartItem[]; total: number;
 
 export default function VendaPage() {
   const { me } = useMe();
+  const online = useOnline();
   const [ready, setReady] = useState(false);
   const [caixaOpen, setCaixaOpen] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
@@ -274,6 +277,8 @@ export default function VendaPage() {
     return (
       <div className="mx-auto max-w-xl">
         <h1 className="mb-4 text-2xl font-bold">Venda</h1>
+        {/* Sem caixa aberto + offline: abrir caixa ainda exige internet (ADR-011). */}
+        <OfflineSalesNotice offlineSales={me?.offlineSales === true} context="cash-open" />
         <div className="rounded-2xl bg-white p-6 text-center shadow-sm">
           <p className="mb-3 text-gray-600">É preciso ter um caixa aberto para vender.</p>
           <Link href="/caixa" className="inline-block rounded-lg bg-gray-900 px-4 py-2 font-medium text-white hover:bg-gray-800">
@@ -417,7 +422,11 @@ export default function VendaPage() {
     <div className="mx-auto max-w-3xl">
       <h1 className="mb-6 text-2xl font-bold">Venda</h1>
 
-      {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
+      {/* Aviso de conexão (ADR-011 §9): só aparece offline; texto depende do flag OFFLINE_SALES. */}
+      <OfflineSalesNotice offlineSales={me?.offlineSales === true} />
+
+      {/* Offline: esconde o erro cru de rede — o aviso acima já explica. */}
+      {error && online && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
       <div className="mb-4 flex flex-wrap gap-2 rounded-2xl bg-white p-4 shadow-sm">
         <select

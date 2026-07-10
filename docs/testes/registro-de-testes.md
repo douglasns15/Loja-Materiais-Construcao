@@ -1469,3 +1469,100 @@ atalho para o app no ar, não um pacote congelado (como `.apk`/`.exe`).
 
 > Regra prática: para pegar uma atualização, **fechar e reabrir o app** (a 1ª abertura baixa em
 > segundo plano; a seguinte já roda com ela). Só mudança de ícone/nome pode pedir reinstalar no iPhone.
+
+### 3.B — Flag `OFFLINE_SALES` por loja (ADR-011, Action Item 4) — 2026-07-09
+
+Primeira fatia da implementação do ADR-011 (fila de sync offline): o **interruptor por loja**
+`OFFLINE_SALES`, que decide se o PDV enfileira venda offline (fila em si vem na próxima fatia).
+Reusa a tabela **`TenantModule`** que já existe — **sem migration**. Regra do gate (§9):
+**ausência da linha OU `isActive=false` = OFF** (default desligado; recurso de plano pago).
+Escopo desta fatia (decidido com o usuário): **só ler o flag + aviso** no PDV — a `outbox`/worker
+ficam para a fatia seguinte.
+
+**O que entrou**
+
+| Peça | Arquivo |
+|---|---|
+| Constante `MODULE_OFFLINE_SALES` + `isOfflineSalesOn()` (puro) + `setTenantModuleSchema` (Zod) | `packages/shared/src/modules.ts` |
+| `GET /me` devolve `offlineSales` (query no `TenantModule` pelo índice `[tenantId, moduleKey]`) | `apps/api/src/routes/me.ts` |
+| `PATCH /platform/tenants/:id/modules` (upsert + `AuditEvent SET_TENANT_MODULE`) + `offlineSales` na lista `GET /platform/tenants` | `apps/api/src/routes/platform.ts` |
+| Toggle "Offline (pago)" por loja no painel do Super Usuário | `apps/web/app/plataforma/page.tsx` |
+| `Me.offlineSales` no hook | `apps/web/lib/useMe.ts` |
+| Aviso de conexão no PDV (só offline; texto depende do flag) | `apps/web/components/OfflineSalesNotice.tsx` + `apps/web/app/(app)/venda/page.tsx` |
+| Novo `action` `SET_TENANT_MODULE` formalizado na lista fechada | `docs/adr/ADR-004-*.md` |
+
+> **Segurança/RLS (ADR-011 §7):** o toggle é rota de plataforma (`requirePlatformAuth`); o
+> `GET /me` lê o módulo do **próprio tenant** do JWT. Nenhuma porta cross-tenant nova.
+
+**Build / typecheck / core (Claude)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Typecheck `packages/shared` (`tsc --noEmit`) | sem erros | ✅ |
+| Typecheck `apps/api` (`tsc --noEmit`) | sem erros | ✅ |
+| Typecheck `apps/web` (`tsc --noEmit`) | sem erros | ✅ |
+| Build de produção (`next build`) | 17 rotas, `/plataforma` 2.51 kB · `/venda` 5.07 kB | ✅ sem erros |
+| Core (Vitest) — regressão (nada quebrou) | 35/35 | ✅ 35/35 |
+
+**Deploy + smoke em produção (Claude) — 2026-07-09**
+
+| Passo | Resultado |
+|---|---|
+| `wrangler deploy` (API — `/me` com `offlineSales` + `PATCH …/modules`) | ✅ Version `0b8c0348` |
+| Smoke API: `/health` 200 · `/db-check` `{tenants:2}` · `/me` 401 · `PATCH …/modules` sem token 401 | ✅ |
+| `npm run deploy` (web — toggle + aviso no PDV) | ✅ Version `bda9d6dd` |
+| Smoke web: `/login` 200 · `/` 307 · `/manifest.webmanifest` 200 · `/plataforma` 200 | ✅ |
+
+**E2E no navegador — ⏭️ usuário** (exige login de Super Usuário e estado offline real)
+
+| Teste | Resultado |
+|---|---|
+| Painel `/plataforma`: coluna "Offline (pago)" mostra ON/OFF; **Ligar/Desligar** persiste (upsert `TenantModule`) + grava `SET_TENANT_MODULE` | ⏭️ usuário |
+| Loja com flag OFF, PDV sem internet → aviso âmbar "nota manual" | ⏭️ usuário |
+| Loja com flag ON, PDV sem internet → aviso índigo "vendas offline habilitadas" | ⏭️ usuário |
+| Reativar conexão → aviso some | ⏭️ usuário |
+
+> **3.B no ar** — shared/api/web + auditoria formalizada; sem migration; API `0b8c0348` + web
+> `bda9d6dd` publicados + smoke em produção ✅. **E2E do usuário validado (2026-07-09):** os dois
+> avisos (OFF âmbar / ON índigo) aparecem no PDV offline. Próxima fatia do ADR-011: **envelope de
+> mutação + store `outbox`** (AI 5).
+
+**3.B.1 — Aviso offline no caixa fechado + abrir caixa online-only (2026-07-09)**
+
+Achado do usuário no E2E: com o **caixa fechado**, o aviso offline não aparecia (o `OfflineSalesNotice`
+só estava na tela principal de venda) e o botão "Abrir caixa" tentaria abrir sem rede. Como abrir
+caixa é **intencionalmente online-only** nesta fatia (ADR-011 sequenciou venda → estoque → caixa),
+o ajuste é **só de UX** (sem backend, sem migration):
+
+- Hook `useOnline` (`apps/web/lib/useOnline.ts`) extraído — estado de `navigator.onLine` reativo.
+- `OfflineSalesNotice` ganhou `context='cash-open'`: texto explica que abrir caixa precisa de internet
+  (ON: "a venda offline cobre quedas depois do caixa aberto"; OFF: "nota manual").
+- Aviso adicionado ao galho "caixa fechado" do PDV (`/venda`) **e** à tela `/caixa`.
+- Botão "Abrir caixa" **desabilitado quando offline** (rótulo "Sem conexão para abrir o caixa"),
+  em vez de falhar com erro de rede.
+
+> **Nota (cold start offline):** o flag vem do `GET /me`; se o app abrir já sem internet, `/me` falha
+> e o aviso cai no padrão âmbar (nota manual) mesmo numa loja ON. Fallback seguro por ora; **persistir
+> o flag em `localStorage`** entra junto com a fatia da `outbox` (AI 5).
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Typecheck `apps/web` (`tsc --noEmit`) | sem erros | ✅ |
+| Build de produção (`next build`) | 17 rotas, `/venda` 5.24 kB | ✅ |
+| `npm run deploy` (web) | publicado | ✅ Version `ca49b68f` |
+| Smoke web: `/login` `/caixa` `/venda` | 200 | ✅ 200/200/200 |
+| E2E: caixa fechado + offline → aviso + botão "Abrir caixa" desabilitado | — | ✅ usuário (2026-07-09) |
+
+**3.B.2 — Esconder erro cru de rede offline ("Failed to fetch") (2026-07-09)**
+
+Achado do usuário no E2E: ao desabilitar a internet, a `/caixa` mostrava **"Failed to fetch"** em
+vermelho (erro cru do `GET /cash-sessions/current`) logo acima do aviso amigável — ruído redundante.
+Correção: o banner de `error` só aparece **quando online** (`error && online`); offline, quem explica
+é o `OfflineSalesNotice`. Aplicado na `/caixa` e no PDV (`/venda`, mesmo padrão). Sem backend.
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Typecheck `apps/web` + `next build` | sem erros, 17 rotas | ✅ |
+| `npm run deploy` (web) | publicado | ✅ Version `c35f8592` |
+| Smoke web: `/login` `/caixa` `/venda` | 200 | ✅ 200/200/200 |
+| Offline: "Failed to fetch" some; só o aviso amigável fica | — | ⏭️ usuário |

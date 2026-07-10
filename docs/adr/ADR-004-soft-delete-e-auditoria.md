@@ -53,6 +53,7 @@ A tabela `AuditEvent` é a fonte da trilha. `action` é uma string estável (nã
 |---|---|---|
 | `CREATE_TENANT` | Criação de loja + convite do 1º Admin pelo Super Usuário | `Tenant` |
 | `SET_TENANT_ACTIVE` | Ativação/inativação de loja pelo painel de plataforma | `Tenant` |
+| `SET_TENANT_MODULE` | Ligar/desligar um módulo da loja pelo painel (ex.: `OFFLINE_SALES`, ADR-011); `meta.moduleKey` + `before`/`after` | `TenantModule` |
 | `SUPPORT_SESSION_START` | Início de sessão de suporte (impersonation read-only, ADR-009 Fatia E) | `Tenant` |
 | `SUPPORT_SESSION_END` | Encerramento da sessão de suporte | `Tenant` |
 

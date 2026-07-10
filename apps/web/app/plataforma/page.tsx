@@ -15,6 +15,8 @@ type Tenant = {
   isActive: boolean;
   createdAt: string;
   userCount: number;
+  /** Módulo de vendas offline ligado (ADR-011, recurso de plano pago). */
+  offlineSales: boolean;
 };
 
 type CreatedTenant = {
@@ -33,6 +35,7 @@ export default function PlataformaPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [togglingOfflineId, setTogglingOfflineId] = useState<string | null>(null);
   const [supportingId, setSupportingId] = useState<string | null>(null);
   const [form, setForm] = useState({
     name: '',
@@ -129,6 +132,28 @@ export default function PlataformaPage() {
     }
   }
 
+  /**
+   * Liga/desliga a VENDA OFFLINE da loja (ADR-011 §9 — módulo `OFFLINE_SALES`, plano pago).
+   * Upsert em `TenantModule` pela API; ausência/inativa = OFF. É a fronteira comercial +
+   * botão de pânico do recurso (rollout gradual sem redeploy).
+   */
+  async function toggleOffline(t: Tenant) {
+    setError(null);
+    setSuccess(null);
+    setTogglingOfflineId(t.id);
+    try {
+      await apiPatch(`/platform/tenants/${t.id}/modules`, {
+        moduleKey: 'OFFLINE_SALES',
+        isActive: !t.offlineSales,
+      });
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setTogglingOfflineId(null);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-5xl">
       <h1 className="mb-1 text-2xl font-bold">Lojas</h1>
@@ -201,13 +226,14 @@ export default function PlataformaPage() {
               <th className="px-4 py-2 text-right">Usuários</th>
               <th className="px-4 py-2">Criada</th>
               <th className="px-4 py-2">Status</th>
+              <th className="px-4 py-2">Offline (pago)</th>
               <th className="px-4 py-2 text-right">Ação</th>
             </tr>
           </thead>
           <tbody>
             {tenants.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={7} className="px-4 py-6 text-center text-gray-400">
                   Nenhuma loja cadastrada.
                 </td>
               </tr>
@@ -231,6 +257,31 @@ export default function PlataformaPage() {
                     >
                       {t.isActive ? 'Ativa' : 'Inativa'}
                     </span>
+                  </td>
+                  <td className="px-4 py-2">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                          t.offlineSales
+                            ? 'bg-indigo-100 text-indigo-800'
+                            : 'bg-gray-100 text-gray-500'
+                        }`}
+                      >
+                        {t.offlineSales ? 'ON' : 'OFF'}
+                      </span>
+                      <button
+                        onClick={() => toggleOffline(t)}
+                        disabled={togglingOfflineId === t.id}
+                        className={`rounded-lg border px-2.5 py-1 text-xs font-medium disabled:opacity-50 ${
+                          t.offlineSales
+                            ? 'border-gray-300 text-gray-700 hover:bg-gray-100'
+                            : 'border-indigo-600 text-indigo-700 hover:bg-indigo-50'
+                        }`}
+                        title="Vendas offline (ADR-011) — recurso de plano pago"
+                      >
+                        {togglingOfflineId === t.id ? '…' : t.offlineSales ? 'Desligar' : 'Ligar'}
+                      </button>
+                    </div>
                   </td>
                   <td className="px-4 py-2">
                     <div className="flex justify-end gap-2">

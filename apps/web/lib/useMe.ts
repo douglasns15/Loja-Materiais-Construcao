@@ -14,6 +14,10 @@ export type Me = {
   /** `false` quando a loja foi desativada pelo Super Usuário (ADR-009). Opcional para
    * tolerar respostas antigas da API (ausente = tratado como ativa). */
   tenantActive?: boolean;
+  /** `true` quando o módulo `OFFLINE_SALES` está ligado para a loja (ADR-011 §9). O PDV usa
+   * para decidir enfileirar venda offline (ON) ou orientar nota manual (OFF). Opcional para
+   * tolerar respostas antigas da API (ausente = OFF). */
+  offlineSales?: boolean;
 };
 
 /**

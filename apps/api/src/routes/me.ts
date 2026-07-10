@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { createPrismaClient } from '@nexoloja/db';
-import { toStoreRole, updateMeSchema } from '@nexoloja/shared';
+import { MODULE_OFFLINE_SALES, toStoreRole, updateMeSchema } from '@nexoloja/shared';
 import { type Env, getConnectionString, getTenantId } from '../lib/request';
 import { requireAuth } from '../middleware/auth';
 
@@ -23,11 +23,23 @@ me.get('/', async (c) => {
     if (!user) {
       return c.json({ ok: false, error: 'Usuário não encontrado.' }, 404);
     }
+    // `offlineSales` (ADR-011 §9): o PDV usa para decidir se enfileira venda offline (ON) ou
+    // orienta nota manual (OFF). Gate = existência ATIVA da linha `OFFLINE_SALES` em
+    // `TenantModule` (ausência/inativa = OFF). `findUnique` no índice `[tenantId, moduleKey]`.
+    const offlineModule = await prisma.tenantModule.findUnique({
+      where: { tenantId_moduleKey: { tenantId, moduleKey: MODULE_OFFLINE_SALES } },
+      select: { isActive: true },
+    });
     // `tenantActive` (ADR-009): o front usa para avisar no topo e bloquear vendas novas quando
     // a loja está desativada. Vem do `requireAuth` (sem query extra).
     return c.json({
       ok: true,
-      data: { ...user, storeRole: toStoreRole(user.role), tenantActive: c.get('tenantActive') },
+      data: {
+        ...user,
+        storeRole: toStoreRole(user.role),
+        tenantActive: c.get('tenantActive'),
+        offlineSales: offlineModule?.isActive === true,
+      },
     });
   } catch (err) {
     console.error('GET /me falhou:', err);

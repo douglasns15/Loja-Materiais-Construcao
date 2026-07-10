@@ -4,7 +4,9 @@ import { useEffect, useState } from 'react';
 import { openCashSessionSchema, closeCashSessionSchema } from '@nexoloja/shared';
 import { apiGet, apiPost } from '@/lib/api';
 import { useMe } from '@/lib/useMe';
+import { useOnline } from '@/lib/useOnline';
 import { StoreDisabledNotice } from '@/components/StoreDisabledNotice';
+import { OfflineSalesNotice } from '@/components/OfflineSalesNotice';
 
 type CashSession = {
   id: string;
@@ -21,6 +23,7 @@ const BRL = (v: string | number) =>
 
 export default function CaixaPage() {
   const { me } = useMe();
+  const online = useOnline();
   const [session, setSession] = useState<CashSession | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -105,7 +108,9 @@ export default function CaixaPage() {
     <div className="mx-auto max-w-xl">
       <h1 className="mb-6 text-2xl font-bold">Caixa</h1>
 
-      {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
+      {/* Offline: o erro cru de rede ("Failed to fetch") vira ruído — o OfflineSalesNotice já
+          explica. Só mostra o erro técnico quando online (falha real de ação). */}
+      {error && online && <p className="mb-4 text-sm text-red-600">{error}</p>}
       {info && <p className="mb-4 rounded-lg bg-gray-100 px-3 py-2 text-sm">{info}</p>}
 
       {!loaded ? (
@@ -170,27 +175,32 @@ export default function CaixaPage() {
         // Loja desativada (ADR-009): abrir caixa bloqueado. Aviso já ao abrir a tela.
         <StoreDisabledNotice message="A abertura de caixa está bloqueada. Fale com o suporte para reativar a loja." />
       ) : (
-        <form onSubmit={onOpen} className="space-y-3 rounded-2xl bg-white p-5 shadow-sm">
-          <div className="mb-1 inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1 text-sm font-medium text-gray-600">
-            <span className="h-2 w-2 rounded-full bg-gray-400" /> Caixa fechado
-          </div>
-          <h2 className="font-medium">Abrir caixa</h2>
-          <input
-            placeholder="Valor de abertura (R$)"
-            type="number"
-            step="0.01"
-            value={opening}
-            onChange={(e) => setOpening(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2"
-          />
-          <button
-            type="submit"
-            disabled={busy}
-            className="w-full rounded-lg bg-gray-900 py-2 font-medium text-white hover:bg-gray-800 disabled:opacity-60"
-          >
-            {busy ? 'Abrindo…' : 'Abrir caixa'}
-          </button>
-        </form>
+        <>
+          {/* Abrir caixa ainda é online-only nesta fatia (ADR-011): avisa e desabilita offline. */}
+          <OfflineSalesNotice offlineSales={me?.offlineSales === true} context="cash-open" />
+          <form onSubmit={onOpen} className="space-y-3 rounded-2xl bg-white p-5 shadow-sm">
+            <div className="mb-1 inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1 text-sm font-medium text-gray-600">
+              <span className="h-2 w-2 rounded-full bg-gray-400" /> Caixa fechado
+            </div>
+            <h2 className="font-medium">Abrir caixa</h2>
+            <input
+              placeholder="Valor de abertura (R$)"
+              type="number"
+              step="0.01"
+              value={opening}
+              onChange={(e) => setOpening(e.target.value)}
+              disabled={!online}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 disabled:bg-gray-100"
+            />
+            <button
+              type="submit"
+              disabled={busy || !online}
+              className="w-full rounded-lg bg-gray-900 py-2 font-medium text-white hover:bg-gray-800 disabled:opacity-60"
+            >
+              {busy ? 'Abrindo…' : !online ? 'Sem conexão para abrir o caixa' : 'Abrir caixa'}
+            </button>
+          </form>
+        </>
       )}
     </div>
   );

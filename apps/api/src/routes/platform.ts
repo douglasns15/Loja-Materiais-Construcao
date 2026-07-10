@@ -1,6 +1,12 @@
 import { Hono } from 'hono';
 import { createPrismaClient } from '@nexoloja/db';
-import { createTenantSchema, setTenantActiveSchema, slugify } from '@nexoloja/shared';
+import {
+  MODULE_OFFLINE_SALES,
+  createTenantSchema,
+  setTenantActiveSchema,
+  setTenantModuleSchema,
+  slugify,
+} from '@nexoloja/shared';
 import { type Env, getConnectionString } from '../lib/request';
 import { inviteAuthUser } from '../lib/authAdmin';
 import { signSupportToken } from '../lib/supportToken';
@@ -50,11 +56,20 @@ platform.get('/tenants', async (c) => {
         isActive: true,
         createdAt: true,
         _count: { select: { users: true } },
+        // Estado do módulo de vendas offline (ADR-011) por loja, para o toggle do painel.
+        modules: {
+          where: { moduleKey: MODULE_OFFLINE_SALES },
+          select: { isActive: true },
+        },
       },
     });
     return c.json({
       ok: true,
-      data: tenants.map(({ _count, ...t }) => ({ ...t, userCount: _count.users })),
+      data: tenants.map(({ _count, modules, ...t }) => ({
+        ...t,
+        userCount: _count.users,
+        offlineSales: modules.some((m) => m.isActive === true),
+      })),
     });
   } catch (err) {
     console.error('GET /platform/tenants falhou:', err);
@@ -221,6 +236,65 @@ platform.patch('/tenants/:id', async (c) => {
   } catch (err) {
     console.error('PATCH /platform/tenants/:id falhou:', err);
     return c.json({ ok: false, error: 'Falha ao atualizar a loja.' }, 500);
+  }
+});
+
+/**
+ * Liga/desliga um MÓDULO da loja pelo painel de plataforma (ADR-011 §9). Por ora só
+ * `OFFLINE_SALES` (fila de sincronização offline de vendas — recurso de plano pago). Faz upsert
+ * na tabela `TenantModule` que já existe (sem migration): a chave é `[tenantId, moduleKey]` e o
+ * liga/desliga é `isActive`. Regra do gate: ausência da linha OU `isActive=false` = OFF (o
+ * `PATCH` cria a linha na 1ª ativação). Registra `AuditEvent SET_TENANT_MODULE` (evento de
+ * plataforma; loja-alvo dá o `tenantId`, o ator é o Super Usuário), espelhando `SET_TENANT_ACTIVE`.
+ */
+platform.patch('/tenants/:id/modules', async (c) => {
+  const connectionString = getConnectionString(c.env);
+  if (!connectionString) {
+    return c.json({ ok: false, error: 'Sem conexão com o banco.' }, 500);
+  }
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => null);
+  const parsed = setTenantModuleSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ ok: false, error: 'Dados inválidos.', issues: parsed.error.flatten() }, 400);
+  }
+
+  const actorId = c.get('platformAdminId');
+  const { moduleKey, isActive } = parsed.data;
+  try {
+    const prisma = createPrismaClient(connectionString);
+    const target = await prisma.tenant.findUnique({ where: { id }, select: { id: true } });
+    if (!target) {
+      return c.json({ ok: false, error: 'Loja não encontrada.' }, 404);
+    }
+
+    const before = await prisma.tenantModule.findUnique({
+      where: { tenantId_moduleKey: { tenantId: id, moduleKey } },
+      select: { isActive: true },
+    });
+
+    await prisma.$transaction(async (tx) => {
+      await tx.tenantModule.upsert({
+        where: { tenantId_moduleKey: { tenantId: id, moduleKey } },
+        create: { tenantId: id, moduleKey, isActive },
+        update: { isActive },
+      });
+      await tx.auditEvent.create({
+        data: {
+          tenantId: id,
+          userId: actorId,
+          entity: 'TenantModule',
+          entityId: id,
+          action: 'SET_TENANT_MODULE',
+          meta: { platform: true, moduleKey, before: before?.isActive ?? false, after: isActive },
+        },
+      });
+    });
+
+    return c.json({ ok: true, data: { id, moduleKey, isActive } });
+  } catch (err) {
+    console.error('PATCH /platform/tenants/:id/modules falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao atualizar o módulo da loja.' }, 500);
   }
 });
 
