@@ -15,12 +15,7 @@ Login: owner@lojademo.com / NexoLoja#2026
 http://localhost:3000/
 
 ## Leia docs/ROADMAP.md e docs/testes/registro-de-testes.md e vamos continuar
-Onde retomar (na próxima sessão)
-A venda offline está completa e validada. As direções abertas, em ordem natural:
-
-Refinos do offline — drenagem global (fora do PDV), tela de itens FAILED, poda de SYNCED, e cold-start-offline (persistir sessionId).
-Próximas naturezas de mutação — estoque e caixa offline; cadastros mutáveis por último (aí entra a tela de CONFLICT).
-Outros da Fase 3 — módulo de estoque fino, otimização do pooler, avaliar Supabase Pro.
+Estado atual: refinos 3.E no ar e validados (web 300254fc), docs em dia. A fila de venda offline está fechada; a próxima frente natural é o cold-start acima, começando pelo ADR. Quando você retomar, é só dizer "vamos ao ADR-012" (ou me pedir para redigir o rascunho do ADR já com as 5 decisões para você revisar).
 
 ## Subir servidor
 
