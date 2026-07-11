@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { createProductSchema } from '@nexoloja/shared';
 import { apiGet, apiPatch, apiPost } from '@/lib/api';
+import { useOnline } from '@/lib/useOnline';
+import { OfflineNotice } from '@/components/OfflineNotice';
 
 type Product = {
   id: string;
@@ -28,6 +30,7 @@ const QTY = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 4 });
 
 export default function ProductsPage() {
+  const online = useOnline();
   const [products, setProducts] = useState<Product[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
@@ -117,6 +120,9 @@ export default function ProductsPage() {
     <div className="mx-auto max-w-4xl">
       <h1 className="mb-6 text-2xl font-bold">Produtos</h1>
 
+      {/* Tela online-only (ADR-012 (c)): offline mostra o aviso de rede, não o erro cru. */}
+      <OfflineNotice />
+
       <form
         onSubmit={onCreate}
         className="mb-6 grid grid-cols-1 gap-3 rounded-2xl bg-white p-4 shadow-sm sm:grid-cols-6"
@@ -177,7 +183,8 @@ export default function ProductsPage() {
         </button>
       </form>
 
-      {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
+      {/* Erro cru só quando online (offline vira "Failed to fetch" — o aviso acima já explica). */}
+      {error && online && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
       <div className="overflow-x-auto rounded-2xl bg-white shadow-sm">
         <table className="w-full text-sm">

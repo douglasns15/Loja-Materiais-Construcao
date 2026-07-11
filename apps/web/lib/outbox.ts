@@ -1,4 +1,5 @@
 import type { MutationEnvelope } from '@nexoloja/shared';
+import { openDb, reqAsPromise, OUTBOX_STORE as STORE, hasIndexedDb } from './db';
 
 /**
  * Store `outbox` no IndexedDB — a fila de mutações offline (ADR-011 §1, AI 5).
@@ -7,14 +8,9 @@ import type { MutationEnvelope } from '@nexoloja/shared';
  * autoincremental, então ler em ordem de `seq` reproduz a ordem em que as mutações foram
  * criadas (essencial para respeitar dependências — abrir caixa antes da venda, ADR-011 §5).
  *
- * Esta fatia entrega **só a infraestrutura** (enfileirar/ler/marcar). O worker que drena a fila
- * e o `POST /orders` idempotente vêm nas fatias seguintes. Aplicar a mutação (efeitos no
- * servidor) NÃO acontece aqui.
+ * A abertura/migração do banco vive em `db.ts` (abridor compartilhado com o store `catalog` da
+ * CS-2). Este módulo cuida só das operações da fila (enfileirar/ler/marcar/podar).
  */
-
-const DB_NAME = 'nexoloja';
-const DB_VERSION = 1;
-const STORE = 'outbox';
 
 /** Estado de cada item na fila. `PENDING` nasce ao enfileirar; o worker move para `SYNCED`
  *  (aplicado no servidor — inclui o dedup 409), `ERROR` (falha transitória, será re-tentada),
@@ -37,9 +33,10 @@ export interface OutboxRecord {
   updatedAt: string;
 }
 
-/** `true` quando o ambiente tem IndexedDB (evita quebrar no SSR/hydration do Next). */
+/** `true` quando o ambiente tem IndexedDB (evita quebrar no SSR/hydration do Next).
+ *  Alias de `hasIndexedDb` mantido pelo nome histórico usado nos imports da fila. */
 export function hasOutbox(): boolean {
-  return typeof indexedDB !== 'undefined';
+  return hasIndexedDb();
 }
 
 // --- Pub/sub: avisa a UI quando a fila muda (enfileirar/sincronizar/podar/descartar) ---
@@ -65,40 +62,6 @@ function notifyOutbox(): void {
       // ignora — a UI se recompõe no próximo evento
     }
   }
-}
-
-let dbPromise: Promise<IDBDatabase> | null = null;
-
-/** Abre (e cria/migra) o banco. Memoiza a conexão para não reabrir a cada chamada. */
-function openDb(): Promise<IDBDatabase> {
-  if (!hasOutbox()) return Promise.reject(new Error('IndexedDB indisponível'));
-  if (dbPromise) return dbPromise;
-  dbPromise = new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(STORE)) {
-        const store = db.createObjectStore(STORE, { keyPath: 'seq', autoIncrement: true });
-        // Índice único por `entityId`: impede enfileirar a MESMA venda duas vezes (ex.: clique
-        // duplo / reabrir a tela). A idempotência de rede fica com o servidor (ADR-011 §2); esta
-        // é a idempotência de ENFILEIRAMENTO no cliente.
-        store.createIndex('entityId', 'envelope.entityId', { unique: true });
-        // Índice por status para o worker varrer só os PENDING sem ler a fila inteira.
-        store.createIndex('status', 'status', { unique: false });
-      }
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error ?? new Error('Falha ao abrir o IndexedDB'));
-  });
-  return dbPromise;
-}
-
-/** Promise wrapper para uma request do IndexedDB. */
-function reqAsPromise<T>(req: IDBRequest<T>): Promise<T> {
-  return new Promise((resolve, reject) => {
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error ?? new Error('Erro no IndexedDB'));
-  });
 }
 
 /**

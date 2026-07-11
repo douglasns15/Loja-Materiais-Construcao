@@ -8,6 +8,8 @@ import {
   type SalesReport,
 } from '@nexoloja/shared';
 import { apiGet } from '@/lib/api';
+import { useOnline } from '@/lib/useOnline';
+import { OfflineNotice } from '@/components/OfflineNotice';
 
 const BRL = (v: number) =>
   v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -36,6 +38,7 @@ function presetRange(preset: 'today' | '7d' | '30d'): { from: string; to: string
 }
 
 export default function RelatoriosPage() {
+  const online = useOnline();
   const [range, setRange] = useState(() => presetRange('30d'));
   const [sales, setSales] = useState<SalesReport | null>(null);
   const [sessions, setSessions] = useState<CashSessionReport[]>([]);
@@ -75,6 +78,9 @@ export default function RelatoriosPage() {
   return (
     <div className="mx-auto max-w-5xl">
       <h1 className="mb-6 text-2xl font-bold">Relatórios</h1>
+
+      {/* Tela online-only (ADR-012 (c)): offline mostra o aviso de rede, não o erro cru. */}
+      <OfflineNotice />
 
       {/* Seletor de período */}
       <div className="mb-6 flex flex-wrap items-end gap-2 rounded-2xl bg-white p-4 shadow-sm">
@@ -125,7 +131,7 @@ export default function RelatoriosPage() {
         {loading && <span className="pb-2 text-sm text-gray-400">Carregando…</span>}
       </div>
 
-      {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
+      {error && online && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
       {/* Cards de resumo de vendas */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

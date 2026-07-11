@@ -3,7 +3,21 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-10 (**Fase 3 — Refinos da fila offline (3.E): CÓDIGO PRONTO** —
+> **Última atualização:** 2026-07-11 (**Fase 3 — Cold-start / offline-first de LEITURA: CS-1 + CS-2
+> NO AR e VALIDADAS** — o PDV segue **vendável offline após remontar/reabrir**). **ADR-012 escrito e
+> ACEITO** (5 decisões a–e). **CS-1** (cache do caixa aberto em `localStorage`) + **CS-2** (cache do
+> catálogo no IndexedDB — abridor compartilhado `lib/db.ts`, `DB_VERSION`→2 com store `catalog`;
+> `outbox.ts` refatorado): online a rede vence/sobrescreve; offline, `/venda` e `/caixa` leem do cache
+> (rótulo "dados de HH:MM"), com baixa otimista fazendo write-through no catálogo. **Sem migration.**
+> E2E do usuário **7/7** (web `b55d670f`). **Refinos de UX offline (decisão c do ADR-012):** aviso de
+> rede amigável (`components/OfflineNotice.tsx`) nas **6 telas online-only** (Produtos, Estoque,
+> Clientes, Relatórios, Histórico, **Configurações**) no lugar do "Failed to fetch"/"Acesso restrito"
+> crus (web `a4cebe57` + `c1679c08`) — **validado pelo usuário em todas as telas**. **Achado 3.F.CS-2.2
+> (aberto):** navegar offline **entre telas** ainda quebra (chunk/RSC não cacheado → erro do roteador);
+> mitigado com `app/global-error.tsx` (aviso recuperável, web `51faac08`), mas a correção real é a
+> **fatia CS-3** (spike do SW: precache de rotas/RSC ou navegação-por-reload). **PRÓXIMO PASSO = CS-3.**
+> Typecheck + build **18 rotas** + core 47/47 ✅ em todo o caminho. Ver 3.F.CS-1/CS-2/CS-2.1/CS-2.2 no
+> registro. **Antes (2026-07-10): Fase 3 — Refinos da fila offline (3.E): CÓDIGO PRONTO** —
 > drenagem global (worker no shell `(app)` + chip de status no topo, drena em qualquer tela), poda de
 > `SYNCED` (`pruneSynced` no fim do dreno) e tela **`/pendencias`** (lista a fila incl. `FAILED`;
 > **Tentar novamente**/**Descartar**); pub/sub na `outbox` sincroniza chip/PDV/tela. Só cliente, sem
@@ -126,14 +140,23 @@
 > e **E2E de convite pela URL publicada validado pelo usuário no navegador** (convite → e-mail →
 > `/definir-senha` → login). Ver 2.R no registro de testes.
 >
-> ▶️ **Próximo passo:** **venda offline (3.D) + refinos (3.E) concluídos e validados.** Falta a fila
-> só de venda? Não — está fechada. A **próxima fatia natural** (estratégia já montada, a executar em
-> outra sessão) é o **cold-start / offline-first de LEITURA** — persistir `sessionId` do caixa +
-> cachear o catálogo + navegação offline (achados 3.E.1/3.E.2). **Passo 0 = ADR-012 (ou adendo ao
-> ADR-011) antes de codar.** Sub-fatias CS-0…CS-4 no bloco da Fase 3; roteiro de testes em 3.F.
-> **Tudo no cliente — sem migration, sem impacto nos free tiers.** Outras direções abertas: (b)
-> próximas naturezas de mutação (estoque e caixa offline; depois cadastros mutáveis → tela de
-> `CONFLICT`); (c) outros itens da Fase 3 (módulo de estoque fino, pooler, avaliar Supabase Pro).
+> ▶️ **Próximo passo: Fatia CS-3 — navegação offline entre telas** (a executar em outra sessão). O
+> **cold-start de leitura** já está no ar e validado em **CS-1** (cache do caixa) + **CS-2** (cache do
+> catálogo) — o PDV é vendável offline após remontar/reabrir, **ficando no `/venda`**. O que falta é
+> **trocar de tela offline**: hoje quebra porque o chunk/RSC da rota destino não está cacheado e o
+> erro nasce no roteador (achado 3.F.CS-2.2) — mitigado com `app/global-error.tsx` (aviso recuperável),
+> mas a correção real é o **CS-3**: um *spike* do Service Worker para **precachear as rotas
+> offline-capable (venda/caixa/pendências) + o payload RSC** após a 1ª visita online; se o RSC
+> inviabilizar a navegação client-side, **assumir navegação-por-reload** (o SW já é network-first com
+> fallback de cache para `navigate`). Ver ADR-012 (decisão c) e 3.F.CS-2.2 no registro. Depois do CS-3:
+> **CS-4** (borda do caixa fechado no sync: anexar + reconciliação, decisão b). **Tudo no cliente —
+> sem migration, sem impacto nos free tiers.** Outras direções abertas: (b) próximas naturezas de
+> mutação (estoque e caixa offline; depois cadastros mutáveis → tela de `CONFLICT`); (c) outros itens
+> da Fase 3 (módulo de estoque fino, pooler, avaliar Supabase Pro).
+>
+> ⚠️ **Ao retomar o teste offline após qualquer deploy:** abra o app **online uma vez** e visite as
+> telas que vai testar (o deploy troca o hash dos chunks; o SW só os cacheia ao visitá-las online) —
+> senão a navegação offline bate em chunk não-cacheado. É exatamente o que o CS-3 vai resolver.
 > **Antes:** Fatia 2 (envelope + `outbox` + flag em `localStorage`) — código pronto (2026-07-10, ver
 > 3.C). **Antes:**
 > **Fatia 1 (flag `OFFLINE_SALES` + avisos)
@@ -493,7 +516,9 @@
         fechado" e catálogo vazio; e navegar para rota sem chunk cacheado quebra (hoje mitigado por
         `(app)/error.tsx`). **Meta:** o PDV segue **vendável offline** após remontar/reabrir. **Tudo no
         cliente — sem migration, sem custo de free tier** (IndexedDB/localStorage/SW cache no aparelho).
-    - [ ] **Passo 0 — ADR-012 (ou adendo ao ADR-011) ANTES de codar** (regra 4). Travar as decisões:
+    - [x] **Passo 0 — ADR-012 escrito e ACEITO (2026-07-11)** (regra 4 cumprida). 5 decisões (a)–(e)
+          aprovadas pelo Owner (`docs/adr/ADR-012-cold-start-offline-first-leitura.md`; índice do
+          README das ADRs atualizado). Decisões travadas:
           (a) **validade do cache** offline — confiar no último snapshot conhecido enquanto offline,
           sempre preferir a rede online, e **rotular "dados de HH:MM"** quando servir do cache;
           (b) **caixa fechado no servidor durante o offline** — a venda offline referencia um
@@ -504,16 +529,28 @@
           = último cache + baixas otimistas locais, reconciliação no sync (já ADR-001/ADR-011 §6);
           (e) **abrir caixa NOVO segue online-only** (âncora financeira) — cold-start cobre "caixa **já
           aberto**", não abrir um do zero sem rede.
-    - [ ] **Fatia CS-1 — cache do caixa aberto** (pequena). Persistir `{ id, openedAt, openingAmount,
-          openedByName }` da sessão corrente em `localStorage` a cada `GET /cash-sessions/current` com
-          caixa; **limpar** quando vier `null` (fechado online) ou ao fechar. `/venda` e `/caixa` leem
-          esse cache offline → PDV sabe que o caixa está aberto e recupera o `sessionId` p/ enfileirar.
-    - [ ] **Fatia CS-2 — cache do catálogo de produtos** (média). Novo store `catalog` no IndexedDB
-          (`nexoloja` DB → bump `DB_VERSION` p/ 2 + `onupgradeneeded`; **sem migration de servidor**).
-          Persistir a lista (id/nome/sku/preços/`stockQty`/`minStockQty`) a cada `GET /products` OK;
-          offline, `/venda` monta o carrinho a partir do cache (estoque = último conhecido + baixas
-          otimistas que já existem). Com CS-1 + CS-2, **operar offline após remontar/reabrir já funciona
-          sem navegar** (ficando no `/venda`).
+    - [x] **Fatia CS-1 — cache do caixa aberto — CÓDIGO PRONTO (2026-07-11)** (pequena). Nova lib
+          `apps/web/lib/cashSessionCache.ts` persiste `{ id, openedAt, openingAmount, openedByName,
+          cachedAt }` em `localStorage` a cada `GET /cash-sessions/current` com caixa; **limpa** quando
+          vier `null` (fechado online). Online a **rede sempre vence** (sobrescreve/limpa, decisão (a));
+          offline, `/venda` e `/caixa` leem o cache → PDV reconhece o caixa aberto e recupera o
+          `sessionId` p/ enfileirar, com rótulo **"dados de HH:MM"**. `/caixa` offline mostra card
+          enxuto (sem "Abrir caixa", online-only). **Sem migration/API.** Typecheck + build (18 rotas)
+          ✅; core 47/47 (não tocado). **NO AR (web `b55d670f`) + E2E validado pelo usuário (7/7,
+          2026-07-11).** Ver 3.F.CS-1 no registro.
+    - [x] **Fatia CS-2 — cache do catálogo de produtos — CÓDIGO PRONTO (2026-07-11)** (média). Abridor
+          compartilhado extraído p/ `apps/web/lib/db.ts` (dono da versão do IndexedDB `nexoloja` +
+          cria os stores num só `onupgradeneeded`); **bump `DB_VERSION`→2** adiciona o store `catalog`
+          (upgrade v1→v2 preserva a `outbox`; **sem migration de servidor**). Nova lib
+          `apps/web/lib/catalog.ts` (`cacheProducts`/`readCachedProducts`): a cada `GET /products` OK a
+          rede vence e **sobrescreve** o espelho; offline, `/venda` monta o carrinho do cache (estoque =
+          último conhecido − baixas otimistas, que agora fazem **write-through** no cache). `outbox.ts`
+          refatorado p/ usar o `db.ts` (mantém `hasOutbox` como alias). Typecheck + build (18 rotas) ✅;
+          core 47/47 (não tocado). **NO AR (web `b55d670f`) + E2E validado pelo usuário (7/7,
+          2026-07-11).** Com CS-1 + CS-2, o PDV fica **vendável offline após remontar/reabrir** (ficando
+          no `/venda`). Ver 3.F.CS-2 no registro. **Refino 3.F.CS-2.1 (web `a4cebe57`):** aviso de rede
+          amigável (`OfflineNotice`) nas 5 telas online-only (Produtos/Estoque/Clientes/Relatórios/
+          Histórico) no lugar do "Failed to fetch" cru — decisão (c) do ADR-012.
     - [ ] **Fatia CS-3 — navegação offline entre telas** (a mais incerta — exige *spike*). Estender o
           SW para servir as **rotas do operador** offline (documento + chunks + payload RSC do Next App
           Router). Abordagem a validar no spike: precache das rotas offline-capable após 1ª visita

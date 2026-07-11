@@ -9,6 +9,8 @@ import {
   type PaymentMethod,
 } from '@nexoloja/shared';
 import { apiGet, apiPost } from '@/lib/api';
+import { useOnline } from '@/lib/useOnline';
+import { OfflineNotice } from '@/components/OfflineNotice';
 import { ReceiptPrint, type Store } from '@/components/ReceiptPrint';
 
 type OrderItem = { id: string; productName: string; quantity: string; unitPrice: string; total: string };
@@ -39,6 +41,7 @@ function methodLabel(m: string): string {
 }
 
 export default function VendasPage() {
+  const online = useOnline();
   const [ready, setReady] = useState(false);
   const [openSessionId, setOpenSessionId] = useState<string | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -165,7 +168,10 @@ export default function VendasPage() {
         (repõe o estoque e lança a saída no caixa de hoje).
       </p>
 
-      {!caixaOpen && (
+      {/* Tela online-only (ADR-012 (c)): offline mostra o aviso de rede, não o erro cru. */}
+      <OfflineNotice />
+
+      {!caixaOpen && online && (
         <div className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800 ring-1 ring-amber-200">
           Caixa fechado — você pode consultar e reimprimir. Para cancelar ou devolver,{' '}
           <Link href="/caixa" className="font-medium underline">
@@ -175,7 +181,8 @@ export default function VendasPage() {
         </div>
       )}
 
-      {error && !action && <p className="mb-4 text-sm text-red-600">{error}</p>}
+      {/* Erro cru da lista só quando online (offline = "Failed to fetch"; o aviso acima já cobre). */}
+      {error && online && !action && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
       <div className="space-y-3">
         {orders.length === 0 ? (

@@ -28,6 +28,7 @@ Um *Architecture Decision Record* é um documento curto e versionado que captura
 | [ADR-009](./ADR-009-multi-loja-e-super-admin.md) | Multi-loja, onboarding e Super Usuário (plataforma) | Aceito |
 | [ADR-010](./ADR-010-atribuicao-de-autoria.md) | Atribuição de autoria ("Registrado por") | Aceito |
 | [ADR-011](./ADR-011-fila-de-sincronizacao-offline.md) | Fila de sincronização offline (IndexedDB → Supabase) | Aceito |
+| [ADR-012](./ADR-012-cold-start-offline-first-leitura.md) | Cold-start / offline-first de leitura (cache de caixa, catálogo e navegação) | Aceito |
 
 > O detalhamento da arquitetura (diagrama, estrutura do monorepo, segurança/RLS, offline, deploy e roadmap) está em [`../ARCHITECTURE.md`](../ARCHITECTURE.md).
 

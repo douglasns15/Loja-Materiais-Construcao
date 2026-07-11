@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { createCustomerSchema } from '@nexoloja/shared';
 import { apiGet, apiPost } from '@/lib/api';
+import { useOnline } from '@/lib/useOnline';
+import { OfflineNotice } from '@/components/OfflineNotice';
 
 type Customer = {
   id: string;
@@ -19,6 +21,7 @@ const byLine = (name: string | null, iso?: string) =>
   name ? `${name}${iso ? ` · ${new Date(iso).toLocaleDateString('pt-BR')}` : ''}` : '—';
 
 export default function CustomersPage() {
+  const online = useOnline();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({ name: '', cpfCnpj: '', phone: '', email: '' });
@@ -69,6 +72,9 @@ export default function CustomersPage() {
     <div className="mx-auto max-w-4xl">
       <h1 className="mb-6 text-2xl font-bold">Clientes</h1>
 
+      {/* Tela online-only (ADR-012 (c)): offline mostra o aviso de rede, não o erro cru. */}
+      <OfflineNotice />
+
       <form
         onSubmit={onCreate}
         className="mb-6 grid grid-cols-1 gap-3 rounded-2xl bg-white p-4 shadow-sm sm:grid-cols-4"
@@ -107,7 +113,7 @@ export default function CustomersPage() {
         </button>
       </form>
 
-      {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
+      {error && online && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
       <div className="overflow-x-auto rounded-2xl bg-white shadow-sm">
         <table className="w-full text-sm">

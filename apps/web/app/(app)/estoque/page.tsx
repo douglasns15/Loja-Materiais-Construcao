@@ -6,6 +6,8 @@ import {
   inventoryAdjustmentSchema,
 } from '@nexoloja/shared';
 import { apiGet, apiPost } from '@/lib/api';
+import { useOnline } from '@/lib/useOnline';
+import { OfflineNotice } from '@/components/OfflineNotice';
 import { useMe } from '@/lib/useMe';
 import { StoreDisabledNotice } from '@/components/StoreDisabledNotice';
 
@@ -42,6 +44,7 @@ const EMPTY_FILTERS = { productId: '', type: '', reason: '', dateFrom: '', dateT
 
 export default function EstoquePage() {
   const { me } = useMe();
+  const online = useOnline();
   const [products, setProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [movements, setMovements] = useState<Movement[]>([]);
@@ -191,7 +194,9 @@ export default function EstoquePage() {
     <div className="mx-auto max-w-5xl">
       <h1 className="mb-6 text-2xl font-bold">Estoque</h1>
 
-      {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
+      {/* Tela online-only (ADR-012 (c)): offline mostra o aviso de rede, não o erro cru. */}
+      <OfflineNotice />
+      {error && online && <p className="mb-4 text-sm text-red-600">{error}</p>}
       {notice && <p className="mb-4 text-sm text-green-700">{notice}</p>}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

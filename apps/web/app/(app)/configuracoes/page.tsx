@@ -11,6 +11,8 @@ import {
 } from '@nexoloja/shared';
 import { apiDelete, apiGet, apiPatch, apiUpload } from '@/lib/api';
 import { useMe } from '@/lib/useMe';
+import { useOnline } from '@/lib/useOnline';
+import { OfflineNotice } from '@/components/OfflineNotice';
 import { UsersSection } from './UsersSection';
 
 type Store = {
@@ -22,6 +24,7 @@ type Store = {
 
 export default function ConfiguracoesPage() {
   const { me, loading: meLoading, isAdmin } = useMe();
+  const online = useOnline();
   const [store, setStore] = useState<Store | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -160,9 +163,16 @@ export default function ConfiguracoesPage() {
     return (
       <div className="mx-auto max-w-2xl">
         <h1 className="mb-2 text-2xl font-bold">Configurações da loja</h1>
-        <p className="rounded-xl bg-white p-6 text-sm text-gray-600 shadow-sm">
-          Acesso restrito a administradores.
-        </p>
+        {/* Offline (tela online-only, ADR-012 (c)): o `GET /me` falha e o papel não pode ser
+            confirmado — mostra o aviso de rede em vez de "acesso restrito", que soaria como
+            problema de permissão. Online + não-Admin → o gate de RBAC de verdade (ADR-008). */}
+        {online ? (
+          <p className="rounded-xl bg-white p-6 text-sm text-gray-600 shadow-sm">
+            Acesso restrito a administradores.
+          </p>
+        ) : (
+          <OfflineNotice />
+        )}
       </div>
     );
   }

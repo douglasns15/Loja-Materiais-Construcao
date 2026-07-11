@@ -10,6 +10,8 @@ import {
 } from '@nexoloja/shared';
 import { calcMarginPercent, calcSaleTotals } from '@nexoloja/core';
 import { apiGet, apiPost } from '@/lib/api';
+import { cacheCashSession, readCachedCashSession } from '@/lib/cashSessionCache';
+import { cacheProducts, readCachedProducts } from '@/lib/catalog';
 import { enqueueMutation } from '@/lib/outbox';
 import { useOutboxSyncContext } from '@/lib/outboxSync';
 import { useMe } from '@/lib/useMe';
@@ -88,6 +90,9 @@ export default function VendaPage() {
   const [caixaOpen, setCaixaOpen] = useState(false);
   // Caixa aberto no momento (guardado para carimbar a venda offline — ADR-011 §5).
   const [sessionId, setSessionId] = useState<string | null>(null);
+  // Horário do snapshot do caixa quando o estado veio do cache offline (ADR-012 CS-1, decisão (a));
+  // `null` = leitura fresca da rede. Alimenta o rótulo "dados de HH:MM".
+  const [cachedSessionAt, setCachedSessionAt] = useState<number | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selected, setSelected] = useState('');
@@ -102,19 +107,40 @@ export default function VendaPage() {
   const [printModel, setPrintModel] = useState<'80mm' | 'A4'>('80mm');
 
   async function loadProducts() {
-    setProducts(await apiGet<Product[]>('/products'));
+    const list = await apiGet<Product[]>('/products');
+    setProducts(list);
+    // Rede venceu (ADR-012 CS-2): espelha o catálogo p/ o cold-start offline (best-effort).
+    void cacheProducts(list);
   }
 
   useEffect(() => {
     (async () => {
       try {
         apiGet<Store>('/tenant').then(setStore).catch(() => {});
-        const session = await apiGet<{ id: string } | null>('/cash-sessions/current');
+        const session = await apiGet<{
+          id: string;
+          openedAt: string;
+          openingAmount: string;
+          openedByName: string | null;
+        } | null>('/cash-sessions/current');
+        // Rede venceu (ADR-012 (a)): sobrescreve/limpa o cache do caixa e opera com dado fresco.
+        cacheCashSession(session);
         setCaixaOpen(!!session);
         setSessionId(session?.id ?? null);
+        setCachedSessionAt(null);
         if (session) await loadProducts();
       } catch (e) {
-        setError((e as Error).message);
+        // Offline (cold-start): sem a API, recupera o último caixa aberto conhecido e o catálogo em
+        // cache para o PDV seguir vendável após remontar/reabrir (achados 3.E.2 / ADR-012 CS-1+CS-2).
+        const cached = readCachedCashSession();
+        if (cached) {
+          setCaixaOpen(true);
+          setSessionId(cached.id);
+          setCachedSessionAt(cached.cachedAt);
+          setProducts(await readCachedProducts());
+        } else {
+          setError((e as Error).message);
+        }
       } finally {
         setReady(true);
       }
@@ -252,14 +278,16 @@ export default function VendaPage() {
       setBusy(true);
       try {
         await enqueueMutation(buildSaleMutation(id, sessionId, parsed.data));
-        // Baixa otimista no cache LOCAL (sem rede não dá para recarregar do servidor): mantém a
+        // Baixa otimista no estado LOCAL (sem rede não dá para recarregar do servidor): mantém a
         // trava de estoque coerente para as próximas vendas offline. O débito real é no sync (§3).
-        setProducts((prev) =>
-          prev.map((p) => {
-            const item = cart.find((c) => c.productId === p.id);
-            return item ? { ...p, stockQty: String(Number(p.stockQty) - item.quantity) } : p;
-          }),
-        );
+        const next = products.map((p) => {
+          const item = cart.find((c) => c.productId === p.id);
+          return item ? { ...p, stockQty: String(Number(p.stockQty) - item.quantity) } : p;
+        });
+        setProducts(next);
+        // Persiste a baixa no cache do catálogo (ADR-012 CS-2): ao remontar offline, o estoque
+        // exibido já reflete as vendas offline anteriores (último conhecido − baixas otimistas).
+        void cacheProducts(next);
         setView({ ...doneBase, change: localChange, pending: true });
         // O indicador "X pendentes" atualiza sozinho: `enqueueMutation` notifica o pub/sub da
         // `outbox`, e o contexto de sync reatualiza os contadores (aqui e no chip do topo).
@@ -497,6 +525,15 @@ export default function VendaPage() {
 
       {/* Aviso de conexão (ADR-011 §9): só aparece offline; texto depende do flag OFFLINE_SALES. */}
       <OfflineSalesNotice offlineSales={offlineSales} />
+
+      {/* Cold-start offline (ADR-012 CS-1, decisão (a)): o caixa veio do último snapshot conhecido.
+          Rotula a origem para o operador saber que o dado pode estar defasado. */}
+      {cachedSessionAt !== null && (
+        <p className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+          Caixa recuperado do cache offline — dados de{' '}
+          {new Date(cachedSessionAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.
+        </p>
+      )}
 
       {/* Indicador de vendas pendentes de sincronização (ADR-011 AI 6/9). */}
       {pending > 0 && (

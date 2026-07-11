@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { openCashSessionSchema, closeCashSessionSchema } from '@nexoloja/shared';
 import { apiGet, apiPost } from '@/lib/api';
+import { cacheCashSession, readCachedCashSession, type CachedCashSession } from '@/lib/cashSessionCache';
 import { useMe } from '@/lib/useMe';
 import { useOnline } from '@/lib/useOnline';
 import { StoreDisabledNotice } from '@/components/StoreDisabledNotice';
@@ -25,6 +26,8 @@ export default function CaixaPage() {
   const { me, offlineSales } = useMe();
   const online = useOnline();
   const [session, setSession] = useState<CashSession | null>(null);
+  // Caixa aberto recuperado do cache offline (ADR-012 CS-1) quando a API não respondeu (cold-start).
+  const [cachedSession, setCachedSession] = useState<CachedCashSession | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
@@ -36,10 +39,19 @@ export default function CaixaPage() {
 
   async function load() {
     try {
-      setSession(await apiGet<CashSession | null>('/cash-sessions/current'));
+      const current = await apiGet<CashSession | null>('/cash-sessions/current');
+      setSession(current);
+      // Rede venceu (ADR-012 (a)): sobrescreve/limpa o cache do caixa aberto.
+      cacheCashSession(current);
+      setCachedSession(null);
       setError(null);
     } catch (e) {
-      setError((e as Error).message);
+      // Offline (cold-start): recupera o último caixa aberto conhecido para não oferecer "abrir
+      // caixa" indevidamente (achado 3.E.2 / ADR-012 CS-1). Fechar caixa segue online-only.
+      const cached = readCachedCashSession();
+      setSession(null);
+      setCachedSession(cached);
+      if (!cached) setError((e as Error).message);
     } finally {
       setLoaded(true);
     }
@@ -170,6 +182,32 @@ export default function CaixaPage() {
               {busy ? 'Fechando…' : 'Fechar caixa'}
             </button>
           </form>
+        </div>
+      ) : cachedSession ? (
+        // Cold-start offline (ADR-012 CS-1): sem rede, mostramos o caixa aberto conhecido (só a
+        // identidade do turno; os valores financeiros vêm do servidor). Fechar caixa é online-only,
+        // então aqui não há formulário — só o aviso de que a operação volta com a conexão.
+        <div className="rounded-2xl bg-white p-5 shadow-sm">
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-700">
+            <span className="h-2 w-2 rounded-full bg-green-500" /> Caixa aberto
+          </div>
+          <dl className="grid grid-cols-2 gap-3 text-sm">
+            <dt className="text-gray-500">Aberto em</dt>
+            <dd className="text-right">{new Date(cachedSession.openedAt).toLocaleString('pt-BR')}</dd>
+            {cachedSession.openedByName && (
+              <>
+                <dt className="text-gray-500">Aberto por</dt>
+                <dd className="text-right">{cachedSession.openedByName}</dd>
+              </>
+            )}
+            <dt className="text-gray-500">Valor de abertura</dt>
+            <dd className="text-right">{BRL(cachedSession.openingAmount)}</dd>
+          </dl>
+          <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            Sem conexão — dados de{' '}
+            {new Date(cachedSession.cachedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.
+            Os valores do caixa e o fechamento voltam quando a internet retornar.
+          </p>
         </div>
       ) : me?.tenantActive === false ? (
         // Loja desativada (ADR-009): abrir caixa bloqueado. Aviso já ao abrir a tela.
