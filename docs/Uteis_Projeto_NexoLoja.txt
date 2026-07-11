@@ -15,7 +15,6 @@ Login: owner@lojademo.com / NexoLoja#2026
 http://localhost:3000/
 
 ## Leia docs/ROADMAP.md e docs/testes/registro-de-testes.md e vamos continuar
-Estado atual: refinos 3.E no ar e validados (web 300254fc), docs em dia. A fila de venda offline está fechada; a próxima frente natural é o cold-start acima, começando pelo ADR. Quando você retomar, é só dizer "vamos ao ADR-012" (ou me pedir para redigir o rascunho do ADR já com as 5 decisões para você revisar).
 
 OBS: Status: Online - mostrar para indicar que o software está online... questionar sobre essa adição!! Outra coisa, será que é relevante adicionar no painel do super user um indicador por loja, mostrando se está on Line ou não.. se bem que pode estar off na loja, mas em outro local qualquer alguém acessar e vai mostrar como ON Line ... 
 
