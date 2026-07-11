@@ -3,7 +3,16 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-10 (**Fase 3 — Fila de sync offline, Fatias 3–6 (round-trip da
+> **Última atualização:** 2026-07-10 (**Fase 3 — Refinos da fila offline (3.E): CÓDIGO PRONTO** —
+> drenagem global (worker no shell `(app)` + chip de status no topo, drena em qualquer tela), poda de
+> `SYNCED` (`pruneSynced` no fim do dreno) e tela **`/pendencias`** (lista a fila incl. `FAILED`;
+> **Tentar novamente**/**Descartar**); pub/sub na `outbox` sincroniza chip/PDV/tela. Só cliente, sem
+> migration. Typecheck + build **18 rotas** + core 47/47 ✅; **no ar (web `3921af94` + `300254fc`) +
+> smoke ✅; E2E validado pelo usuário (2026-07-11)** — chip global + drenagem + vendas registradas.
+> **Achados** (3.E.1 tela branca ao navegar offline → mitigado com `(app)/error.tsx`; 3.E.2 PDV assume
+> "caixa fechado" offline após remontar) são a **lacuna de offline-first de leitura** — a próxima
+> fatia natural: **cold-start offline** (persistir `sessionId` + cachear catálogo/rotas). Ver 3.E no
+> registro. **Antes: Fase 3 — Fila de sync offline, Fatias 3–6 (round-trip da
 > venda offline) NO AR e VALIDADO em produção**: PDV enfileira offline → worker (`syncWorker.ts` +
 > `useOutboxSync`) drena FIFO ao voltar a rede, para na 1ª falha, retry só transitório → servidor
 > `POST /orders` **idempotente por PK** (dedup do reenvio; caixa do envelope; estoque insuficiente
@@ -117,11 +126,13 @@
 > e **E2E de convite pela URL publicada validado pelo usuário no navegador** (convite → e-mail →
 > `/definir-senha` → login). Ver 2.R no registro de testes.
 >
-> ▶️ **Próximo passo:** **venda offline concluída e validada (Fatias 3–6, ver 3.D).** Ciclo
-> enfileirar→drenar→aplicar idempotente confirmado em produção (inclui idempotência do reenvio).
-> Direções possíveis a seguir: (a) **refinos do offline** — drenagem global (fora do PDV), tela de
-> itens `FAILED`, poda de `SYNCED`, e testar o caminho **OFF** (nota manual); (b) **próximas
-> naturezas de mutação** — estoque e caixa offline (depois cadastros mutáveis, que trazem a tela de
+> ▶️ **Próximo passo:** **venda offline (3.D) + refinos (3.E) concluídos e validados.** Falta a fila
+> só de venda? Não — está fechada. A **próxima fatia natural** (estratégia já montada, a executar em
+> outra sessão) é o **cold-start / offline-first de LEITURA** — persistir `sessionId` do caixa +
+> cachear o catálogo + navegação offline (achados 3.E.1/3.E.2). **Passo 0 = ADR-012 (ou adendo ao
+> ADR-011) antes de codar.** Sub-fatias CS-0…CS-4 no bloco da Fase 3; roteiro de testes em 3.F.
+> **Tudo no cliente — sem migration, sem impacto nos free tiers.** Outras direções abertas: (b)
+> próximas naturezas de mutação (estoque e caixa offline; depois cadastros mutáveis → tela de
 > `CONFLICT`); (c) outros itens da Fase 3 (módulo de estoque fino, pooler, avaliar Supabase Pro).
 > **Antes:** Fatia 2 (envelope + `outbox` + flag em `localStorage`) — código pronto (2026-07-10, ver
 > 3.C). **Antes:**
@@ -459,6 +470,61 @@
           `syncBackoffMs` (exp., teto 30s), `haltsQueue` — **+12 testes Vitest** (47/47).
     - [x] **Fatia 6 — indicador de pendentes (AI 9)** — "X vendas pendentes" + "Sincronizar agora"
           no PDV + rótulo por venda offline. *Tela de `CONFLICT` segue adiada (venda é append-only).*
+  - [x] **Refinos da fila offline (3.E) — NO AR e VALIDADO (2026-07-11)**. Três pontas soltas da venda
+        offline, **só cliente** (sem migration/API): **(1) drenagem global** — o worker saiu de dentro
+        do `/venda` para o shell `(app)` via `OutboxSyncProvider` (instância única) + **chip de status
+        no topo** (aparece só com fila não-vazia; vermelho=falha/índigo=pendente); drena em qualquer
+        tela quando a rede volta. **(2) poda de `SYNCED`** — `pruneSynced()` no fim do dreno (fila não
+        cresce sem limite). **(3) tela `/pendencias`** — lista a fila (inclui `FAILED`, que sumia do
+        contador) com **Tentar novamente** (`requeue`) e **Descartar**. Pub/sub na `outbox`
+        (`subscribeOutbox`) mantém chip/PDV/tela em sincronia. Typecheck + build (**18 rotas**) + core
+        47/47 ✅. **No ar:** web `3921af94` (+ `300254fc` do `error.tsx`) + smoke ✅. **E2E validado
+        pelo usuário (2026-07-11)** no PWA do macOS: chip global + drenagem + vendas registradas
+        (`#2f0d11b0`/`#7bfa4d01`). **Achados do E2E:** (3.E.1) navegar **offline entre telas** dava tela
+        branca (chunk não cacheado) → mitigado com `(app)/error.tsx` (mantém shell/chip + aviso);
+        (3.E.2) offline após remontar, o PDV assume "caixa fechado" (não lê `sessionId`/catálogo sem
+        rede) — ambos são a lacuna de offline-first de leitura (fatia própria), não do refino. Ver
+        3.E/3.E.1/3.E.2 no registro.
+  - [ ] **Cold-start / offline-first de LEITURA — fatia própria (ESTRATÉGIA MONTADA, a executar em
+        outra sessão)**. **Problema (achados 3.E.1/3.E.2):** offline, `GET /me`, `/cash-sessions/current`
+        e `/products` falham (API cross-origin, nunca cacheada — ADR-011 §7). A venda offline de 3.D só
+        funciona porque `sessionId` + produtos ficam **em memória** enquanto o operador **não sai do
+        `/venda`**; ao **navegar/remontar/reabrir offline**, essa memória se perde → PDV assume "caixa
+        fechado" e catálogo vazio; e navegar para rota sem chunk cacheado quebra (hoje mitigado por
+        `(app)/error.tsx`). **Meta:** o PDV segue **vendável offline** após remontar/reabrir. **Tudo no
+        cliente — sem migration, sem custo de free tier** (IndexedDB/localStorage/SW cache no aparelho).
+    - [ ] **Passo 0 — ADR-012 (ou adendo ao ADR-011) ANTES de codar** (regra 4). Travar as decisões:
+          (a) **validade do cache** offline — confiar no último snapshot conhecido enquanto offline,
+          sempre preferir a rede online, e **rotular "dados de HH:MM"** quando servir do cache;
+          (b) **caixa fechado no servidor durante o offline** — a venda offline referencia um
+          `cashSessionId` que pode ter sido fechado noutro dispositivo: **anexar mesmo assim** (a venda
+          ocorreu fisicamente naquele turno; divergência aparece na reconciliação) **ou** rejeitar →
+          `FAILED` (tela de pendências); (c) **quais rotas são "offline-capable"** (venda + caixa-leitura
+          no mínimo; histórico/estoque a decidir) para escopar o precache do SW; (d) **estoque offline**
+          = último cache + baixas otimistas locais, reconciliação no sync (já ADR-001/ADR-011 §6);
+          (e) **abrir caixa NOVO segue online-only** (âncora financeira) — cold-start cobre "caixa **já
+          aberto**", não abrir um do zero sem rede.
+    - [ ] **Fatia CS-1 — cache do caixa aberto** (pequena). Persistir `{ id, openedAt, openingAmount,
+          openedByName }` da sessão corrente em `localStorage` a cada `GET /cash-sessions/current` com
+          caixa; **limpar** quando vier `null` (fechado online) ou ao fechar. `/venda` e `/caixa` leem
+          esse cache offline → PDV sabe que o caixa está aberto e recupera o `sessionId` p/ enfileirar.
+    - [ ] **Fatia CS-2 — cache do catálogo de produtos** (média). Novo store `catalog` no IndexedDB
+          (`nexoloja` DB → bump `DB_VERSION` p/ 2 + `onupgradeneeded`; **sem migration de servidor**).
+          Persistir a lista (id/nome/sku/preços/`stockQty`/`minStockQty`) a cada `GET /products` OK;
+          offline, `/venda` monta o carrinho a partir do cache (estoque = último conhecido + baixas
+          otimistas que já existem). Com CS-1 + CS-2, **operar offline após remontar/reabrir já funciona
+          sem navegar** (ficando no `/venda`).
+    - [ ] **Fatia CS-3 — navegação offline entre telas** (a mais incerta — exige *spike*). Estender o
+          SW para servir as **rotas do operador** offline (documento + chunks + payload RSC do Next App
+          Router). Abordagem a validar no spike: precache das rotas offline-capable após 1ª visita
+          online + fallback de navegação servindo o documento cacheado; avaliar o custo do RSC
+          (`?_rsc=`). Se o RSC inviabilizar client-nav offline, aceitar **navegação por reload** offline.
+          *Substitui o paliativo do `error.tsx` pelo caminho real.*
+    - [ ] **Fatia CS-4 — semântica de caixa fechado no sync** (pequena-média). Implementar a decisão (b)
+          do ADR: no `POST /orders` idempotente, tratar `cashSessionId` de sessão **fechada** conforme
+          travado (anexar com marca de reconciliação, ou 4xx → `FAILED`).
+    > **Ordem de valor:** CS-1 + CS-2 entregam o essencial (PDV vendável offline após remontar, sem
+    > navegar). CS-3 adiciona a navegação offline entre telas. CS-4 endurece a borda do caixa fechado.
 - [ ] Módulo de estoque fino (estoque mínimo, notificações, movimentações detalhadas)
 - [ ] Otimização do pooler (6543) para limites do free tier
 - [ ] Avaliar upgrade Supabase Pro p/ produção

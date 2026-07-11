@@ -7,7 +7,9 @@ import { STORE_ROLE_LABELS } from '@nexoloja/shared';
 import { supabase } from '@/lib/supabase';
 import { isPlatformAdmin } from '@/lib/session';
 import { useMe } from '@/lib/useMe';
+import { OutboxSyncProvider } from '@/lib/outboxSync';
 import { ProfileModal } from './ProfileModal';
+import { QueueChip } from './QueueChip';
 
 const NAV = [
   { href: '/venda', label: 'Nova Venda' },
@@ -93,6 +95,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const currentLabel = NAV.find((item) => item.href === pathname)?.label ?? 'NexoLoja';
 
   return (
+    <OutboxSyncProvider>
     <div className="flex h-dvh">
       {/* Fundo escuro por trás da gaveta (só no celular/tablet). */}
       {drawerOpen && (
@@ -237,6 +240,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </button>
           )}
           <span className="truncate font-semibold text-gray-800">{currentLabel}</span>
+          {/* Status da fila offline (aparece só quando há vendas na fila) — drenagem global. */}
+          <QueueChip />
         </header>
 
         {/* Aviso de loja desativada pelo Super Usuário (ADR-009): visível no topo de toda tela.
@@ -267,5 +272,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         />
       )}
     </div>
+    </OutboxSyncProvider>
   );
 }

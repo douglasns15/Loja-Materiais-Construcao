@@ -1,25 +1,29 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { countPending, hasOutbox } from './outbox';
+import { countOutbox, hasOutbox, subscribeOutbox } from './outbox';
 import { drainOutbox } from './syncWorker';
 
 /**
- * Cola a fila offline (`outbox` + `drainOutbox`) na UI (ADR-011 AI 6). Mantém o contador de
- * pendentes e dispara a drenagem nos **gatilhos** previstos: evento `online`, volta ao foreground
- * (`visibilitychange`), montagem (se já online) e botão manual (`syncNow`). A concorrência é
- * barrada dentro do próprio worker (trava `draining`); aqui `syncing` é só para a UI.
+ * Cola a fila offline (`outbox` + `drainOutbox`) na UI (ADR-011 AI 6). Mantém os contadores de
+ * pendentes e de itens com falha e dispara a drenagem nos **gatilhos** previstos: evento `online`,
+ * volta ao foreground (`visibilitychange`), montagem (se já online) e botão manual (`syncNow`).
+ * Assina o pub/sub da `outbox`, então enfileirar/sincronizar/podar em qualquer lugar reflete aqui
+ * sem polling. A concorrência é barrada dentro do worker (trava `draining`); `syncing` é só p/ UI.
  */
 export function useOutboxSync() {
   const [pending, setPending] = useState(0);
+  const [failed, setFailed] = useState(0);
   const [syncing, setSyncing] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!hasOutbox()) return;
     try {
-      setPending(await countPending());
+      const { pending: p, failed: f } = await countOutbox();
+      setPending(p);
+      setFailed(f);
     } catch {
-      // IndexedDB indisponível — o indicador simplesmente fica em 0.
+      // IndexedDB indisponível — os indicadores simplesmente ficam em 0.
     }
   }, []);
 
@@ -36,6 +40,8 @@ export function useOutboxSync() {
 
   useEffect(() => {
     refresh();
+    // Qualquer mudança na fila (enfileirar/sincronizar/podar/descartar) reatualiza os contadores.
+    const unsubscribe = subscribeOutbox(() => void refresh());
     const onOnline = () => void syncNow();
     const onVisible = () => {
       if (document.visibilityState === 'visible' && navigator.onLine) void syncNow();
@@ -45,10 +51,11 @@ export function useOutboxSync() {
     // Tenta drenar ao montar (ex.: abriu o app já com pendências e com rede).
     if (typeof navigator !== 'undefined' && navigator.onLine) void syncNow();
     return () => {
+      unsubscribe();
       window.removeEventListener('online', onOnline);
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, [refresh, syncNow]);
 
-  return { pending, syncing, syncNow, refresh };
+  return { pending, failed, syncing, syncNow, refresh };
 }

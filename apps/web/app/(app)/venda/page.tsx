@@ -11,7 +11,7 @@ import {
 import { calcMarginPercent, calcSaleTotals } from '@nexoloja/core';
 import { apiGet, apiPost } from '@/lib/api';
 import { enqueueMutation } from '@/lib/outbox';
-import { useOutboxSync } from '@/lib/useOutboxSync';
+import { useOutboxSyncContext } from '@/lib/outboxSync';
 import { useMe } from '@/lib/useMe';
 import { useOnline } from '@/lib/useOnline';
 import { ReceiptPrint, type Store } from '@/components/ReceiptPrint';
@@ -83,7 +83,7 @@ function Summary({ items, total, discount }: { items: CartItem[]; total: number;
 export default function VendaPage() {
   const { me, offlineSales } = useMe();
   const online = useOnline();
-  const { pending, syncing, syncNow, refresh: refreshPending } = useOutboxSync();
+  const { pending, syncing, syncNow } = useOutboxSyncContext();
   const [ready, setReady] = useState(false);
   const [caixaOpen, setCaixaOpen] = useState(false);
   // Caixa aberto no momento (guardado para carimbar a venda offline — ADR-011 §5).
@@ -261,7 +261,8 @@ export default function VendaPage() {
           }),
         );
         setView({ ...doneBase, change: localChange, pending: true });
-        void refreshPending(); // atualiza o indicador "X pendentes" logo após enfileirar
+        // O indicador "X pendentes" atualiza sozinho: `enqueueMutation` notifica o pub/sub da
+        // `outbox`, e o contexto de sync reatualiza os contadores (aqui e no chip do topo).
       } catch (e) {
         setError((e as Error).message);
       } finally {

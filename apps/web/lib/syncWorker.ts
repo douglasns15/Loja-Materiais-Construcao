@@ -11,6 +11,7 @@ import {
   markFailed,
   markSynced,
   peekPending,
+  pruneSynced,
   type OutboxRecord,
 } from './outbox';
 
@@ -61,6 +62,7 @@ export async function drainOutbox(): Promise<DrainResult> {
   }
   draining = true;
   let synced = 0;
+  let stopped = false;
   try {
     // FIFO: sempre o primeiro pendente/erro. `guard` limita o loop ao tamanho atual da fila para
     // nunca girar infinito (a cada volta ou removemos 1 do topo, ou paramos).
@@ -83,10 +85,18 @@ export async function drainOutbox(): Promise<DrainResult> {
       } else {
         await markFailed(rec.seq, reason(outcome, 'falha dura — requer atenção'));
       }
-      return { synced, stopped: true }; // para na 1ª falha (ADR-011 §5)
+      stopped = true; // para na 1ª falha (ADR-011 §5)
+      break;
     }
-    return { synced, stopped: false };
+    return { synced, stopped };
   } finally {
+    // Poda os SYNCED (desta e de passadas anteriores) para a fila não crescer sem limite. É
+    // best-effort — uma falha na poda não invalida o dreno. Roda antes de liberar a trava.
+    try {
+      await pruneSynced();
+    } catch {
+      // poda adiada para o próximo dreno
+    }
     draining = false;
   }
 }

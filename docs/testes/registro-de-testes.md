@@ -1689,3 +1689,104 @@ código do `useOnline`/worker, sem derrubar a rede real).
 > debitar estoque no sync (§3). API `897d5524` + web `c74bbc5f`; sem migration; core 47/47. Refinos
 > possíveis (fatia futura): drenagem global (fora do PDV), tela de itens `FAILED`, poda de itens
 > `SYNCED` da fila, e estoque/caixa offline (as próximas naturezas de mutação).
+
+### 3.E — Refinos da fila offline: drenagem global + poda de SYNCED + tela de pendências (2026-07-10)
+
+Polimento das pontas soltas da venda offline (3.D). **Só cliente** — sem migration, sem API. Três
+refinos coesos; o 4º (cold-start offline com `sessionId` persistido) ficou **de fora** de propósito
+por ser maior que um refino (exige também **catálogo de produtos em cache** e semântica de caixa
+possivelmente fechado no servidor) — vira fatia própria.
+
+**O que entrou**
+
+| Refino | Peça | Arquivo |
+|---|---|---|
+| **Drenagem global** — o worker antes só rodava montado no `/venda`; agora drena em qualquer tela | Provider único no shell + chip de status no topo (aparece só com fila não-vazia; vermelho=falha, índigo=pendente) | `apps/web/lib/outboxSync.tsx` · `apps/web/app/(app)/QueueChip.tsx` · `apps/web/app/(app)/layout.tsx` |
+| **Poda de `SYNCED`** — a fila não cresce sem limite | `pruneSynced()` chamado no `finally` do dreno (best-effort) | `apps/web/lib/outbox.ts` · `apps/web/lib/syncWorker.ts` |
+| **Tela de `FAILED`** — itens com falha dura somem do contador; agora têm onde aparecer | Página `/pendencias` (lista a fila; ações **Tentar novamente** = `requeue`, **Descartar** = `removeMutation`) | `apps/web/app/(app)/pendencias/page.tsx` |
+| **Sincronia dos indicadores** | Pub/sub na `outbox` (`subscribeOutbox`/`notifyOutbox`) — enfileirar/sincronizar/podar/descartar reatualiza chip, PDV e tela de pendências sem polling | `apps/web/lib/outbox.ts` · `apps/web/lib/useOutboxSync.ts` |
+
+> **Instância única (drenagem global):** o `useOutboxSync` passou a ser montado **uma vez** no
+> `OutboxSyncProvider` do shell `(app)`; o PDV (`/venda`) agora lê pelo `useOutboxSyncContext` em vez
+> de instanciar o hook, evitando listeners/drenos duplicados. Com o pub/sub, o `void refreshPending()`
+> manual após enfileirar (fix 3.D.1) ficou redundante e foi removido.
+
+**Build / typecheck / core (Claude)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Typecheck `apps/web` (`tsc --noEmit`) | sem erros | ✅ |
+| Build de produção (`next build`) | **18 rotas** (nova `/pendencias` 2.08 kB); `/venda` 5.63 kB | ✅ sem erros |
+| Core (Vitest) — regressão (nada tocado no core) | 47/47 | ✅ 47/47 |
+
+**Deploy / E2E**
+
+| Passo | Resultado |
+|---|---|
+| `npm run deploy` (web — provider global + chip + `/pendencias` + poda) | ✅ Version `3921af94` |
+| `npm run deploy` (web — `error.tsx` da área logada, ver 3.E.1) | ✅ Version `300254fc` |
+| Smoke prod: `/login` 200 · `/` 307 · `/venda` 200 · **`/pendencias` 200** · `/manifest.webmanifest` 200 | ✅ |
+| E2E no navegador (PWA instalado no macOS) | ✅ **validado pelo usuário (2026-07-11)** — offline → **Confirmar** → **chip "1 pendente" no topo**; voltar online (sem sair do `/venda`) → **worker drena** (sincronização vista) → vendas registradas (`#2f0d11b0`, `#7bfa4d01`). Chip global e drenagem OK. *(Achado colateral 3.E.1 na 1ª tentativa: navegação offline entre telas — ver abaixo.)* |
+
+> **3.E: refinos no ar** — drenagem global (chip no topo + worker no shell), poda de `SYNCED` e
+> tela `/pendencias` (retry/descarte). Pub/sub mantém os indicadores em sincronia. Typecheck + build
+> (18 rotas) + core 47/47 ✅. Web publicado + smoke em produção ✅. **Fora deste corte:** cold-start
+> offline (persistir `sessionId` + cachear catálogo) — fatia própria.
+
+**3.E.1 — Achado do E2E: navegação offline entre telas quebra o app (2026-07-11)**
+
+No E2E, ao **navegar offline** do PDV para outra tela (Estoque → Relatórios), o app deu **tela branca**
+("Application error: a client-side exception"). Causa: o service worker da Fatia 3.A cacheia só a
+**casca** e os assets **já abertos com internet**; abrir offline uma tela cujo **chunk JS ainda não
+foi baixado** (agravado logo após o deploy — todo chunk ganha hash novo) faz o import dinâmico falhar
+→ React lança sem fronteira → root error boundary (tela branca). **Não é do refino** — é a lacuna de
+**offline-first de leitura**, já marcada como fatia própria (navegação offline entre telas ainda não
+é suportada; a **fila de vendas offline segue intacta**).
+
+Mitigação aplicada (não é a solução completa): `apps/web/app/(app)/error.tsx` — fronteira de erro de
+segmento que fica **dentro** do `layout` do grupo `(app)`, então a **barra do topo (e o chip)
+permanece** e só a área da página mostra um aviso amigável ("Esta tela precisa de internet para
+abrir…") em vez da tela branca. Web Version `300254fc`. A navegação offline propriamente dita
+(cachear rotas/RSC) continua na fatia futura de offline-first de leitura.
+
+**3.E.2 — Observação do usuário: "caixa fechado" ao navegar offline (2026-07-11)**
+
+Depois do E2E, o usuário desabilitou a rede e navegou entre telas **já cacheadas** (não deu mais tela
+branca, porque os chunks foram baixados no teste anterior). Sintomas: a tela **Venda** dizia "caixa
+fechado" e a **Caixa** informava (corretamente) que abrir caixa precisa de internet; ao **voltar
+online, o caixa reaparecia aberto** (nunca foi fechado). **Comportamento esperado nesta fase, não é
+bug:** offline o `GET /cash-sessions/current` e o `GET /products` falham (a API é cross-origin, nunca
+cacheada, ADR-011 §7), então o PDV, ao **remontar** offline, não consegue confirmar o caixa aberto
+nem carregar o catálogo → assume "caixa fechado". A venda offline de 3.D funciona porque o `sessionId`
+e os produtos ficam **em memória** enquanto você não sai do `/venda`; ao navegar/remontar offline,
+essa memória se perde. A verdade do caixa está no servidor (por isso volta certo online). É
+**exatamente a fatia de cold-start / offline-first de leitura** (adiada): persistir o `sessionId` do
+caixa **+ cachear o catálogo de produtos** para o PDV seguir vendável offline mesmo após
+navegar/reabrir. Sem isso, o offline cobre só a "queda durante a venda" (cenário de 3.D), não a
+operação offline prolongada.
+
+> **Nota de ambiente:** os testes foram feitos no **PWA instalado no macOS** — mesma engine do
+> Chrome, comportamento idêntico ao navegador. Para depurar é mais fácil numa **aba normal do Chrome**
+> (DevTools → Network → Offline + Console prontos); no app instalado, o DevTools abre por
+> botão-direito → *Inspecionar elemento* (ou ⋥ menu → *Mais ferramentas → Ferramentas do
+> desenvolvedor*).
+
+### 3.F — Cold-start / offline-first de leitura — PLANEJADO (estratégia, a executar em outra sessão)
+
+Fatia própria que fecha a lacuna dos achados 3.E.1/3.E.2: manter o PDV **vendável offline** após
+navegar/remontar/reabrir. **Tudo no cliente** (IndexedDB/localStorage/SW cache) — **sem migration de
+servidor, sem impacto nos free tiers** (Cloudflare/Supabase): o cache vive no aparelho e a venda
+sincronizada gera a **mesma** linha `Order` de sempre. Estratégia completa (sub-fatias CS-0…CS-4,
+decisões a travar) no ROADMAP, Fase 3. **Passo 0 = ADR-012 (ou adendo ao ADR-011) antes de codar**
+(regra 4). Roteiro de validação previsto por sub-fatia:
+
+| Sub-fatia | O que validar (E2E, offline) | Status |
+|---|---|---|
+| **CS-1 — cache do caixa aberto** | Abrir caixa online → ficar offline → **navegar/remontar** `/venda` → PDV reconhece o caixa aberto (não diz "caixa fechado") e mantém o `sessionId` p/ enfileirar | ⏭️ planejado |
+| **CS-2 — cache do catálogo** | Offline após remontar → `/venda` **lista os produtos** (do cache) → montar carrinho → **Confirmar** enfileira normalmente; estoque exibido = último conhecido + baixas otimistas | ⏭️ planejado |
+| **CS-3 — navegação offline** | Offline, **trocar entre telas** (Venda↔Caixa↔Histórico) sem tela branca **e sem** o aviso paliativo do `error.tsx` — as telas abrem do cache | ⏭️ planejado |
+| **CS-4 — caixa fechado no sync** | Enfileirar offline → caixa **fechado no servidor** (simular) → voltar online → comportamento conforme ADR (anexa c/ reconciliação **ou** vira `FAILED` na tela de pendências) | ⏭️ planejado |
+| Regressão | Online intacto; venda offline "queda durante a venda" (3.D) segue funcionando; poda/drenagem (3.E) sem regressão; core Vitest | ⏭️ planejado |
+
+> **Marco de valor:** CS-1 + CS-2 já entregam "operar offline após remontar/reabrir" (ficando no
+> `/venda`). CS-3 adiciona navegação offline entre telas. CS-4 endurece a borda do caixa fechado.
