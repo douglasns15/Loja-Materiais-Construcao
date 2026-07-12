@@ -52,4 +52,9 @@ export interface CashSessionReport {
   /** Contado − esperado: positivo = sobra, negativo = falta. */
   divergence: number;
   notes: string | null;
+  /** Vendas offline anexadas a este caixa DEPOIS do fechamento (CS-4, ADR-012 §b) —
+   * marca de reconciliação. `0` quando não houve. */
+  lateSalesCount: number;
+  /** Soma das vendas anexadas após o fechamento (reconciliação, CS-4). */
+  lateSalesTotal: number;
 }

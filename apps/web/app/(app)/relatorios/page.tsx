@@ -226,7 +226,18 @@ export default function RelatoriosPage() {
             ) : (
               sessions.map((s) => (
                 <tr key={s.id} className="border-t border-gray-100">
-                  <td className="px-4 py-2 text-gray-500">{DATETIME(s.closedAt)}</td>
+                  <td className="px-4 py-2 text-gray-500">
+                    {DATETIME(s.closedAt)}
+                    {/* CS-4 (ADR-012 §b): vendas offline anexadas após o fechamento → reconciliar. */}
+                    {s.lateSalesCount > 0 && (
+                      <span
+                        className="ml-2 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800"
+                        title="Vendas offline lançadas neste caixa após o fechamento (conferir na reconciliação)"
+                      >
+                        {s.lateSalesCount} após fechamento · {BRL(s.lateSalesTotal)}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-2 text-right text-gray-500">{BRL(s.openingAmount)}</td>
                   <td className="px-4 py-2 text-right text-gray-500">{BRL(s.expectedAmount)}</td>
                   <td className="px-4 py-2 text-right font-medium">{BRL(s.closingAmount)}</td>

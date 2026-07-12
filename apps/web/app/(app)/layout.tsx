@@ -7,9 +7,11 @@ import { STORE_ROLE_LABELS } from '@nexoloja/shared';
 import { supabase } from '@/lib/supabase';
 import { isPlatformAdmin } from '@/lib/session';
 import { useMe } from '@/lib/useMe';
+import { clearCachedMe } from '@/lib/meCache';
 import { OutboxSyncProvider } from '@/lib/outboxSync';
 import { ProfileModal } from './ProfileModal';
 import { QueueChip } from './QueueChip';
+import { OfflineNav } from './OfflineNav';
 
 const NAV = [
   { href: '/venda', label: 'Nova Venda' },
@@ -24,6 +26,24 @@ const NAV = [
 
 // Lembra a preferência de recolher a barra no desktop entre sessões.
 const COLLAPSE_KEY = 'nexoloja:sidebar-collapsed';
+
+// CS-3 (ADR-012): telas cujo **shell** deve estar em cache para a navegação por reload funcionar
+// offline. Inclui TODAS as telas do menu — não só as offline-capable (venda/caixa/pendências): as
+// online-only (estoque/produtos/…) precisam abrir offline para mostrar o **shell + menu + banner
+// "Sem conexão"** (decisão (c) do ADR-012), em vez de cair no beco-sem-saída `/offline`. Os dados
+// dessas telas seguem online-only; só o casulo é aquecido. `/pendencias` entra aqui porque não está
+// no menu (o chip só aparece com fila offline), então nunca seria aquecida por navegação normal.
+const WARM_ROUTES = [
+  '/venda',
+  '/vendas',
+  '/caixa',
+  '/products',
+  '/estoque',
+  '/customers',
+  '/relatorios',
+  '/configuracoes',
+  '/pendencias',
+];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -59,6 +79,28 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     setDrawerOpen(false);
   }, [pathname]);
 
+  // CS-3: aquece as rotas offline-capable enquanto online (inclui `/pendencias`, que não está no
+  // menu). Re-aquece ao reconectar, pois todo deploy troca o hash dos chunks. O aquecimento real é
+  // feito pelo Service Worker (mensagem `WARM_ROUTES`), que busca o HTML de cada rota e cacheia o
+  // documento + os chunks `/_next/static/` referenciados — o que a navegação por reload precisa
+  // offline. `router.prefetch` só aquece o RSC (não o JS), então serve apenas para acelerar a
+  // navegação client-side online; o cache offline vem do SW.
+  useEffect(() => {
+    if (!ready) return;
+    const warm = () => {
+      if (!navigator.onLine) return;
+      for (const r of WARM_ROUTES) router.prefetch(r);
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready
+          .then((reg) => reg.active?.postMessage({ type: 'WARM_ROUTES', routes: WARM_ROUTES }))
+          .catch(() => {});
+      }
+    };
+    warm();
+    window.addEventListener('online', warm);
+    return () => window.removeEventListener('online', warm);
+  }, [ready, router]);
+
   useEffect(() => {
     (async () => {
       const { data } = await supabase.auth.getSession();
@@ -84,6 +126,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   async function logout() {
+    clearCachedMe();
     await supabase.auth.signOut();
     router.replace('/login');
   }
@@ -96,6 +139,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <OutboxSyncProvider>
+    {/* CS-3: offline, converte a navegação entre telas em recarga (evita o fetch RSC que falha). */}
+    <OfflineNav />
     <div className="flex h-dvh">
       {/* Fundo escuro por trás da gaveta (só no celular/tablet). */}
       {drawerOpen && (

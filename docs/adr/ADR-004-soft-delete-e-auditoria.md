@@ -44,6 +44,7 @@ A tabela `AuditEvent` é a fonte da trilha. `action` é uma string estável (nã
 | `CHANGE_PRICE` | Alteração de preço de produto | `Product` |
 | `ADJUST_STOCK` | Ajuste manual de estoque | `Product` |
 | `CLOSE_CASH_WITH_DIVERGENCE` | Fechamento de caixa com divergência | `CashSession` |
+| `SALE_ON_CLOSED_CASH` | Venda offline sincronizada num caixa **já fechado** (ADR-012 §b, CS-4); `meta`: `cashSessionId`, `cashClosedAt`, `total`, `reconcile:true` — marca de reconciliação | `Order` |
 | `CHANGE_ROLE` | Mudança de papel / (re)convite de usuário (ADR-008) | `User` |
 | `DELETE_USER` | Exclusão de usuário da loja (ADR-008) | `User` |
 

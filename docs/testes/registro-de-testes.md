@@ -1785,9 +1785,9 @@ sub-fatia:
 |---|---|---|
 | **CS-1 — cache do caixa aberto** | Abrir caixa online → ficar offline → **navegar/remontar** `/venda` → PDV reconhece o caixa aberto (não diz "caixa fechado") e mantém o `sessionId` p/ enfileirar | 🟡 código pronto; E2E do usuário ⏭️ (ver 3.F.CS-1) |
 | **CS-2 — cache do catálogo** | Offline após remontar → `/venda` **lista os produtos** (do cache) → montar carrinho → **Confirmar** enfileira normalmente; estoque exibido = último conhecido + baixas otimistas | 🟡 código pronto; E2E do usuário ⏭️ (ver 3.F.CS-2) |
-| **CS-3 — navegação offline** | Offline, **trocar entre telas** (Venda↔Caixa↔Histórico) sem tela branca **e sem** o aviso paliativo do `error.tsx` — as telas abrem do cache | ⏭️ planejado |
-| **CS-4 — caixa fechado no sync** | Enfileirar offline → caixa **fechado no servidor** (simular) → voltar online → comportamento conforme ADR (anexa c/ reconciliação **ou** vira `FAILED` na tela de pendências) | ⏭️ planejado |
-| Regressão | Online intacto; venda offline "queda durante a venda" (3.D) segue funcionando; poda/drenagem (3.E) sem regressão; core Vitest | ⏭️ planejado |
+| **CS-3 — navegação offline** | Offline, **trocar entre telas** sem tela branca — as telas abrem do cache via **navegação por reload** | ✅ **validada pelo usuário (2026-07-11)** — ver 3.F.CS-3 (+ achados .1/.2/.3) |
+| **CS-4 — caixa fechado no sync** | Enfileirar offline → caixa **fechado no servidor** → voltar online → **anexa c/ marca de reconciliação** (`SALE_ON_CLOSED_CASH`); Relatórios mostra "N após fechamento" na linha do caixa | ✅ **validada pelo usuário (2026-07-11/12)** — ver 3.F.CS-4 |
+| Regressão | Online intacto; venda offline "queda durante a venda" (3.D) segue funcionando; poda/drenagem (3.E) sem regressão; core Vitest | ✅ CS-1…CS-4 sem regressão (build 18 rotas + core 47/47) |
 
 > **Marco de valor:** CS-1 + CS-2 já entregam "operar offline após remontar/reabrir" (ficando no
 > `/venda`). CS-3 adiciona navegação offline entre telas. CS-4 endurece a borda do caixa fechado.
@@ -1933,3 +1933,174 @@ do beco-sem-saída) e **Tentar novamente**. Typecheck + build ✅; no ar `51faac
 > vez** e visite as telas que vai testar (para o SW cachear os chunks novos) **antes** de simular
 > offline — senão a navegação offline bate em chunk não-cacheado (o global-error acima agora cobre
 > esse caso com saída, mas a navegação só funciona de fato com o CS-3).
+
+### 3.F.CS-3 — Navegação offline entre telas (por reload) — CÓDIGO PRONTO (2026-07-11)
+
+Fecha o achado **3.F.CS-2.2** (navegar offline entre telas → crash raiz). Fatia de *spike* prevista no
+ADR-012 (decisão (c)) — **cliente puro, sem migration/API**.
+
+**Diagnóstico do spike.** A navegação **client-side** do Next (App Router) via `<Link>` busca o
+**payload RSC** da rota destino (`GET /rota?_rsc=...`) pela rede; o SW não intercepta esse pedido e,
+offline, ele falha → o roteador lança → fallback cru. Já a **navegação real** (full load) embute o RSC
+inicial no próprio HTML (`self.__next_f`), **sem** o fetch `?_rsc=` — e o SW sabe servir o documento
+(navigate network-first) + os chunks (`/_next/static/`, SWR) do cache. Logo, a correção é a
+**navegação por reload** offline (o fallback que o ADR-012 pré-aprovou), equivalente a "reabrir o app
+offline" (caminho já validado em CS-1/CS-2).
+
+**Implementação (só front).**
+- `apps/web/app/(app)/OfflineNav.tsx` — componente sem render montado no shell `(app)`. Instala um
+  interceptor de clique em **fase de captura**: **offline**, se o clique resolve para um `<a>` interno
+  (mesma origem, sem modificador/`target=_blank`/`download`), faz `preventDefault` + `stopPropagation`
+  + `window.location.assign(href)` — **full-load** em vez de client-nav. **Online: no-op** (client-nav
+  rápida do Next preservada). Cobre o menu lateral, o chip → `/pendencias` e os botões dos error
+  boundaries (que já eram navegação real).
+- `apps/web/public/sw.js` — **reescrito (v3)** para aquecer os chunks de verdade (ver 3.F.CS-3.1 para o
+  porquê): **dois caches** — `SHELL` versionado (documentos + ícones/manifest) e `STATIC` **não-versionado**
+  (`/_next/static/*`, imutáveis por hash → **sobrevivem a deploys**, cache-first). `warmRoutes()` busca o
+  HTML de cada rota offline-capable, cacheia o **documento** (SHELL) e **extrai as URLs `/_next/static/`
+  do próprio HTML** (onde o chunk da página aparece como `<script>`) cacheando-as (STATIC). Disparado no
+  `install` (online) e por mensagem `WARM_ROUTES` do cliente. O `activate` limpa só caches de casca
+  antigos (preserva o STATIC).
+- **Aquecimento no cliente:** efeito no shell `(app)` manda `WARM_ROUTES` ao SW **quando online** e
+  **re-aquece ao reconectar** (todo deploy troca o hash dos chunks). Inclui `/pendencias`, que **não está
+  no menu** (o chip só aparece com fila offline → seu chunk nunca seria aquecido por navegação normal). O
+  `router.prefetch` foi mantido só para acelerar a client-nav online (aquece o RSC, **não** o JS — por
+  isso não bastava; ver 3.F.CS-3.1).
+- Cópia de `(app)/error.tsx` e `global-error.tsx` atualizada: pós-CS-3 a navegação offline funciona
+  para telas já abertas online; os boundaries viram **rede de segurança** para o caso residual (rota
+  cujo chunk/RSC nunca foi cacheado).
+
+**Build / typecheck / core (local)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Typecheck `apps/web` (`tsc --noEmit`) | sem erros | ✅ |
+| Build de produção (`next build`) | 18 rotas | ✅ sem erros |
+| Core (Vitest) — não tocado | 47/47 | ✅ (regressão) |
+
+**Deploy + smoke (produção) — 2026-07-11**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| `npm run deploy` (web) — 1º | publicado | ✅ Version `6b4f8ad9` (1ª tentativa caiu em `fetch failed` transitório; retry OK) |
+| `GET /sw.js` traz `VERSION` v2 + precache `/venda`,`/caixa`,`/pendencias` | atualizado | ✅ |
+| `GET /login` / `GET /venda` | 200 | ✅ 200 / 200 |
+| `npm run deploy` (web) — 2º (`router.prefetch` p/ `/pendencias`) | publicado | ✅ Version `6f65a81b` (insuficiente; ver 3.F.CS-3.1) |
+| `npm run deploy` (web) — 3º (SW v3: aquecimento real de chunks) | publicado | ✅ Version `b4fa95f7` |
+| `GET /sw.js` traz `VERSION` v3 + `warmRoutes`/`WARM_ROUTES`/`nexoloja-static` | atualizado | ✅ |
+| `/pendencias` HTML expõe os chunks `/_next/static/` que o warm extrai | ≥ 1 | ✅ 18 refs (CSS + JS, incl. chunk da página) |
+| `npm run deploy` (web) — 4º (warm de TODAS as telas do menu; ver 3.F.CS-3.2) | publicado | ✅ Version `4d47eacc` |
+| `GET /sw.js` traz `WARM_ROUTES` com as 9 telas do menu | atualizado | ✅ |
+
+**E2E do usuário (offline, no PWA) — ⏭️ pendente (2ª rodada, sobre v3).** O SW/offline é produção-only e
+o `OfflineNav` só monta no shell logado (exige login do usuário). Protocolo (simplificado após a
+correção do aquecimento): abrir o app **online** e aguardar ~2s no shell logado (o efeito pré-carrega
+Venda/Caixa/**Pendências** sozinho — não precisa visitar cada tela) → **desativar a rede** → navegar
+entre elas pelo menu **e pelo chip → Pendências** (após uma venda offline). **Esperado:** as telas
+trocam por reload, sem tela branca e sem cair no `global-error`; o caixa/catálogo seguem do cache
+(CS-1/CS-2) e a venda offline enfileira normalmente.
+
+**3.F.CS-3.1 — Achado do 1º E2E: navegação por reload caía no `global-error` (2026-07-11)**
+
+No 1º E2E (v2/`6f65a81b`), offline: ao trocar de tela apareceu o `global-error` ("Sem conexão para
+abrir esta tela"), e **"Ir para a Venda" voltava para a mesma tela** em vez de abrir o PDV. **Causa
+raiz (duas somadas):** (1) `router.prefetch` **não aquece o JS** da rota — só o payload RSC (que o SW
+nem cacheia); como `/pendencias` nunca é aberta online, seu chunk ficava fora do cache. (2) O bump do
+`VERSION` do SW **apagava o cache de chunks já aquecidos** (o `activate` limpava tudo e recriava só com
+os documentos do PRECACHE, sem os `.js`) — então, logo após o deploy e antes de reabrir tudo online,
+**até o `/venda` ficava sem chunk**, e a navegação real para ele caía de novo no `global-error` (o
+documento carregava, mas o chunk da página faltava). **Correção (SW v3, Version `b4fa95f7`):**
+`warmRoutes()` busca o HTML de cada rota offline-capable e cacheia **documento + todos os chunks
+`/_next/static/` extraídos do HTML** (aquecimento real, incl. `/pendencias`); os chunks vão para um
+cache **não-versionado** (`STATIC`, cache-first) que **sobrevive a deploys**; o `activate` só limpa
+casca antiga. Disparo no `install` (online) e por `WARM_ROUTES` (load online + reconexão). Smoke:
+`/pendencias` expõe 18 refs `/_next/static/` que o parser captura. **Re-teste do usuário sobre v3 →
+pendente.**
+
+**3.F.CS-3.2 — Achado do 2º E2E: tela online-only offline caía no beco `/offline` (2026-07-11)**
+
+No 2º E2E (v3/`b4fa95f7`), offline, ao entrar em **Estoque** (tela **online-only**) apareceu a página
+`/offline` ("Você está offline"), **sem o menu** — um beco-sem-saída. Causa: o `OfflineNav` força
+**reload** em toda navegação e só as rotas offline-capable (`/venda`,`/caixa`,`/pendencias`) eram
+aquecidas; `/estoque` não estava em cache → o SW caiu no `/offline`. **Regressão de UX:** antes da CS-3
+(3.F.CS-2.1) abrir Estoque offline mostrava o **banner "Sem conexão" dentro da tela, com o menu** —
+comportamento validado que a CS-3 quebrou. **Correção (Version `4d47eacc`):** aquecer o **shell de
+TODAS as telas do menu** (`WARM_ROUTES` = venda/vendas/caixa/products/estoque/customers/relatorios/
+configuracoes/pendencias), não só as offline-capable. Custo mínimo (o JS é quase todo compartilhado; o
+chunk próprio de cada tela tem 2–6KB). Assim as telas online-only **abrem o shell + menu + banner "Sem
+conexão"** (os dados seguem online-only, decisão (c) do ADR-012) em vez do beco `/offline`; as
+offline-capable seguem funcionando por completo. Smoke: `sw.js` publicado com as 9 rotas em
+`WARM_ROUTES`; `/estoque` expõe 18 refs `/_next/static/`.
+
+> ✅ **E2E do usuário (2026-07-11) — CS-3 VALIDADA (Version `4d47eacc`).** No PWA (Windows), offline:
+> navegou por **todas** as telas do menu sem tela branca, sem `/offline`, sem `global-error`; as
+> online-only mostram o banner "Sem conexão" com o menu; Venda/Caixa/Pendências operam do cache
+> (CS-1/CS-2) e a venda offline enfileira. **Um achado menor → 3.F.CS-3.3.**
+
+**3.F.CS-3.3 — Achado do E2E: item "Configurações" some do menu ao navegar offline (2026-07-11)**
+
+Durante o E2E validado, o usuário notou que **Configurações desaparece do menu** depois de começar a
+navegar offline. Causa: o item é `adminOnly` — só aparece com `isAdmin` (derivado do `GET /me`). Como a
+navegação por reload remonta o shell a cada tela e o `/me` (cross-origin) falha sem rede, `isAdmin` caía
+para `false` e o item sumia (antes da CS-3, o `me` ficava em memória entre telas). **Correção (Version
+`624912fe`):** novo `apps/web/lib/meCache.ts` persiste o último `/me` bom em `localStorage`; `useMe`, ao
+falhar **offline**, usa o cache (papel/nome preservados) — mas numa falha **online** (auth real, ex.: 403
+de desativado) segue caindo em `me=null` (gate real intacto). `logout` chama `clearCachedMe()` (não vaza
+perfil entre contas no aparelho). Só espelho de UX (decisão (a) do ADR-012); segurança real na API.
+Typecheck + build (18 rotas) ✅. **Re-confirmação do usuário → pendente (item aparece offline).**
+
+### 3.F.CS-4 — Semântica de caixa fechado no sync — CÓDIGO PRONTO (2026-07-11)
+
+Última sub-fatia do ADR-012 (decisão (b)) — **a única que toca o servidor**, ainda **sem migration**
+(`AuditEvent.action` é `String` livre). **Problema:** a venda offline referencia um `cashSessionId` que
+pode ter sido **fechado** (noutro dispositivo) até o sync. A venda ocorreu fisicamente naquele turno, então
+o `POST /orders` idempotente **anexa mesmo assim** (já anexava — a busca do caixa não exige `closedAt:null`)
+e agora **marca para reconciliação**.
+
+**Implementação.**
+- `apps/api/src/routes/orders.ts` — no ramo offline, a busca do caixa passou a trazer `closedAt`;
+  `cashClosedAt = isOffline ? session.closedAt : null`. Na transação, se o caixa estava fechado, grava
+  **`AuditEvent SALE_ON_CLOSED_CASH`** (`meta`: `cashSessionId`, `cashClosedAt`, `total`, `offline`,
+  `reconcile:true`) — evento crítico auditável, **não bloqueia** a venda. A resposta ganha
+  `syncedToClosedCash:true` (observabilidade). Online intacto (caixa aberto, sem marca).
+- `apps/api/src/routes/reports.ts` — `GET /reports/cash-sessions` agrega as marcas por sessão
+  (`SALE_ON_CLOSED_CASH`) e devolve `lateSalesCount`/`lateSalesTotal` por fechamento — a divergência que a
+  decisão (b) manda surgir no relatório.
+- `packages/shared/src/report.ts` — `CashSessionReport` ganhou `lateSalesCount`/`lateSalesTotal`.
+- `apps/web/app/(app)/relatorios/page.tsx` — badge âmbar "N após fechamento · R$…" na linha do caixa
+  quando `lateSalesCount > 0`.
+- `docs/adr/ADR-004` — `SALE_ON_CLOSED_CASH` formalizado na lista fechada de eventos.
+
+**Build / typecheck / core (local)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| `tsc --noEmit` em `packages/shared` + `apps/api` (após `prisma generate`) | sem erros | ✅ |
+| Typecheck `apps/web` + `next build` | 18 rotas | ✅ sem erros |
+| Core (Vitest) — não tocado | 47/47 | ✅ (regressão) |
+
+**Deploy + smoke (produção) — 2026-07-11**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| `npm run deploy` (API) | publicado | ✅ Version `94f277ea` |
+| `npm run deploy` (web) | publicado | ✅ Version `ae5296b5` |
+| `GET /health` | `{ok:true}` | ✅ |
+| `GET /reports/cash-sessions` sem token | 401 | ✅ (rota viva, secret intacto) |
+| `POST /orders` sem token | 401 | ✅ |
+
+**E2E do usuário — ✅ VALIDADO (2026-07-11/12).** Método de dois contextos do mesmo operador (PWA +
+aba anônima): PWA abre o caixa → fica offline → registra a venda (pendente); a aba anônima (online)
+**fecha o caixa**; o PWA volta online → o worker drena → a venda **entra** (não vira `FAILED`). Em
+**Relatórios** apareceu o badge **"após fechamento"** na linha daquele caixa. *(Obs.: o "abrir no
+navegador redireciona para o PWA" é o link-capturing do Chrome/Edge com PWA instalado — a **aba anônima**
+dá o 2º contexto isolado, bastando logar o mesmo operador.)*
+
+**Verificação de estoque (venda `#c0d0b8b9`, script de leitura descartável):** venda **CASH R$370,00**,
+`status CONFIRMED`/`syncStatus SYNCED`, criada `01:21:02` num caixa fechado `01:20:26` (**anexada ~36s
+após o fechamento** → caso real da decisão (b)). Estoque do **Cimento**: **240 → 230** (`StockMovement
+EXPENSE 10` "Venda c0d0b8b9…", débito atômico ADR-001 confirmado); sem outros movimentos após. **Ou
+seja: a marca de reconciliação NÃO afeta o débito de estoque nem a validade da venda — só sinaliza a
+divergência de caixa.** Situação do caixa (`8bda91ce`): abertura R$850,00 · esperado congelado R$893,20
+· contado R$0,00 (fechamento de teste) · a venda tardia foi **CASH R$370** — base para o "esperado
+ajustado" da melhoria futura (ver CS-5 no ROADMAP). **CS-4 validada → ADR-012 (CS-1…CS-4) concluído.**

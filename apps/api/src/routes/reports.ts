@@ -129,9 +129,32 @@ reports.get('/cash-sessions', async (c) => {
       take: 200,
     });
 
+    // CS-4 (ADR-012 §b): vendas offline anexadas a um caixa JÁ FECHADO deixam uma marca de
+    // reconciliação (AuditEvent SALE_ON_CLOSED_CASH). Agrega por sessão para o fechamento sinalizar
+    // "N vendas lançadas após o fechamento" — a divergência que a decisão (b) manda surgir aqui.
+    const sessionIds = new Set(sessions.map((s) => s.id));
+    const reconBySession = new Map<string, { count: number; total: number }>();
+    if (sessionIds.size > 0) {
+      const events = await prisma.auditEvent.findMany({
+        where: { tenantId, action: 'SALE_ON_CLOSED_CASH' },
+        select: { meta: true },
+        orderBy: { createdAt: 'desc' },
+        take: 1000,
+      });
+      for (const ev of events) {
+        const m = ev.meta as { cashSessionId?: string; total?: number } | null;
+        if (!m?.cashSessionId || !sessionIds.has(m.cashSessionId)) continue;
+        const cur = reconBySession.get(m.cashSessionId) ?? { count: 0, total: 0 };
+        cur.count += 1;
+        cur.total = Number((cur.total + Number(m.total ?? 0)).toFixed(2));
+        reconBySession.set(m.cashSessionId, cur);
+      }
+    }
+
     const data = sessions.map((s) => {
       const expectedAmount = Number(s.expectedAmount ?? 0);
       const closingAmount = Number(s.closingAmount ?? 0);
+      const recon = reconBySession.get(s.id) ?? { count: 0, total: 0 };
       return {
         id: s.id,
         openedAt: s.openedAt.toISOString(),
@@ -141,6 +164,9 @@ reports.get('/cash-sessions', async (c) => {
         expectedAmount,
         divergence: calcCashDivergence(expectedAmount, closingAmount),
         notes: s.notes ?? null,
+        // Vendas offline anexadas depois do fechamento (reconciliação, CS-4).
+        lateSalesCount: recon.count,
+        lateSalesTotal: recon.total,
       };
     });
 

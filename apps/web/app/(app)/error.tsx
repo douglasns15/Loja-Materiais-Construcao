@@ -7,10 +7,10 @@ import { useEffect } from 'react';
  * segmento fica **dentro** do `layout.tsx` do grupo `(app)`, então a barra do topo (incl. o chip de
  * pendências) permanece e só a área da página mostra o fallback.
  *
- * Caso principal: navegar **offline** para uma tela cujo código ainda não está em cache — o
- * navegador não consegue baixar o chunk e o React lança. Antes isso virava tela branca ("Application
- * error"); agora vira um aviso claro, sem perder o shell. (A navegação offline entre telas depende do
- * cache de leitura da fatia futura de offline-first; a fila de vendas offline segue intacta.)
+ * Caso residual (pós-CS-3): a navegação offline entre telas passou a ser por **reload** (`OfflineNav`),
+ * então telas **já abertas online** carregam do cache. Este fallback cobre o caso restante — abrir
+ * offline uma tela cujo código **nunca** foi cacheado (ex.: rota nova, ainda não visitada após um
+ * deploy): o navegador não baixa o chunk e o React lança. Vira um aviso claro, sem perder o shell.
  */
 export default function AppError({
   error,
@@ -29,11 +29,11 @@ export default function AppError({
   return (
     <div className="mx-auto max-w-md rounded-2xl bg-white p-8 text-center shadow-sm">
       <h2 className="mb-2 text-lg font-semibold text-gray-900">
-        {offline ? 'Esta tela precisa de internet para abrir' : 'Algo deu errado ao abrir a tela'}
+        {offline ? 'Esta tela ainda não foi carregada offline' : 'Algo deu errado ao abrir a tela'}
       </h2>
       <p className="mb-4 text-sm text-gray-600">
         {offline
-          ? 'Ainda não é possível navegar entre telas sem conexão. Volte a ficar online para abrir esta página — as vendas salvas offline continuam na fila e sincronizam sozinhas quando a rede voltar.'
+          ? 'Abra esta tela uma vez com internet para que ela fique disponível offline. As telas de Venda, Caixa e Pendências funcionam sem conexão depois de abertas online. As vendas salvas offline continuam na fila e sincronizam sozinhas quando a rede voltar.'
           : 'Tente novamente. Se o problema continuar, recarregue o aplicativo.'}
       </p>
       <button

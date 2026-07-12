@@ -130,11 +130,11 @@ orders.post('/', requireActiveTenant, async (c) => {
     const session = isOffline
       ? await prisma.cashSession.findFirst({
           where: { id: sale.cashSessionId, tenantId, userId },
-          select: { id: true },
+          select: { id: true, closedAt: true },
         })
       : await prisma.cashSession.findFirst({
           where: { tenantId, userId, closedAt: null },
-          select: { id: true },
+          select: { id: true, closedAt: true },
         });
     if (!session) {
       return c.json(
@@ -147,6 +147,12 @@ orders.post('/', requireActiveTenant, async (c) => {
         400,
       );
     }
+
+    // CS-4 (ADR-012, decisão (b)): a venda offline pode referenciar um caixa que já foi FECHADO
+    // (noutro dispositivo) até o sync. A venda ocorreu fisicamente naquele turno, então **anexamos
+    // mesmo assim** (não rejeitamos) e **marcamos para reconciliação** (AuditEvent abaixo) — a
+    // divergência aparece no relatório de fechamento, como o estoque negativo do ADR-011 §6.
+    const cashClosedAt = isOffline ? session.closedAt : null;
 
     // Carrega os produtos do tenant e valida existência (sempre) + estoque (só bloqueia online).
     const ids = sale.items.map((i) => i.productId);
@@ -248,10 +254,42 @@ orders.post('/', requireActiveTenant, async (c) => {
         });
       }
 
+      // CS-4 (ADR-004/012 §b): marca de reconciliação quando a venda offline foi anexada a um caixa
+      // JÁ FECHADO. Evento crítico auditável (não bloqueia a venda) — surge no relatório de fechamento.
+      if (cashClosedAt) {
+        await tx.auditEvent.create({
+          data: {
+            tenantId,
+            userId,
+            entity: 'Order',
+            entityId: created.id,
+            action: 'SALE_ON_CLOSED_CASH',
+            meta: {
+              cashSessionId: session.id,
+              cashClosedAt: cashClosedAt.toISOString(),
+              total,
+              offline: true,
+              reconcile: true,
+            },
+          },
+        });
+      }
+
       return created;
     });
 
-    return c.json({ ok: true, data: { ...order, change: Number((paid - total).toFixed(2)) } }, 201);
+    return c.json(
+      {
+        ok: true,
+        data: {
+          ...order,
+          change: Number((paid - total).toFixed(2)),
+          // CS-4: sinaliza ao cliente que a venda foi anexada a um caixa já fechado (reconciliação).
+          ...(cashClosedAt ? { syncedToClosedCash: true } : {}),
+        },
+      },
+      201,
+    );
   } catch (err) {
     // Corrida rara: dois syncs do mesmo `id` ao mesmo tempo → o 2º viola a PK. Trata como dedup.
     if (isOffline && err instanceof Error && (err as { code?: string }).code === 'P2002') {

@@ -10,10 +10,11 @@ import { useEffect } from 'react';
  * fallback cru do Next ("Application error…"), sem casca e sem saída.
  *
  * `global-error` **substitui o layout raiz** (precisa de `<html>`/`<body>` próprios) e não recebe o
- * `globals.css`, então os estilos são inline. Não é a solução de navegação offline (isso é o CS-3 —
- * precache de rotas no SW); é só transformar o beco-sem-saída num aviso recuperável: **Recarregar**
- * dispara uma navegação real, que o Service Worker atende do cache (shell) e devolve o operador a uma
- * tela que funciona. As vendas salvas offline seguem na fila e sincronizam sozinhas.
+ * `globals.css`, então os estilos são inline. Pós-CS-3 a navegação offline entre telas é por reload
+ * (`OfflineNav`) e telas já abertas online carregam do cache — então este fica como **última rede de
+ * segurança** para o caso residual (rota cujo chunk/RSC nunca foi cacheado). **Ir para a Venda**
+ * dispara uma navegação real, que o Service Worker atende do cache, tirando o operador do
+ * beco-sem-saída. As vendas salvas offline seguem na fila e sincronizam sozinhas.
  */
 export default function GlobalError({
   error,

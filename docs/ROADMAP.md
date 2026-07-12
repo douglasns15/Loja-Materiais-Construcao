@@ -3,7 +3,19 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-11 (**Fase 3 — Cold-start / offline-first de LEITURA: CS-1 + CS-2
+> **Última atualização:** 2026-07-12 (**Fase 3 — ADR-012 (cold-start / offline-first de leitura)
+> CONCLUÍDO ponta a ponta: CS-1…CS-4 NO AR e VALIDADAS pelo usuário**). **PRÓXIMO PASSO = CS-5** (melhoria
+> da conferência da CS-4: "esperado ajustado" + divergência recalculada no relatório de fechamento — a
+> executar em outra sessão; ver a fatia CS-5 na Fase 3). **CS-4 (semântica de caixa fechado no sync,
+> decisão b) — validada:** a venda offline anexada a um caixa **fechado** grava `AuditEvent
+> SALE_ON_CLOSED_CASH` (marca de reconciliação, não bloqueia; **sem migration**) e o relatório mostra o
+> badge "N após fechamento". E2E de dois contextos OK; verificação de estoque da venda `#c0d0b8b9` (CASH
+> R$370): Cimento **240 → 230**, débito atômico intacto (a marca não afeta estoque/validade). API
+> `94f277ea` + web `ae5296b5`. **Antes: CS-3 (navegação offline entre telas) VALIDADA** — navegação por
+> reload (`OfflineNav`) + Service Worker v3 (aquece o shell de todas as 9 telas do menu; cache `STATIC`
+> sobrevive a deploys) + `lib/meCache.ts` (papel/nome offline); 3 achados dos E2E corrigidos
+> (3.F.CS-3.1/.2/.3). Web Version `624912fe`.
+> **Antes: CS-1 + CS-2
 > NO AR e VALIDADAS** — o PDV segue **vendável offline após remontar/reabrir**). **ADR-012 escrito e
 > ACEITO** (5 decisões a–e). **CS-1** (cache do caixa aberto em `localStorage`) + **CS-2** (cache do
 > catálogo no IndexedDB — abridor compartilhado `lib/db.ts`, `DB_VERSION`→2 com store `catalog`;
@@ -140,19 +152,19 @@
 > e **E2E de convite pela URL publicada validado pelo usuário no navegador** (convite → e-mail →
 > `/definir-senha` → login). Ver 2.R no registro de testes.
 >
-> ▶️ **Próximo passo: Fatia CS-3 — navegação offline entre telas** (a executar em outra sessão). O
-> **cold-start de leitura** já está no ar e validado em **CS-1** (cache do caixa) + **CS-2** (cache do
-> catálogo) — o PDV é vendável offline após remontar/reabrir, **ficando no `/venda`**. O que falta é
-> **trocar de tela offline**: hoje quebra porque o chunk/RSC da rota destino não está cacheado e o
-> erro nasce no roteador (achado 3.F.CS-2.2) — mitigado com `app/global-error.tsx` (aviso recuperável),
-> mas a correção real é o **CS-3**: um *spike* do Service Worker para **precachear as rotas
-> offline-capable (venda/caixa/pendências) + o payload RSC** após a 1ª visita online; se o RSC
-> inviabilizar a navegação client-side, **assumir navegação-por-reload** (o SW já é network-first com
-> fallback de cache para `navigate`). Ver ADR-012 (decisão c) e 3.F.CS-2.2 no registro. Depois do CS-3:
-> **CS-4** (borda do caixa fechado no sync: anexar + reconciliação, decisão b). **Tudo no cliente —
-> sem migration, sem impacto nos free tiers.** Outras direções abertas: (b) próximas naturezas de
-> mutação (estoque e caixa offline; depois cadastros mutáveis → tela de `CONFLICT`); (c) outros itens
-> da Fase 3 (módulo de estoque fino, pooler, avaliar Supabase Pro).
+> ▶️ **Próximo passo (a executar em outra sessão): Fatia CS-5 — "esperado ajustado" + divergência
+> recalculada no relatório de fechamento** (melhoria da conferência da CS-4). O **ADR-012 (cold-start /
+> offline-first de leitura) está CONCLUÍDO e VALIDADO ponta a ponta (CS-1…CS-4)**: o PDV opera offline
+> após remontar/reabrir (CS-1/CS-2), navega entre telas offline por reload (CS-3) e a venda offline
+> anexada a um caixa já fechado é marcada para reconciliação e aparece em Relatórios (CS-4). A **CS-5**
+> deixa a conferência pronta sem mexer no dado congelado: no `GET /reports/cash-sessions`, para cada caixa
+> com vendas tardias, calcular `lateCashSalesTotal` (**só a parcela em DINHEIRO** — cartão/PIX conciliam
+> na maquininha), `adjustedExpected = expected + lateCashSalesTotal` e `adjustedDivergence = closing −
+> adjustedExpected`; enriquecer o `meta` do `SALE_ON_CLOSED_CASH` com `cashAmount` (evita join nos
+> pagamentos), estender `CashSessionReport` e exibir na UI `/relatorios`. **Sem migration.** Detalhe
+> completo na fatia CS-5 (Fase 3) e o caso concreto em 3.F.CS-4. **Depois da CS-5:** direções abertas —
+> (b) próximas naturezas de mutação offline (estoque e caixa; depois cadastros mutáveis → tela de
+> `CONFLICT`); (c) outros itens da Fase 3 (módulo de estoque fino, pooler, avaliar Supabase Pro).
 >
 > ⚠️ **Ao retomar o teste offline após qualquer deploy:** abra o app **online uma vez** e visite as
 > telas que vai testar (o deploy troca o hash dos chunks; o SW só os cacheia ao visitá-las online) —
@@ -551,17 +563,52 @@
           no `/venda`). Ver 3.F.CS-2 no registro. **Refino 3.F.CS-2.1 (web `a4cebe57`):** aviso de rede
           amigável (`OfflineNotice`) nas 5 telas online-only (Produtos/Estoque/Clientes/Relatórios/
           Histórico) no lugar do "Failed to fetch" cru — decisão (c) do ADR-012.
-    - [ ] **Fatia CS-3 — navegação offline entre telas** (a mais incerta — exige *spike*). Estender o
-          SW para servir as **rotas do operador** offline (documento + chunks + payload RSC do Next App
-          Router). Abordagem a validar no spike: precache das rotas offline-capable após 1ª visita
-          online + fallback de navegação servindo o documento cacheado; avaliar o custo do RSC
-          (`?_rsc=`). Se o RSC inviabilizar client-nav offline, aceitar **navegação por reload** offline.
-          *Substitui o paliativo do `error.tsx` pelo caminho real.*
-    - [ ] **Fatia CS-4 — semântica de caixa fechado no sync** (pequena-média). Implementar a decisão (b)
-          do ADR: no `POST /orders` idempotente, tratar `cashSessionId` de sessão **fechada** conforme
-          travado (anexar com marca de reconciliação, ou 4xx → `FAILED`).
+    - [x] **Fatia CS-3 — navegação offline entre telas — VALIDADA pelo usuário (2026-07-11)** (spike
+          concluído). **Achado do spike:** a client-nav do Next (`<Link>`) busca o **RSC** (`?_rsc=`) pela
+          rede — o SW não intercepta e falha offline; a **navegação real** (full load) embute o RSC no
+          HTML e o SW serve documento + chunks do cache. Correção = **navegação por reload** offline
+          (fallback pré-aprovado). `apps/web/app/(app)/OfflineNav.tsx` (interceptor de clique em captura:
+          offline → `location.assign`; online = no-op) + **Service Worker v3** que **aquece o shell de
+          todas as 9 telas do menu** (`warmRoutes` busca o HTML e cacheia documento + chunks `/_next/static/`;
+          cache `STATIC` não-versionado sobrevive a deploys). Cópia dos error boundaries ajustada (viram
+          rede de segurança). Typecheck + build (**18 rotas**) + core 47/47 ✅. **Substitui o paliativo do
+          `error.tsx` pelo caminho real. NO AR + E2E validado pelo usuário** (offline: navega por todas as
+          telas sem tela branca/`/offline`/`global-error`; online-only mostram banner "Sem conexão" com
+          menu; Venda/Caixa/Pendências operam do cache). **3 achados corrigidos durante os E2E:** (.1)
+          `router.prefetch` não cacheava o JS + bump do SW apagava chunks → SW v3 (`warmRoutes` + cache
+          `STATIC`); (.2) tela online-only caía no beco `/offline` → aquecer todas as telas do menu; (.3)
+          item **Configurações** sumia offline (`/me` falha → `isAdmin` false) → `lib/meCache.ts` cacheia o
+          `/me` p/ o shell offline. Web Version `624912fe`. Ver 3.F.CS-3 (+ .1/.2/.3) no registro.
+    - [x] **Fatia CS-4 — semântica de caixa fechado no sync — NO AR e VALIDADA (2026-07-11/12)** (decisão
+          (b), a única sub-fatia que toca o servidor, **sem migration** — `AuditEvent.action` é String
+          livre). `POST /orders` idempotente: no ramo offline detecta caixa **fechado** (`session.closedAt`)
+          e, além de anexar (já anexava), grava **`AuditEvent SALE_ON_CLOSED_CASH`** (marca de
+          reconciliação, não bloqueia). `GET /reports/cash-sessions` agrega as marcas por sessão
+          (`lateSalesCount`/`lateSalesTotal`); a UI `/relatorios` mostra badge "N após fechamento · R$…"
+          na linha do caixa. `SALE_ON_CLOSED_CASH` formalizado no ADR-004. Shared/api/web typecheck +
+          build (18 rotas) + core 47/47 ✅. **NO AR (API `94f277ea` + web `ae5296b5`).** **E2E validado**
+          (dois contextos: PWA offline registra a venda; aba anônima fecha o caixa; PWA sincroniza → venda
+          entra + badge no relatório). Verificação de estoque da venda `#c0d0b8b9` (CASH R$370): Cimento
+          **240 → 230**, débito atômico (ADR-001) intacto — a marca **não** afeta estoque/validade da
+          venda. Ver 3.F.CS-4 no registro. **Com a CS-4, o ADR-012 (cold-start / offline-first de leitura)
+          está CONCLUÍDO ponta a ponta (CS-1…CS-4).**
     > **Ordem de valor:** CS-1 + CS-2 entregam o essencial (PDV vendável offline após remontar, sem
     > navegar). CS-3 adiciona a navegação offline entre telas. CS-4 endurece a borda do caixa fechado.
+    - [ ] **Fatia CS-5 — "esperado ajustado" e divergência recalculada no relatório de fechamento
+          (melhoria da conferência da CS-4) — PRÓXIMO PASSO (a executar em outra sessão)**. Hoje o
+          relatório mostra "N após fechamento · R$…", mas o dono ainda faz a conta do esperado ajustado na
+          cabeça (ver 3.F.CS-4: caixa `8bda91ce` esperado R$893,20 + venda tardia CASH R$370 = R$1.263,20).
+          **Escopo:** em `GET /reports/cash-sessions`, para cada caixa com vendas tardias, calcular
+          `lateCashSalesTotal` (**só a parcela em DINHEIRO** das vendas tardias — cartão/PIX não tocam a
+          gaveta, conciliam na maquininha), `adjustedExpected = expectedAmount + lateCashSalesTotal` e
+          `adjustedDivergence = closingAmount − adjustedExpected`. **Sem migration.** Para ter a parcela
+          em dinheiro sem consultar pagamentos no relatório, **enriquecer o `meta` do `SALE_ON_CLOSED_CASH`
+          com `cashAmount`** no `POST /orders` (a alternativa é o relatório fazer join nos `payments` das
+          vendas tardias). Estender `CashSessionReport` (`packages/shared`) com os campos e mostrar na UI
+          `/relatorios` (esperado ajustado + divergência recalculada) quando `lateSalesCount > 0`.
+          **NÃO reescreve o dado congelado** do fechamento (auditoria) — só exibe o cálculo pronto. O
+          caixa fechado segue imutável; a venda tardia legítima **não** se devolve (Devolver é só p/ venda
+          errada/duplicada, ADR-006).
 - [ ] Módulo de estoque fino (estoque mínimo, notificações, movimentações detalhadas)
 - [ ] Otimização do pooler (6543) para limites do free tier
 - [ ] Avaliar upgrade Supabase Pro p/ produção

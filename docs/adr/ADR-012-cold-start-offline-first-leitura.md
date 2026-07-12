@@ -184,8 +184,27 @@ Corresponde às sub-fatias **CS-1…CS-4** já esboçadas no ROADMAP. **Tudo no 
        ADR-011 §6).
 5. [x] **(e) aprovada:** abrir caixa novo offline — **online-only** (cold-start cobre "caixa já
        aberto").
-6. [ ] **CS-1 — cache do caixa aberto** (em andamento). Depois CS-2 (catálogo), CS-3 (navegação
-       offline, com spike), CS-4 (borda do caixa fechado no sync).
+6. [x] **CS-1 — cache do caixa aberto**, **CS-2 — cache do catálogo** e **CS-3 — navegação offline
+       (por reload)** NO AR e **validadas pelo usuário** (2026-07-11). O *spike* da CS-3 concluiu:
+       client-nav do Next busca o RSC (`?_rsc=`) pela rede e falha offline; a navegação **real** embute
+       o RSC no HTML → **navegação por reload** (`OfflineNav`) + **Service Worker v3** que aquece o shell
+       de todas as telas do menu (documento + chunks extraídos do HTML; cache `STATIC` sobrevive a
+       deploys) + `lib/meCache.ts` (papel offline).
+7. [x] **CS-4 — semântica de caixa fechado no sync** (decisão (b)) NO AR (API `94f277ea` + web
+       `ae5296b5`) e **VALIDADA pelo usuário (2026-07-11/12)**. Implementa a **única decisão que toca o
+       servidor**, ainda **sem migration**: no `POST /orders` idempotente, quando a venda offline
+       referencia um caixa já **fechado**, anexa mesmo assim e grava `AuditEvent SALE_ON_CLOSED_CASH`
+       (marca de reconciliação, não bloqueia); `GET /reports/cash-sessions` agrega por caixa
+       (`lateSalesCount`/`lateSalesTotal`) e a UI `/relatorios` exibe o badge. E2E de dois contextos OK;
+       verificação de estoque da venda `#c0d0b8b9` (CASH R$370): Cimento 240 → 230, débito atômico
+       (ADR-001) intacto. **Com isso o ADR-012 está CONCLUÍDO e validado ponta a ponta (CS-1…CS-4).**
+8. [ ] **CS-5 (melhoria de acompanhamento, fora do escopo mínimo do ADR) — "esperado ajustado" +
+       divergência recalculada no relatório de fechamento.** A CS-4 já cumpre a decisão (b) (marca +
+       badge); a CS-5 deixa a **conferência** pronta: exibe `adjustedExpected = expected +
+       lateCashSalesTotal` (só a parcela em **dinheiro** das vendas tardias) e a divergência recalculada,
+       **sem reescrever o dado congelado** do fechamento. Requer enriquecer o `meta` do
+       `SALE_ON_CLOSED_CASH` com `cashAmount`. **Sem migration.** Detalhe no ROADMAP (fatia CS-5). Próximo
+       passo do projeto.
 
 ---
 
