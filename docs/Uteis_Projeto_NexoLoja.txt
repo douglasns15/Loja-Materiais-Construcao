@@ -16,6 +16,10 @@ http://localhost:3000/
 
 ## Leia docs/ROADMAP.md e docs/testes/registro-de-testes.md e vamos continuar
 
+Ponto forte descoberto: description, weightKg e unit UnitType já existem no schema (herança do módulo Material de Construção) — então boa parte da EF-1 é só UI, e a única migration real é o nickname.
+
+Quando abrir a próxima sessão, é só dizer "vamos de EF-1" que eu começo pela migration do nickname (mostro o impacto e peço sua aprovação) e a exposição dos campos no cadastro.
+
 <> OBS: Status: Online - mostrar para indicar que o software está online... questionar sobre essa adição!! Outra coisa, será que é relevante adicionar no painel do super user um indicador por loja, mostrando se está on Line ou não.. se bem que pode estar off na loja, mas em outro local qualquer alguém acessar e vai mostrar como ON Line ... 
 
 <> Ah, e na coluna de usuários, no painel do super usuário, ter como clicar no número de usuários e ver quais são, inclusive, ter alguma opção de gerar nova senha, tanto para o super usuário quanto para o admin de cada loja, para aqueles casos em que um usuário, por ventura esqueça sua senha

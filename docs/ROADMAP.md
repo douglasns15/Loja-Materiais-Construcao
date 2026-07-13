@@ -3,7 +3,23 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-13 (**Fase 3 — CS-5 (esperado ajustado + divergência recalculada no
+> **Última atualização:** 2026-07-13 — **CS-5 fechada e validada; direção do próximo bloco travada.**
+> **Decisão de produto:** estoque e caixa seguem **ONLINE-ONLY** — NÃO haverá mutação offline de estoque/
+> caixa agora. O offline valeu para a **VENDA** (cliente no balcão, não pode esperar); já entrada/ajuste de
+> estoque e abrir/fechar caixa são **retaguarda** (podem esperar a rede voltar), e o **"ajuste"** é
+> justamente a classe **conflituosa** que exigiria a tela de **CONFLICT**. Fica adiado até haver demanda
+> real — junto com os cadastros mutáveis e a tela de conflito (ordem já prevista na Fase 3). **Próximo
+> trabalho = módulo ESTOQUE FINO + enriquecimento do cadastro de Produto**, em **3 fatias** (detalhe na
+> Fase 3 → "Módulo de estoque fino + enriquecimento do cadastro"): **EF-1** cadastro enriquecido —
+> **apelido** (busca por **nome E apelido**), **descrição/observação**, **peso** (kg/g), **unidade de
+> venda** — só **1 migration aditiva** (coluna `nickname`); **EF-2** estoque fino online-first — alerta de
+> **estoque baixo** + **movimentações detalhadas** (sem migration); **EF-3** **venda em unidade
+> alternativa** (fio: **rolo fechado × por metro**, dois preços — toca PDV/estoque/comprovante → **ADR
+> próprio antes de codar**). ⚠️ Muitos campos pedidos **JÁ EXISTEM no schema** (`description`, `weightKg`,
+> `unit UnitType`) — só faltam na UI. **Nada codado ainda: só documentação/roadmap para começar em outra
+> sessão.**
+>
+> **Antes:** 2026-07-13 (**Fase 3 — CS-5 (esperado ajustado + divergência recalculada no
 > relatório) NO AR e conferida** + adendo "responsável do caixa" no relatório). CS-5 fecha a conferência
 > da CS-4: `POST /orders` grava `cashAmount` no `meta` do `SALE_ON_CLOSED_CASH`; função pura
 > `calcAdjustedCashClosing` no core (+4 testes, **51/51**); `GET /reports/cash-sessions` devolve
@@ -624,7 +640,37 @@
           desktop + toque no celular/PWA**, `position: fixed` (não é cortado pelo overflow da tabela), fecha
           ao tocar fora/Esc/rolar; não duplica as colunas financeiras. No ar (API `3c926d4c` + web
           `ac7c5b14`). Ver 3.F.CS-5 no registro.
-- [ ] Módulo de estoque fino (estoque mínimo, notificações, movimentações detalhadas)
+- [ ] **Módulo de ESTOQUE FINO + enriquecimento do cadastro de Produto — PLANEJADO (2026-07-13), a
+      executar em outra sessão, na ordem EF-1 → EF-2 → EF-3.** Decisão travada: **estoque/caixa seguem
+      ONLINE-ONLY** (mutação offline adiada — ver a nota da decisão no topo do arquivo). Boa parte dos
+      campos pedidos **já existe no schema** e não precisa de migration; falta só a UI + validação. Mapa
+      do que **já existe** vs. **novo** (conferido em `packages/db/prisma/schema.prisma`, `model Product`):
+      - `description VarChar(500)` → **já existe** (observação/descrição) — só falta na tela.
+      - `weightKg Decimal(8,3)` → **já existe** (peso; 3 casas cobrem gramas). "kg/g" é **toggle de UI**,
+        guardando canônico em **kg** (mesmo padrão de CNPJ/telefone: banco canônico, UI formata).
+      - `unit UnitType` → **já existe** (UNIT / METER / SQUARE_METER / CUBIC_METER / KILOGRAM / LITER /
+        THOUSAND / BAG / ROLL) — só falta expor o seletor no cadastro.
+      - **apelido** → **NÃO existe** → coluna nova (a única migration da EF-1).
+      - **segundo preço** (rolo fechado) → **NÃO existe** (`conversionFactor` existe, mas sem preço próprio) → EF-3.
+  - [ ] **EF-1 — Cadastro de produto enriquecido** *(rápida; 1 migration aditiva)*. Expor no cadastro/
+        edição de Produtos: **descrição/observação** (já no banco), **peso** com toggle **kg/g** (canônico
+        em kg), **unidade de venda** (dropdown do `UnitType`) e **apelido** (`nickname`). O **apelido serve
+        para BUSCA**: procurar produto por **nome oficial OU apelido** (cada loja usa o termo do seu dia a
+        dia) — avaliar incluir na consulta/índice de busca (hoje `@@index([tenantId, name])`). **Migration:**
+        1 coluna nova `nickname` (VarChar curto — ex. 60 — **nullable, sem default, NÃO altera RLS**);
+        aditiva e segura. **Não toca PDV/estoque transacional.** ⚠️ **Pedir aprovação da migration antes de
+        aplicar (regra 1 do CLAUDE.md).**
+  - [ ] **EF-2 — Estoque fino (online-first)** *(sem migration)*. Dar superfície ao que já existe no core:
+        **alerta/painel de estoque baixo** (regra `stockQty <= minStockQty`, já testada no core — falta a
+        UI de alerta/lista) e **movimentações detalhadas** / visão de reposição. Usa `StockMovement` e
+        `minStockQty` existentes. Online-first — **não toca a fila offline**.
+  - [ ] **EF-3 — Venda em unidade alternativa** *(complexa; ADR próprio antes de codar)*. Ex.: **fio** —
+        vender o **rolo fechado** OU **por metro**, com **preços diferentes** (o rolo fechado costuma sair
+        mais barato por metro). **Não é um campo — é mudança no motor de venda:** toca **PDV** (o carrinho
+        escolhe rolo/metro), **baixa de estoque** (vender 5 m desconta quanto de um "rolo"? → reusar/
+        estender `conversionFactor`), **comprovante** e **preço** (segundo preço). Modelagem em aberto:
+        (a) segundo preço + `conversionFactor`, ou (b) pequena estrutura de "embalagem" (label + tamanho +
+        preço fechado). ⚠️ **Escrever ADR curto (regra 4) + pedir aprovação da migration antes de codar.**
 - [ ] Otimização do pooler (6543) para limites do free tier
 - [ ] Avaliar upgrade Supabase Pro p/ produção
 
