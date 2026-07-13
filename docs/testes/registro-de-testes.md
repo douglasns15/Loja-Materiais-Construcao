@@ -1787,7 +1787,8 @@ sub-fatia:
 | **CS-2 — cache do catálogo** | Offline após remontar → `/venda` **lista os produtos** (do cache) → montar carrinho → **Confirmar** enfileira normalmente; estoque exibido = último conhecido + baixas otimistas | 🟡 código pronto; E2E do usuário ⏭️ (ver 3.F.CS-2) |
 | **CS-3 — navegação offline** | Offline, **trocar entre telas** sem tela branca — as telas abrem do cache via **navegação por reload** | ✅ **validada pelo usuário (2026-07-11)** — ver 3.F.CS-3 (+ achados .1/.2/.3) |
 | **CS-4 — caixa fechado no sync** | Enfileirar offline → caixa **fechado no servidor** → voltar online → **anexa c/ marca de reconciliação** (`SALE_ON_CLOSED_CASH`); Relatórios mostra "N após fechamento" na linha do caixa | ✅ **validada pelo usuário (2026-07-11/12)** — ver 3.F.CS-4 |
-| Regressão | Online intacto; venda offline "queda durante a venda" (3.D) segue funcionando; poda/drenagem (3.E) sem regressão; core Vitest | ✅ CS-1…CS-4 sem regressão (build 18 rotas + core 47/47) |
+| **CS-5 — esperado ajustado** | Caixa com venda tardia em dinheiro → Relatórios mostra "ajust. R$…" sob Esperado (= esperado + dinheiro tardio) e Divergência recalculada | 🟡 código pronto; deploy + E2E do usuário ⏭️ (ver 3.F.CS-5) |
+| Regressão | Online intacto; venda offline "queda durante a venda" (3.D) segue funcionando; poda/drenagem (3.E) sem regressão; core Vitest | ✅ CS-1…CS-5 sem regressão (build 18 rotas + core 51/51) |
 
 > **Marco de valor:** CS-1 + CS-2 já entregam "operar offline após remontar/reabrir" (ficando no
 > `/venda`). CS-3 adiciona navegação offline entre telas. CS-4 endurece a borda do caixa fechado.
@@ -2104,3 +2105,63 @@ seja: a marca de reconciliação NÃO afeta o débito de estoque nem a validade 
 divergência de caixa.** Situação do caixa (`8bda91ce`): abertura R$850,00 · esperado congelado R$893,20
 · contado R$0,00 (fechamento de teste) · a venda tardia foi **CASH R$370** — base para o "esperado
 ajustado" da melhoria futura (ver CS-5 no ROADMAP). **CS-4 validada → ADR-012 (CS-1…CS-4) concluído.**
+
+### 3.F.CS-5 — "Esperado ajustado" e divergência recalculada no relatório — CÓDIGO PRONTO (2026-07-13)
+
+Melhoria da conferência da CS-4. Hoje o relatório mostra "N após fechamento · R$…", mas o dono ainda
+fazia a conta do esperado ajustado na cabeça (ver 3.F.CS-4: caixa `8bda91ce` esperado R$893,20 + venda
+tardia CASH R$370 = R$1.263,20). A CS-5 exibe a conta pronta **sem tocar no dado congelado** do
+fechamento (auditoria — o caixa fechado segue imutável). **Sem migration** (`AuditEvent.meta` é JSON livre).
+
+**Implementação.**
+- `packages/core/src/index.ts` — função pura **`calcAdjustedCashClosing(expected, closing, lateCashTotal)`**
+  → `{ adjustedExpected = expected + lateCashTotal, adjustedDivergence = closing − adjustedExpected }`
+  (reusa `calcCashDivergence`; só o **dinheiro** entra, como no `calcExpectedCash`). **+4 testes Vitest.**
+- `apps/api/src/routes/orders.ts` — no ramo que grava `SALE_ON_CLOSED_CASH`, o `meta` ganhou **`cashAmount`**
+  (Σ dos `payments` com `method === 'CASH'` da venda) — evita join nos pagamentos no relatório.
+- `apps/api/src/routes/reports.ts` — `GET /reports/cash-sessions` acumula `lateCashSalesTotal` por sessão
+  (lê `meta.cashAmount`; **fallback ao `meta.total`** para marcas gravadas antes da CS-5, correto p/ venda
+  100% dinheiro como a da CS-4) e devolve `adjustedExpected`/`adjustedDivergence` via `calcAdjustedCashClosing`.
+- `packages/shared/src/report.ts` — `CashSessionReport` ganhou `lateCashSalesTotal`, `adjustedExpected`,
+  `adjustedDivergence`.
+- `apps/web/app/(app)/relatorios/page.tsx` — sob **Esperado** e **Divergência**, uma linha "ajust. R$…"
+  (âmbar/colorida) aparece quando `lateSalesCount > 0 && lateCashSalesTotal > 0`.
+
+**Build / typecheck / core (local)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Core (Vitest) — `calcAdjustedCashClosing` (+4) | 51/51 | ✅ 51/51 (era 47) |
+| `tsc --noEmit` em `apps/api` (após `prisma generate`) | sem erros | ✅ |
+| Typecheck `apps/web` + `next build` | 18 rotas | ✅ sem erros |
+
+**Casos cobertos pelos testes do core**
+
+| Caso | `adjustedExpected` | `adjustedDivergence` |
+|---|---|---|
+| Sem vendas tardias (repete o fechamento) | = esperado | 0 |
+| Caso 3.F.CS-4 (893,20 + CASH 370, contado 1.263,20) | 1.263,20 | 0 |
+| Contado não cobre a venda tardia (contado 893,20) | 1.263,20 | −370 |
+| Arredondamento a 2 casas | ✅ | ✅ |
+
+**Deploy (produção) — 2026-07-13.** API Version `dedff652` + web `8e398cfd`; smoke ✅ (`/health` ok;
+`/reports/cash-sessions` e `POST /orders` → 401 sem token). **E2E do usuário:** confirmado no navegador
+que a linha "ajust." aparece no relatório usando o dado da CS-4 (caixa `8bda91ce`: Esperado R$893,20 →
+**ajust. R$1.263,20**, com o fallback ao `total` para a marca antiga sem `cashAmount`).
+
+**Adendo — responsável do caixa no relatório (2026-07-13).** Pedido de UX: a tabela de Fechamentos já
+mostra todo o financeiro do turno (abertura/esperado/contado/divergência), mas **não** dizia *quem abriu
+e quem fechou* — dado capturado pelo ADR-010 (`CashSession.openedByName`/`closedByName`), nunca exibido.
+`GET /reports/cash-sessions` passou a mapear `openedByName`/`closedByName` (a query já lia a sessão
+inteira; **sem migration, sem core**); `CashSessionReport` (`packages/shared`) estendido. api tsc + web
+typecheck/build (18 rotas) ✅. **No ar:** API Version `3c926d4c` + web `952c3bda`.
+
+**Adendo — popover do turno (substitui o tooltip nativo, 2026-07-13).** O `title` nativo não aparece no
+toque (celular/PWA). Trocado por um **popover React** (`CashSessionSummary` em `relatorios/page.tsx`) na
+célula "Fechado em": **hover no desktop** (mouse, com atraso de 150 ms para "atravessar" até o balão) e
+**toque abre/fecha no celular/PWA**; fecha ao tocar fora, `Esc`, rolar ou redimensionar. Posicionado com
+`position: fixed` calculado do gatilho (`getBoundingClientRect`) + clamp na viewport → **não é cortado**
+pelo `overflow-x-auto` da tabela nem sai da tela em telas estreitas. Conteúdo: *Aberto {data/hora · por
+nome}* e *Fechado {data/hora · por nome}* (nomes com fallback "não informado"). Só front — web typecheck +
+build (18 rotas) ✅. **No ar:** web Version `ac7c5b14`. **E2E do usuário ✅ VALIDADO (2026-07-13)** — o
+popover aparece corretamente com abertura/fechamento + responsáveis.

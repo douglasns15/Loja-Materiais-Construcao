@@ -3,10 +3,19 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-12 (**Fase 3 — ADR-012 (cold-start / offline-first de leitura)
-> CONCLUÍDO ponta a ponta: CS-1…CS-4 NO AR e VALIDADAS pelo usuário**). **PRÓXIMO PASSO = CS-5** (melhoria
-> da conferência da CS-4: "esperado ajustado" + divergência recalculada no relatório de fechamento — a
-> executar em outra sessão; ver a fatia CS-5 na Fase 3). **CS-4 (semântica de caixa fechado no sync,
+> **Última atualização:** 2026-07-13 (**Fase 3 — CS-5 (esperado ajustado + divergência recalculada no
+> relatório) NO AR e conferida** + adendo "responsável do caixa" no relatório). CS-5 fecha a conferência
+> da CS-4: `POST /orders` grava `cashAmount` no `meta` do `SALE_ON_CLOSED_CASH`; função pura
+> `calcAdjustedCashClosing` no core (+4 testes, **51/51**); `GET /reports/cash-sessions` devolve
+> `lateCashSalesTotal`/`adjustedExpected`/`adjustedDivergence` (só o DINHEIRO das vendas tardias; fallback
+> ao `total` p/ marcas antigas); UI `/relatorios` mostra "ajust. R$…" sob Esperado/Divergência. **Adendo:**
+> tooltip na célula "Fechado em" com abertura/fechamento + **quem abriu/fechou** (`openedByName`/
+> `closedByName`, ADR-010), exibido num **popover** (hover no desktop + toque no celular/PWA). **Sem
+> migration.** **NO AR:** API `3c926d4c` + web `ac7c5b14`. **PRÓXIMO
+> PASSO** = direções abertas: (b) próximas naturezas de mutação offline (estoque/caixa) ou (c) outros
+> itens da Fase 3. Ver 3.F.CS-5 no registro.
+> **Antes:** ADR-012 (cold-start / offline-first de leitura) CONCLUÍDO ponta a ponta (CS-1…CS-4 NO AR e
+> VALIDADAS pelo usuário). **CS-4 (semântica de caixa fechado no sync,
 > decisão b) — validada:** a venda offline anexada a um caixa **fechado** grava `AuditEvent
 > SALE_ON_CLOSED_CASH` (marca de reconciliação, não bloqueia; **sem migration**) e o relatório mostra o
 > badge "N após fechamento". E2E de dois contextos OK; verificação de estoque da venda `#c0d0b8b9` (CASH
@@ -152,19 +161,19 @@
 > e **E2E de convite pela URL publicada validado pelo usuário no navegador** (convite → e-mail →
 > `/definir-senha` → login). Ver 2.R no registro de testes.
 >
-> ▶️ **Próximo passo (a executar em outra sessão): Fatia CS-5 — "esperado ajustado" + divergência
-> recalculada no relatório de fechamento** (melhoria da conferência da CS-4). O **ADR-012 (cold-start /
-> offline-first de leitura) está CONCLUÍDO e VALIDADO ponta a ponta (CS-1…CS-4)**: o PDV opera offline
-> após remontar/reabrir (CS-1/CS-2), navega entre telas offline por reload (CS-3) e a venda offline
-> anexada a um caixa já fechado é marcada para reconciliação e aparece em Relatórios (CS-4). A **CS-5**
-> deixa a conferência pronta sem mexer no dado congelado: no `GET /reports/cash-sessions`, para cada caixa
-> com vendas tardias, calcular `lateCashSalesTotal` (**só a parcela em DINHEIRO** — cartão/PIX conciliam
-> na maquininha), `adjustedExpected = expected + lateCashSalesTotal` e `adjustedDivergence = closing −
-> adjustedExpected`; enriquecer o `meta` do `SALE_ON_CLOSED_CASH` com `cashAmount` (evita join nos
-> pagamentos), estender `CashSessionReport` e exibir na UI `/relatorios`. **Sem migration.** Detalhe
-> completo na fatia CS-5 (Fase 3) e o caso concreto em 3.F.CS-4. **Depois da CS-5:** direções abertas —
-> (b) próximas naturezas de mutação offline (estoque e caixa; depois cadastros mutáveis → tela de
-> `CONFLICT`); (c) outros itens da Fase 3 (módulo de estoque fino, pooler, avaliar Supabase Pro).
+> ▶️ **Próximo passo: deploy da API+web + E2E do usuário da CS-5.** A **Fatia CS-5 — "esperado ajustado" +
+> divergência recalculada no relatório de fechamento** (melhoria da conferência da CS-4) está **CÓDIGO
+> PRONTO (2026-07-13)**, sem migration: `POST /orders` grava `cashAmount` no `meta` do
+> `SALE_ON_CLOSED_CASH`; função pura `calcAdjustedCashClosing` no core (+4 testes, **51/51**); `GET
+> /reports/cash-sessions` devolve `lateCashSalesTotal`/`adjustedExpected`/`adjustedDivergence` (**só o
+> DINHEIRO** das vendas tardias — cartão/PIX conciliam na maquininha; **fallback ao `total`** p/ marcas
+> antigas sem `cashAmount`); UI `/relatorios` mostra "ajust. R$…" sob Esperado/Divergência. **NÃO
+> reescreve o dado congelado** do fechamento (auditoria). api tsc + web typecheck/build (18 rotas) ✅.
+> **Falta:** `npm run deploy` (API e web) + E2E do usuário (registrar venda offline num caixa que será
+> fechado → sincronizar → conferir "esperado ajustado" e divergência recalculada em Relatórios). O
+> **ADR-012 (CS-1…CS-4) segue CONCLUÍDO e VALIDADO**. **Depois da CS-5:** (b) próximas naturezas de
+> mutação offline (estoque e caixa; depois cadastros mutáveis → tela de `CONFLICT`); (c) outros itens da
+> Fase 3 (módulo de estoque fino, pooler, avaliar Supabase Pro).
 >
 > ⚠️ **Ao retomar o teste offline após qualquer deploy:** abra o app **online uma vez** e visite as
 > telas que vai testar (o deploy troca o hash dos chunks; o SW só os cacheia ao visitá-las online) —
@@ -594,21 +603,27 @@
           está CONCLUÍDO ponta a ponta (CS-1…CS-4).**
     > **Ordem de valor:** CS-1 + CS-2 entregam o essencial (PDV vendável offline após remontar, sem
     > navegar). CS-3 adiciona a navegação offline entre telas. CS-4 endurece a borda do caixa fechado.
-    - [ ] **Fatia CS-5 — "esperado ajustado" e divergência recalculada no relatório de fechamento
-          (melhoria da conferência da CS-4) — PRÓXIMO PASSO (a executar em outra sessão)**. Hoje o
-          relatório mostra "N após fechamento · R$…", mas o dono ainda faz a conta do esperado ajustado na
-          cabeça (ver 3.F.CS-4: caixa `8bda91ce` esperado R$893,20 + venda tardia CASH R$370 = R$1.263,20).
-          **Escopo:** em `GET /reports/cash-sessions`, para cada caixa com vendas tardias, calcular
-          `lateCashSalesTotal` (**só a parcela em DINHEIRO** das vendas tardias — cartão/PIX não tocam a
-          gaveta, conciliam na maquininha), `adjustedExpected = expectedAmount + lateCashSalesTotal` e
-          `adjustedDivergence = closingAmount − adjustedExpected`. **Sem migration.** Para ter a parcela
-          em dinheiro sem consultar pagamentos no relatório, **enriquecer o `meta` do `SALE_ON_CLOSED_CASH`
-          com `cashAmount`** no `POST /orders` (a alternativa é o relatório fazer join nos `payments` das
-          vendas tardias). Estender `CashSessionReport` (`packages/shared`) com os campos e mostrar na UI
-          `/relatorios` (esperado ajustado + divergência recalculada) quando `lateSalesCount > 0`.
-          **NÃO reescreve o dado congelado** do fechamento (auditoria) — só exibe o cálculo pronto. O
-          caixa fechado segue imutável; a venda tardia legítima **não** se devolve (Devolver é só p/ venda
-          errada/duplicada, ADR-006).
+    - [x] **Fatia CS-5 — "esperado ajustado" e divergência recalculada no relatório de fechamento
+          (melhoria da conferência da CS-4) — CÓDIGO PRONTO (2026-07-13)**. Fecha a conta que o dono fazia
+          na cabeça (ver 3.F.CS-4: caixa `8bda91ce` esperado R$893,20 + venda tardia CASH R$370 = R$1.263,20).
+          **Implementado, sem migration:** (1) `POST /orders` enriquece o `meta` do `SALE_ON_CLOSED_CASH`
+          com **`cashAmount`** (parcela CASH da venda — evita join nos `payments`); (2) função pura
+          **`calcAdjustedCashClosing`** em `packages/core` (`adjustedExpected = expected + lateCashSalesTotal`,
+          `adjustedDivergence = closing − adjustedExpected`) **+4 testes Vitest (47→51)**; (3)
+          `GET /reports/cash-sessions` acumula `lateCashSalesTotal` (**só o DINHEIRO** — cartão/PIX conciliam
+          na maquininha; **fallback ao `total`** p/ marcas antigas sem `cashAmount`) e devolve
+          `adjustedExpected`/`adjustedDivergence`; (4) `CashSessionReport` (`packages/shared`) estendido; (5)
+          UI `/relatorios` mostra "ajust. R$…" sob Esperado e Divergência quando há venda tardia em dinheiro.
+          **NÃO reescreve o dado congelado** do fechamento (auditoria) — só exibe o cálculo pronto; o caixa
+          fechado segue imutável e a venda tardia legítima **não** se devolve (ADR-006). Core 51/51 + api
+          tsc + web typecheck/build (18 rotas) ✅. **NO AR (API `dedff652` + web `8e398cfd`) + conferido no
+          navegador** (linha "ajust." aparece usando o dado da CS-4, fallback ao `total`). **Adendo (mesmo
+          dia): responsável do caixa no relatório** — `GET /reports/cash-sessions` mapeia
+          `openedByName`/`closedByName` (ADR-010, sem migration) e a UI mostra um **popover na célula
+          "Fechado em"** (`CashSessionSummary`) com abertura/fechamento + quem abriu/fechou — **hover no
+          desktop + toque no celular/PWA**, `position: fixed` (não é cortado pelo overflow da tabela), fecha
+          ao tocar fora/Esc/rolar; não duplica as colunas financeiras. No ar (API `3c926d4c` + web
+          `ac7c5b14`). Ver 3.F.CS-5 no registro.
 - [ ] Módulo de estoque fino (estoque mínimo, notificações, movimentações detalhadas)
 - [ ] Otimização do pooler (6543) para limites do free tier
 - [ ] Avaliar upgrade Supabase Pro p/ produção

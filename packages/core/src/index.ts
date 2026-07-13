@@ -59,6 +59,33 @@ export function calcCashDivergence(expectedAmount: number, closingAmount: number
   return Number((closingAmount - expectedAmount).toFixed(2));
 }
 
+/**
+ * Fechamento ajustado por vendas offline tardias (CS-5, ADR-012 §b).
+ *
+ * Uma venda offline pode ser anexada a um caixa JÁ FECHADO no sync (CS-4). O dado
+ * congelado do fechamento (`expected`/`divergence`) permanece **imutável** para a
+ * auditoria; esta função só recalcula, para exibição no relatório, quanto o esperado
+ * "deveria" ter sido incluindo a **parcela em dinheiro** dessas vendas tardias.
+ *
+ * Só o dinheiro entra no ajuste — cartão/PIX não passam pela gaveta (conciliam na
+ * maquininha), exatamente como no cálculo do esperado (`calcExpectedCash`).
+ *
+ * @param expectedAmount  esperado congelado no fechamento
+ * @param closingAmount   contado no fechamento
+ * @param lateCashSalesTotal  Σ da parcela CASH das vendas anexadas após o fechamento
+ */
+export function calcAdjustedCashClosing(
+  expectedAmount: number,
+  closingAmount: number,
+  lateCashSalesTotal: number,
+): { adjustedExpected: number; adjustedDivergence: number } {
+  const adjustedExpected = Number((expectedAmount + lateCashSalesTotal).toFixed(2));
+  return {
+    adjustedExpected,
+    adjustedDivergence: calcCashDivergence(adjustedExpected, closingAmount),
+  };
+}
+
 /** Movimentação de caixa que não é venda (devolução, sangria, suprimento, despesa). */
 export interface CashMovementLike {
   type: StockMovementType; // reaproveita 'INCOME' | 'EXPENSE'

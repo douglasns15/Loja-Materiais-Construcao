@@ -257,6 +257,14 @@ orders.post('/', requireActiveTenant, async (c) => {
       // CS-4 (ADR-004/012 §b): marca de reconciliação quando a venda offline foi anexada a um caixa
       // JÁ FECHADO. Evento crítico auditável (não bloqueia a venda) — surge no relatório de fechamento.
       if (cashClosedAt) {
+        // CS-5: guarda a parcela em DINHEIRO da venda no `meta` para o relatório recalcular o
+        // "esperado ajustado" sem precisar de join nos pagamentos (só o dinheiro toca a gaveta;
+        // cartão/PIX conciliam na maquininha, igual ao cálculo do esperado no fechamento).
+        const cashAmount = Number(
+          sale.payments
+            .reduce((acc, pmt) => acc + (pmt.method === 'CASH' ? pmt.amount : 0), 0)
+            .toFixed(2),
+        );
         await tx.auditEvent.create({
           data: {
             tenantId,
@@ -268,6 +276,7 @@ orders.post('/', requireActiveTenant, async (c) => {
               cashSessionId: session.id,
               cashClosedAt: cashClosedAt.toISOString(),
               total,
+              cashAmount,
               offline: true,
               reconcile: true,
             },

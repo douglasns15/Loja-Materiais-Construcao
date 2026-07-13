@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   PAYMENT_METHOD_LABELS,
   type CashSessionReport,
@@ -35,6 +35,125 @@ function presetRange(preset: 'today' | '7d' | '30d'): { from: string; to: string
   if (preset === '7d') from.setDate(from.getDate() - 6);
   if (preset === '30d') from.setDate(from.getDate() - 29);
   return { from: isoDay(from), to: isoDay(to) };
+}
+
+/**
+ * Célula "Fechado em" com popover do turno (ADR-010): abertura/fechamento + quem abriu/fechou.
+ * Funciona no desktop (hover do mouse) e no celular/PWA (toque abre/fecha). Fecha ao tocar fora,
+ * Esc, rolar ou redimensionar. Usa `position: fixed` (calculado do gatilho) para não ser cortado
+ * pelo `overflow-x-auto` da tabela. Não duplica as colunas financeiras — só o que não está na tabela.
+ */
+function CashSessionSummary({
+  s,
+  children,
+}: {
+  s: CashSessionReport;
+  children: React.ReactNode;
+}) {
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const hideTimer = useRef<number | null>(null);
+  const open = pos !== null;
+
+  const clearTimer = useCallback(() => {
+    if (hideTimer.current !== null) {
+      window.clearTimeout(hideTimer.current);
+      hideTimer.current = null;
+    }
+  }, []);
+
+  const show = useCallback(() => {
+    clearTimer();
+    const r = triggerRef.current?.getBoundingClientRect();
+    if (!r) return;
+    const width = 260;
+    // Encaixa na viewport (celular estreito): nunca deixa o popover sair pela direita/esquerda.
+    const left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8));
+    setPos({ top: r.bottom + 6, left });
+  }, [clearTimer]);
+
+  const hide = useCallback(() => {
+    clearTimer();
+    setPos(null);
+  }, [clearTimer]);
+
+  const scheduleHide = useCallback(() => {
+    clearTimer();
+    hideTimer.current = window.setTimeout(() => setPos(null), 150);
+  }, [clearTimer]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onOutside = (e: Event) => {
+      if (triggerRef.current && !triggerRef.current.contains(e.target as Node)) hide();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') hide();
+    };
+    document.addEventListener('mousedown', onOutside);
+    document.addEventListener('touchstart', onOutside);
+    document.addEventListener('keydown', onKey);
+    window.addEventListener('scroll', hide, true);
+    window.addEventListener('resize', hide);
+    return () => {
+      document.removeEventListener('mousedown', onOutside);
+      document.removeEventListener('touchstart', onOutside);
+      document.removeEventListener('keydown', onKey);
+      window.removeEventListener('scroll', hide, true);
+      window.removeEventListener('resize', hide);
+    };
+  }, [open, hide]);
+
+  useEffect(() => clearTimer, [clearTimer]);
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-expanded={open}
+        onClick={() => (open ? hide() : show())}
+        onPointerEnter={(e) => {
+          if (e.pointerType === 'mouse') show();
+        }}
+        onPointerLeave={(e) => {
+          if (e.pointerType === 'mouse') scheduleHide();
+        }}
+        className="cursor-help border-b border-dotted border-gray-400 text-left text-gray-600 hover:text-gray-900"
+      >
+        {children}
+      </button>
+      {open && pos && (
+        <div
+          role="tooltip"
+          onPointerEnter={clearTimer}
+          onPointerLeave={(e) => {
+            if (e.pointerType === 'mouse') scheduleHide();
+          }}
+          style={{ top: pos.top, left: pos.left }}
+          className="fixed z-30 w-[260px] rounded-lg border border-gray-200 bg-white p-3 text-left text-xs shadow-xl"
+        >
+          <p className="mb-2 font-semibold text-gray-700">Turno do caixa</p>
+          <dl className="space-y-2">
+            <div>
+              <dt className="text-gray-400">Aberto</dt>
+              <dd className="text-gray-700">
+                {DATETIME(s.openedAt)}
+                <span className="text-gray-500"> · por {s.openedByName ?? 'não informado'}</span>
+              </dd>
+            </div>
+            <div>
+              <dt className="text-gray-400">Fechado</dt>
+              <dd className="text-gray-700">
+                {DATETIME(s.closedAt)}
+                <span className="text-gray-500"> · por {s.closedByName ?? 'não informado'}</span>
+              </dd>
+            </div>
+          </dl>
+        </div>
+      )}
+    </>
+  );
 }
 
 export default function RelatoriosPage() {
@@ -227,7 +346,9 @@ export default function RelatoriosPage() {
               sessions.map((s) => (
                 <tr key={s.id} className="border-t border-gray-100">
                   <td className="px-4 py-2 text-gray-500">
-                    {DATETIME(s.closedAt)}
+                    {/* Popover do turno (ADR-010): abertura/fechamento + quem abriu/fechou.
+                        Hover no desktop, toque no celular/PWA; não duplica as colunas financeiras. */}
+                    <CashSessionSummary s={s}>{DATETIME(s.closedAt)}</CashSessionSummary>
                     {/* CS-4 (ADR-012 §b): vendas offline anexadas após o fechamento → reconciliar. */}
                     {s.lateSalesCount > 0 && (
                       <span
@@ -239,7 +360,18 @@ export default function RelatoriosPage() {
                     )}
                   </td>
                   <td className="px-4 py-2 text-right text-gray-500">{BRL(s.openingAmount)}</td>
-                  <td className="px-4 py-2 text-right text-gray-500">{BRL(s.expectedAmount)}</td>
+                  <td className="px-4 py-2 text-right text-gray-500">
+                    {BRL(s.expectedAmount)}
+                    {/* CS-5: esperado ajustado quando houve vendas em dinheiro após o fechamento. */}
+                    {s.lateSalesCount > 0 && s.lateCashSalesTotal > 0 && (
+                      <span
+                        className="mt-0.5 block text-xs text-amber-700"
+                        title={`Esperado + dinheiro das vendas tardias (${BRL(s.lateCashSalesTotal)})`}
+                      >
+                        ajust. {BRL(s.adjustedExpected)}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-2 text-right font-medium">{BRL(s.closingAmount)}</td>
                   <td
                     className={`px-4 py-2 text-right font-medium ${
@@ -252,6 +384,22 @@ export default function RelatoriosPage() {
                   >
                     {s.divergence > 0 ? '+' : ''}
                     {BRL(s.divergence)}
+                    {/* CS-5: divergência recalculada contra o esperado ajustado. */}
+                    {s.lateSalesCount > 0 && s.lateCashSalesTotal > 0 && (
+                      <span
+                        className={`mt-0.5 block text-xs ${
+                          s.adjustedDivergence === 0
+                            ? 'text-gray-400'
+                            : s.adjustedDivergence > 0
+                              ? 'text-green-700'
+                              : 'text-red-700'
+                        }`}
+                        title="Divergência recalculada incluindo o dinheiro das vendas tardias"
+                      >
+                        ajust. {s.adjustedDivergence > 0 ? '+' : ''}
+                        {BRL(s.adjustedDivergence)}
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))

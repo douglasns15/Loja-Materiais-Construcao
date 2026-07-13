@@ -46,6 +46,10 @@ export interface CashSessionReport {
   id: string;
   openedAt: string;
   closedAt: string;
+  /** Nome de quem abriu o caixa (snapshot, ADR-010); `null` se não registrado. */
+  openedByName: string | null;
+  /** Nome de quem fechou o caixa (snapshot, ADR-010); `null` se não registrado. */
+  closedByName: string | null;
   openingAmount: number;
   closingAmount: number;
   expectedAmount: number;
@@ -55,6 +59,13 @@ export interface CashSessionReport {
   /** Vendas offline anexadas a este caixa DEPOIS do fechamento (CS-4, ADR-012 §b) —
    * marca de reconciliação. `0` quando não houve. */
   lateSalesCount: number;
-  /** Soma das vendas anexadas após o fechamento (reconciliação, CS-4). */
+  /** Soma (total) das vendas anexadas após o fechamento (reconciliação, CS-4). */
   lateSalesTotal: number;
+  /** Parcela em DINHEIRO das vendas tardias — só o que tocaria a gaveta (CS-5). */
+  lateCashSalesTotal: number;
+  /** Esperado recalculado = `expectedAmount` + `lateCashSalesTotal` (CS-5).
+   * NÃO reescreve o dado congelado do fechamento; é só a conta pronta para conferência. */
+  adjustedExpected: number;
+  /** Divergência recalculada = `closingAmount` − `adjustedExpected` (CS-5). */
+  adjustedDivergence: number;
 }

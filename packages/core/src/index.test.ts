@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyStockMovement,
+  calcAdjustedCashClosing,
   calcCashDivergence,
   calcExpectedCash,
   calcInventoryAdjustment,
@@ -82,6 +83,37 @@ describe('calcCashDivergence', () => {
 
   it('negativo quando falta dinheiro', () => {
     expect(calcCashDivergence(175.5, 170)).toBe(-5.5);
+  });
+});
+
+describe('calcAdjustedCashClosing', () => {
+  it('sem vendas tardias, o ajuste repete o fechamento original', () => {
+    expect(calcAdjustedCashClosing(893.2, 893.2, 0)).toEqual({
+      adjustedExpected: 893.2,
+      adjustedDivergence: 0,
+    });
+  });
+
+  it('soma a parcela em dinheiro da venda tardia ao esperado (caso 3.F.CS-4)', () => {
+    // Caixa 8bda91ce: esperado R$893,20 + venda tardia CASH R$370 = R$1.263,20.
+    expect(calcAdjustedCashClosing(893.2, 1263.2, 370)).toEqual({
+      adjustedExpected: 1263.2,
+      adjustedDivergence: 0,
+    });
+  });
+
+  it('a divergência ajustada revela a falta quando o contado não cobre as vendas tardias', () => {
+    expect(calcAdjustedCashClosing(893.2, 893.2, 370)).toEqual({
+      adjustedExpected: 1263.2,
+      adjustedDivergence: -370,
+    });
+  });
+
+  it('arredonda a 2 casas', () => {
+    expect(calcAdjustedCashClosing(100.1, 130.2, 30.05)).toEqual({
+      adjustedExpected: 130.15,
+      adjustedDivergence: 0.05,
+    });
   });
 });
 

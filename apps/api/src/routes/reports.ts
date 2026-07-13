@@ -1,6 +1,11 @@
 import { Hono } from 'hono';
 import { createPrismaClient } from '@nexoloja/db';
-import { calcAverageTicket, calcCashDivergence, withPaymentShare } from '@nexoloja/core';
+import {
+  calcAdjustedCashClosing,
+  calcAverageTicket,
+  calcCashDivergence,
+  withPaymentShare,
+} from '@nexoloja/core';
 import { reportRangeSchema } from '@nexoloja/shared';
 import { type Env, getConnectionString, getTenantId } from '../lib/request';
 import { requireAuth } from '../middleware/auth';
@@ -133,7 +138,9 @@ reports.get('/cash-sessions', async (c) => {
     // reconciliação (AuditEvent SALE_ON_CLOSED_CASH). Agrega por sessão para o fechamento sinalizar
     // "N vendas lançadas após o fechamento" — a divergência que a decisão (b) manda surgir aqui.
     const sessionIds = new Set(sessions.map((s) => s.id));
-    const reconBySession = new Map<string, { count: number; total: number }>();
+    // CS-5: além do total, acumula a parcela em DINHEIRO (`cashTotal`) das vendas tardias —
+    // é o que recalcula o "esperado ajustado" (cartão/PIX não tocam a gaveta).
+    const reconBySession = new Map<string, { count: number; total: number; cashTotal: number }>();
     if (sessionIds.size > 0) {
       const events = await prisma.auditEvent.findMany({
         where: { tenantId, action: 'SALE_ON_CLOSED_CASH' },
@@ -142,11 +149,20 @@ reports.get('/cash-sessions', async (c) => {
         take: 1000,
       });
       for (const ev of events) {
-        const m = ev.meta as { cashSessionId?: string; total?: number } | null;
+        const m = ev.meta as {
+          cashSessionId?: string;
+          total?: number;
+          cashAmount?: number;
+        } | null;
         if (!m?.cashSessionId || !sessionIds.has(m.cashSessionId)) continue;
-        const cur = reconBySession.get(m.cashSessionId) ?? { count: 0, total: 0 };
+        const cur = reconBySession.get(m.cashSessionId) ?? { count: 0, total: 0, cashTotal: 0 };
+        const total = Number(m.total ?? 0);
+        // Compat: marcas gravadas antes da CS-5 não têm `cashAmount`. Caem no `total` (correto
+        // para venda 100% em dinheiro, que é o caso da CS-4; mistas ficam levemente super estimadas).
+        const cashAmount = m.cashAmount === undefined ? total : Number(m.cashAmount);
         cur.count += 1;
-        cur.total = Number((cur.total + Number(m.total ?? 0)).toFixed(2));
+        cur.total = Number((cur.total + total).toFixed(2));
+        cur.cashTotal = Number((cur.cashTotal + cashAmount).toFixed(2));
         reconBySession.set(m.cashSessionId, cur);
       }
     }
@@ -154,11 +170,21 @@ reports.get('/cash-sessions', async (c) => {
     const data = sessions.map((s) => {
       const expectedAmount = Number(s.expectedAmount ?? 0);
       const closingAmount = Number(s.closingAmount ?? 0);
-      const recon = reconBySession.get(s.id) ?? { count: 0, total: 0 };
+      const recon = reconBySession.get(s.id) ?? { count: 0, total: 0, cashTotal: 0 };
+      // CS-5: esperado/divergência recalculados incluindo o dinheiro das vendas tardias.
+      // NÃO reescreve o dado congelado do fechamento (auditoria) — só a conta pronta p/ conferência.
+      const { adjustedExpected, adjustedDivergence } = calcAdjustedCashClosing(
+        expectedAmount,
+        closingAmount,
+        recon.cashTotal,
+      );
       return {
         id: s.id,
         openedAt: s.openedAt.toISOString(),
         closedAt: s.closedAt!.toISOString(),
+        // Responsáveis do turno (ADR-010, snapshot do nome) — exibidos no tooltip do relatório.
+        openedByName: s.openedByName ?? null,
+        closedByName: s.closedByName ?? null,
         openingAmount: Number(s.openingAmount),
         closingAmount,
         expectedAmount,
@@ -167,6 +193,10 @@ reports.get('/cash-sessions', async (c) => {
         // Vendas offline anexadas depois do fechamento (reconciliação, CS-4).
         lateSalesCount: recon.count,
         lateSalesTotal: recon.total,
+        // Esperado ajustado + divergência recalculada (CS-5).
+        lateCashSalesTotal: recon.cashTotal,
+        adjustedExpected,
+        adjustedDivergence,
       };
     });
 
