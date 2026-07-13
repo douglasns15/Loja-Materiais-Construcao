@@ -22,7 +22,7 @@ http://localhost:3000/
 
 <> ah.2, relatórios ter a possibilidade de mostrar quantas vendas foram em dinheiro, pix, débito e crédito, mostrando valor e uma coluna ao lado da porcentagem que esse valor representa para o total do dia, semana e mês.
 
-<> ah.3, cadastro de produtos precisa ter campo para adicionar, de forma opcional, peso do produto e selecionar se é em kilos ou gramas.. pois alguns produtos se vende por kilo e até mesmo por metro também, por exemplo fio, posso vender o rolo fechado ou por metro ai tem o valor por metro e fechado. E tmbm ter um campo de "apelido" para cada produto cadastrado!
+<> ah.3, cadastro de produtos precisa ter campo para adicionar (de forma opcional) peso do produto e selecionar se é em kilos ou gramas.. pois alguns produtos se vende por kilo e até mesmo por metro também, por exemplo fio, posso vender o rolo fechado ou por metro ai tem o valor por metro e fechado. E tmbm ter um campo de "apelido" para cada produto cadastrado! E além destes pontos, também ter um campo observação ou descrição, de texto livre.
 
 <> ah.4, no histórico de vendas, caso tenha sido pago em dinheiro, mostrar tmbm o valor recebido e o troco!
 
