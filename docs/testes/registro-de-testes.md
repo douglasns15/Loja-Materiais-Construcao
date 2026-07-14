@@ -2205,8 +2205,9 @@ nem retornava**. Confirmado no banco antes do deploy: produto criado ficou com `
 | **Busca por nome popular** ("cano" só existe em popular "Cano 100") | ❌ antes do deploy → ✅ **depois do deploy** |
 | Persistência do `popularName` no banco (produto "Tubo PVC 100mm" / "Cano 100") | ✅ `popularName="Cano 100"` |
 
-⚠️ **PENDENTE:** o **web NÃO foi deployado** — a UI (campo, busca, scanner) só rodou em dev local; a feature
-não fica visível ao usuário final até deployar o `apps/web`. **É o 1º passo da próxima sessão.**
+**Deploy do web (2026-07-14).** `apps/web` deployado (OpenNext) — Version `2bc2eab3-1aa4-4151-bd61-3e3a168300bd`;
+smoke OK (login serve em `nexoloja-web.imortal.workers.dev`). **Fatia 100% no ar (API + web).** Login de produção
+para o usuário conferir (não inserimos senha).
 
 **Notas.** Leitura por **câmera** só dá para validar de verdade num **celular** (HTTPS) — o preview desktop não
 tem câmera. **Dados de teste** deixados no tenant (a pedido do usuário): caixa aberto R$100 + produtos FE8-TESTE

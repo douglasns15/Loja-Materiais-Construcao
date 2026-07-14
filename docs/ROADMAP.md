@@ -3,7 +3,7 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-14 — **EF-1 (parte do apelido) + busca + código de barras NO AR na API; web pendente de deploy.**
+> **Última atualização:** 2026-07-14 — **EF-1 (parte do apelido) + busca + código de barras NO AR (API + web deployados e validados).**
 > Entregue a fatia **"nome popular + busca + leitura de código de barras"** (parte do EF-1 planejado, com desvios anotados):
 > - **Nome popular do produto** — coluna nova **`popularName`** (renomeamos o `nickname` do plano; `VarChar(150)`,
 >   nullable, sem mudança de RLS) + índice `products_tenantId_popularName_idx`. **Migration `0007` aplicada** via
@@ -22,10 +22,10 @@
 >   e o `@nexoloja/shared`/Prisma antigos **descartavam** o `popularName` (Zod tira campo desconhecido; client antigo não
 >   lê a coluna) — sem o redeploy o campo nem salvava nem retornava. **Validado E2E pós-deploy:** produto "Tubo PVC 100mm"
 >   / popular "Cano 100" **persistiu** (DB confere) e a **busca por "cano" (só no nome popular) achou**.
-> - ⚠️ **PENDENTE — DEPLOY DO WEB:** o frontend (campo, busca, scanner) **só rodou em dev local**; a feature **não está
->   visível para o usuário final** até deployar o **`apps/web`** (OpenNext/Workers). **Este é o 1º passo da próxima sessão.**
-> - **Resto do EF-1 NÃO feito** (fica p/ próxima fatia): **descrição/observação**, **peso (toggle kg/g, canônico kg)** e
->   **unidade de venda (dropdown `UnitType`)** no cadastro — campos que **já existem no schema**, só falta a UI. Depois **EF-2**.
+> - **Web deployado** (`nexoloja-web`, Version `2bc2eab3-1aa4-4151-bd61-3e3a168300bd`) — smoke OK (login serve em
+>   `nexoloja-web.imortal.workers.dev`). Fatia **100% no ar** (API + web). Login de produção fica p/ o usuário conferir.
+> - **PRÓXIMO PASSO (próxima sessão) — resto do EF-1** (só UI, **sem migration**, campos já no schema): **descrição/
+>   observação**, **peso (toggle kg/g, canônico kg)** e **unidade de venda (dropdown `UnitType`)** no cadastro. Depois **EF-2**.
 > - Gates: core **58/58**, typecheck web ✅, build API (dry-run) ✅. Dados de teste deixados no tenant do usuário (a pedido):
 >   caixa aberto R$100 + produtos FE8-TESTE (sem popular) e PVC100-TESTE (popular "Cano 100").
 >
@@ -683,7 +683,7 @@
           nullable, sem RLS); **migration `0007` aplicada**; índice `products_tenantId_popularName_idx`. Busca por
           **nome + nome popular + SKU** nas telas Produtos e Venda (`productMatchesQuery` no core, +7 testes). **Bônus:**
           leitura de **código de barras** (o `sku` é o código) — Enter-scan (leitor físico) + `BarcodeScanButton` (câmera,
-          `BarcodeDetector` + `@zxing`). **API deployada e validada; ⚠️ web ainda NÃO deployado.**
+          `BarcodeDetector` + `@zxing`). **API + web deployados e validados (no ar).**
     - [ ] **Descrição/observação** (`description`, já no banco) — só falta na UI do cadastro.
     - [ ] **Peso** com toggle **kg/g** (canônico em kg — `weightKg` já no banco) — falta na UI.
     - [ ] **Unidade de venda** (dropdown do `UnitType`, já no banco) — falta na UI.
