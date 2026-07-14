@@ -8,7 +8,7 @@ import {
   createSaleSchema,
   type PaymentMethod,
 } from '@nexoloja/shared';
-import { calcMarginPercent, calcSaleTotals } from '@nexoloja/core';
+import { calcMarginPercent, calcSaleTotals, productMatchesQuery } from '@nexoloja/core';
 import { apiGet, apiPost } from '@/lib/api';
 import { cacheCashSession, readCachedCashSession } from '@/lib/cashSessionCache';
 import { cacheProducts, readCachedProducts } from '@/lib/catalog';
@@ -19,8 +19,9 @@ import { useOnline } from '@/lib/useOnline';
 import { ReceiptPrint, type Store } from '@/components/ReceiptPrint';
 import { StoreDisabledNotice } from '@/components/StoreDisabledNotice';
 import { OfflineSalesNotice } from '@/components/OfflineSalesNotice';
+import { BarcodeScanButton } from '@/components/BarcodeScanButton';
 
-type Product = { id: string; name: string; sku: string; salePrice: string; costPrice: string; stockQty: string };
+type Product = { id: string; name: string; popularName: string | null; sku: string; salePrice: string; costPrice: string; stockQty: string };
 type CartItem = {
   productId: string;
   name: string;
@@ -96,6 +97,7 @@ export default function VendaPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selected, setSelected] = useState('');
+  const [productSearch, setProductSearch] = useState('');
   const [qty, setQty] = useState('1');
   const [method, setMethod] = useState<PaymentMethod>('CASH');
   const [received, setReceived] = useState('');
@@ -176,6 +178,12 @@ export default function VendaPage() {
   const discountTooHigh = discountValue > totals.subtotal;
   const change = method === 'CASH' && received ? Number(received) - totals.total : 0;
 
+  // Busca do PDV: filtra por nome, nome popular ou SKU (função pura de packages/core).
+  const filteredProducts = useMemo(
+    () => products.filter((p) => productMatchesQuery(p, productSearch)),
+    [products, productSearch],
+  );
+
   /** Tooltip por item: margem de lucro e desconto máximo possível (até o custo). */
   function itemTooltip(i: CartItem): string {
     const margin = calcMarginPercent(i.costPrice, i.unitPrice);
@@ -185,9 +193,10 @@ export default function VendaPage() {
       : `Margem: ${margin}% • Sem margem para desconto`;
   }
 
-  function addToCart() {
+  // `productId` padrão = seleção do dropdown; o scanner/Enter passa o id do único match da busca.
+  function addToCart(productId: string = selected) {
     setError(null);
-    const p = products.find((x) => x.id === selected);
+    const p = products.find((x) => x.id === productId);
     const q = Number(qty);
     if (!p || !(q > 0)) {
       setError('Selecione um produto e uma quantidade válida.');
@@ -217,6 +226,36 @@ export default function VendaPage() {
     }
     setSelected('');
     setQty('1');
+    // Limpa a busca para o próximo item/leitura de código começar do zero.
+    setProductSearch('');
+  }
+
+  /**
+   * Enter no campo de busca: se a busca isolou UM único produto (típico ao escanear o SKU/código
+   * de barras — o leitor "digita" o código e manda Enter), adiciona direto ao carrinho. Prepara o
+   * fluxo de leitor físico (HID) sem depender de câmera. Ignora quando há 0 ou vários resultados.
+   */
+  function onProductSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const only = filteredProducts.length === 1 ? filteredProducts[0] : undefined;
+    if (only) {
+      addToCart(only.id);
+    }
+  }
+
+  /**
+   * Código lido pela CÂMERA (BarcodeScanButton): se casar com um único produto, adiciona direto ao
+   * carrinho; se casar com 0 ou vários, joga o código na busca para o operador escolher na lista.
+   */
+  function addByScan(code: string) {
+    const matches = products.filter((p) => productMatchesQuery(p, code));
+    const only = matches.length === 1 ? matches[0] : undefined;
+    if (only) {
+      addToCart(only.id);
+    } else {
+      setProductSearch(code);
+    }
   }
 
   function removeFromCart(productId: string) {
@@ -558,15 +597,32 @@ export default function VendaPage() {
       {error && (online || offlineSales) && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
       <div className="mb-4 flex flex-wrap gap-2 rounded-2xl bg-white p-4 shadow-sm">
+        <div className="flex basis-full gap-2">
+          <input
+            type="search"
+            placeholder="Buscar ou escanear (nome, nome popular ou SKU)…"
+            value={productSearch}
+            onChange={(e) => setProductSearch(e.target.value)}
+            onKeyDown={onProductSearchKeyDown}
+            className="min-w-[12rem] flex-1 rounded-lg border border-gray-300 px-3 py-2"
+            aria-label="Buscar produto"
+          />
+          <BarcodeScanButton onScan={addByScan} label="Escanear produto" />
+        </div>
         <select
           value={selected}
           onChange={(e) => setSelected(e.target.value)}
           className="min-w-[12rem] flex-1 rounded-lg border border-gray-300 px-3 py-2"
         >
-          <option value="">Selecione um produto…</option>
-          {products.map((p) => (
+          <option value="">
+            {productSearch && filteredProducts.length === 0
+              ? 'Nenhum produto encontrado…'
+              : 'Selecione um produto…'}
+          </option>
+          {filteredProducts.map((p) => (
             <option key={p.id} value={p.id}>
-              {p.name} — {BRL(p.salePrice)} (est. {Number(p.stockQty)})
+              {p.name}
+              {p.popularName ? ` (${p.popularName})` : ''} — {BRL(p.salePrice)} (est. {Number(p.stockQty)})
             </option>
           ))}
         </select>
@@ -578,7 +634,7 @@ export default function VendaPage() {
           onChange={(e) => setQty(e.target.value)}
           className="w-24 rounded-lg border border-gray-300 px-3 py-2"
         />
-        <button onClick={addToCart} className="rounded-lg bg-gray-200 px-4 py-2 font-medium hover:bg-gray-300">
+        <button onClick={() => addToCart()} className="rounded-lg bg-gray-200 px-4 py-2 font-medium hover:bg-gray-300">
           Adicionar
         </button>
       </div>

@@ -20,6 +20,8 @@ import {
   syncBackoffMs,
   haltsQueue,
   MAX_SYNC_ATTEMPTS,
+  normalizeSearchText,
+  productMatchesQuery,
 } from './index';
 
 describe('calcSubtotal', () => {
@@ -322,5 +324,44 @@ describe('haltsQueue', () => {
     expect(haltsQueue('SYNCED')).toBe(false);
     expect(haltsQueue('RETRY')).toBe(true);
     expect(haltsQueue('FAILED')).toBe(true);
+  });
+});
+
+describe('normalizeSearchText', () => {
+  it('minúsculas, sem acento e sem espaços nas pontas', () => {
+    expect(normalizeSearchText('  Címento Ç  ')).toBe('cimento c');
+  });
+});
+
+describe('productMatchesQuery', () => {
+  const p = { name: 'Vergalhão CA-50 8mm', popularName: 'Ferro 8', sku: 'FE8' };
+
+  it('casa pelo nome oficial (acento/caixa-insensível)', () => {
+    expect(productMatchesQuery(p, 'vergalhao')).toBe(true);
+    expect(productMatchesQuery(p, 'CA-50')).toBe(true);
+  });
+
+  it('casa pelo nome popular', () => {
+    expect(productMatchesQuery(p, 'ferro')).toBe(true);
+    expect(productMatchesQuery(p, 'Ferro 8')).toBe(true);
+  });
+
+  it('casa pelo SKU', () => {
+    expect(productMatchesQuery(p, 'fe8')).toBe(true);
+  });
+
+  it('query vazia casa tudo (sem filtro)', () => {
+    expect(productMatchesQuery(p, '')).toBe(true);
+    expect(productMatchesQuery(p, '   ')).toBe(true);
+  });
+
+  it('não casa quando nada bate', () => {
+    expect(productMatchesQuery(p, 'cimento')).toBe(false);
+  });
+
+  it('funciona com popularName ausente (null)', () => {
+    const semPopular = { name: 'Cimento CP-II 50kg', popularName: null, sku: 'CIM50' };
+    expect(productMatchesQuery(semPopular, 'cimento')).toBe(true);
+    expect(productMatchesQuery(semPopular, 'ferro')).toBe(false);
   });
 });

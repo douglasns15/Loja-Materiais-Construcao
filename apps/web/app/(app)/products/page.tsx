@@ -1,15 +1,18 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createProductSchema } from '@nexoloja/shared';
+import { productMatchesQuery } from '@nexoloja/core';
 import { apiGet, apiPatch, apiPost } from '@/lib/api';
 import { useOnline } from '@/lib/useOnline';
 import { OfflineNotice } from '@/components/OfflineNotice';
+import { BarcodeScanButton } from '@/components/BarcodeScanButton';
 
 type Product = {
   id: string;
   sku: string;
   name: string;
+  popularName: string | null;
   costPrice: string;
   salePrice: string;
   stockQty: string;
@@ -35,6 +38,7 @@ export default function ProductsPage() {
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
     name: '',
+    popularName: '',
     sku: '',
     costPrice: '',
     salePrice: '',
@@ -42,6 +46,15 @@ export default function ProductsPage() {
     initialStock: '',
   });
   const [saving, setSaving] = useState(false);
+
+  // Busca local: filtra por nome, nome popular ou SKU (função pura de packages/core).
+  const [search, setSearch] = useState('');
+  const filtered = products.filter((p) => productMatchesQuery(p, search));
+
+  // Enter-scan (leitor físico): destaca a linha do produto encontrado por alguns segundos.
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  // Ref do campo Nome do cadastro — foca ao escanear um código ainda não cadastrado.
+  const nameRef = useRef<HTMLInputElement>(null);
 
   // Edições do estoque mínimo por produto (id → valor digitado), antes de salvar.
   const [minEdits, setMinEdits] = useState<Record<string, string>>({});
@@ -60,12 +73,21 @@ export default function ProductsPage() {
     load();
   }, []);
 
+  // Remove o destaque da linha escaneada depois de alguns segundos.
+  useEffect(() => {
+    if (!highlightId) return;
+    const t = setTimeout(() => setHighlightId(null), 2500);
+    return () => clearTimeout(t);
+  }, [highlightId]);
+
   async function onCreate(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
 
     const parsed = createProductSchema.safeParse({
       name: form.name,
+      // Nome popular é opcional: string vazia vira undefined (não envia coluna vazia).
+      popularName: form.popularName.trim() || undefined,
       sku: form.sku,
       costPrice: Number(form.costPrice),
       salePrice: Number(form.salePrice),
@@ -81,13 +103,48 @@ export default function ProductsPage() {
     setSaving(true);
     try {
       await apiPost<Product>('/products', parsed.data);
-      setForm({ name: '', sku: '', costPrice: '', salePrice: '', minStockQty: '', initialStock: '' });
+      setForm({ name: '', popularName: '', sku: '', costPrice: '', salePrice: '', minStockQty: '', initialStock: '' });
       await load();
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setSaving(false);
     }
+  }
+
+  /**
+   * Processa um código lido (Enter do leitor físico OU câmera). O SKU é o código de barras:
+   * - achou 1 produto → rola até a linha e a destaca (o produto já existe; ajuste ali mesmo);
+   * - não achou nada → é um código novo: joga no campo SKU do cadastro e foca em Nome, para
+   *   registrar o produto lido na hora;
+   * - vários → só filtra a lista pelo código, para o operador escolher.
+   */
+  function handleScannedCode(raw: string) {
+    const code = raw.trim();
+    if (!code) return;
+    const matches = products.filter((p) => productMatchesQuery(p, code));
+    const found = matches.length === 1 ? matches[0] : undefined;
+    if (found) {
+      setSearch(code); // garante que a linha está visível
+      setHighlightId(found.id);
+      // Rola após o re-render (a linha só existe no DOM depois do commit da busca).
+      requestAnimationFrame(() =>
+        document.getElementById(`prod-row-${found.id}`)?.scrollIntoView({ block: 'center' }),
+      );
+    } else if (matches.length === 0) {
+      // Código não cadastrado → começa o cadastro já com o SKU preenchido.
+      setForm((f) => ({ ...f, sku: code }));
+      setSearch('');
+      nameRef.current?.focus();
+    } else {
+      setSearch(code); // vários resultados: filtra a lista
+    }
+  }
+
+  function onSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    handleScannedCode(search);
   }
 
   /** Salva o estoque mínimo de um produto (PATCH parcial). */
@@ -128,17 +185,31 @@ export default function ProductsPage() {
         className="mb-6 grid grid-cols-1 gap-3 rounded-2xl bg-white p-4 shadow-sm sm:grid-cols-6"
       >
         <input
+          ref={nameRef}
           placeholder="Nome"
           value={form.name}
           onChange={(e) => setForm({ ...form, name: e.target.value })}
           className="rounded-lg border border-gray-300 px-3 py-2 sm:col-span-2"
         />
         <input
-          placeholder="SKU"
-          value={form.sku}
-          onChange={(e) => setForm({ ...form, sku: e.target.value })}
-          className="rounded-lg border border-gray-300 px-3 py-2"
+          placeholder="Nome popular (opcional)"
+          value={form.popularName}
+          onChange={(e) => setForm({ ...form, popularName: e.target.value })}
+          title="Nome popular/regional pelo qual o produto também é buscado no PDV. Ex.: 'Ferro 8' para 'Vergalhão CA-50 8mm'."
+          className="rounded-lg border border-gray-300 px-3 py-2 sm:col-span-2"
         />
+        <div className="flex gap-2">
+          <input
+            placeholder="SKU / código de barras"
+            value={form.sku}
+            onChange={(e) => setForm({ ...form, sku: e.target.value })}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2"
+          />
+          <BarcodeScanButton
+            onScan={(code) => setForm((f) => ({ ...f, sku: code.trim() }))}
+            label="Escanear código de barras para o SKU"
+          />
+        </div>
         <input
           placeholder="Custo"
           type="number"
@@ -186,6 +257,19 @@ export default function ProductsPage() {
       {/* Erro cru só quando online (offline vira "Failed to fetch" — o aviso acima já explica). */}
       {error && online && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
+      <div className="mb-3 flex gap-2 sm:max-w-md">
+        <input
+          type="search"
+          placeholder="Buscar ou escanear (nome, nome popular ou SKU)…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={onSearchKeyDown}
+          className="w-full rounded-lg border border-gray-300 px-3 py-2"
+          aria-label="Buscar produto"
+        />
+        <BarcodeScanButton onScan={handleScannedCode} label="Escanear para buscar ou cadastrar" />
+      </div>
+
       <div className="overflow-x-auto rounded-2xl bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="bg-gray-100 text-left text-gray-600">
@@ -200,21 +284,34 @@ export default function ProductsPage() {
             </tr>
           </thead>
           <tbody>
-            {products.length === 0 ? (
+            {filtered.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-4 py-6 text-center text-gray-400">
-                  Nenhum produto cadastrado.
+                  {search
+                    ? 'Nenhum produto encontrado para a busca.'
+                    : 'Nenhum produto cadastrado.'}
                 </td>
               </tr>
             ) : (
-              products.map((p) => {
+              filtered.map((p) => {
                 const current = minEdits[p.id] ?? p.minStockQty;
                 const changed =
                   minEdits[p.id] !== undefined &&
                   Number(minEdits[p.id]) !== Number(p.minStockQty);
                 return (
-                  <tr key={p.id} className="border-t border-gray-100">
-                    <td className="px-4 py-2">{p.name}</td>
+                  <tr
+                    key={p.id}
+                    id={`prod-row-${p.id}`}
+                    className={`border-t border-gray-100 transition-colors ${
+                      highlightId === p.id ? 'bg-yellow-100' : ''
+                    }`}
+                  >
+                    <td className="px-4 py-2">
+                      {p.name}
+                      {p.popularName && (
+                        <span className="block text-xs text-gray-400">{p.popularName}</span>
+                      )}
+                    </td>
                     <td className="px-4 py-2 text-gray-500">{p.sku}</td>
                     <td className="px-4 py-2 text-right">{BRL(p.costPrice)}</td>
                     <td className="px-4 py-2 text-right">{BRL(p.salePrice)}</td>

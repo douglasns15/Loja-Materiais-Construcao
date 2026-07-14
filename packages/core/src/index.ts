@@ -143,6 +143,42 @@ export function calcSaleTotals(
 }
 
 // =============================================================================
+// BUSCA DE PRODUTO (Product search) — cadastro e PDV
+// =============================================================================
+
+/** Campos pelos quais um produto é localizável na busca (cadastro e PDV). */
+export interface ProductSearchFields {
+  name: string;
+  popularName?: string | null;
+  sku: string;
+}
+
+/**
+ * Normaliza texto para busca: minúsculas, sem acentos e sem espaços nas pontas.
+ * Assim "Cimento", "cimento" e "címento" casam igual — essencial em português.
+ */
+export function normalizeSearchText(text: string): string {
+  return text
+    .normalize('NFD') // separa letra + acento (ex.: "á" → "a" + combinante)
+    .replace(/\p{Diacritic}/gu, '') // remove os diacríticos combinantes
+    .toLowerCase()
+    .trim();
+}
+
+/**
+ * `true` se o produto casa com a busca por **nome oficial, nome popular OU SKU**
+ * (digitar qualquer um dos três encontra o produto). Match por substring, acento-
+ * e caixa-insensível. Query vazia casa tudo (sem filtro). Função pura reusada no
+ * cadastro (apps/web) e no PDV.
+ */
+export function productMatchesQuery(product: ProductSearchFields, query: string): boolean {
+  const q = normalizeSearchText(query);
+  if (!q) return true; // sem termo digitado → não filtra nada
+  const fields = [product.name, product.popularName ?? '', product.sku];
+  return fields.some((field) => normalizeSearchText(field).includes(q));
+}
+
+// =============================================================================
 // ESTOQUE (Stock) — ADR-001
 // =============================================================================
 

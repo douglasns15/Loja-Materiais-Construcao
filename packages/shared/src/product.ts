@@ -24,6 +24,9 @@ export type UnitType = z.infer<typeof unitTypeSchema>;
 export const createProductSchema = z.object({
   sku: z.string().min(1).max(60),
   name: z.string().min(1).max(150),
+  /// Nome popular/regional do produto — usado na busca do PDV além do nome oficial.
+  /// Opcional e genérico p/ qualquer ramo (ex.: "Ferro 8", "Dipirona").
+  popularName: z.string().max(150).optional(),
   description: z.string().max(500).optional(),
   categoryId: z.string().uuid().optional(),
   unit: unitTypeSchema.default('UNIT'),

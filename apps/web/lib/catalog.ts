@@ -21,6 +21,8 @@ import { openDb, reqAsPromise, txDone, CATALOG_STORE, hasIndexedDb } from './db'
 export interface CachedProduct {
   id: string;
   name: string;
+  /** Nome popular/regional — mantido no cache p/ o operador localizar o produto offline. */
+  popularName: string | null;
   sku: string;
   salePrice: string;
   costPrice: string;
@@ -44,6 +46,7 @@ export async function cacheProducts(products: CachedProduct[]): Promise<void> {
       store.put({
         id: p.id,
         name: p.name,
+        popularName: p.popularName ?? null,
         sku: p.sku,
         salePrice: p.salePrice,
         costPrice: p.costPrice,

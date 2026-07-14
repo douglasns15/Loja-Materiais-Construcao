@@ -203,6 +203,9 @@ model Product {
   categoryId      String?   @db.Uuid
   sku             String    @db.VarChar(60)   // Código interno ou código de barras
   name            String    @db.VarChar(150)
+  /// Nome popular/regional do produto — usado para busca no PDV além do nome oficial.
+  /// Genérico p/ qualquer ramo. Ex.: "Ferro 8" p/ "Vergalhão CA-50 8mm"; "Dipirona" p/ "Dipirona Sódica 500mg".
+  popularName     String?   @db.VarChar(150)
   description     String?   @db.VarChar(500)
   imageUrl        String?   @db.VarChar(500)  // URL no Cloudflare R2 — nunca BLOB
   unit            UnitType  @default(UNIT)
@@ -237,6 +240,7 @@ model Product {
 
   @@unique([tenantId, sku])
   @@index([tenantId, name])
+  @@index([tenantId, popularName])
   @@map("products")
 }
 

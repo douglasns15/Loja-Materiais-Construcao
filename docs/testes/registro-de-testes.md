@@ -2165,3 +2165,49 @@ pelo `overflow-x-auto` da tabela nem sai da tela em telas estreitas. Conteúdo: 
 nome}* e *Fechado {data/hora · por nome}* (nomes com fallback "não informado"). Só front — web typecheck +
 build (18 rotas) ✅. **No ar:** web Version `ac7c5b14`. **E2E do usuário ✅ VALIDADO (2026-07-13)** — o
 popover aparece corretamente com abertura/fechamento + responsáveis.
+
+### EF-1 (parcial) — Nome popular + busca (nome/popular/SKU) + código de barras — 2026-07-14
+
+Fatia do enriquecimento do cadastro (parte do apelido) + leitura de código de barras. **Desvios do plano:**
+a coluna virou `popularName` (não `nickname`, `VarChar(150)`) e o **código de barras entrou como bônus** (não
+estava no EF-1 original). O resto do EF-1 (descrição, peso kg/g, unidade de venda) **não** foi feito.
+
+**Banco.** Migration `0007_add_popular_name_to_product` — `ALTER TABLE products ADD COLUMN "popularName"
+VARCHAR(150)` + `CREATE INDEX products_tenantId_popularName_idx`. Aditiva, nullable, **sem mudança de RLS**.
+Aplicada com `migrate deploy` (o `migrate dev` tropeça no shadow DB por causa do schema `auth` do Supabase).
+
+**Core (Vitest).**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| `normalizeSearchText` + `productMatchesQuery` (+7) | 58/58 | ✅ 58/58 (era 51) |
+
+Casos cobertos: match por nome oficial, por nome popular, por SKU; acento- e caixa-insensível; query vazia
+casa tudo; `popularName` nulo; "não casa quando nada bate".
+
+**Build / typecheck.** `tsc --noEmit` em `apps/web` ✅; build da API (`wrangler deploy --dry-run`) ✅ após
+`prisma generate`.
+
+**Deploy da API (2026-07-14).** `apps/api` re-deployado — Version `54acd8eb-4c89-4f58-a5a6-44aca930b7e6`.
+**Motivo (achado):** a API é um Worker deployado (`NEXT_PUBLIC_API_URL` aponta p/ ela). A versão anterior tinha
+`@nexoloja/shared` (Zod **descarta** campo desconhecido) e Prisma Client antigos → o `popularName` **não salvava
+nem retornava**. Confirmado no banco antes do deploy: produto criado ficou com `popularName=null`.
+
+**E2E do usuário (2026-07-14, app logado, tenant real).**
+
+| Caso | Resultado |
+|---|---|
+| Busca por **nome** (Produtos) e por **SKU** (case-insensitive) | ✅ |
+| Busca **acento-insensível** ("vergalhao" → "Vergalhão") | ✅ |
+| Cadastro de produto pela UI | ✅ (persistiu) |
+| Modal do scanner 📷 abre + **câmera indisponível** → mensagem tratada (não quebra) | ✅ (preview sem câmera) |
+| **Auto-add no Enter** na venda (SKU "TIJ-8F" → Tijolo no carrinho) | ✅ |
+| **Busca por nome popular** ("cano" só existe em popular "Cano 100") | ❌ antes do deploy → ✅ **depois do deploy** |
+| Persistência do `popularName` no banco (produto "Tubo PVC 100mm" / "Cano 100") | ✅ `popularName="Cano 100"` |
+
+⚠️ **PENDENTE:** o **web NÃO foi deployado** — a UI (campo, busca, scanner) só rodou em dev local; a feature
+não fica visível ao usuário final até deployar o `apps/web`. **É o 1º passo da próxima sessão.**
+
+**Notas.** Leitura por **câmera** só dá para validar de verdade num **celular** (HTTPS) — o preview desktop não
+tem câmera. **Dados de teste** deixados no tenant (a pedido do usuário): caixa aberto R$100 + produtos FE8-TESTE
+e PVC100-TESTE.

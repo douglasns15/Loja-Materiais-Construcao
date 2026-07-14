@@ -3,7 +3,33 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-13 — **CS-5 fechada e validada; direção do próximo bloco travada.**
+> **Última atualização:** 2026-07-14 — **EF-1 (parte do apelido) + busca + código de barras NO AR na API; web pendente de deploy.**
+> Entregue a fatia **"nome popular + busca + leitura de código de barras"** (parte do EF-1 planejado, com desvios anotados):
+> - **Nome popular do produto** — coluna nova **`popularName`** (renomeamos o `nickname` do plano; `VarChar(150)`,
+>   nullable, sem mudança de RLS) + índice `products_tenantId_popularName_idx`. **Migration `0007` aplicada** via
+>   `wrangler`/`migrate deploy` (aprovada pelo usuário). Campo **genérico p/ qualquer ramo** (sistema é multiramos),
+>   exemplo só ilustrativo ("Ferro 8" p/ "Vergalhão CA-50 8mm"). Exposto no cadastro e na listagem (linha secundária).
+> - **Busca de produto** por **nome oficial + nome popular + SKU** (digitar qualquer um acha) nas telas **Produtos** e
+>   **Venda**. Lógica pura `productMatchesQuery` + `normalizeSearchText` em `packages/core` (acento- e caixa-insensível,
+>   substring; **+7 testes → 58/58**). Na venda, o `<select>` passa a listar só os matches.
+> - **Código de barras (BÔNUS, fora do plano original):** o `sku` **é** o código de barras, então buscar por SKU já é
+>   buscar por código. (a) **Leitor físico (HID)**: campo de busca com **Enter-quando-sobra-1** — na venda **auto-adiciona
+>   ao carrinho**; em Produtos **acha+destaca** a linha ou, se o código for novo, **joga no SKU do cadastro e foca Nome**.
+>   (b) **Câmera**: componente reutilizável `apps/web/components/BarcodeScanButton.tsx` (📷) — `BarcodeDetector` nativo
+>   com fallback **`@zxing/library`** (dep nova, dynamic import só ao abrir); integrado na venda (📷 busca) e em Produtos
+>   (📷 busca + 📷 campo SKU). `CachedProduct` (cache offline) ganhou `popularName`.
+> - **API re-deployada** (`nexoloja-api`, Version `54acd8eb-4c89-4f58-a5a6-44aca930b7e6`): a API é um **Worker deployado**
+>   e o `@nexoloja/shared`/Prisma antigos **descartavam** o `popularName` (Zod tira campo desconhecido; client antigo não
+>   lê a coluna) — sem o redeploy o campo nem salvava nem retornava. **Validado E2E pós-deploy:** produto "Tubo PVC 100mm"
+>   / popular "Cano 100" **persistiu** (DB confere) e a **busca por "cano" (só no nome popular) achou**.
+> - ⚠️ **PENDENTE — DEPLOY DO WEB:** o frontend (campo, busca, scanner) **só rodou em dev local**; a feature **não está
+>   visível para o usuário final** até deployar o **`apps/web`** (OpenNext/Workers). **Este é o 1º passo da próxima sessão.**
+> - **Resto do EF-1 NÃO feito** (fica p/ próxima fatia): **descrição/observação**, **peso (toggle kg/g, canônico kg)** e
+>   **unidade de venda (dropdown `UnitType`)** no cadastro — campos que **já existem no schema**, só falta a UI. Depois **EF-2**.
+> - Gates: core **58/58**, typecheck web ✅, build API (dry-run) ✅. Dados de teste deixados no tenant do usuário (a pedido):
+>   caixa aberto R$100 + produtos FE8-TESTE (sem popular) e PVC100-TESTE (popular "Cano 100").
+>
+> **Antes:** 2026-07-13 — **CS-5 fechada e validada; direção do próximo bloco travada.**
 > **Decisão de produto:** estoque e caixa seguem **ONLINE-ONLY** — NÃO haverá mutação offline de estoque/
 > caixa agora. O offline valeu para a **VENDA** (cliente no balcão, não pode esperar); já entrada/ajuste de
 > estoque e abrir/fechar caixa são **retaguarda** (podem esperar a rede voltar), e o **"ajuste"** é
@@ -652,14 +678,16 @@
         THOUSAND / BAG / ROLL) — só falta expor o seletor no cadastro.
       - **apelido** → **NÃO existe** → coluna nova (a única migration da EF-1).
       - **segundo preço** (rolo fechado) → **NÃO existe** (`conversionFactor` existe, mas sem preço próprio) → EF-3.
-  - [ ] **EF-1 — Cadastro de produto enriquecido** *(rápida; 1 migration aditiva)*. Expor no cadastro/
-        edição de Produtos: **descrição/observação** (já no banco), **peso** com toggle **kg/g** (canônico
-        em kg), **unidade de venda** (dropdown do `UnitType`) e **apelido** (`nickname`). O **apelido serve
-        para BUSCA**: procurar produto por **nome oficial OU apelido** (cada loja usa o termo do seu dia a
-        dia) — avaliar incluir na consulta/índice de busca (hoje `@@index([tenantId, name])`). **Migration:**
-        1 coluna nova `nickname` (VarChar curto — ex. 60 — **nullable, sem default, NÃO altera RLS**);
-        aditiva e segura. **Não toca PDV/estoque transacional.** ⚠️ **Pedir aprovação da migration antes de
-        aplicar (regra 1 do CLAUDE.md).**
+  - 🟡 **EF-1 — Cadastro de produto enriquecido** *(rápida; 1 migration aditiva)* — **PARCIAL (2026-07-14).**
+    - [x] **Apelido/nome popular + BUSCA** — FEITO. Renomeamos `nickname`→**`popularName`** (`VarChar(150)`,
+          nullable, sem RLS); **migration `0007` aplicada**; índice `products_tenantId_popularName_idx`. Busca por
+          **nome + nome popular + SKU** nas telas Produtos e Venda (`productMatchesQuery` no core, +7 testes). **Bônus:**
+          leitura de **código de barras** (o `sku` é o código) — Enter-scan (leitor físico) + `BarcodeScanButton` (câmera,
+          `BarcodeDetector` + `@zxing`). **API deployada e validada; ⚠️ web ainda NÃO deployado.**
+    - [ ] **Descrição/observação** (`description`, já no banco) — só falta na UI do cadastro.
+    - [ ] **Peso** com toggle **kg/g** (canônico em kg — `weightKg` já no banco) — falta na UI.
+    - [ ] **Unidade de venda** (dropdown do `UnitType`, já no banco) — falta na UI.
+    - Sem nova migration para o que falta (campos já existem). **Não toca PDV/estoque transacional.**
   - [ ] **EF-2 — Estoque fino (online-first)** *(sem migration)*. Dar superfície ao que já existe no core:
         **alerta/painel de estoque baixo** (regra `stockQty <= minStockQty`, já testada no core — falta a
         UI de alerta/lista) e **movimentações detalhadas** / visão de reposição. Usa `StockMovement` e

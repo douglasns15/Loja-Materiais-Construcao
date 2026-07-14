@@ -16,9 +16,24 @@ http://localhost:3000/
 
 ## Leia docs/ROADMAP.md e docs/testes/registro-de-testes.md e vamos continuar
 
-Ponto forte descoberto: description, weightKg e unit UnitType já existem no schema (herança do módulo Material de Construção) — então boa parte da EF-1 é só UI, e a única migration real é o nickname.
+Ponto forte descoberto: description, weightKg e unit UnitType já existem no schema (herança do módulo Material de Construção) — então boa parte da EF-1 é só UI.
 
-Quando abrir a próxima sessão, é só dizer "vamos de EF-1" que eu começo pela migration do nickname (mostro o impacto e peço sua aprovação) e a exposição dos campos no cadastro.
+## HANDOFF (atualizado 2026-07-14) — o que foi feito e o próximo passo
+
+FEITO nesta fatia (parte do EF-1 + bônus código de barras):
+- Coluna nova `popularName` (renomeamos o "nickname" para popularName, VarChar(150)) — migration 0007 APLICADA.
+- Busca de produto por nome + nome popular + SKU (telas Produtos e Venda).
+- Código de barras: Enter-scan (leitor físico) + componente de câmera BarcodeScanButton (@zxing instalado).
+- API RE-DEPLOYADA (Version 54acd8eb...) — sem isso a API antiga descartava o popularName.
+- Validado E2E pelo usuário. Detalhes em docs/ROADMAP.md (topo) e docs/testes/registro-de-testes.md (seção EF-1).
+
+⚠️ PRÓXIMO PASSO (1º da próxima sessão): DEPLOY DO WEB — a UI só rodou em dev local, ainda não está no ar.
+   Comando: cd apps/web && npm run deploy  (wrangler já autenticado). Depois, smoke em nexoloja-web.imortal.workers.dev.
+
+DEPOIS: terminar o restante do EF-1 (só UI, sem migration nova): campo descrição/observação, peso com toggle
+   kg/g (canônico em kg) e unidade de venda (dropdown UnitType) no cadastro de Produtos. Em seguida EF-2 (estoque fino).
+
+Limpeza pendente no tenant do usuário (deixada a pedido): caixa aberto R$100 + produtos de teste FE8-TESTE e PVC100-TESTE.
 
 <> OBS: Status: Online - mostrar para indicar que o software está online... questionar sobre essa adição!! Outra coisa, será que é relevante adicionar no painel do super user um indicador por loja, mostrando se está on Line ou não.. se bem que pode estar off na loja, mas em outro local qualquer alguém acessar e vai mostrar como ON Line ... 
 
