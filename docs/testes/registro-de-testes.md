@@ -2257,3 +2257,32 @@ descrição. Persistência conferida direto na API (`GET /products`, do contexto
 
 > O caminho **g** (não-trivial, ÷1000) passou; o **kg** é identidade (coberto). **EF-1 FECHADO.** Produto de
 > teste `CABO25-EF1TESTE` deixado no tenant (remover quando quiser). Próximo passo: **EF-2**.
+
+### Fix — Busca do PDV (Nova Venda) vira lista visível e clicável — 2026-07-15
+
+**Achado do usuário:** ao digitar no campo "Buscar produto" da Nova Venda, os produtos relacionados não
+apareciam. **Causa:** a busca *funcionava* (mesma `productMatchesQuery` do core, 58/58), mas os resultados
+filtravam só as `<option>` **dentro de um `<select>` colapsado** — só visíveis ao abrir o dropdown. Não era
+bug de filtragem, e sim de UX (resultado escondido).
+
+**Correção (só front, `apps/web/.../venda/page.tsx`):** trocado o `<select> + Adicionar` por uma **lista de
+resultados visível e rolável** (autocomplete do PDV) abaixo do campo de busca:
+- Aparece/filtra ao vivo conforme se digita (nome, nome popular ou SKU); sem termo, lista o catálogo (rolável).
+- **Clicar no produto adiciona ao carrinho** com a **Quantidade** informada (campo ao lado da busca); depois a
+  busca limpa e a lista volta ao catálogo completo.
+- Cada linha mostra nome · SKU · preço · estoque; **estoque zerado** fica esmaecido e **desabilitado**
+  ("sem estoque").
+- **Enter-scan** (leitor físico, `onProductSearchKeyDown`) e **câmera** (`addByScan`) preservados.
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Typecheck `apps/web` (`tsc --noEmit`) | sem erros | ✅ |
+| Build + `npm run deploy` (web) | publicado | ✅ Version `c15b93a1-ad8f-4bc3-96b0-6c8776bc7668` |
+| Digitar "cimento" → lista filtra ao vivo (7 → 1) | lista visível narrowa | ✅ (E2E no navegador, produção) |
+| Clicar no produto (qtd 3) → entra no carrinho | 3× Cimento = R$ 111,00 | ✅ |
+| Após adicionar: busca limpa + lista volta ao catálogo + qtd volta a 1 | ok | ✅ |
+| Itens sem estoque (Mouse, Cabo, Tubo PVC…) desabilitados | não clicáveis | ✅ ("sem estoque" em vermelho) |
+| Console do navegador | sem erros | ✅ |
+
+> Nada gravado no banco no teste (carrinho é estado local até "Confirmar"). Busca por **SKU/nome popular** usa a
+> mesma função pura já validada (58/58 no core + E2E da tela Produtos).

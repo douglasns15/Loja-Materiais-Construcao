@@ -596,47 +596,74 @@ export default function VendaPage() {
           offline sem o recurso, esconde o ruído de rede — o aviso acima já orienta a nota manual. */}
       {error && (online || offlineSales) && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
-      <div className="mb-4 flex flex-wrap gap-2 rounded-2xl bg-white p-4 shadow-sm">
-        <div className="flex basis-full gap-2">
-          <input
-            type="search"
-            placeholder="Buscar ou escanear (nome, nome popular ou SKU)…"
-            value={productSearch}
-            onChange={(e) => setProductSearch(e.target.value)}
-            onKeyDown={onProductSearchKeyDown}
-            className="min-w-[12rem] flex-1 rounded-lg border border-gray-300 px-3 py-2"
-            aria-label="Buscar produto"
-          />
-          <BarcodeScanButton onScan={addByScan} label="Escanear produto" />
+      <div className="mb-4 rounded-2xl bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex basis-full gap-2">
+            <input
+              type="search"
+              placeholder="Buscar ou escanear (nome, nome popular ou SKU)…"
+              value={productSearch}
+              onChange={(e) => setProductSearch(e.target.value)}
+              onKeyDown={onProductSearchKeyDown}
+              className="min-w-[12rem] flex-1 rounded-lg border border-gray-300 px-3 py-2"
+              aria-label="Buscar produto"
+            />
+            <BarcodeScanButton onScan={addByScan} label="Escanear produto" />
+          </div>
+          <label className="flex items-center gap-2 text-sm text-gray-600">
+            Quantidade
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={qty}
+              onChange={(e) => setQty(e.target.value)}
+              className="w-24 rounded-lg border border-gray-300 px-3 py-2"
+              aria-label="Quantidade"
+            />
+          </label>
         </div>
-        <select
-          value={selected}
-          onChange={(e) => setSelected(e.target.value)}
-          className="min-w-[12rem] flex-1 rounded-lg border border-gray-300 px-3 py-2"
-        >
-          <option value="">
-            {productSearch && filteredProducts.length === 0
-              ? 'Nenhum produto encontrado…'
-              : 'Selecione um produto…'}
-          </option>
-          {filteredProducts.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-              {p.popularName ? ` (${p.popularName})` : ''} — {BRL(p.salePrice)} (est. {Number(p.stockQty)})
-            </option>
-          ))}
-        </select>
-        <input
-          type="number"
-          min="0"
-          step="1"
-          value={qty}
-          onChange={(e) => setQty(e.target.value)}
-          className="w-24 rounded-lg border border-gray-300 px-3 py-2"
-        />
-        <button onClick={() => addToCart()} className="rounded-lg bg-gray-200 px-4 py-2 font-medium hover:bg-gray-300">
-          Adicionar
-        </button>
+
+        {/* Lista de resultados (autocomplete do PDV): aparece conforme se digita/escaneia e mostra
+            os produtos que casam com a busca (nome, nome popular ou SKU). Clicar adiciona ao carrinho
+            com a quantidade informada — sem precisar abrir dropdown. Sem termo, lista o catálogo todo
+            (rolável) para navegar. Estoque zerado fica desabilitado. */}
+        <ul className="mt-3 max-h-64 divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-200">
+          {filteredProducts.length === 0 ? (
+            <li className="px-3 py-6 text-center text-sm text-gray-400">
+              {productSearch ? 'Nenhum produto encontrado.' : 'Nenhum produto cadastrado.'}
+            </li>
+          ) : (
+            filteredProducts.map((p) => {
+              const stock = Number(p.stockQty);
+              const out = !(stock > 0);
+              return (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    onClick={() => addToCart(p.id)}
+                    disabled={out}
+                    className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium">{p.name}</span>
+                      <span className="block truncate text-xs text-gray-400">
+                        {p.popularName ? `${p.popularName} · ` : ''}
+                        {p.sku}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <span className="block font-medium">{BRL(p.salePrice)}</span>
+                      <span className={`block text-xs ${out ? 'text-red-500' : 'text-gray-400'}`}>
+                        {out ? 'sem estoque' : `est. ${stock}`}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              );
+            })
+          )}
+        </ul>
       </div>
 
       <div className="mb-4 overflow-x-auto rounded-2xl bg-white shadow-sm">
