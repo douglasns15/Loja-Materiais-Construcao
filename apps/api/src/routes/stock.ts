@@ -40,6 +40,47 @@ stock.get('/movements', async (c) => {
 });
 
 /**
+ * Resumo consolidado de estoque por produto (EF-2): Σ entradas e Σ saídas de cada produto,
+ * agregadas no servidor (Prisma `groupBy` + `_sum`, cost-zero — não trafega o histórico inteiro).
+ * A tela cruza com `Product.stockQty`/`minStockQty` para a visão "saldo × mínimo × histórico" e
+ * confere a consistência do cache (ADR-001): Σ INCOME − Σ EXPENSE deve bater com `stockQty`.
+ */
+stock.get('/summary', async (c) => {
+  const tenantId = getTenantId(c);
+  const connectionString = getConnectionString(c.env);
+  if (!tenantId || !connectionString) {
+    return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
+  }
+
+  try {
+    const prisma = createPrismaClient(connectionString);
+    const rows = await prisma.stockMovement.groupBy({
+      by: ['productId', 'type'],
+      where: { tenantId },
+      _sum: { quantity: true },
+    });
+    // Reagrupa (produto, tipo) → { productId, income, expense }.
+    const byProduct = new Map<string, { income: number; expense: number }>();
+    for (const r of rows) {
+      const cur = byProduct.get(r.productId) ?? { income: 0, expense: 0 };
+      const qty = Number(r._sum.quantity ?? 0);
+      if (r.type === 'INCOME') cur.income += qty;
+      else cur.expense += qty;
+      byProduct.set(r.productId, cur);
+    }
+    const data = [...byProduct.entries()].map(([productId, v]) => ({
+      productId,
+      income: Number(v.income.toFixed(4)),
+      expense: Number(v.expense.toFixed(4)),
+    }));
+    return c.json({ ok: true, data });
+  } catch (err) {
+    console.error('GET /stock/summary falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao resumir o estoque.' }, 500);
+  }
+});
+
+/**
  * Entrada/saída de estoque (compra, recebimento). Transação atômica (ADR-001):
  * grava StockMovement + atualiza `Product.stockQty`. Bloqueia saída que deixaria
  * o estoque negativo. Auditoria natural pelo próprio StockMovement (sem AuditEvent).

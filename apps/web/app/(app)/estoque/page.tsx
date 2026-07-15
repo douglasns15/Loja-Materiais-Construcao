@@ -23,6 +23,9 @@ type Product = {
 
 type Supplier = { id: string; name: string };
 
+/** Totais consolidados por produto (EF-2): Σ entradas / Σ saídas, vindos de `GET /stock/summary`. */
+type StockSummaryRow = { productId: string; income: number; expense: number };
+
 type Movement = {
   id: string;
   type: 'INCOME' | 'EXPENSE';
@@ -49,6 +52,8 @@ export default function EstoquePage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [movements, setMovements] = useState<Movement[]>([]);
+  // Resumo consolidado por produto (Σ entradas/saídas) para a visão "saldo × mínimo × histórico".
+  const [summary, setSummary] = useState<Record<string, { income: number; expense: number }>>({});
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -72,12 +77,16 @@ export default function EstoquePage() {
 
   async function loadCatalog() {
     try {
-      const [p, s] = await Promise.all([
+      const [p, s, sum] = await Promise.all([
         apiGet<Product[]>('/products'),
         apiGet<Supplier[]>('/suppliers'),
+        apiGet<StockSummaryRow[]>('/stock/summary'),
       ]);
       setProducts(p);
       setSuppliers(s);
+      setSummary(
+        Object.fromEntries(sum.map((r) => [r.productId, { income: r.income, expense: r.expense }])),
+      );
       setError(null);
     } catch (e) {
       setError((e as Error).message);
@@ -402,12 +411,15 @@ export default function EstoquePage() {
               <th className="px-4 py-2">SKU</th>
               <th className="px-4 py-2 text-right">Em estoque</th>
               <th className="px-4 py-2 text-right">Mínimo</th>
+              <th className="px-4 py-2 text-right">Entradas</th>
+              <th className="px-4 py-2 text-right">Saídas</th>
+              <th className="px-4 py-2 text-right">Saldo (hist.)</th>
             </tr>
           </thead>
           <tbody>
             {products.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={7} className="px-4 py-6 text-center text-gray-400">
                   Nenhum produto cadastrado.
                 </td>
               </tr>
@@ -417,10 +429,23 @@ export default function EstoquePage() {
                   stockQty: Number(p.stockQty),
                   minStockQty: Number(p.minStockQty),
                 });
+                const s = summary[p.id] ?? { income: 0, expense: 0 };
+                // Saldo reconstruído do histórico (ADR-001): Σ entradas − Σ saídas. Deve bater
+                // com o cache `stockQty`; quando diverge, sinalizamos (não é erro — dado antigo
+                // sem movimento de origem também diverge).
+                const reconciled = Number((s.income - s.expense).toFixed(4));
+                const diverges = reconciled !== Number(p.stockQty);
                 return (
                   <tr key={p.id} className="border-t border-gray-100">
                     <td className="px-4 py-2">
-                      {p.name}
+                      <button
+                        type="button"
+                        onClick={() => setFilters({ ...EMPTY_FILTERS, productId: p.id })}
+                        title="Ver as movimentações deste produto"
+                        className="text-left font-medium text-gray-900 hover:text-gray-600 hover:underline"
+                      >
+                        {p.name}
+                      </button>
                       {low && (
                         <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800">
                           baixo
@@ -434,12 +459,29 @@ export default function EstoquePage() {
                       {QTY(p.stockQty)}
                     </td>
                     <td className="px-4 py-2 text-right text-gray-500">{QTY(p.minStockQty)}</td>
+                    <td className="px-4 py-2 text-right text-green-700">{QTY(s.income)}</td>
+                    <td className="px-4 py-2 text-right text-red-700">{QTY(s.expense)}</td>
+                    <td
+                      className={`px-4 py-2 text-right ${diverges ? 'text-amber-700' : 'text-gray-500'}`}
+                      title={
+                        diverges
+                          ? `Saldo pelo histórico (Σ entradas − Σ saídas) = ${QTY(reconciled)}, diferente do saldo atual ${QTY(p.stockQty)}.`
+                          : 'Saldo confere com o histórico (ADR-001).'
+                      }
+                    >
+                      {QTY(reconciled)}
+                      {diverges && ' ⚠'}
+                    </td>
                   </tr>
                 );
               })
             )}
           </tbody>
         </table>
+        <p className="px-4 py-2 text-xs text-gray-400">
+          Entradas/Saídas são os totais do histórico; “Saldo (hist.)” é Σ entradas − Σ saídas (deve
+          bater com o saldo atual — ADR-001). Clique no produto para ver suas movimentações abaixo.
+        </p>
       </div>
 
       {/* Histórico de movimentações */}

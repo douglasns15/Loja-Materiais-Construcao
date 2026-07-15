@@ -2320,3 +2320,36 @@ Reusadas na tela (painel + badge + tabela — removida a duplicação da regra i
 
 > Painel só renderiza quando há itens a repor (some quando tudo está acima do mínimo). Próxima fatia do EF-2:
 > visão de reposição/movimentações por produto.
+
+### EF-2 (fatia 2) — Visão consolidada por produto (saldo × mínimo × histórico) — 2026-07-15
+
+Fecha o EF-2. A tabela "Estoque atual" passou a mostrar, por produto, os **totais do histórico** e a **consistência
+do cache** (ADR-001), e virou porta de entrada para o histórico daquele produto. **Sem migration**; precisou de
+**deploy de API** (endpoint agregado novo).
+
+**API — `GET /stock/summary` (novo).** Totais por produto agregados no servidor com Prisma
+`groupBy(['productId','type'], _sum: quantity)` — **cost-zero**, não trafega o histórico inteiro (o
+`/stock/movements` tem `take: 50`, insuficiente para somar tudo). Reagrupa em `{ productId, income, expense }`.
+Typecheck `apps/api` ✅. Deploy Version `d1f6799a-05b2-41bd-a9ff-088a45221f8e`.
+
+**Web — tela de Estoque.** Colunas novas em "Estoque atual": **Entradas** (Σ INCOME, verde), **Saídas**
+(Σ EXPENSE, vermelho) e **Saldo (hist.)** = Σ entradas − Σ saídas. Quando o saldo do histórico **diverge** do
+`stockQty`, mostra **⚠** com tooltip (consistência ADR-001; não é erro — dado antigo sem movimento de origem
+também diverge). **Clicar no produto** define o filtro das "Movimentações recentes" para ele (liga saldo ↔
+histórico). Typecheck `apps/web` ✅. Deploy web Version `3523dd7c-e796-4dee-8fbb-ab4947eff59b`.
+
+**E2E no navegador (produção, app logado).**
+
+| Caso | Resultado |
+|---|---|
+| Colunas Entradas/Saídas/Saldo(hist.) aparecem por produto | ✅ |
+| Argamassa: 55 entradas − 6 saídas = **49** = saldo atual (confere, sem ⚠) | ✅ |
+| **⚠ de divergência** dispara quando Σ ≠ `stockQty` | ✅ **achado real no seed:** Cimento 230 ≠ 200; Tijolo 955 ≠ 905 |
+| Produtos zerados/sem movimento (Mouse, Cabo, Tubo PVC, Vergalhão) → 0/0/0 | ✅ |
+| Clicar no produto (Cimento) → filtra "Movimentações recentes" para ele | ✅ (dropdown vira "Cimento", lista 37 de 37 só Cimento) |
+| Console do navegador | ✅ sem erros |
+
+> **Achado (dado, não código):** o ⚠ revelou que `Product.stockQty` de **Cimento** (230) e **Tijolo** (955) não
+> bate com a soma das movimentações (200 e 905) — provável seed/legado ajustado fora do fluxo de `StockMovement`.
+> A **rotina de reconciliação** do ADR-001 (`stockQty = Σ INCOME − Σ EXPENSE`) corrige isso quando o usuário
+> quiser. **EF-2 fechado** (fatias 1 e 2). Próximo: **EF-3** (venda em unidade alternativa — ADR antes de codar).
