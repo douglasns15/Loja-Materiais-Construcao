@@ -3,7 +3,15 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-15 — **EF-1 COMPLETO e NO AR** (cadastro de produto enriquecido fechado).
+> **Última atualização:** 2026-07-15 — **EF-2 iniciado: Painel de reposição NO AR e validado** (+ fix da busca
+> do PDV + EF-1 completo, no mesmo dia). O **painel de reposição** (topo da tela de Estoque) lista tudo no ponto
+> de reposição (saldo ≤ mínimo) com badge **zerado/baixo** e **sugestão de compra**; funções puras novas no core
+> `isLowStock` + `replenishmentShortfall` (**68/68**), reusadas no badge/tabela. Web Version `42314d77`; E2E
+> validado (Cimento baixo +70, Mouse zerado +5) e dados de teste revertidos. **Antes, no mesmo dia:** fix da
+> **busca do PDV** (Nova Venda) — virou lista visível e clicável (era `<select>` colapsado), web `c15b93a1`.
+> **Próximo passo:** próxima fatia do EF-2 (visão de reposição/movimentações por produto) ou EF-3.
+>
+> **Antes:** 2026-07-15 — **EF-1 COMPLETO e NO AR** (cadastro de produto enriquecido fechado).
 > Deployado o **resto do EF-1** (só UI, sem migration/API): **descrição/observação** (textarea ≤500), **peso**
 > com toggle **kg/g** (canônico em kg) e **unidade de venda** (dropdown `UnitType` + `unitTypeLabels` PT-BR novo
 > em `packages/shared`). Web Version `4baf2760-c0e2-442a-a5a7-c25d6f52e337`; **E2E do usuário validado** (Metro /
@@ -710,10 +718,19 @@
       `POST /products` repassa `...parsed.data` ao Prisma). **Não toca PDV/estoque transacional.** Gates:
       typecheck web ✅, build web (18 rotas) ✅, core 58/58 ✅. **Web deployado** (Version `4baf2760-…`) +
       **E2E do usuário validado** (Metro/250 g→0,25 kg/descrição persistiram — ver registro). **EF-1 fechado.**
-  - [ ] **EF-2 — Estoque fino (online-first)** *(sem migration)*. Dar superfície ao que já existe no core:
-        **alerta/painel de estoque baixo** (regra `stockQty <= minStockQty`, já testada no core — falta a
-        UI de alerta/lista) e **movimentações detalhadas** / visão de reposição. Usa `StockMovement` e
-        `minStockQty` existentes. Online-first — **não toca a fila offline**.
+  - 🟡 **EF-2 — Estoque fino (online-first)** *(sem migration)* — **PARCIAL (2026-07-15).** Dar superfície ao
+        que já existe no core, usando `StockMovement`/`minStockQty` existentes. Online-first — **não toca a
+        fila offline**.
+    - [x] **Painel de reposição** — **COMPLETO e NO AR (2026-07-15).** Card no topo da tela de Estoque que
+          junta num lugar só tudo que está no ponto de reposição (saldo ≤ mínimo, mínimo > 0), com **badge
+          zerado/baixo**, **sugestão de compra** (quanto falta p/ o mínimo) e ordenação (zerados primeiro,
+          maior falta no topo). Funções puras novas no core **`isLowStock`** + **`replenishmentShortfall`**
+          (+10 testes → **68/68**), reusadas também no badge e na tabela (removida a duplicação da regra
+          inline). Só front (web Version `42314d77`). **E2E validado** (Cimento 230/mín 300 → baixo +70;
+          Mouse 0/mín 5 → zerado +5; dados de teste revertidos após a demo).
+    - [ ] **Movimentações detalhadas / visão de reposição por produto** — a tela de Estoque já tem histórico
+          com filtros (2.J.3); falta uma visão consolidada por produto (saldo × mínimo × histórico). Próxima
+          fatia do EF-2.
   - [ ] **EF-3 — Venda em unidade alternativa** *(complexa; ADR próprio antes de codar)*. Ex.: **fio** —
         vender o **rolo fechado** OU **por metro**, com **preços diferentes** (o rolo fechado costuma sair
         mais barato por metro). **Não é um campo — é mudança no motor de venda:** toca **PDV** (o carrinho

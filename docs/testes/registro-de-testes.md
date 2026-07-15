@@ -2286,3 +2286,37 @@ resultados visível e rolável** (autocomplete do PDV) abaixo do campo de busca:
 
 > Nada gravado no banco no teste (carrinho é estado local até "Confirmar"). Busca por **SKU/nome popular** usa a
 > mesma função pura já validada (58/58 no core + E2E da tela Produtos).
+
+### EF-2 (fatia 1) — Painel de reposição na tela de Estoque — 2026-07-15
+
+Primeira fatia do EF-2 (estoque fino online-first): um **painel de reposição** no topo da tela de Estoque que
+junta num lugar só tudo que está no ponto de reposição. **Sem migration, sem deploy de API** (usa
+`/products`/`minStockQty` já existentes). **Não toca a fila offline.**
+
+**Core (funções puras + testes, CLAUDE.md regra 2).** Duas funções novas em `packages/core`:
+- **`isLowStock({stockQty, minStockQty})`** — regra canônica de estoque baixo: `minStockQty > 0 && stockQty <=
+  minStockQty` (produto sem mínimo não alerta — o lojista opta rastreando).
+- **`replenishmentShortfall(...)`** — sugestão de compra: `minStockQty − stockQty` (nunca negativa, 0 quando não
+  está baixo), 4 casas (kg/m² fracionados).
+Reusadas na tela (painel + badge + tabela — removida a duplicação da regra inline).
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Core: `isLowStock` + `replenishmentShortfall` (+10 casos) | 68/68 | ✅ 68/68 (era 58) |
+| Typecheck `apps/web` (`tsc --noEmit`) | sem erros | ✅ |
+| Build + `npm run deploy` (web) | publicado | ✅ Version `42314d77-384d-497e-89ac-d8f7cfa25295` |
+
+**E2E no navegador (produção, app logado).** Cenário montado pela tela de Produtos (com autorização do usuário) e
+**revertido ao final**: **Cimento** (saldo 230) mínimo → 300; **Mouse** (saldo 0) mínimo → 5.
+
+| Caso | Resultado |
+|---|---|
+| Painel "Reposição de estoque" aparece no topo do Estoque com contador "2 itens para repor" | ✅ |
+| **Mouse** — badge **zerado**, em estoque 0, mínimo 5, **Comprar +5** | ✅ (ordenado 1º, por estar zerado) |
+| **Cimento** — badge **baixo**, em estoque 230, mínimo 300, **Comprar +70** | ✅ |
+| Ordenação: zerados antes de baixos | ✅ |
+| Console do navegador | ✅ sem erros |
+| Reverter mínimos (Cimento → 10, Mouse → 0) → painel desaparece | ✅ (dados de teste restaurados) |
+
+> Painel só renderiza quando há itens a repor (some quando tudo está acima do mínimo). Próxima fatia do EF-2:
+> visão de reposição/movimentações por produto.

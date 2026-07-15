@@ -5,6 +5,8 @@ import {
   calcCashDivergence,
   calcExpectedCash,
   calcInventoryAdjustment,
+  isLowStock,
+  replenishmentShortfall,
   calcMarginPercent,
   calcOrderTotal,
   calcSaleItemTotal,
@@ -190,6 +192,50 @@ describe('calcInventoryAdjustment', () => {
 
   it('contagem igual → quantidade 0 (nada a fazer)', () => {
     expect(calcInventoryAdjustment(10, 10)).toEqual({ type: 'INCOME', quantity: 0 });
+  });
+});
+
+describe('isLowStock', () => {
+  it('saldo abaixo do mínimo → baixo', () => {
+    expect(isLowStock({ stockQty: 3, minStockQty: 10 })).toBe(true);
+  });
+
+  it('saldo igual ao mínimo → baixo (ponto de reposição)', () => {
+    expect(isLowStock({ stockQty: 10, minStockQty: 10 })).toBe(true);
+  });
+
+  it('saldo acima do mínimo → ok', () => {
+    expect(isLowStock({ stockQty: 11, minStockQty: 10 })).toBe(false);
+  });
+
+  it('sem mínimo definido (0) → nunca baixo, mesmo zerado', () => {
+    expect(isLowStock({ stockQty: 0, minStockQty: 0 })).toBe(false);
+  });
+
+  it('zerado com mínimo definido → baixo', () => {
+    expect(isLowStock({ stockQty: 0, minStockQty: 5 })).toBe(true);
+  });
+});
+
+describe('replenishmentShortfall', () => {
+  it('sugere a diferença até o mínimo', () => {
+    expect(replenishmentShortfall({ stockQty: 3, minStockQty: 10 })).toBe(7);
+  });
+
+  it('zerado → repõe o mínimo inteiro', () => {
+    expect(replenishmentShortfall({ stockQty: 0, minStockQty: 5 })).toBe(5);
+  });
+
+  it('não está baixo → 0 (nada a repor)', () => {
+    expect(replenishmentShortfall({ stockQty: 11, minStockQty: 10 })).toBe(0);
+  });
+
+  it('sem mínimo (0) → 0', () => {
+    expect(replenishmentShortfall({ stockQty: 0, minStockQty: 0 })).toBe(0);
+  });
+
+  it('mantém precisão fracionada (kg/m²)', () => {
+    expect(replenishmentShortfall({ stockQty: 2.5, minStockQty: 10 })).toBe(7.5);
   });
 });
 

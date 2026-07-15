@@ -5,6 +5,7 @@ import {
   createStockMovementSchema,
   inventoryAdjustmentSchema,
 } from '@nexoloja/shared';
+import { isLowStock, replenishmentShortfall } from '@nexoloja/core';
 import { apiGet, apiPost } from '@/lib/api';
 import { useOnline } from '@/lib/useOnline';
 import { OfflineNotice } from '@/components/OfflineNotice';
@@ -103,11 +104,23 @@ export default function EstoquePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters.productId]);
 
-  const lowStock = useMemo(
+  // Painel de reposição (EF-2): produtos no ponto de reposição (saldo ≤ mínimo, com mínimo
+  // definido — regra pura `isLowStock` do core), já com a sugestão de quanto comprar
+  // (`replenishmentShortfall`). Ordena zerados primeiro, depois a maior falta no topo.
+  const replenish = useMemo(
     () =>
-      products.filter(
-        (p) => Number(p.minStockQty) > 0 && Number(p.stockQty) <= Number(p.minStockQty),
-      ),
+      products
+        .map((p) => {
+          const level = { stockQty: Number(p.stockQty), minStockQty: Number(p.minStockQty) };
+          return {
+            p,
+            out: level.stockQty <= 0,
+            shortfall: replenishmentShortfall(level),
+            low: isLowStock(level),
+          };
+        })
+        .filter((r) => r.low)
+        .sort((a, b) => Number(b.out) - Number(a.out) || b.shortfall - a.shortfall),
     [products],
   );
 
@@ -198,6 +211,60 @@ export default function EstoquePage() {
       <OfflineNotice />
       {error && online && <p className="mb-4 text-sm text-red-600">{error}</p>}
       {notice && <p className="mb-4 text-sm text-green-700">{notice}</p>}
+
+      {/* Painel de reposição (EF-2): tudo que está no ponto de reposição num lugar só, com a
+          sugestão de compra (quanto falta para voltar ao mínimo). Só aparece quando há itens. */}
+      {replenish.length > 0 && (
+        <div className="mb-6 overflow-x-auto rounded-2xl border border-amber-200 bg-amber-50 shadow-sm">
+          <div className="flex items-center justify-between px-4 py-3">
+            <h2 className="font-semibold text-amber-900">Reposição de estoque</h2>
+            <span className="rounded-full bg-amber-200 px-3 py-1 text-xs font-medium text-amber-900">
+              {replenish.length} {replenish.length === 1 ? 'item para repor' : 'itens para repor'}
+            </span>
+          </div>
+          <table className="w-full text-sm">
+            <thead className="bg-amber-100/70 text-left text-amber-900">
+              <tr>
+                <th className="px-4 py-2">Produto</th>
+                <th className="px-4 py-2">SKU</th>
+                <th className="px-4 py-2 text-right">Em estoque</th>
+                <th className="px-4 py-2 text-right">Mínimo</th>
+                <th className="px-4 py-2 text-right">Comprar</th>
+              </tr>
+            </thead>
+            <tbody>
+              {replenish.map(({ p, out, shortfall }) => (
+                <tr key={p.id} className="border-t border-amber-100">
+                  <td className="px-4 py-2">
+                    {p.name}
+                    <span
+                      className={`ml-2 rounded px-1.5 py-0.5 text-xs font-medium ${
+                        out ? 'bg-red-100 text-red-800' : 'bg-amber-200 text-amber-900'
+                      }`}
+                    >
+                      {out ? 'zerado' : 'baixo'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2 text-amber-800/70">{p.sku}</td>
+                  <td
+                    className={`px-4 py-2 text-right font-medium ${out ? 'text-red-700' : 'text-amber-800'}`}
+                  >
+                    {QTY(p.stockQty)}
+                  </td>
+                  <td className="px-4 py-2 text-right text-amber-800/70">{QTY(p.minStockQty)}</td>
+                  <td className="px-4 py-2 text-right font-semibold text-amber-900">
+                    +{QTY(shortfall)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="px-4 py-2 text-xs text-amber-800/80">
+            “Comprar” é o quanto falta para o saldo voltar ao mínimo. Defina o mínimo de cada produto
+            na tela de Produtos.
+          </p>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Entrada de estoque — bloqueada em loja desativada (ADR-009); ajuste segue liberado. */}
@@ -322,9 +389,9 @@ export default function EstoquePage() {
       <div className="mt-6 overflow-x-auto rounded-2xl bg-white shadow-sm">
         <div className="flex items-center justify-between px-4 py-3">
           <h2 className="font-semibold">Estoque atual</h2>
-          {lowStock.length > 0 && (
+          {replenish.length > 0 && (
             <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800">
-              {lowStock.length} com estoque baixo
+              {replenish.length} com estoque baixo
             </span>
           )}
         </div>
@@ -346,8 +413,10 @@ export default function EstoquePage() {
               </tr>
             ) : (
               products.map((p) => {
-                const low =
-                  Number(p.minStockQty) > 0 && Number(p.stockQty) <= Number(p.minStockQty);
+                const low = isLowStock({
+                  stockQty: Number(p.stockQty),
+                  minStockQty: Number(p.minStockQty),
+                });
                 return (
                   <tr key={p.id} className="border-t border-gray-100">
                     <td className="px-4 py-2">

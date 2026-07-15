@@ -231,6 +231,32 @@ export function calcInventoryAdjustment(
   };
 }
 
+/** Saldo e mínimo de um produto — base do painel de reposição (EF-2). */
+export interface StockLevelFields {
+  stockQty: number;
+  minStockQty: number;
+}
+
+/**
+ * `true` quando o produto tem **mínimo definido** (`minStockQty > 0`) e o saldo está
+ * **igual ou abaixo** dele — a regra canônica de "estoque baixo" (ADR-001, ponto de reposição).
+ * Produtos sem mínimo (0) NÃO disparam alerta: o lojista opta por rastrear definindo o mínimo.
+ * Função pura reusada na tela de Estoque (badge, painel de reposição) e no PDV.
+ */
+export function isLowStock(item: StockLevelFields): boolean {
+  return item.minStockQty > 0 && item.stockQty <= item.minStockQty;
+}
+
+/**
+ * Quanto comprar para o saldo voltar ao mínimo (`minStockQty − stockQty`, nunca negativo).
+ * Retorna 0 quando o item não está baixo (nada a repor). Arredondado a 4 casas (precisão de
+ * `Product.stockQty`, cobre kg/m² fracionados). Sugestão de compra do painel de reposição.
+ */
+export function replenishmentShortfall(item: StockLevelFields): number {
+  if (!isLowStock(item)) return 0;
+  return Number((item.minStockQty - item.stockQty).toFixed(4));
+}
+
 // =============================================================================
 // RELATÓRIOS (Reports) — vendas por período e formas de pagamento
 // =============================================================================
