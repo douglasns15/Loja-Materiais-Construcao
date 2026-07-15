@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { createProductSchema } from '@nexoloja/shared';
+import { createProductSchema, unitTypeLabels, type UnitType } from '@nexoloja/shared';
 import { productMatchesQuery } from '@nexoloja/core';
 import { apiGet, apiPatch, apiPost } from '@/lib/api';
 import { useOnline } from '@/lib/useOnline';
@@ -40,8 +40,13 @@ export default function ProductsPage() {
     name: '',
     popularName: '',
     sku: '',
+    description: '',
+    unit: 'UNIT' as UnitType,
     costPrice: '',
     salePrice: '',
+    // Peso: o usuário digita na unidade escolhida (kg/g); guardamos canônico em kg no envio.
+    weight: '',
+    weightUnit: 'kg' as 'kg' | 'g',
     minStockQty: '',
     initialStock: '',
   });
@@ -84,13 +89,22 @@ export default function ProductsPage() {
     e.preventDefault();
     setError(null);
 
+    // Peso canônico em kg (mesmo padrão de CNPJ/telefone: UI formata, banco guarda canônico).
+    // Digitado em gramas → divide por 1000; `weightKg` só vai quando > 0.
+    const weightRaw = form.weight ? Number(form.weight) : 0;
+    const weightKg =
+      weightRaw > 0 ? (form.weightUnit === 'g' ? weightRaw / 1000 : weightRaw) : undefined;
+
     const parsed = createProductSchema.safeParse({
       name: form.name,
       // Nome popular é opcional: string vazia vira undefined (não envia coluna vazia).
       popularName: form.popularName.trim() || undefined,
       sku: form.sku,
+      description: form.description.trim() || undefined,
+      unit: form.unit,
       costPrice: Number(form.costPrice),
       salePrice: Number(form.salePrice),
+      weightKg,
       minStockQty: form.minStockQty ? Number(form.minStockQty) : undefined,
       // Se preenchido, a API gera a Entrada de estoque atomicamente (ADR-001); vazio = nasce em 0.
       initialStock: form.initialStock ? Number(form.initialStock) : undefined,
@@ -103,7 +117,19 @@ export default function ProductsPage() {
     setSaving(true);
     try {
       await apiPost<Product>('/products', parsed.data);
-      setForm({ name: '', popularName: '', sku: '', costPrice: '', salePrice: '', minStockQty: '', initialStock: '' });
+      setForm({
+        name: '',
+        popularName: '',
+        sku: '',
+        description: '',
+        unit: 'UNIT',
+        costPrice: '',
+        salePrice: '',
+        weight: '',
+        weightUnit: 'kg',
+        minStockQty: '',
+        initialStock: '',
+      });
       await load();
     } catch (e) {
       setError((e as Error).message);
@@ -226,6 +252,42 @@ export default function ProductsPage() {
           onChange={(e) => setForm({ ...form, salePrice: e.target.value })}
           className="rounded-lg border border-gray-300 px-3 py-2"
         />
+        {/* Unidade de venda (UnitType) — como o produto é vendido/medido. */}
+        <select
+          value={form.unit}
+          onChange={(e) => setForm({ ...form, unit: e.target.value as UnitType })}
+          title="Unidade de venda do produto (ex.: saco de cimento, milheiro de tijolo, metro de fio)."
+          className="rounded-lg border border-gray-300 bg-white px-3 py-2 sm:col-span-2"
+          aria-label="Unidade de venda"
+        >
+          {(Object.keys(unitTypeLabels) as UnitType[]).map((u) => (
+            <option key={u} value={u}>
+              {unitTypeLabels[u]}
+            </option>
+          ))}
+        </select>
+        {/* Peso: digita em kg ou g; guardamos canônico em kg (banco). Opcional. */}
+        <div className="flex gap-2 sm:col-span-2">
+          <input
+            placeholder="Peso (opcional)"
+            type="number"
+            step="any"
+            min="0"
+            value={form.weight}
+            onChange={(e) => setForm({ ...form, weight: e.target.value })}
+            title="Peso do produto por unidade de venda. Escolha kg ou g ao lado; guardamos em kg."
+            className="w-full rounded-lg border border-gray-300 px-3 py-2"
+          />
+          <select
+            value={form.weightUnit}
+            onChange={(e) => setForm({ ...form, weightUnit: e.target.value as 'kg' | 'g' })}
+            className="rounded-lg border border-gray-300 bg-white px-2 py-2"
+            aria-label="Unidade do peso"
+          >
+            <option value="kg">kg</option>
+            <option value="g">g</option>
+          </select>
+        </div>
         <input
           placeholder="Estoque mín."
           type="number"
@@ -244,6 +306,16 @@ export default function ProductsPage() {
           onChange={(e) => setForm({ ...form, initialStock: e.target.value })}
           title="Se preenchido, gera uma Entrada de estoque no cadastro (aparece no Estoque como 'Estoque inicial'). Deixe vazio para o produto nascer com 0."
           className="rounded-lg border border-gray-300 px-3 py-2 sm:col-span-2"
+        />
+        {/* Descrição/observação (opcional, até 500 caracteres). */}
+        <textarea
+          placeholder="Descrição / observação (opcional)"
+          value={form.description}
+          onChange={(e) => setForm({ ...form, description: e.target.value })}
+          maxLength={500}
+          rows={2}
+          title="Detalhes ou observações do produto (opcional). Ex.: marca, especificação técnica, cor."
+          className="resize-y rounded-lg border border-gray-300 px-3 py-2 sm:col-span-4"
         />
         <button
           type="submit"

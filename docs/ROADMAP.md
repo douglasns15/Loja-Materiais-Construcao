@@ -3,7 +3,14 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-14 — **EF-1 (parte do apelido) + busca + código de barras NO AR (API + web deployados e validados).**
+> **Última atualização:** 2026-07-15 — **EF-1 COMPLETO e NO AR** (cadastro de produto enriquecido fechado).
+> Deployado o **resto do EF-1** (só UI, sem migration/API): **descrição/observação** (textarea ≤500), **peso**
+> com toggle **kg/g** (canônico em kg) e **unidade de venda** (dropdown `UnitType` + `unitTypeLabels` PT-BR novo
+> em `packages/shared`). Web Version `4baf2760-c0e2-442a-a5a7-c25d6f52e337`; **E2E do usuário validado** (Metro /
+> 250 g→0,25 kg / descrição persistiram — conferido na API). Gates: typecheck web ✅, build web (18 rotas) ✅,
+> core 58/58 ✅. **Próximo: EF-2** (estoque fino online-first). Detalhe abaixo (bloco "EF-1 FECHADO").
+>
+> **Antes:** 2026-07-14 — **EF-1 (parte do apelido) + busca + código de barras NO AR (API + web deployados e validados).**
 > Entregue a fatia **"nome popular + busca + leitura de código de barras"** (parte do EF-1 planejado, com desvios anotados):
 > - **Nome popular do produto** — coluna nova **`popularName`** (renomeamos o `nickname` do plano; `VarChar(150)`,
 >   nullable, sem mudança de RLS) + índice `products_tenantId_popularName_idx`. **Migration `0007` aplicada** via
@@ -24,8 +31,18 @@
 >   / popular "Cano 100" **persistiu** (DB confere) e a **busca por "cano" (só no nome popular) achou**.
 > - **Web deployado** (`nexoloja-web`, Version `2bc2eab3-1aa4-4151-bd61-3e3a168300bd`) — smoke OK (login serve em
 >   `nexoloja-web.imortal.workers.dev`). Fatia **100% no ar** (API + web). Login de produção fica p/ o usuário conferir.
-> - **PRÓXIMO PASSO (próxima sessão) — resto do EF-1** (só UI, **sem migration**, campos já no schema): **descrição/
->   observação**, **peso (toggle kg/g, canônico kg)** e **unidade de venda (dropdown `UnitType`)** no cadastro. Depois **EF-2**.
+> - **EF-1 FECHADO — NO AR e VALIDADO (2026-07-15):** os 3 campos que faltavam no cadastro de produto entraram,
+>   **só UI, sem migration e sem deploy de API** (a API de 14/07 já aceita — `POST /products` repassa
+>   `...parsed.data` ao Prisma): **descrição/observação** (textarea ≤500), **peso** com toggle **kg/g** (canônico
+>   em kg — gramas ÷ 1000 no envio) e **unidade de venda** (dropdown do `UnitType` com rótulos PT-BR, novo
+>   `unitTypeLabels` em `packages/shared`). Gates: typecheck web ✅, build web (18 rotas) ✅, core 58/58 ✅.
+>   **Web deployado** (Version `4baf2760-c0e2-442a-a5a7-c25d6f52e337`). **E2E do usuário validado:** produto
+>   "Cabo Flexível 2,5mm — TESTE EF1" com Metro/250 g/descrição → API confere `unit="METER"`, `weightKg="0.25"`
+>   (250 g → 0,25 kg), descrição íntegra. Com o cadastro enriquecido pronto (apelido+busca+código de barras da
+>   fatia anterior **+** descrição/peso/unidade), **EF-1 está completo.**
+> - **PRÓXIMO PASSO (próxima sessão) — EF-2 (estoque fino online-first, sem migration):** dar superfície ao que já
+>   existe no core — **alerta/painel de estoque baixo** (`stockQty <= minStockQty`, já testado) + **movimentações
+>   detalhadas** / visão de reposição, usando `StockMovement` e `minStockQty`. **Não toca a fila offline.**
 > - Gates: core **58/58**, typecheck web ✅, build API (dry-run) ✅. Dados de teste deixados no tenant do usuário (a pedido):
 >   caixa aberto R$100 + produtos FE8-TESTE (sem popular) e PVC100-TESTE (popular "Cano 100").
 >
@@ -678,16 +695,21 @@
         THOUSAND / BAG / ROLL) — só falta expor o seletor no cadastro.
       - **apelido** → **NÃO existe** → coluna nova (a única migration da EF-1).
       - **segundo preço** (rolo fechado) → **NÃO existe** (`conversionFactor` existe, mas sem preço próprio) → EF-3.
-  - 🟡 **EF-1 — Cadastro de produto enriquecido** *(rápida; 1 migration aditiva)* — **PARCIAL (2026-07-14).**
+  - [x] **EF-1 — Cadastro de produto enriquecido** *(rápida; 1 migration aditiva)* — **COMPLETO e NO AR (2026-07-15).**
     - [x] **Apelido/nome popular + BUSCA** — FEITO. Renomeamos `nickname`→**`popularName`** (`VarChar(150)`,
           nullable, sem RLS); **migration `0007` aplicada**; índice `products_tenantId_popularName_idx`. Busca por
           **nome + nome popular + SKU** nas telas Produtos e Venda (`productMatchesQuery` no core, +7 testes). **Bônus:**
           leitura de **código de barras** (o `sku` é o código) — Enter-scan (leitor físico) + `BarcodeScanButton` (câmera,
           `BarcodeDetector` + `@zxing`). **API + web deployados e validados (no ar).**
-    - [ ] **Descrição/observação** (`description`, já no banco) — só falta na UI do cadastro.
-    - [ ] **Peso** com toggle **kg/g** (canônico em kg — `weightKg` já no banco) — falta na UI.
-    - [ ] **Unidade de venda** (dropdown do `UnitType`, já no banco) — falta na UI.
-    - Sem nova migration para o que falta (campos já existem). **Não toca PDV/estoque transacional.**
+    - [x] **Descrição/observação** (`description`, já no banco) — textarea (até 500) no cadastro. **NO AR (2026-07-15).**
+    - [x] **Peso** com toggle **kg/g** (canônico em kg — `weightKg` já no banco) — input + seletor kg/g;
+          gramas ÷ 1000 no envio (mesmo padrão CNPJ/telefone: UI formata, banco canônico). **NO AR.**
+    - [x] **Unidade de venda** (dropdown do `UnitType`, já no banco) — `<select>` com rótulos PT-BR
+          (`unitTypeLabels` novo em `packages/shared`, reutilizável no PDV/comprovante). **NO AR.**
+    - Sem nova migration (campos já existem) e **sem deploy de API** (a API de 14/07 já aceita os 3 campos —
+      `POST /products` repassa `...parsed.data` ao Prisma). **Não toca PDV/estoque transacional.** Gates:
+      typecheck web ✅, build web (18 rotas) ✅, core 58/58 ✅. **Web deployado** (Version `4baf2760-…`) +
+      **E2E do usuário validado** (Metro/250 g→0,25 kg/descrição persistiram — ver registro). **EF-1 fechado.**
   - [ ] **EF-2 — Estoque fino (online-first)** *(sem migration)*. Dar superfície ao que já existe no core:
         **alerta/painel de estoque baixo** (regra `stockQty <= minStockQty`, já testada no core — falta a
         UI de alerta/lista) e **movimentações detalhadas** / visão de reposição. Usa `StockMovement` e

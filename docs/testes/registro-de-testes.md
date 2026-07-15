@@ -2212,3 +2212,48 @@ para o usuário conferir (não inserimos senha).
 **Notas.** Leitura por **câmera** só dá para validar de verdade num **celular** (HTTPS) — o preview desktop não
 tem câmera. **Dados de teste** deixados no tenant (a pedido do usuário): caixa aberto R$100 + produtos FE8-TESTE
 e PVC100-TESTE.
+
+### EF-1 (resto) — Descrição + peso (toggle kg/g) + unidade de venda no cadastro — 2026-07-15
+
+Fecha o cadastro enriquecido do EF-1: os 3 campos que faltavam entraram na tela de Produtos. **Só front** —
+os campos já existiam no `schema.prisma` (`description VarChar(500)`, `weightKg Decimal(8,3)`, `unit UnitType`)
+e no `createProductSchema`; a API de 14/07 (`POST /products`) já repassa `...parsed.data` ao Prisma, então
+**sem migration e sem deploy de API**.
+
+**O que foi feito.**
+- **`packages/shared/src/product.ts`** — novo `unitTypeLabels` (Record<UnitType,string> com rótulos PT-BR:
+  Unidade/Metro/m²/m³/kg/Litro/Milheiro/Saco/Rolo), reutilizável no PDV/comprovante.
+- **`apps/web/.../products/page.tsx`** — no formulário de cadastro:
+  - **Unidade de venda** — `<select>` sobre `unitTypeLabels` (default `UNIT`).
+  - **Peso** — input numérico + seletor **kg/g**; canônico em **kg** (gramas ÷ 1000 no envio; só vai quando > 0).
+  - **Descrição/observação** — `<textarea>` (até 500, `resize-y`); vazio → `undefined` (não envia coluna vazia).
+  - Reset do form e grid realinhados (6 colunas: unidade e peso col-span-2; descrição col-span-4 ao lado do
+    estoque inicial).
+
+**Build / typecheck / core.**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Typecheck `apps/web` (`tsc --noEmit`) | sem erros | ✅ |
+| Typecheck `packages/shared` | sem erros | ✅ |
+| Core (Vitest) — regressão (não tocou o core) | 58/58 | ✅ 58/58 |
+| Build de produção (`next build`) | rota `/products` regenerada | ✅ 18 rotas, sem erros |
+| Dev server compila `/products` | 200 | ✅ (compilou, GET 200, sem erros no log) |
+
+**Deploy do web (2026-07-15).** `apps/web` deployado (OpenNext) — Version `4baf2760-c0e2-442a-a5a7-c25d6f52e337`.
+Sem deploy de API (a de 14/07 já aceita os 3 campos). Smoke OK (login serve em produção).
+
+**E2E no navegador (2026-07-15, app logado, tenant real).** Usuário logou; cadastramos o produto **"Cabo
+Flexível 2,5mm — TESTE EF1"** (SKU `CABO25-EF1TESTE`) com **Unidade = Metro (m)**, **Peso = 250 g** e
+descrição. Persistência conferida direto na API (`GET /products`, do contexto da página com o token da sessão):
+
+| Campo | Enviado na UI | Persistido |
+|---|---|---|
+| Cadastro pela UI (form reseta + produto surge na lista) | — | ✅ (margem 42,86%) |
+| `unit` | Metro (m) | ✅ `"METER"` |
+| `weightKg` (canônico kg) | **250 g** | ✅ **`"0.25"`** (conversão g→kg correta) |
+| `description` | texto | ✅ íntegro |
+| Console do navegador | — | ✅ sem erros |
+
+> O caminho **g** (não-trivial, ÷1000) passou; o **kg** é identidade (coberto). **EF-1 FECHADO.** Produto de
+> teste `CABO25-EF1TESTE` deixado no tenant (remover quando quiser). Próximo passo: **EF-2**.

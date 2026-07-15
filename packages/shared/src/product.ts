@@ -19,6 +19,20 @@ export const unitTypeSchema = z.enum([
 ]);
 export type UnitType = z.infer<typeof unitTypeSchema>;
 
+/// Rótulos PT-BR de cada `UnitType`, para o dropdown de unidade de venda no cadastro
+/// (e reuso futuro no PDV/comprovante). A ordem espelha o enum do schema.
+export const unitTypeLabels: Record<UnitType, string> = {
+  UNIT: 'Unidade (un)',
+  METER: 'Metro (m)',
+  SQUARE_METER: 'Metro quadrado (m²)',
+  CUBIC_METER: 'Metro cúbico (m³)',
+  KILOGRAM: 'Quilograma (kg)',
+  LITER: 'Litro (L)',
+  THOUSAND: 'Milheiro (mil)',
+  BAG: 'Saco (sc)',
+  ROLL: 'Rolo',
+};
+
 /// Payload para criar um produto. `tenantId` NÃO entra aqui — vem do contexto
 /// (header temporário na Fase 1; claim do JWT na Fase 2).
 export const createProductSchema = z.object({
