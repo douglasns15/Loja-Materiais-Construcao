@@ -614,8 +614,8 @@
         (3.E.2) offline após remontar, o PDV assume "caixa fechado" (não lê `sessionId`/catálogo sem
         rede) — ambos são a lacuna de offline-first de leitura (fatia própria), não do refino. Ver
         3.E/3.E.1/3.E.2 no registro.
-  - [ ] **Cold-start / offline-first de LEITURA — fatia própria (ESTRATÉGIA MONTADA, a executar em
-        outra sessão)**. **Problema (achados 3.E.1/3.E.2):** offline, `GET /me`, `/cash-sessions/current`
+  - [x] **Cold-start / offline-first de LEITURA — fatia própria — CONCLUÍDA e VALIDADA (CS-1…CS-5, ver
+        cabeçalho).** **Problema original (achados 3.E.1/3.E.2):** offline, `GET /me`, `/cash-sessions/current`
         e `/products` falham (API cross-origin, nunca cacheada — ADR-011 §7). A venda offline de 3.D só
         funciona porque `sessionId` + produtos ficam **em memória** enquanto o operador **não sai do
         `/venda`**; ao **navegar/remontar/reabrir offline**, essa memória se perde → PDV assume "caixa
@@ -709,8 +709,8 @@
           desktop + toque no celular/PWA**, `position: fixed` (não é cortado pelo overflow da tabela), fecha
           ao tocar fora/Esc/rolar; não duplica as colunas financeiras. No ar (API `3c926d4c` + web
           `ac7c5b14`). Ver 3.F.CS-5 no registro.
-- [ ] **Módulo de ESTOQUE FINO + enriquecimento do cadastro de Produto — PLANEJADO (2026-07-13), a
-      executar em outra sessão, na ordem EF-1 → EF-2 → EF-3.** Decisão travada: **estoque/caixa seguem
+- [x] **Módulo de ESTOQUE FINO + enriquecimento do cadastro de Produto — CONCLUÍDO (EF-1 → EF-2 → EF-3,
+      todos no ar e validados; ver cabeçalho).** Decisão travada: **estoque/caixa seguem
       ONLINE-ONLY** (mutação offline adiada — ver a nota da decisão no topo do arquivo). Boa parte dos
       campos pedidos **já existe no schema** e não precisa de migration; falta só a UI + validação. Mapa
       do que **já existe** vs. **novo** (conferido em `packages/db/prisma/schema.prisma`, `model Product`):
