@@ -48,7 +48,16 @@ export const createProductSchema = z.object({
   salePrice: z.number().nonnegative(),
   minStockQty: z.number().nonnegative().optional(),
   weightKg: z.number().positive().optional(),
+  /**
+   * Venda em unidade alternativa (ADR-013 — EF-3). `conversionFactor` é o TAMANHO da
+   * embalagem fechada em unidade-base (ex.: 100 metros por rolo); `altUnit` é a unidade
+   * da embalagem (ex.: 'ROLL') e `altSalePrice` o seu PREÇO PRÓPRIO (o fechado sai mais
+   * barato por unidade-base, então NÃO é `salePrice × conversionFactor`). Os três juntos
+   * habilitam o modo "rolo × metro" no PDV; qualquer um ausente ⇒ produto de uma unidade só.
+   */
   conversionFactor: z.number().positive().optional(),
+  altUnit: unitTypeSchema.optional(),
+  altSalePrice: z.number().positive().optional(),
   /**
    * Estoque inicial (opcional). Quando > 0, o cadastro NÃO grava o saldo direto no produto:
    * a API cria o produto e gera a **Entrada** (`StockMovement` INCOME) na MESMA transação

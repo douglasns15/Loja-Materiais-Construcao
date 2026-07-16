@@ -1,3 +1,4 @@
+import type { UnitType } from '@nexoloja/shared';
 import { openDb, reqAsPromise, txDone, CATALOG_STORE, hasIndexedDb } from './db';
 
 /**
@@ -27,6 +28,12 @@ export interface CachedProduct {
   salePrice: string;
   costPrice: string;
   stockQty: string;
+  /** Unidade de venda base. */
+  unit: UnitType;
+  // Venda em unidade alternativa (EF-3, ADR-013) — mantida no cache p/ o PDV oferecer rolo × metro offline.
+  altUnit: UnitType | null;
+  altSalePrice: string | null;
+  conversionFactor: string | null;
 }
 
 /**
@@ -51,6 +58,10 @@ export async function cacheProducts(products: CachedProduct[]): Promise<void> {
         salePrice: p.salePrice,
         costPrice: p.costPrice,
         stockQty: p.stockQty,
+        unit: p.unit,
+        altUnit: p.altUnit ?? null,
+        altSalePrice: p.altSalePrice ?? null,
+        conversionFactor: p.conversionFactor ?? null,
       });
     }
     await txDone(tx);

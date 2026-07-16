@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { createPrismaClient } from '@nexoloja/db';
-import { calcSaleItemTotal, calcSaleTotals } from '@nexoloja/core';
+import { calcSaleItemTotal, calcSaleTotals, hasAltUnit, toBaseQuantity } from '@nexoloja/core';
 import { cancelOrderSchema, createSaleSchema, returnOrderSchema } from '@nexoloja/shared';
 import { type Env, getConnectionString, getTenantId } from '../lib/request';
 import { requireActiveTenant, requireAuth } from '../middleware/auth';
@@ -161,13 +161,32 @@ orders.post('/', requireActiveTenant, async (c) => {
     });
     const byId = new Map(products.map((p) => [p.id, p]));
 
+    // EF-3 (ADR-013): resolve cada linha para a UNIDADE-BASE. No modo embalagem (ALT), a baixa de
+    // estoque é `quantity × conversionFactor` (ex.: 2 rolos = 200 m); a trava e o `StockMovement`
+    // usam essa quantidade-base. `unit` do item vira a unidade vendida (embalagem) para o comprovante.
+    const lines: {
+      item: (typeof sale.items)[number];
+      product: (typeof products)[number];
+      baseQty: number;
+      soldUnit: (typeof products)[number]['unit'];
+    }[] = [];
     for (const item of sale.items) {
       const p = byId.get(item.productId);
       if (!p) {
         return c.json({ ok: false, error: 'Produto inexistente na venda.' }, 400);
       }
-      // Estoque insuficiente: bloqueia no online; no offline registra e deixa negativo (§6).
-      if (!isOffline && Number(p.stockQty) < item.quantity) {
+      const altCfg = {
+        salePrice: Number(p.salePrice),
+        altUnit: p.altUnit,
+        altSalePrice: p.altSalePrice != null ? Number(p.altSalePrice) : null,
+        conversionFactor: p.conversionFactor != null ? Number(p.conversionFactor) : null,
+      };
+      const isAlt = item.saleMode === 'ALT' && hasAltUnit(altCfg);
+      const baseQty = toBaseQuantity(altCfg, item.saleMode, item.quantity);
+      const soldUnit = isAlt ? (p.altUnit ?? p.unit) : p.unit;
+      // Estoque insuficiente (em unidade-base): bloqueia no online; no offline registra e deixa
+      // negativo p/ reconciliação (§6). A venda offline de EF-3 também traz `saleMode` no envelope.
+      if (!isOffline && Number(p.stockQty) < baseQty) {
         return c.json(
           {
             ok: false,
@@ -176,6 +195,7 @@ orders.post('/', requireActiveTenant, async (c) => {
           400,
         );
       }
+      lines.push({ item, product: p, baseQty, soldUnit });
     }
 
     const { subtotal, total } = calcSaleTotals(sale.items, {
@@ -209,18 +229,16 @@ orders.post('/', requireActiveTenant, async (c) => {
           notes: sale.notes,
           syncStatus: 'SYNCED',
           items: {
-            create: sale.items.map((item) => {
-              const p = byId.get(item.productId)!;
-              return {
-                productId: item.productId,
-                productName: p.name, // snapshot
-                unit: p.unit, // snapshot
-                quantity: item.quantity,
-                unitPrice: item.unitPrice,
-                discount: item.discount ?? 0,
-                total: calcSaleItemTotal(item),
-              };
-            }),
+            create: lines.map(({ item, product, baseQty, soldUnit }) => ({
+              productId: item.productId,
+              productName: product.name, // snapshot
+              unit: soldUnit, // snapshot da unidade VENDIDA (base ou embalagem — EF-3)
+              quantity: item.quantity, // na unidade vendida (ex.: 2 rolos)
+              baseQuantity: baseQty, // em unidade-base p/ o estorno (ex.: 200 m) — ADR-013
+              unitPrice: item.unitPrice,
+              discount: item.discount ?? 0,
+              total: calcSaleItemTotal(item),
+            })),
           },
           payments: {
             create: sale.payments.map((pmt) => ({
@@ -235,13 +253,14 @@ orders.post('/', requireActiveTenant, async (c) => {
 
       // ADR-001: cada item gera saída de estoque + decremento atômico do cache (pode ficar
       // negativo no sync offline — sinaliza cadastro desatualizado, vai p/ reconciliação, §6).
-      for (const item of sale.items) {
+      // EF-3 (ADR-013): a baixa é sempre em UNIDADE-BASE (`baseQty` = qtd × fator no modo embalagem).
+      for (const { item, baseQty } of lines) {
         await tx.stockMovement.create({
           data: {
             tenantId,
             productId: item.productId,
             type: 'EXPENSE',
-            quantity: item.quantity,
+            quantity: baseQty,
             reason: `Venda ${created.id}`,
             syncStatus: 'SYNCED',
             userId, // autoria (ADR-010)
@@ -250,7 +269,7 @@ orders.post('/', requireActiveTenant, async (c) => {
         });
         await tx.product.update({
           where: { id: item.productId },
-          data: { stockQty: { decrement: item.quantity } },
+          data: { stockQty: { decrement: baseQty } },
         });
       }
 
@@ -371,13 +390,16 @@ orders.post('/:id/cancel', async (c) => {
 
     const cancelled = await prisma.$transaction(async (tx) => {
       // ADR-001: estorna cada item — movimento reverso (INCOME) + incremento do cache.
+      // EF-3 (ADR-013): estorna em UNIDADE-BASE (`baseQuantity`); `?? quantity` cobre pedidos
+      // antigos (pré-EF-3, sem a coluna) — para eles base == vendida (fator 1), então é exato.
       for (const item of order.items) {
+        const baseQty = Number(item.baseQuantity ?? item.quantity);
         await tx.stockMovement.create({
           data: {
             tenantId,
             productId: item.productId,
             type: 'INCOME',
-            quantity: item.quantity,
+            quantity: baseQty,
             reason: `Cancelamento da venda ${order.id}`,
             syncStatus: 'SYNCED',
             userId, // autoria (ADR-010): quem cancelou/estornou
@@ -386,7 +408,7 @@ orders.post('/:id/cancel', async (c) => {
         });
         await tx.product.update({
           where: { id: item.productId },
-          data: { stockQty: { increment: item.quantity } },
+          data: { stockQty: { increment: baseQty } },
         });
       }
 
@@ -495,13 +517,15 @@ orders.post('/:id/return', async (c) => {
 
     const returned = await prisma.$transaction(async (tx) => {
       // ADR-001: estorna cada item — movimento reverso (INCOME) + incremento do cache.
+      // EF-3 (ADR-013): estorna em UNIDADE-BASE (`baseQuantity`); `?? quantity` cobre pedidos antigos.
       for (const item of order.items) {
+        const baseQty = Number(item.baseQuantity ?? item.quantity);
         await tx.stockMovement.create({
           data: {
             tenantId,
             productId: item.productId,
             type: 'INCOME',
-            quantity: item.quantity,
+            quantity: baseQty,
             reason: `Devolução da venda ${order.id}`,
             syncStatus: 'SYNCED',
             userId, // autoria (ADR-010): quem devolveu/estornou
@@ -510,7 +534,7 @@ orders.post('/:id/return', async (c) => {
         });
         await tx.product.update({
           where: { id: item.productId },
-          data: { stockQty: { increment: item.quantity } },
+          data: { stockQty: { increment: baseQty } },
         });
       }
 

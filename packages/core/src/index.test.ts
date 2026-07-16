@@ -24,6 +24,10 @@ import {
   MAX_SYNC_ATTEMPTS,
   normalizeSearchText,
   productMatchesQuery,
+  hasAltUnit,
+  resolveSaleUnit,
+  toBaseQuantity,
+  effectiveBaseUnitPrice,
 } from './index';
 
 describe('calcSubtotal', () => {
@@ -409,5 +413,86 @@ describe('productMatchesQuery', () => {
     const semPopular = { name: 'Cimento CP-II 50kg', popularName: null, sku: 'CIM50' };
     expect(productMatchesQuery(semPopular, 'cimento')).toBe(true);
     expect(productMatchesQuery(semPopular, 'ferro')).toBe(false);
+  });
+});
+
+// =============================================================================
+// VENDA EM UNIDADE ALTERNATIVA (ADR-013 — EF-3)
+// =============================================================================
+
+describe('EF-3 — venda em unidade alternativa', () => {
+  // Fio: base = metro a R$ 2,00; rolo fechado de 100 m a R$ 150,00 (sai R$ 1,50/m).
+  const fio = { salePrice: 2, altUnit: 'ROLL', altSalePrice: 150, conversionFactor: 100 };
+  // Cimento: produto de uma unidade só (sem embalagem alternativa).
+  const cimento = { salePrice: 32, altUnit: null, altSalePrice: null, conversionFactor: null };
+
+  describe('hasAltUnit', () => {
+    it('true quando altUnit + altSalePrice > 0 + conversionFactor > 0', () => {
+      expect(hasAltUnit(fio)).toBe(true);
+    });
+
+    it('false sem altUnit', () => {
+      expect(hasAltUnit(cimento)).toBe(false);
+      expect(hasAltUnit({ salePrice: 2, altSalePrice: 150, conversionFactor: 100 })).toBe(false);
+    });
+
+    it('false quando altSalePrice é 0/null (preço não cadastrado)', () => {
+      expect(hasAltUnit({ ...fio, altSalePrice: 0 })).toBe(false);
+      expect(hasAltUnit({ ...fio, altSalePrice: null })).toBe(false);
+    });
+
+    it('false quando conversionFactor é 0/null (tamanho não cadastrado)', () => {
+      expect(hasAltUnit({ ...fio, conversionFactor: 0 })).toBe(false);
+      expect(hasAltUnit({ ...fio, conversionFactor: null })).toBe(false);
+    });
+  });
+
+  describe('resolveSaleUnit', () => {
+    it('BASE devolve o preço-base e fator 1', () => {
+      expect(resolveSaleUnit(fio, 'BASE')).toEqual({ unitPrice: 2, factorToBase: 1 });
+    });
+
+    it('ALT devolve o preço da embalagem e o fator de conversão', () => {
+      expect(resolveSaleUnit(fio, 'ALT')).toEqual({ unitPrice: 150, factorToBase: 100 });
+    });
+
+    it('ALT pedido em produto sem embalagem cai para BASE (nunca preço indefinido)', () => {
+      expect(resolveSaleUnit(cimento, 'ALT')).toEqual({ unitPrice: 32, factorToBase: 1 });
+    });
+  });
+
+  describe('toBaseQuantity', () => {
+    it('BASE debita a própria quantidade', () => {
+      expect(toBaseQuantity(fio, 'BASE', 5)).toBe(5);
+    });
+
+    it('ALT debita quantidade × conversionFactor (2 rolos = 200 m)', () => {
+      expect(toBaseQuantity(fio, 'ALT', 2)).toBe(200);
+    });
+
+    it('lida com quantidade fracionada (2,5 m)', () => {
+      expect(toBaseQuantity(fio, 'BASE', 2.5)).toBe(2.5);
+    });
+
+    it('ALT em produto sem embalagem debita 1:1 (cai para BASE)', () => {
+      expect(toBaseQuantity(cimento, 'ALT', 3)).toBe(3);
+    });
+  });
+
+  describe('effectiveBaseUnitPrice', () => {
+    it('BASE = salePrice (R$ 2,00/m)', () => {
+      expect(effectiveBaseUnitPrice(fio, 'BASE')).toBe(2);
+    });
+
+    it('ALT = altSalePrice / conversionFactor — o rolo sai mais barato por metro', () => {
+      expect(effectiveBaseUnitPrice(fio, 'ALT')).toBe(1.5); // 150 / 100
+      expect(effectiveBaseUnitPrice(fio, 'ALT')).toBeLessThan(
+        effectiveBaseUnitPrice(fio, 'BASE'),
+      );
+    });
+
+    it('arredonda a 4 casas (100 / 3)', () => {
+      expect(effectiveBaseUnitPrice({ salePrice: 1, altUnit: 'ROLL', altSalePrice: 100, conversionFactor: 3 }, 'ALT')).toBe(33.3333);
+    });
   });
 });

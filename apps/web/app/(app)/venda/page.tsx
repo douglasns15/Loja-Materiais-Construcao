@@ -6,9 +6,18 @@ import {
   PAYMENT_METHOD_LABELS,
   buildSaleMutation,
   createSaleSchema,
+  unitTypeLabels,
   type PaymentMethod,
+  type SaleUnitMode,
+  type UnitType,
 } from '@nexoloja/shared';
-import { calcMarginPercent, calcSaleTotals, productMatchesQuery } from '@nexoloja/core';
+import {
+  calcMarginPercent,
+  calcSaleTotals,
+  hasAltUnit,
+  productMatchesQuery,
+  resolveSaleUnit,
+} from '@nexoloja/core';
 import { apiGet, apiPost } from '@/lib/api';
 import { cacheCashSession, readCachedCashSession } from '@/lib/cashSessionCache';
 import { cacheProducts, readCachedProducts } from '@/lib/catalog';
@@ -21,15 +30,39 @@ import { StoreDisabledNotice } from '@/components/StoreDisabledNotice';
 import { OfflineSalesNotice } from '@/components/OfflineSalesNotice';
 import { BarcodeScanButton } from '@/components/BarcodeScanButton';
 
-type Product = { id: string; name: string; popularName: string | null; sku: string; salePrice: string; costPrice: string; stockQty: string };
+type Product = {
+  id: string;
+  name: string;
+  popularName: string | null;
+  sku: string;
+  salePrice: string;
+  costPrice: string;
+  stockQty: string;
+  unit: UnitType;
+  // Venda em unidade alternativa (EF-3, ADR-013). Nulos ⇒ produto de uma unidade só.
+  altUnit: UnitType | null;
+  altSalePrice: string | null;
+  conversionFactor: string | null;
+};
 type CartItem = {
+  /** Chave única da linha = `productId:saleMode` (o mesmo produto pode ir como metro E como rolo). */
+  key: string;
   productId: string;
   name: string;
   unitPrice: number;
   costPrice: number;
   quantity: number;
+  /** Estoque disponível em UNIDADE-BASE (metros), como vem do catálogo. */
   stockQty: number;
+  // EF-3: modo de venda, unidade vendida, unidade-base e fator de conversão (BASE = 1).
+  saleMode: SaleUnitMode;
+  unitType: UnitType;
+  baseUnitType: UnitType;
+  conversionFactor: number;
 };
+
+/** Rótulo curto de uma unidade (sem o parêntese): "Metro (m)" → "Metro"; "Rolo" → "Rolo". */
+const unitShort = (u: UnitType) => unitTypeLabels[u].replace(/\s*\(.*\)$/, '');
 type View =
   | { kind: 'review' }
   | {
@@ -55,9 +88,16 @@ function Summary({ items, total, discount }: { items: CartItem[]; total: number;
     <>
       <ul className="divide-y divide-gray-100 text-sm">
         {items.map((i) => (
-          <li key={i.productId} className="flex justify-between py-1">
+          <li key={i.key} className="flex justify-between py-1">
             <span>
-              {i.quantity}× {i.name}
+              {i.quantity}
+              {i.saleMode === 'ALT' ? ` ${unitShort(i.unitType)}` : '×'} {i.name}
+              {i.saleMode === 'ALT' && (
+                <span className="text-gray-400">
+                  {' '}
+                  (≈ {i.quantity * i.conversionFactor} {unitShort(i.baseUnitType)})
+                </span>
+              )}
             </span>
             <span>{BRL(i.unitPrice * i.quantity)}</span>
           </li>
@@ -184,17 +224,30 @@ export default function VendaPage() {
     [products, productSearch],
   );
 
-  /** Tooltip por item: margem de lucro e desconto máximo possível (até o custo). */
+  /** Config de unidade alternativa (EF-3) de um produto, no formato do core. */
+  function altConfig(p: Product) {
+    return {
+      salePrice: Number(p.salePrice),
+      altUnit: p.altUnit,
+      altSalePrice: p.altSalePrice != null ? Number(p.altSalePrice) : null,
+      conversionFactor: p.conversionFactor != null ? Number(p.conversionFactor) : null,
+    };
+  }
+
+  /** Tooltip por item: margem de lucro e desconto máximo possível (até o custo). No modo embalagem
+   *  (EF-3), a margem usa o preço efetivo POR UNIDADE-BASE (preço do rolo ÷ fator), comparável ao custo. */
   function itemTooltip(i: CartItem): string {
-    const margin = calcMarginPercent(i.costPrice, i.unitPrice);
-    const maxDisc = Math.max(0, Number((i.unitPrice - i.costPrice).toFixed(2)));
+    const effUnit = i.conversionFactor > 0 ? i.unitPrice / i.conversionFactor : i.unitPrice;
+    const margin = calcMarginPercent(i.costPrice, effUnit);
+    const maxDisc = Math.max(0, Number((i.unitPrice - i.costPrice * i.conversionFactor).toFixed(2)));
     return maxDisc > 0
       ? `Margem: ${margin}% • Desconto possível: até ${BRL(maxDisc)}/un`
       : `Margem: ${margin}% • Sem margem para desconto`;
   }
 
   // `productId` padrão = seleção do dropdown; o scanner/Enter passa o id do único match da busca.
-  function addToCart(productId: string = selected) {
+  // `mode` (EF-3): 'ALT' vende a embalagem fechada (rolo); default 'BASE' = venda de sempre.
+  function addToCart(productId: string = selected, mode: SaleUnitMode = 'BASE') {
     setError(null);
     const p = products.find((x) => x.id === productId);
     const q = Number(qty);
@@ -202,25 +255,42 @@ export default function VendaPage() {
       setError('Selecione um produto e uma quantidade válida.');
       return;
     }
+    const cfg = altConfig(p);
+    const useAlt = mode === 'ALT' && hasAltUnit(cfg);
+    const effMode: SaleUnitMode = useAlt ? 'ALT' : 'BASE';
+    const { unitPrice, factorToBase } = resolveSaleUnit(cfg, effMode);
+    const unitType = useAlt ? (p.altUnit as UnitType) : p.unit;
+
     const stock = Number(p.stockQty);
-    const existing = cart.find((c) => c.productId === p.id);
+    const key = `${p.id}:${effMode}`;
+    const existing = cart.find((c) => c.key === key);
     const newQty = (existing?.quantity ?? 0) + q;
-    if (newQty > stock) {
+    // Trava de estoque em UNIDADE-BASE: soma a base já consumida por OUTRAS linhas do mesmo produto
+    // (ex.: já tem uma linha em metro ao adicionar um rolo) + a base desta linha (EF-3).
+    const otherBase = cart
+      .filter((c) => c.productId === p.id && c.key !== key)
+      .reduce((acc, c) => acc + c.quantity * c.conversionFactor, 0);
+    if (otherBase + newQty * factorToBase > stock) {
       setError(`Estoque insuficiente para "${p.name}" (disponível: ${stock}).`);
       return;
     }
     if (existing) {
-      setCart(cart.map((c) => (c.productId === p.id ? { ...c, quantity: newQty } : c)));
+      setCart(cart.map((c) => (c.key === key ? { ...c, quantity: newQty } : c)));
     } else {
       setCart([
         ...cart,
         {
+          key,
           productId: p.id,
           name: p.name,
-          unitPrice: Number(p.salePrice),
+          unitPrice,
           costPrice: Number(p.costPrice),
           quantity: q,
           stockQty: stock,
+          saleMode: effMode,
+          unitType,
+          baseUnitType: p.unit,
+          conversionFactor: factorToBase,
         },
       ]);
     }
@@ -258,8 +328,8 @@ export default function VendaPage() {
     }
   }
 
-  function removeFromCart(productId: string) {
-    setCart(cart.filter((c) => c.productId !== productId));
+  function removeFromCart(key: string) {
+    setCart(cart.filter((c) => c.key !== key));
   }
 
   /** "Concluir venda" agora só abre a REVISÃO — nada é gravado ainda. */
@@ -305,7 +375,12 @@ export default function VendaPage() {
       const sale = {
         id,
         cashSessionId: sessionId,
-        items: cart.map((c) => ({ productId: c.productId, quantity: c.quantity, unitPrice: c.unitPrice })),
+        items: cart.map((c) => ({
+          productId: c.productId,
+          quantity: c.quantity,
+          unitPrice: c.unitPrice,
+          saleMode: c.saleMode, // EF-3: o servidor converte a baixa p/ unidade-base
+        })),
         payments: [{ method, amount: totals.total }],
         ...(discountValue > 0 ? { discountAmount: discountValue } : {}),
       };
@@ -320,8 +395,11 @@ export default function VendaPage() {
         // Baixa otimista no estado LOCAL (sem rede não dá para recarregar do servidor): mantém a
         // trava de estoque coerente para as próximas vendas offline. O débito real é no sync (§3).
         const next = products.map((p) => {
-          const item = cart.find((c) => c.productId === p.id);
-          return item ? { ...p, stockQty: String(Number(p.stockQty) - item.quantity) } : p;
+          // EF-3: soma a baixa em UNIDADE-BASE de todas as linhas do produto (metro + rolo).
+          const baseSold = cart
+            .filter((c) => c.productId === p.id)
+            .reduce((acc, c) => acc + c.quantity * c.conversionFactor, 0);
+          return baseSold > 0 ? { ...p, stockQty: String(Number(p.stockQty) - baseSold) } : p;
         });
         setProducts(next);
         // Persiste a baixa no cache do catálogo (ADR-012 CS-2): ao remontar offline, o estoque
@@ -340,7 +418,12 @@ export default function VendaPage() {
 
     // --- Online: grava direto na API (caminho de sempre) ---
     const payload = {
-      items: cart.map((c) => ({ productId: c.productId, quantity: c.quantity, unitPrice: c.unitPrice })),
+      items: cart.map((c) => ({
+        productId: c.productId,
+        quantity: c.quantity,
+        unitPrice: c.unitPrice,
+        saleMode: c.saleMode, // EF-3
+      })),
       payments: [{ method, amount: totals.total }],
       ...(discountValue > 0 ? { discountAmount: discountValue } : {}),
     };
@@ -546,7 +629,15 @@ export default function VendaPage() {
         <ReceiptPrint
           kind={isQuote ? 'quote' : 'sale'}
           store={store}
-          items={view.items.map((i) => ({ name: i.name, quantity: i.quantity, unitPrice: i.unitPrice }))}
+          items={view.items.map((i) => ({
+            // EF-3: no comprovante, o nome carrega a embalagem vendida ("Fio — Rolo (100 m)").
+            name:
+              i.saleMode === 'ALT'
+                ? `${i.name} — ${unitShort(i.unitType)} (${i.conversionFactor} ${unitShort(i.baseUnitType)})`
+                : i.name,
+            quantity: i.quantity,
+            unitPrice: i.unitPrice,
+          }))}
           total={view.total}
           discount={view.discount}
           date={view.date}
@@ -637,14 +728,39 @@ export default function VendaPage() {
             filteredProducts.map((p) => {
               const stock = Number(p.stockQty);
               const out = !(stock > 0);
+              const alt = hasAltUnit(altConfig(p));
+              // Produto de unidade única: clicar na linha adiciona (fluxo de sempre, bom p/ scan).
+              if (!alt) {
+                return (
+                  <li key={p.id}>
+                    <button
+                      type="button"
+                      onClick={() => addToCart(p.id)}
+                      disabled={out}
+                      className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium">{p.name}</span>
+                        <span className="block truncate text-xs text-gray-400">
+                          {p.popularName ? `${p.popularName} · ` : ''}
+                          {p.sku}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-right">
+                        <span className="block font-medium">{BRL(p.salePrice)}</span>
+                        <span className={`block text-xs ${out ? 'text-red-500' : 'text-gray-400'}`}>
+                          {out ? 'sem estoque' : `est. ${stock}`}
+                        </span>
+                      </span>
+                    </button>
+                  </li>
+                );
+              }
+              // EF-3: produto com embalagem alternativa → dois botões (unidade-base × embalagem fechada).
+              const factor = Number(p.conversionFactor);
               return (
-                <li key={p.id}>
-                  <button
-                    type="button"
-                    onClick={() => addToCart(p.id)}
-                    disabled={out}
-                    className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
+                <li key={p.id} className="px-3 py-2">
+                  <div className="flex items-center justify-between gap-3">
                     <span className="min-w-0">
                       <span className="block truncate font-medium">{p.name}</span>
                       <span className="block truncate text-xs text-gray-400">
@@ -652,13 +768,29 @@ export default function VendaPage() {
                         {p.sku}
                       </span>
                     </span>
-                    <span className="shrink-0 text-right">
-                      <span className="block font-medium">{BRL(p.salePrice)}</span>
-                      <span className={`block text-xs ${out ? 'text-red-500' : 'text-gray-400'}`}>
-                        {out ? 'sem estoque' : `est. ${stock}`}
-                      </span>
+                    <span className={`shrink-0 text-xs ${out ? 'text-red-500' : 'text-gray-400'}`}>
+                      {out ? 'sem estoque' : `est. ${stock} ${unitShort(p.unit)}`}
                     </span>
-                  </button>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => addToCart(p.id, 'BASE')}
+                      disabled={out}
+                      className="rounded-lg border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      + {unitShort(p.unit)} · {BRL(p.salePrice)}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => addToCart(p.id, 'ALT')}
+                      disabled={out}
+                      title={`1 ${unitShort(p.altUnit as UnitType)} = ${factor} ${unitShort(p.unit)}`}
+                      className="rounded-lg border border-indigo-300 bg-indigo-50 px-2 py-1 text-xs text-indigo-700 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      + {unitShort(p.altUnit as UnitType)} ({factor} {unitShort(p.unit)}) · {BRL(p.altSalePrice as string)}
+                    </button>
+                  </div>
                 </li>
               );
             })
@@ -686,17 +818,25 @@ export default function VendaPage() {
               </tr>
             ) : (
               cart.map((i) => (
-                <tr key={i.productId} className="border-t border-gray-100">
+                <tr key={i.key} className="border-t border-gray-100">
                   <td className="px-4 py-2">
                     <span title={itemTooltip(i)} className="cursor-help border-b border-dotted border-gray-300">
                       {i.name}
                     </span>
+                    {i.saleMode === 'ALT' && (
+                      <span className="block text-xs text-gray-400">
+                        embalagem fechada · ≈ {i.quantity * i.conversionFactor} {unitShort(i.baseUnitType)}
+                      </span>
+                    )}
                   </td>
-                  <td className="px-4 py-2 text-right">{i.quantity}</td>
+                  <td className="px-4 py-2 text-right">
+                    {i.quantity}
+                    {i.saleMode === 'ALT' ? ` ${unitShort(i.unitType)}` : ''}
+                  </td>
                   <td className="px-4 py-2 text-right">{BRL(i.unitPrice)}</td>
                   <td className="px-4 py-2 text-right">{BRL(i.unitPrice * i.quantity)}</td>
                   <td className="px-4 py-2 text-right">
-                    <button onClick={() => removeFromCart(i.productId)} className="text-gray-400 hover:text-red-600">
+                    <button onClick={() => removeFromCart(i.key)} className="text-gray-400 hover:text-red-600">
                       remover
                     </button>
                   </td>

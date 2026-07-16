@@ -143,6 +143,93 @@ export function calcSaleTotals(
 }
 
 // =============================================================================
+// VENDA EM UNIDADE ALTERNATIVA (ADR-013 — EF-3)
+// =============================================================================
+//
+// Um produto pode ser vendido na sua unidade-base (ex.: metro) OU numa embalagem
+// fechada (ex.: rolo de 100 m) com PREÇO PRÓPRIO — o fechado costuma sair mais barato
+// por unidade-base, então NÃO é `salePrice × conversionFactor`. O estoque é único e
+// físico: vender a embalagem debita `quantity × conversionFactor` da unidade-base
+// (ADR-001). Estas funções puras traduzem "modo escolhido no PDV" em preço e baixa.
+
+/** Modo de venda escolhido no PDV: unidade-base (metro) ou embalagem alternativa (rolo). */
+export type SaleUnitMode = 'BASE' | 'ALT';
+
+/**
+ * Configuração de preço/embalagem de um produto (subconjunto de `Product`, ADR-013).
+ * `altUnit`/`altSalePrice`/`conversionFactor` são opcionais: preenchidos juntos habilitam
+ * a venda na embalagem fechada; vazios ⇒ produto de uma unidade só.
+ */
+export interface AltUnitConfig {
+  /** Preço de venda da unidade-base (ex.: preço por metro). */
+  salePrice: number;
+  /** Unidade da embalagem alternativa (ex.: 'ROLL'). `null`/ausente = sem alternativa. */
+  altUnit?: string | null;
+  /** Preço próprio de 1 embalagem alternativa (ex.: preço do rolo fechado). */
+  altSalePrice?: number | null;
+  /** Tamanho da embalagem em unidade-base (ex.: 100 metros por rolo). */
+  conversionFactor?: number | null;
+}
+
+/**
+ * `true` quando o produto TEM embalagem alternativa vendável: precisa de `altUnit`,
+ * `altSalePrice > 0` e `conversionFactor > 0` (os três juntos). É o gate que o PDV usa
+ * para decidir se oferece o seletor "base × embalagem".
+ */
+export function hasAltUnit(p: AltUnitConfig): boolean {
+  return (
+    !!p.altUnit &&
+    p.altSalePrice != null &&
+    p.altSalePrice > 0 &&
+    p.conversionFactor != null &&
+    p.conversionFactor > 0
+  );
+}
+
+/** Preço unitário e fator de conversão para a unidade-base, resolvidos para um modo. */
+export interface ResolvedSaleUnit {
+  /** Preço a cobrar por 1 unidade do modo escolhido. */
+  unitPrice: number;
+  /** Quantas unidades-base equivalem a 1 do modo (BASE = 1; ALT = `conversionFactor`). */
+  factorToBase: number;
+}
+
+/**
+ * Resolve preço e fator para o modo escolhido. BASE ⇒ `{ salePrice, 1 }`; ALT (quando
+ * disponível) ⇒ `{ altSalePrice, conversionFactor }`. **Guarda de segurança:** se ALT for
+ * pedido mas o produto não tem embalagem válida, cai para BASE — nunca cobra preço indefinido.
+ */
+export function resolveSaleUnit(p: AltUnitConfig, mode: SaleUnitMode): ResolvedSaleUnit {
+  if (mode === 'ALT' && hasAltUnit(p)) {
+    return { unitPrice: p.altSalePrice as number, factorToBase: p.conversionFactor as number };
+  }
+  return { unitPrice: p.salePrice, factorToBase: 1 };
+}
+
+/**
+ * Quantidade em unidade-base a debitar do estoque (ADR-001) para `quantity` unidades
+ * vendidas no modo escolhido. BASE ⇒ `quantity`; ALT ⇒ `quantity × conversionFactor`.
+ * Arredondado a 4 casas (precisão de `Product.stockQty`). Usado tanto na trava de estoque
+ * do PDV quanto no `StockMovement` de saída.
+ */
+export function toBaseQuantity(p: AltUnitConfig, mode: SaleUnitMode, quantity: number): number {
+  const { factorToBase } = resolveSaleUnit(p, mode);
+  return Number((quantity * factorToBase).toFixed(4));
+}
+
+/**
+ * Preço efetivo por unidade-base no modo escolhido — BASE ⇒ `salePrice`; ALT ⇒
+ * `altSalePrice / conversionFactor`. Serve para MOSTRAR a economia ("R$ x,xx/m no rolo")
+ * e para comparar com o `costPrice` (que é por unidade-base) ao calcular margem. Retorna 0
+ * se o fator for inválido (evita divisão por zero). Arredondado a 4 casas.
+ */
+export function effectiveBaseUnitPrice(p: AltUnitConfig, mode: SaleUnitMode): number {
+  const { unitPrice, factorToBase } = resolveSaleUnit(p, mode);
+  if (factorToBase <= 0) return 0;
+  return Number((unitPrice / factorToBase).toFixed(4));
+}
+
+// =============================================================================
 // BUSCA DE PRODUTO (Product search) — cadastro e PDV
 // =============================================================================
 

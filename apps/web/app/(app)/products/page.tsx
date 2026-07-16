@@ -49,6 +49,10 @@ export default function ProductsPage() {
     weightUnit: 'kg' as 'kg' | 'g',
     minStockQty: '',
     initialStock: '',
+    // Venda em unidade alternativa (EF-3, ADR-013). Vazios ⇒ produto de uma unidade só.
+    altUnit: '' as UnitType | '',
+    conversionFactor: '',
+    altSalePrice: '',
   });
   const [saving, setSaving] = useState(false);
 
@@ -108,6 +112,10 @@ export default function ProductsPage() {
       minStockQty: form.minStockQty ? Number(form.minStockQty) : undefined,
       // Se preenchido, a API gera a Entrada de estoque atomicamente (ADR-001); vazio = nasce em 0.
       initialStock: form.initialStock ? Number(form.initialStock) : undefined,
+      // Unidade alternativa (EF-3): só envia se preenchido; os 3 juntos habilitam o modo no PDV.
+      altUnit: form.altUnit || undefined,
+      conversionFactor: form.conversionFactor ? Number(form.conversionFactor) : undefined,
+      altSalePrice: form.altSalePrice ? Number(form.altSalePrice) : undefined,
     });
     if (!parsed.success) {
       setError('Confira os campos: nome, SKU e preços são obrigatórios.');
@@ -129,6 +137,9 @@ export default function ProductsPage() {
         weightUnit: 'kg',
         minStockQty: '',
         initialStock: '',
+        altUnit: '',
+        conversionFactor: '',
+        altSalePrice: '',
       });
       await load();
     } catch (e) {
@@ -317,6 +328,51 @@ export default function ProductsPage() {
           title="Detalhes ou observações do produto (opcional). Ex.: marca, especificação técnica, cor."
           className="resize-y rounded-lg border border-gray-300 px-3 py-2 sm:col-span-4"
         />
+        {/* Venda em unidade alternativa (EF-3, ADR-013): embalagem fechada com preço próprio. */}
+        <fieldset className="rounded-xl border border-dashed border-gray-300 p-3 sm:col-span-6">
+          <legend className="px-1 text-xs font-medium text-gray-500">
+            Venda em unidade alternativa (opcional) — ex.: fio por metro OU rolo fechado
+          </legend>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <select
+              value={form.altUnit}
+              onChange={(e) => setForm({ ...form, altUnit: e.target.value as UnitType | '' })}
+              title="Unidade da embalagem fechada (ex.: Rolo). Deixe em branco para vender só na unidade principal."
+              className="rounded-lg border border-gray-300 bg-white px-3 py-2"
+              aria-label="Unidade da embalagem alternativa"
+            >
+              <option value="">— sem embalagem alternativa —</option>
+              {(Object.keys(unitTypeLabels) as UnitType[]).map((u) => (
+                <option key={u} value={u}>
+                  {unitTypeLabels[u]}
+                </option>
+              ))}
+            </select>
+            <input
+              placeholder={`Tamanho (${unitTypeLabels[form.unit]} por embalagem)`}
+              type="number"
+              step="any"
+              min="0"
+              value={form.conversionFactor}
+              onChange={(e) => setForm({ ...form, conversionFactor: e.target.value })}
+              title="Quantas unidades-base cabem em 1 embalagem fechada. Ex.: rolo de 100 m → 100."
+              className="rounded-lg border border-gray-300 px-3 py-2"
+            />
+            <input
+              placeholder="Preço da embalagem fechada"
+              type="number"
+              step="0.01"
+              min="0"
+              value={form.altSalePrice}
+              onChange={(e) => setForm({ ...form, altSalePrice: e.target.value })}
+              title="Preço próprio de 1 embalagem fechada (costuma sair mais barato por unidade-base que o avulso)."
+              className="rounded-lg border border-gray-300 px-3 py-2"
+            />
+          </div>
+          <p className="mt-2 text-xs text-gray-400">
+            Preencha os três para habilitar a escolha “{unitTypeLabels[form.unit]} × embalagem” no PDV.
+          </p>
+        </fieldset>
         <button
           type="submit"
           disabled={saving}

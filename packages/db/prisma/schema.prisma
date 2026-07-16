@@ -209,11 +209,18 @@ model Product {
   description     String?   @db.VarChar(500)
   imageUrl        String?   @db.VarChar(500)  // URL no Cloudflare R2 — nunca BLOB
   unit            UnitType  @default(UNIT)
-  /// Fator de conversão para módulo Material de Construção
-  /// Ex: 1 milheiro = 1000 unidades → conversionFactor = 1000
+  /// Fator de conversão para módulo Material de Construção (ADR-013 — EF-3).
+  /// Ex: 1 milheiro = 1000 unidades → conversionFactor = 1000; 1 rolo = 100 metros → 100.
+  /// Reusado como TAMANHO da embalagem alternativa (unidade-base por embalagem fechada).
   conversionFactor Decimal? @db.Decimal(10, 4)
   costPrice       Decimal   @db.Decimal(12, 4)
   salePrice       Decimal   @db.Decimal(12, 4)
+  /// Venda em unidade alternativa (ADR-013 — EF-3). Quando `altUnit` + `altSalePrice` +
+  /// `conversionFactor` estão preenchidos, o produto pode ser vendido também na embalagem
+  /// fechada (ex.: ROLO de 100 m) com PREÇO PRÓPRIO — o fechado costuma sair mais barato por
+  /// unidade-base, então NÃO é `salePrice × conversionFactor`. Vazio ⇒ produto de uma unidade só.
+  altUnit         UnitType?                     // Unidade da embalagem fechada (ex.: ROLL)
+  altSalePrice    Decimal?  @db.Decimal(12, 4)  // Preço de 1 embalagem fechada
   stockQty        Decimal   @default(0) @db.Decimal(12, 4)
   minStockQty     Decimal   @default(0) @db.Decimal(12, 4)
   isActive        Boolean   @default(true)
@@ -372,9 +379,15 @@ model OrderItem {
   orderId     String   @db.Uuid
   productId   String   @db.Uuid
   productName String   @db.VarChar(150)  // Snapshot do nome no momento da venda
-  unit        UnitType                   // Snapshot da unidade no momento da venda
-  quantity    Decimal  @db.Decimal(12, 4)
-  unitPrice   Decimal  @db.Decimal(12, 4)
+  unit        UnitType                   // Snapshot da unidade vendida (base OU embalagem — ADR-013)
+  quantity    Decimal  @db.Decimal(12, 4) // Quantidade na unidade VENDIDA (ex.: 2 rolos)
+  /// Quantidade em UNIDADE-BASE debitada do estoque (ADR-013 — EF-3). Snapshot congelado no
+  /// momento da venda: modo embalagem ⇒ quantity × conversionFactor (ex.: 2 rolos = 200 m);
+  /// modo base ⇒ igual a `quantity`. NULL em pedidos antigos (pré-EF-3) — o estorno usa
+  /// `baseQuantity ?? quantity`, que é exato para eles (fator 1). Base do estorno de estoque
+  /// no cancelamento/devolução (ADR-001), robusto mesmo se `conversionFactor` mudar depois.
+  baseQuantity Decimal? @db.Decimal(12, 4)
+  unitPrice   Decimal  @db.Decimal(12, 4) // Preço na unidade vendida (ex.: preço do rolo)
   discount    Decimal  @default(0) @db.Decimal(12, 4)
   total       Decimal  @db.Decimal(12, 2)
 
