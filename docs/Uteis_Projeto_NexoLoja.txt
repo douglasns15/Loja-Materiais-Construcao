@@ -16,17 +16,11 @@ http://localhost:3000/
 
 ## Leia docs/ROADMAP.md e docs/testes/registro-de-testes.md e vamos continuar
 
-Reconciliar o seed (ADR-001) — Cimento 230≠200, Tijolo 955≠905.
-Limpar o dado de teste do EF-3 — produto "Cabo Flexível 2,5mm — TESTE 2 EF1" (est. 495) + as vendas f3939b7d/52408f3e; decidir soft-delete ou manter para demo.
-Itens finais da Fase 3 — pooler 6543 + avaliar Supabase Pro
-
 <> OBS: Status: Online - mostrar para indicar que o software está online... questionar sobre essa adição!! Outra coisa, será que é relevante adicionar no painel do super user um indicador por loja, mostrando se está on Line ou não.. se bem que pode estar off na loja, mas em outro local qualquer alguém acessar e vai mostrar como ON Line ... 
 
 <> Ah, e na coluna de usuários, no painel do super usuário, ter como clicar no número de usuários e ver quais são, inclusive, ter alguma opção de gerar nova senha, tanto para o super usuário quanto para o admin de cada loja, para aqueles casos em que um usuário, por ventura esqueça sua senha
 
 <> ah.2, relatórios ter a possibilidade de mostrar quantas vendas foram em dinheiro, pix, débito e crédito, mostrando valor e uma coluna ao lado da porcentagem que esse valor representa para o total do dia, semana e mês.
-
-<> ah.3, cadastro de produtos precisa ter campo para adicionar (de forma opcional) peso do produto e selecionar se é em kilos ou gramas.. pois alguns produtos se vende por kilo e até mesmo por metro também, por exemplo fio, posso vender o rolo fechado ou por metro ai tem o valor por metro e fechado. E tmbm ter um campo de "apelido" para cada produto cadastrado! E além destes pontos, também ter um campo observação ou descrição, de texto livre.
 
 <> ah.4, no histórico de vendas, caso tenha sido pago em dinheiro, mostrar tmbm o valor recebido e o troco!
 
