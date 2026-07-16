@@ -16,7 +16,9 @@ http://localhost:3000/
 
 ## Leia docs/ROADMAP.md e docs/testes/registro-de-testes.md e vamos continuar
 
-
+Reconciliar o seed (ADR-001) — Cimento 230≠200, Tijolo 955≠905.
+Limpar o dado de teste do EF-3 — produto "Cabo Flexível 2,5mm — TESTE 2 EF1" (est. 495) + as vendas f3939b7d/52408f3e; decidir soft-delete ou manter para demo.
+Itens finais da Fase 3 — pooler 6543 + avaliar Supabase Pro
 
 <> OBS: Status: Online - mostrar para indicar que o software está online... questionar sobre essa adição!! Outra coisa, será que é relevante adicionar no painel do super user um indicador por loja, mostrando se está on Line ou não.. se bem que pode estar off na loja, mas em outro local qualquer alguém acessar e vai mostrar como ON Line ... 
 
