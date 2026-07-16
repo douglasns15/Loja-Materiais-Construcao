@@ -1,8 +1,9 @@
 # ADR-013 — Venda em unidade alternativa (segundo preço: rolo fechado × por metro)
 
-- **Status:** **Aceito — Opção A** (aprovada pelo Owner em 2026-07-15). A migration (2 colunas
-  nullable em `Product`) será **escrita e mostrada antes de aplicar** ao banco (regra 4 do `CLAUDE.md`).
-- **Data:** 2026-07-15
+- **Status:** **Aceito — Opção A, IMPLEMENTADO e VALIDADO (2026-07-16).** No ar (API `4f19776c` + web
+  `98453ac5`); E2E do usuário conferido — venda por rolo baixou 200 m (2 × 100) e o cancelamento
+  estornou 200 m (não 2), provando o snapshot `baseQuantity`. Migrations `0008` + `0009` aplicadas.
+- **Data:** 2026-07-15 (implementado/validado 2026-07-16)
 - **Contexto de fase:** Fase 3, item **EF-3** (última fatia do módulo de estoque fino; EF-1 e EF-2 já no ar).
 - **Deciders:** Owner do produto (pendente).
 
@@ -177,9 +178,11 @@ model ProductPackaging {          // "embalagem / forma de venda"
          equivalente, trava de estoque em unidade-base, `saleMode` no payload (online e offline), cache do
          catálogo estendido; **comprovante** imprime a embalagem vendida.
        Gates: core 82/82, api tsc ✅, web tsc ✅, build web (18 rotas) ✅.
-6. [ ] **Deploy (API + web) + E2E** — script E2E de API (vender rolo → baixa `qtd × fator`; cancelar →
-       estorno em base) e E2E do usuário no navegador (cadastro, PDV, comprovante). Depois: **Aceito** final
-       + `ROADMAP.md`/registro de testes.
+6. [x] **Deploy (API `4f19776c` + web `98453ac5`) + E2E do usuário VALIDADO (2026-07-16).** Produto
+       "Cabo Flexível 2,5mm — TESTE 2 EF1" (metro R$2 / rolo 100 m R$150, estoque 500): venda por metro
+       Saída 5; venda por rolo (2×) Saída **200**; cancelamento Entrada **200** (estorno em unidade-base,
+       não 2); saldo 500−5−200+200 = 495. Casos extras 11–13 (margem efetiva, dois modos no carrinho,
+       produto comum inalterado) OK. **ADR fechado; `ROADMAP.md` e registro de testes atualizados.**
 
 ---
 

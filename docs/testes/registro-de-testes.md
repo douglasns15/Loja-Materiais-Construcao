@@ -2353,3 +2353,54 @@ histórico). Typecheck `apps/web` ✅. Deploy web Version `3523dd7c-e796-4dee-8f
 > bate com a soma das movimentações (200 e 905) — provável seed/legado ajustado fora do fluxo de `StockMovement`.
 > A **rotina de reconciliação** do ADR-001 (`stockQty = Σ INCOME − Σ EXPENSE`) corrige isso quando o usuário
 > quiser. **EF-2 fechado** (fatias 1 e 2). Próximo: **EF-3** (venda em unidade alternativa — ADR antes de codar).
+
+### EF-3 — Venda em unidade alternativa (rolo fechado × por metro) (2026-07-16)
+
+ADR-013 (Opção A). Vender o mesmo produto na unidade-base (metro) OU numa embalagem fechada (rolo) com
+**preço próprio** e baixa de estoque convertida. **2 migrations aditivas aplicadas:** `0008`
+(`products.altUnit`/`altSalePrice`) e `0009` (`order_items.baseQuantity` — snapshot da baixa em unidade-base,
+p/ o estorno de cancelamento/devolução ser robusto mesmo se o `conversionFactor` mudar depois). Core:
+`hasAltUnit`, `resolveSaleUnit`, `toBaseQuantity`, `effectiveBaseUnitPrice` (**+14 → 82/82**). API
+`POST /orders`: baixa e `StockMovement` em unidade-base (`qtd × fator`), `OrderItem` grava `baseQuantity` +
+unidade vendida; cancelar/devolver estornam em base (`baseQuantity ?? quantity`). Web: cadastro com bloco
+"unidade alternativa"; PDV com botões base × embalagem, carrinho com a base equivalente, trava de estoque em
+base e `saleMode` no payload (online + offline); comprovante imprime a embalagem. Cache do catálogo estendido.
+
+**Gates**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Core: 4 funções EF-3 (Vitest) | — | ✅ 82/82 |
+| Typecheck `apps/api` (`tsc --noEmit`) | sem erros | ✅ |
+| Typecheck `apps/web` (`tsc --noEmit`) | sem erros | ✅ |
+| Build de produção (`next build`) | 18 rotas | ✅ (`/venda` 8.25 kB) |
+
+**Deploy (produção)**
+
+| Passo | Resultado |
+|---|---|
+| `wrangler deploy` (API) | ✅ Version `4f19776c` |
+| `POST /orders` sem token (smoke) | ✅ 401 (rota existe + auth) |
+| `npm run deploy` (web, OpenNext) | ✅ Version `98453ac5` |
+
+**E2E no navegador (usuário) — produção, app logado**
+
+Produto "Cabo Flexível 2,5mm — TESTE 2 EF1": metro R$ 2,00 / rolo de 100 m R$ 150,00; estoque inicial 500 m.
+
+| Caso | Esperado | Resultado |
+|---|---|---|
+| Cadastro com bloco "unidade alternativa" (rolo / 100 / R$150) persiste | ok | ✅ |
+| PDV mostra 2 botões (`+ Metro · R$2,00` e `+ Rolo (100 Metro) · R$150,00`) | ok | ✅ |
+| Venda **por metro** (5) → baixa 5 | Saída 5 | ✅ (venda `f3939b7d`) |
+| Venda **por rolo** (2) → baixa `2 × 100` | Saída **200** | ✅ (venda `52408f3e`) |
+| Comprovante imprime a embalagem vendida | "Fio — Rolo (100 m)" | ✅ |
+| **Cancelamento** da venda do rolo → estorno em base | Entrada **200** (não 2) | ✅ (movimento reverso `52408f3e`) |
+| Saldo final = 500 − 5 − 200 + 200 | 495 | ✅ |
+| Margem no tooltip usa preço efetivo por unidade-base (rolo R$1,50/m) | ok | ✅ (caso 13) |
+| Dois modos no mesmo carrinho viram 2 linhas; trava soma em base | ok | ✅ (caso 12) |
+| Produto comum (sem embalagem) segue com 1 botão, clique na linha | inalterado | ✅ (caso 14) |
+
+> **Verificação crítica (imagem do usuário):** o histórico do produto mostrou, em ordem, Entrada 500
+> (cadastro) · Saída 5 (venda metro) · Saída **200** (venda rolo, 2×100) · Entrada **200** (cancelamento) —
+> confirmando que a conversão para unidade-base vale **na baixa e no estorno** (o `baseQuantity` congelado
+> devolve 200, não 2). **EF-3 fechado — módulo de estoque fino (EF-1→EF-2→EF-3) concluído.**

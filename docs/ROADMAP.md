@@ -3,7 +3,21 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-15 — **EF-2 COMPLETO e NO AR** (estoque fino online-first). Duas fatias: **(1)
+> **Última atualização:** 2026-07-16 — **EF-3 COMPLETO, NO AR e VALIDADO** (venda em unidade alternativa —
+> rolo fechado × por metro, 2 preços). Fecha o **módulo de estoque fino** (EF-1→EF-2→EF-3). **ADR-013
+> (Opção A):** segundo preço reusando `conversionFactor`; **2 migrations aditivas** — `0008`
+> (`products.altUnit`/`altSalePrice`) e `0009` (`order_items.baseQuantity`). Core
+> `hasAltUnit`/`resolveSaleUnit`/`toBaseQuantity`/`effectiveBaseUnitPrice` (**+14 → 82/82**). API
+> `POST /orders`: baixa e `StockMovement` em **unidade-base** (`qtd × fator`), `OrderItem` grava
+> `baseQuantity`; **cancelar/devolver estornam em base** (`baseQuantity ?? quantity`). Web: cadastro com
+> bloco "unidade alternativa"; PDV com botões **base × embalagem** + trava de estoque em base (`saleMode`
+> no payload online/offline); comprovante imprime a embalagem. **No ar:** API `4f19776c` + web `98453ac5`.
+> **E2E validado** (fio metro R$2 / rolo 100 m R$150, estoque 500: venda rolo 2× baixou **200**, cancelamento
+> estornou **200** — não 2 — saldo 495). **Próximo passo:** reconciliar as divergências de estoque do seed
+> (Cimento 230≠200, Tijolo 955≠905 — rotina do ADR-001) **ou** itens finais da Fase 3 (pooler 6543, avaliar
+> Supabase Pro).
+>
+> **Antes:** 2026-07-15 — **EF-2 COMPLETO e NO AR** (estoque fino online-first). Duas fatias: **(1)
 > painel de reposição** (topo do Estoque — tudo no ponto de reposição, badge zerado/baixo + sugestão de compra)
 > e **(2) visão consolidada por produto** (colunas Entradas/Saídas/Saldo-hist. na tabela "Estoque atual", com ⚠
 > de divergência ADR-001 e clique no produto p/ filtrar o histórico). Novo endpoint agregado `GET /stock/summary`
@@ -738,13 +752,21 @@
           migration; **deploy de API** (Version `d1f6799a`) + web (`3523dd7c`). **E2E validado** — Argamassa
           confere (55−6=49); o ⚠ **capturou divergências reais no seed** (Cimento 230≠200, Tijolo 955≠905) e o
           clique no produto filtrou o histórico. *(ver EF-2 fatia 2 no registro)*
-  - [ ] **EF-3 — Venda em unidade alternativa** *(complexa; ADR próprio antes de codar)*. Ex.: **fio** —
-        vender o **rolo fechado** OU **por metro**, com **preços diferentes** (o rolo fechado costuma sair
-        mais barato por metro). **Não é um campo — é mudança no motor de venda:** toca **PDV** (o carrinho
-        escolhe rolo/metro), **baixa de estoque** (vender 5 m desconta quanto de um "rolo"? → reusar/
-        estender `conversionFactor`), **comprovante** e **preço** (segundo preço). Modelagem em aberto:
-        (a) segundo preço + `conversionFactor`, ou (b) pequena estrutura de "embalagem" (label + tamanho +
-        preço fechado). ⚠️ **Escrever ADR curto (regra 4) + pedir aprovação da migration antes de codar.**
+  - [x] **EF-3 — Venda em unidade alternativa** *(complexa; ADR próprio)* — **COMPLETO, NO AR e VALIDADO
+        (2026-07-16).** Vender o mesmo produto **por metro** OU como **rolo fechado**, com **preços
+        diferentes** (o rolo sai mais barato por metro). **ADR-013 (Opção A, aprovada):** segundo preço
+        reusando `conversionFactor`; **2 migrations aditivas** — `0008` (`products.altUnit`/`altSalePrice`)
+        e `0009` (`order_items.baseQuantity`, snapshot p/ o estorno em unidade-base ser robusto a mudança
+        de fator). **Core:** `hasAltUnit`/`resolveSaleUnit`/`toBaseQuantity`/`effectiveBaseUnitPrice`
+        (**+14 → 82/82**). **API `POST /orders`:** baixa e `StockMovement` em unidade-base (`qtd × fator`),
+        `OrderItem` grava `baseQuantity` + unidade vendida; **cancelar/devolver** estornam em base
+        (`baseQuantity ?? quantity`, cobre pedidos antigos). **Web:** cadastro ganhou o bloco "unidade
+        alternativa"; PDV mostra botões **base × embalagem**, carrinho com a base equivalente e trava de
+        estoque em base (`saleMode` no payload online+offline); **comprovante** imprime a embalagem
+        ("Fio — Rolo (100 m)"). Cache do catálogo estendido. **No ar:** API `4f19776c` + web `98453ac5`.
+        **E2E validado:** fio metro R$2 / rolo 100 m R$150 (estoque 500) → venda metro Saída 5; venda rolo
+        (2×) Saída **200**; cancelamento Entrada **200** (não 2!); saldo 495. Casos extras (margem efetiva,
+        dois modos no mesmo carrinho, produto comum inalterado) OK.
 - [ ] Otimização do pooler (6543) para limites do free tier
 - [ ] Avaliar upgrade Supabase Pro p/ produção
 
