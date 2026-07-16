@@ -2404,3 +2404,33 @@ Produto "Cabo Flexível 2,5mm — TESTE 2 EF1": metro R$ 2,00 / rolo de 100 m R$
 > (cadastro) · Saída 5 (venda metro) · Saída **200** (venda rolo, 2×100) · Entrada **200** (cancelamento) —
 > confirmando que a conversão para unidade-base vale **na baixa e no estorno** (o `baseQuantity` congelado
 > devolve 200, não 2). **EF-3 fechado — módulo de estoque fino (EF-1→EF-2→EF-3) concluído.**
+
+### Reconciliação de estoque do seed (ADR-001) (2026-07-16)
+
+Pendência 1 do pós-EF-3. O ⚠ da EF-2 revelou `Product.stockQty` (cache desnormalizado) fora de sincronia com
+`Σ INCOME − Σ EXPENSE` do `StockMovement` (a fonte de verdade auditável) — dado de seed/legado ajustado fora
+do fluxo de `applyStockMovement`. Nova **rotina de reconciliação** geral em
+`packages/db/scripts/reconcile-stock.mjs` (dry-run por padrão; corrige com `--apply`; escopo opcional por loja
+com `--tenant <slug>`): recalcula o saldo pelo histórico e alinha o cache. **Só corrige dado** (UPDATE em
+`products.stockQty`) — sem migration, sem criar `StockMovement`, sem deploy. Reusa a lógica do core
+`reconcileStock` (mesma do endpoint `GET /stock/summary`).
+
+**Achados vs. snapshot do ROADMAP:** os números do Cimento haviam andado (`220 ≠ 190`, não `230 ≠ 200` — mais
+uma saída de 10 depois do registro) e apareceu um **3º caso não previsto**: produto **soft-deleted** com
+estoque-fantasma e zero movimentos. Aprovado corrigir os 3 (cache 100% consistente).
+
+| Produto (SKU) | Σ INCOME − Σ EXPENSE | Cache antes | Correção | Depois |
+|---|---|---|---|---|
+| Tijolo 8 furos (TIJ-8F) | 1001 − 96 = 905 | 955 | −50 | ✅ 905 |
+| Cimento (CIM-50k) | 290 − 100 = 190 | 220 | −30 | ✅ 190 |
+| Cimento CP-II 50kg (CIM-50) *(soft-deleted)* | 0 − 0 = 0 | 120 | −120 | ✅ 0 |
+
+| Passo | Esperado | Resultado |
+|---|---|---|
+| Dry-run inicial (`node …/reconcile-stock.mjs`) | lista 3 divergências, não escreve | ✅ |
+| Aprovação do usuário antes do write (regra 1 do CLAUDE.md) | explícita | ✅ (os 3 produtos) |
+| `--apply` corrige as 3 | 3 produtos reconciliados | ✅ |
+| Dry-run de verificação (pós-apply) | 0 divergências | ✅ "Nenhuma divergência" |
+
+> Rotina fica no repo para reuso: se o ⚠ da tela de Estoque reaparecer, basta rodar o dry-run e, se
+> confirmado, `--apply`. **Pendência 1 do pós-EF-3 fechada.**

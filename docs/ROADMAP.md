@@ -13,9 +13,10 @@
 > bloco "unidade alternativa"; PDV com botões **base × embalagem** + trava de estoque em base (`saleMode`
 > no payload online/offline); comprovante imprime a embalagem. **No ar:** API `4f19776c` + web `98453ac5`.
 > **E2E validado** (fio metro R$2 / rolo 100 m R$150, estoque 500: venda rolo 2× baixou **200**, cancelamento
-> estornou **200** — não 2 — saldo 495). **Próximo passo:** reconciliar as divergências de estoque do seed
-> (Cimento 230≠200, Tijolo 955≠905 — rotina do ADR-001) **ou** itens finais da Fase 3 (pooler 6543, avaliar
-> Supabase Pro).
+> estornou **200** — não 2 — saldo 495). **Pendência 1 (reconciliação de estoque do seed) FECHADA em
+> 2026-07-16** — rotina `reconcile-stock.mjs` corrigiu 3 produtos (Tijolo 955→905, Cimento 220→190, e o
+> soft-deleted Cimento CP-II 120→0); pós-apply 0 divergências (ver registro). **Próximo passo:** pendência 2
+> (limpar dado de teste do EF-3) **ou** pendência 3 / itens finais da Fase 3 (pooler 6543, avaliar Supabase Pro).
 >
 > **Antes:** 2026-07-15 — **EF-2 COMPLETO e NO AR** (estoque fino online-first). Duas fatias: **(1)
 > painel de reposição** (topo do Estoque — tudo no ponto de reposição, badge zerado/baixo + sugestão de compra)
@@ -779,15 +780,27 @@
 > Nenhuma bloqueia produção. **Não há deploy pendente** — API `4f19776c` + web `98453ac5` estão no ar e
 > commitados (`4802a63` código + `c794811` docs). Ordem sugerida:
 
-1. [ ] **Reconciliar as divergências de estoque do seed (rotina do ADR-001).** O ⚠ da EF-2 revelou
-       `Product.stockQty` fora de sincronia com Σ movimentos: **Cimento 230 ≠ 200** e **Tijolo 955 ≠ 905**
-       (seed/legado ajustado fora do fluxo de `StockMovement`). Correção: aplicar `stockQty = Σ INCOME −
-       Σ EXPENSE` (ADR-001) para esses produtos. Só corrige dado, sem migration/deploy.
-2. [ ] **Limpar o dado de teste do EF-3.** Ficou o produto **"Cabo Flexível 2,5mm — TESTE 2 EF1"**
-       (estoque 495) + vendas de teste (`f3939b7d` metro, `52408f3e` rolo cancelada) no histórico do
-       tenant do usuário. Decidir: soft-delete do produto (mantém histórico) **ou** manter para demos do rolo.
-3. [ ] **Itens finais da Fase 3:** otimização do pooler (6543) e avaliar upgrade Supabase Pro (ver os dois
-       itens abaixo, no fim da Fase 3).
+1. [x] **Reconciliar as divergências de estoque do seed (rotina do ADR-001).** ✅ **FEITO (2026-07-16).**
+       Nova rotina geral `packages/db/scripts/reconcile-stock.mjs` (dry-run por padrão; `--apply` corrige;
+       `--tenant <slug>` opcional) recalcula `stockQty = Σ INCOME − Σ EXPENSE` e alinha o cache. No dry-run,
+       além de **Tijolo 955→905** e **Cimento 220→190** (o Cimento havia andado desde o snapshot — era 230→200;
+       mais uma saída de 10 no meio), apareceu um **3º caso**: soft-deleted **Cimento CP-II (CIM-50) 120→0**
+       (estoque-fantasma, zero movimentos). Aprovado e aplicado nos 3; verificação pós-apply = **0
+       divergências**. Só corrigiu dado (UPDATE em `products.stockQty`), sem migration/deploy. Ver
+       "Reconciliação de estoque do seed" no registro de testes.
+2. [x] **Limpar o dado de teste do EF-3.** ✅ **DECIDIDO (2026-07-16): manter.** O produto **"Cabo Flexível
+       2,5mm — TESTE 2 EF1"** (estoque 495) + vendas de teste (`f3939b7d` metro, `52408f3e` rolo cancelada)
+       ficam **de propósito** no tenant — é a **loja Demo**, servem para futuros testes/demos do rolo. Sem ação.
+3. [~] **Itens finais da Fase 3 — LEVANTADOS e DOCUMENTADOS (2026-07-16), execução adiada p/ go-live.**
+       Plano completo em **`docs/plano-producao.md`**. Achados:
+       - **Pooler:** a premissa "otimizar p/ 6543" estava **invertida** — a Cloudflare recomenda a conexão de
+         **sessão (5432)**, não a de transação (6543), pois o Hyperdrive já é um pooler. **O projeto já está
+         em sessão/5432** (`aws-1-...pooler.supabase.com`, `origin_connection_limit=20`). Único ajuste real:
+         baixar o `origin_connection_limit` **se** aparecer "too many connections". Comentário do
+         `wrangler.toml` (que dizia usar `DIRECT_URL`) corrigido.
+       - **Supabase Pro:** banco em **12 MB de 500 MB** (o teto está a ~160 mil vendas → anos). Gatilho real
+         **não é tamanho**, e sim confiabilidade ao entrar a 1ª loja real: backups diários, sem auto-pause,
+         e-mail com marca. Script de medição: `packages/db/scripts/db-size.mjs`.
 
 - **Prisma 6 (não 7):** mantido de propósito por estabilidade de conexão. Não subir sem revalidar a conexão pela edge.
 - **Atualizar o wrangler da API (3.114 → 4.x) — ✅ concluído (2026-07-03):** as **duas apps** agora usam **wrangler `4.107.0`** e um **único `workerd 1.20260701.1`** na raiz (meta + binário), **sem binários aninhados** (os `optionalDependencies` de workerd que existiam no web foram removidos — deixaram de ser necessários). A config `wrangler.toml` da API não precisou de mudança (chaves padrão). Validado com `deploy --dry-run` (bindings Hyperdrive/R2/`SUPABASE_URL` ok; secret `SUPABASE_SERVICE_ROLE_KEY` persiste no Worker) + smoke (`/health`, `/db-check` → tenants:2, `/me` 401). Ver "Infra.WranglerV4" no registro de testes.

@@ -9,10 +9,17 @@ compatibility_flags = ["nodejs_compat"]
 SUPABASE_URL = "https://esxssekaflzewibbklpu.supabase.co"
 
 # --- Hyperdrive → Supabase (ADR-005) ---
-# Conexão poolada na edge. Recriar com:
-#   npx wrangler hyperdrive create nexoloja-db --connection-string="<DIRECT_URL>"
+# Conexão poolada na edge. A origem configurada é o POOLER do Supabase (Supavisor) em
+# MODO SESSÃO — host `aws-1-us-west-2.pooler.supabase.com`, porta 5432, user
+# `postgres.<ref>` (endpoint IPv4; o host direto `db.<ref>.supabase.co` é IPv6-only no
+# free tier). NÃO usar a porta 6543 (transação): o Hyperdrive já pooleia e empilhar
+# pooler-sobre-pooler causa instabilidade — a Cloudflare recomenda a conexão de sessão.
+# Ver `docs/plano-producao.md`. Recriar com:
+#   npx wrangler hyperdrive create nexoloja-db --connection-string="<POOLER_SESSION_URL:5432>"
 # Cache de leitura DESABILITADO (evita listas velhas após escrita num ERP/POS):
 #   npx wrangler hyperdrive update <id> --caching-disabled
+# Conexões que o Hyperdrive mantém no origin: origin_connection_limit = 20 (baixar se
+# aparecer "too many connections" sob carga).
 [[hyperdrive]]
 binding = "HYPERDRIVE"
 id = "7b728afad9a643f096bfbcdb6d0724ea"
