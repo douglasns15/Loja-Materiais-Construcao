@@ -774,6 +774,21 @@
 
 ## 📌 Notas / decisões em aberto
 
+### ▶️ Pendências para a próxima sessão (deixadas após o EF-3, 2026-07-16)
+
+> Nenhuma bloqueia produção. **Não há deploy pendente** — API `4f19776c` + web `98453ac5` estão no ar e
+> commitados (`4802a63` código + `c794811` docs). Ordem sugerida:
+
+1. [ ] **Reconciliar as divergências de estoque do seed (rotina do ADR-001).** O ⚠ da EF-2 revelou
+       `Product.stockQty` fora de sincronia com Σ movimentos: **Cimento 230 ≠ 200** e **Tijolo 955 ≠ 905**
+       (seed/legado ajustado fora do fluxo de `StockMovement`). Correção: aplicar `stockQty = Σ INCOME −
+       Σ EXPENSE` (ADR-001) para esses produtos. Só corrige dado, sem migration/deploy.
+2. [ ] **Limpar o dado de teste do EF-3.** Ficou o produto **"Cabo Flexível 2,5mm — TESTE 2 EF1"**
+       (estoque 495) + vendas de teste (`f3939b7d` metro, `52408f3e` rolo cancelada) no histórico do
+       tenant do usuário. Decidir: soft-delete do produto (mantém histórico) **ou** manter para demos do rolo.
+3. [ ] **Itens finais da Fase 3:** otimização do pooler (6543) e avaliar upgrade Supabase Pro (ver os dois
+       itens abaixo, no fim da Fase 3).
+
 - **Prisma 6 (não 7):** mantido de propósito por estabilidade de conexão. Não subir sem revalidar a conexão pela edge.
 - **Atualizar o wrangler da API (3.114 → 4.x) — ✅ concluído (2026-07-03):** as **duas apps** agora usam **wrangler `4.107.0`** e um **único `workerd 1.20260701.1`** na raiz (meta + binário), **sem binários aninhados** (os `optionalDependencies` de workerd que existiam no web foram removidos — deixaram de ser necessários). A config `wrangler.toml` da API não precisou de mudança (chaves padrão). Validado com `deploy --dry-run` (bindings Hyperdrive/R2/`SUPABASE_URL` ok; secret `SUPABASE_SERVICE_ROLE_KEY` persiste no Worker) + smoke (`/health`, `/db-check` → tenants:2, `/me` 401). Ver "Infra.WranglerV4" no registro de testes.
 - **Migrations no Supabase:** usar `migrate diff` + `migrate deploy` (o `migrate dev` tropeça no *shadow database* do free tier).
