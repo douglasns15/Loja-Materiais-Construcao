@@ -28,6 +28,10 @@ http://localhost:3000/
 
 <> Produtos que dependendo da forma de pagamento, tem acréscimo no valor.. tipo caso do cimento
 
+<> Ao pesquisar produto mostrar todas as informações cadastradas nele, hj não está mostrando e tmbm adicionar campo Marca/Fabricante/Grupo
+
+<> Ao remover um logo e subir um novo, as impressões estão sendo feitas sem o logo, parece estar se perdendo.
+
 ## Subir servidor
 
 cd C:\Users\Douglas\Documents\GitHub\Loja-Materiais-Construcao
