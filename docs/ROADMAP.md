@@ -3,7 +3,21 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-16 — **EF-3 COMPLETO, NO AR e VALIDADO** (venda em unidade alternativa —
+> **Última atualização:** 2026-07-17 — **"Última atividade da loja" no painel do Super Usuário — NO AR e
+> VALIDADO.** Ideia do usuário ("mostrar se a loja está online?") virou um sinal **honesto**: não existe
+> "online/offline por loja" (online/offline é do dispositivo/sessão, não do tenant; a API é única na edge), então
+> mostramos **quando foi a última operação real** — responde de verdade "está sendo usada?". **Cost-zero, sem
+> migration, sem tabela de log:** `GET /platform/tenants` deriva `lastActivityAt` do `MAX` de sinais que já
+> existem (última venda + último movimento de estoque + abertura/fechamento de caixa, 3 `groupBy`). Web: coluna
+> **"Última atividade"** no `/plataforma` — "• ativa agora" (verde, < 15 min) senão rótulo relativo PT-BR
+> (`timeAgoPtBr`, puro) ou "— sem atividade". *(A "ideia 1", badge "Online" p/ o operador, foi descartada:
+> `navigator.onLine` mente — só diz que há rede, não que a API responde.)* Gates: typecheck API+web, build web
+> (17 rotas), core **82/82**. **No ar:** API `d3fc9568` + web `4feb010c`; commit `2f0f14b`. **E2E do usuário
+> validado** (Loja Demo "ativa agora" após operação; outra loja "há 13 dias"). Ver "Plataforma — Última
+> atividade da loja" no registro. **Próximo passo:** direções abertas — go-live (Supabase Pro/CORS/SMTP, ver
+> `docs/plano-producao.md`), nova funcionalidade, ou endurecimento.
+>
+> **Antes:** 2026-07-16 — **EF-3 COMPLETO, NO AR e VALIDADO** (venda em unidade alternativa —
 > rolo fechado × por metro, 2 preços). Fecha o **módulo de estoque fino** (EF-1→EF-2→EF-3). **ADR-013
 > (Opção A):** segundo preço reusando `conversionFactor`; **2 migrations aditivas** — `0008`
 > (`products.altUnit`/`altSalePrice`) e `0009` (`order_items.baseQuantity`). Core

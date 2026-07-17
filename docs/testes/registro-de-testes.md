@@ -2434,3 +2434,49 @@ estoque-fantasma e zero movimentos. Aprovado corrigir os 3 (cache 100% consisten
 
 > Rotina fica no repo para reuso: se o ⚠ da tela de Estoque reaparecer, basta rodar o dry-run e, se
 > confirmado, `--apply`. **Pendência 1 do pós-EF-3 fechada.**
+
+### Plataforma — "Última atividade da loja" no painel do Super Usuário (2026-07-17)
+
+Ideia levantada pelo usuário: mostrar se a loja está "online". **Decisão de design (discutida e aprovada):**
+não existe "online/offline por loja" honesto — online/offline é do **dispositivo/sessão**, não do tenant, e a
+API é única na edge (a loja apareceria "online" se qualquer pessoa a acessasse de qualquer lugar). Trocamos por
+**"última atividade da loja"** = *quando* ocorreu a última operação real, que responde de verdade "está sendo
+usada?". **Cost-zero, sem tabela de log, sem migration** (CLAUDE.md: proibido log de navegação no banco): o
+`lastActivityAt` é derivado do `MAX` de sinais que já existem — última venda (`Order.createdAt`), último
+movimento de estoque (`StockMovement.createdAt`) e abertura/fechamento de caixa (`CashSession.openedAt`/
+`closedAt`), via 3 `groupBy` agregados no servidor. Devolução (`CashMovement`) sempre exige caixa aberto no dia,
+então já fica coberta pelo `CashSession`. Web: coluna **"Última atividade"** no `/plataforma` — **"• ativa
+agora"** (verde) quando < 15 min, senão rótulo relativo PT-BR (`há X min/h/dias`, data no tooltip) ou
+**"— sem atividade"**; formatador `timeAgoPtBr` puro (`nowMs` injetável). *(A "ideia 1" — badge "Online" para o
+operador — foi descartada: `navigator.onLine` só diz que há interface de rede, não que a API responde, então um
+selo verde poderia mentir; o app já sinaliza o lado ruim via avisos offline + chip de pendências.)*
+
+**Build / typecheck / core (local)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Typecheck `apps/api` (`tsc --noEmit`, após `prisma generate`) | sem erros | ✅ |
+| Typecheck `apps/web` | sem erros | ✅ |
+| Build de produção (`next build`) | `/plataforma` regenerada | ✅ 17 rotas (`/plataforma` 2.84 kB) |
+| Core (Vitest) — regressão (não tocado) | 82/82 | ✅ 82/82 |
+
+**Deploy + smoke (produção) — 2026-07-17**
+
+| Passo | Resultado |
+|---|---|
+| `wrangler deploy` (API — `GET /platform/tenants` devolve `lastActivityAt`) | ✅ Version `d3fc9568` |
+| `GET /platform/tenants` sem token (smoke) | ✅ 401 (rota existe + auth de plataforma) |
+| `npm run deploy` (web, OpenNext) | ✅ Version `4feb010c` |
+
+**E2E no navegador (usuário) — produção, painel do Super Usuário**
+
+| Caso | Resultado |
+|---|---|
+| Coluna "Última atividade" na tabela de lojas | ✅ |
+| Loja com histórico ("Loja Testes Integrados") mostra rótulo relativo | ✅ "há 13 dias" |
+| Loja com operação recente ("Loja Demo") mostra ativa agora | ✅ "• ativa agora" (verde) |
+| Registrar uma operação e recarregar → muda para "ativa agora" | ✅ validado pelo usuário |
+
+> Mata o furo que o próprio usuário apontou: em vez de mentir "Online" quando alguém acessa de outro lugar,
+> mostra **quando** foi a última operação real — de qualquer dispositivo, de qualquer lugar. Commit `2f0f14b`
+> (diff limpo 79/6 após corrigir flip de EOL CRLF→LF introduzido pelos edits no Windows).
