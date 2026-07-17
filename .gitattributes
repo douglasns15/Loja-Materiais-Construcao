@@ -1,0 +1,16 @@
+# Normaliza o fim de linha de todo arquivo de texto para LF no repositório.
+# Mantém Windows e macOS consistentes: o que é gravado no git é sempre LF,
+# independente do SO ou do editor. `text=auto` deixa o git detectar binários
+# automaticamente e NÃO os toca (só arquivos de texto são normalizados).
+* text=auto eol=lf
+
+# Binários explícitos — garantia extra de que nunca sofrem conversão de EOL.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.webp binary
+*.ico  binary
+*.gif  binary
+*.woff  binary
+*.woff2 binary
+*.pdf  binary
