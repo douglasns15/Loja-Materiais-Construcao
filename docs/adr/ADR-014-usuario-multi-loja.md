@@ -124,6 +124,45 @@ removemos o guard atual ("1 tenant por identidade"), entra um novo conjunto de r
    Super Usuário) e alvo. O Super Usuário concede direto (identidade de plataforma, confiável), mas grava na mesma
    tabela e trilha.
 
+### 5. Exclusão de usuário / saída de loja (histórico ancora em identidade+loja, nunca na membership)
+
+Com o multi-loja, **"excluir usuário" deixa de ser uma operação só** e se separa em duas, bem diferentes de risco:
+
+> **Regra de design (a que garante o requisito):** o histórico de ações — `orders.userId`,
+> `cash_sessions.userId`, `stock_movements.userId`, autoria ADR-010 — ancora em **`(userId da identidade +
+> tenantId da loja)`**, **nunca** em `TenantMembership.id`. A membership é só a **chave de acesso**, desacoplada
+> da autoria. Logo, mexer no vínculo **não** toca registro histórico nenhum.
+
+**(a) Sair de UMA loja — revogar a membership** *(o caso comum do dia a dia)*
+- Mexe **só** na linha `TenantMembership(userId, tenantId)`. A identidade e o histórico ficam intactos; a pessoa
+  mantém as **outras** lojas e o login.
+- **Os registros dela naquela loja permanecem** (apontam para a identidade, que continua existindo, + o snapshot
+  de nome congelado da ADR-010). Relatórios/comprovantes seguem mostrando "Registrado por [nome]" para sempre.
+- **Seguro e trivial** — como nenhum histórico referencia `membership.id`, pode ser `DELETE` real da linha.
+  **Preferência:** `isActive=false` (soft) + `AuditEvent REVOKE_MEMBERSHIP`, para deixar rastro de "foi membro,
+  saiu em X". Não trava por histórico (é o ponto: histórico não está no vínculo).
+- **Guard (ADR-008 no contexto da loja):** não remover a membership do **`OWNER`** — toda loja precisa manter um
+  dono. `requireAdmin` passa a valer sobre o papel **da loja ativa**.
+
+**(b) Excluir a IDENTIDADE inteira — a pessoa / conta do Auth** *(raro; libera o e-mail)*
+- Mantém **a mesma trava de hoje** (2.5.Del): se a identidade tem histórico em **qualquer** loja (FKs sem
+  cascade), o hard-delete é **bloqueado → desativa** (`users.isActive=false`), preservando integridade + registros.
+  Só se apaga a identidade + revoga o Auth quando ela **não tem histórico em loja nenhuma** (e, por consistência,
+  sem memberships ativas).
+- Diferença vs. hoje: a checagem de histórico deixa de ser "nesta loja" e passa a ser **cross-loja** (a identidade
+  é global). O `DELETE /users/:id` de loja passa a significar **(a)** (revogar membership); a exclusão da
+  identidade é uma ação mais forte, restrita (Super Usuário ou dono da própria conta).
+
+**Resumo:**
+
+| Operação | Dificuldade | Histórico |
+|---|---|---|
+| Sair de uma loja (revogar membership) | Simples (1 linha) | Preservado (ancora em identidade+loja) |
+| Excluir identidade inteira | Igual a hoje (trava por histórico → desativar) | Preservado (identidade desativada, não some) |
+
+Novos `AuditEvent`: `REVOKE_MEMBERSHIP` (além de `GRANT_MEMBERSHIP`/`ACCEPT_MEMBERSHIP` da seção 4), formalizados
+na lista fechada do ADR-004 quando a Fatia 4 for implementada.
+
 ---
 
 ## A decisão difícil: RLS com N lojas
@@ -200,8 +239,9 @@ Migrations **aditivas** e faseadas (padrão do projeto: `migrate diff` + `migrat
    (a API já isola). Cache offline chaveado por loja.
 3. **Fatia 3 — RLS multi-loja (migration 2, Opção RLS-B).** Hook `tenant_ids` + políticas `= ANY(...)`. Testes de
    regressão de isolamento (membro vê suas lojas; não-membro é barrado; `anon` vazio).
-4. **Fatia 4 — Concessão de acesso "ambos" + consentimento.** Super Usuário concede; Admin convida existente com
-   fluxo `PENDING → ACEITAR`, resposta genérica, anti-vazamento, auditoria.
+4. **Fatia 4 — Concessão/remoção de acesso "ambos" + consentimento.** Super Usuário concede; Admin convida
+   existente com fluxo `PENDING → ACEITAR`, resposta genérica, anti-vazamento, auditoria. Inclui **revogar
+   membership (sair de uma loja)** e a nova semântica de exclusão da seção 5 (identidade vs. vínculo).
 5. **Fatia 5 — Cleanup (migration 3).** Remover `users.tenantId`/`role` quando todo o read-path estiver na
    membership. Só após validação ponta a ponta.
 
