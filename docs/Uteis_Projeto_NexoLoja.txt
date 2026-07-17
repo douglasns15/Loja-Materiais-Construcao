@@ -26,6 +26,8 @@ http://localhost:3000/
 
 <> Na documentação, tudo que faz consulta para mostrar algo tela, também deve ser explicado de onde vem a info e qual a lógica pra de determinada informação
 
+<> Produtos que dependendo da forma de pagamento, tem acréscimo no valor.. tipo caso do cimento
+
 ## Subir servidor
 
 cd C:\Users\Douglas\Documents\GitHub\Loja-Materiais-Construcao
