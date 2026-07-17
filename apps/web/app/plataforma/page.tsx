@@ -17,6 +17,12 @@ type Tenant = {
   userCount: number;
   /** Módulo de vendas offline ligado (ADR-011, recurso de plano pago). */
   offlineSales: boolean;
+  /**
+   * Momento da última operação real da loja (venda/estoque/caixa) — derivado no servidor.
+   * `null` = a loja ainda não teve nenhuma atividade. Não confundir com "online/offline"
+   * (que é do dispositivo, não do tenant): isto responde "está sendo usada?".
+   */
+  lastActivityAt: string | null;
 };
 
 type CreatedTenant = {
@@ -27,6 +33,26 @@ type CreatedTenant = {
 };
 
 const DATE = (v: string) => new Date(v).toLocaleDateString('pt-BR');
+
+/** Janela em que consideramos a loja "ativa agora" (última operação recente). */
+const ACTIVE_NOW_MS = 15 * 60 * 1000;
+
+/**
+ * Rótulo relativo em PT-BR de "quanto tempo atrás" (última atividade da loja). Presentacional —
+ * `nowMs` é injetável para determinismo. Escala: agora → min → h → dias; acima disso cai na data.
+ */
+function timeAgoPtBr(iso: string, nowMs: number = Date.now()): string {
+  const diff = nowMs - new Date(iso).getTime();
+  if (!Number.isFinite(diff)) return '—';
+  if (diff < 60_000) return 'agora mesmo';
+  const min = Math.floor(diff / 60_000);
+  if (min < 60) return `há ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `há ${h} h`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `há ${d} ${d === 1 ? 'dia' : 'dias'}`;
+  return `em ${new Date(iso).toLocaleDateString('pt-BR')}`;
+}
 
 export default function PlataformaPage() {
   const router = useRouter();
@@ -225,6 +251,7 @@ export default function PlataformaPage() {
               <th className="px-4 py-2">CNPJ</th>
               <th className="px-4 py-2 text-right">Usuários</th>
               <th className="px-4 py-2">Criada</th>
+              <th className="px-4 py-2">Última atividade</th>
               <th className="px-4 py-2">Status</th>
               <th className="px-4 py-2">Offline (pago)</th>
               <th className="px-4 py-2 text-right">Ação</th>
@@ -233,7 +260,7 @@ export default function PlataformaPage() {
           <tbody>
             {tenants.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={8} className="px-4 py-6 text-center text-gray-400">
                   Nenhuma loja cadastrada.
                 </td>
               </tr>
@@ -247,6 +274,20 @@ export default function PlataformaPage() {
                   <td className="px-4 py-2 text-gray-500">{t.cnpj ? formatCnpj(t.cnpj) : '—'}</td>
                   <td className="px-4 py-2 text-right text-gray-500">{t.userCount}</td>
                   <td className="px-4 py-2 text-gray-500">{DATE(t.createdAt)}</td>
+                  <td className="px-4 py-2">
+                    {t.lastActivityAt === null ? (
+                      <span className="text-gray-400">— sem atividade</span>
+                    ) : Date.now() - new Date(t.lastActivityAt).getTime() < ACTIVE_NOW_MS ? (
+                      <span className="inline-flex items-center gap-1.5 text-green-700">
+                        <span className="h-2 w-2 rounded-full bg-green-500" aria-hidden />
+                        ativa agora
+                      </span>
+                    ) : (
+                      <span className="text-gray-500" title={new Date(t.lastActivityAt).toLocaleString('pt-BR')}>
+                        {timeAgoPtBr(t.lastActivityAt)}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-2">
                     <span
                       className={`rounded-full px-2 py-0.5 text-xs font-medium ${

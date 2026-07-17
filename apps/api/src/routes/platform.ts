@@ -63,13 +63,45 @@ platform.get('/tenants', async (c) => {
         },
       },
     });
+
+    // "Última atividade da loja" (cost-zero, sem tabela de log): NÃO existe conceito honesto de
+    // "loja online/offline" — online/offline é do dispositivo/sessão, não do tenant, e a API é uma
+    // só na edge. O que responde de verdade "esta loja está sendo usada?" é QUANDO ocorreu a última
+    // operação real. Derivamos isso do MAX de sinais que já existem (venda, movimento de estoque e
+    // abertura/fechamento de caixa) — sem escrita nova nem migration (CLAUDE.md: proibido log de
+    // navegação no banco). Devolução (`CashMovement`) sempre exige caixa aberto no dia, então já
+    // fica coberta pelo `CashSession`. `groupBy` agrega no servidor (não trafega o histórico).
+    const [orderAgg, stockAgg, cashAgg] = await Promise.all([
+      prisma.order.groupBy({ by: ['tenantId'], _max: { createdAt: true } }),
+      prisma.stockMovement.groupBy({ by: ['tenantId'], _max: { createdAt: true } }),
+      prisma.cashSession.groupBy({ by: ['tenantId'], _max: { openedAt: true, closedAt: true } }),
+    ]);
+
+    const lastActivity = new Map<string, number>();
+    const bump = (tenantId: string, at: Date | null | undefined) => {
+      if (!at) return;
+      const ms = at.getTime();
+      const cur = lastActivity.get(tenantId);
+      if (cur === undefined || ms > cur) lastActivity.set(tenantId, ms);
+    };
+    for (const r of orderAgg) bump(r.tenantId, r._max.createdAt);
+    for (const r of stockAgg) bump(r.tenantId, r._max.createdAt);
+    for (const r of cashAgg) {
+      bump(r.tenantId, r._max.openedAt);
+      bump(r.tenantId, r._max.closedAt);
+    }
+
     return c.json({
       ok: true,
-      data: tenants.map(({ _count, modules, ...t }) => ({
-        ...t,
-        userCount: _count.users,
-        offlineSales: modules.some((m) => m.isActive === true),
-      })),
+      data: tenants.map(({ _count, modules, ...t }) => {
+        const ms = lastActivity.get(t.id);
+        return {
+          ...t,
+          userCount: _count.users,
+          offlineSales: modules.some((m) => m.isActive === true),
+          lastActivityAt: ms !== undefined ? new Date(ms).toISOString() : null,
+        };
+      }),
     });
   } catch (err) {
     console.error('GET /platform/tenants falhou:', err);
