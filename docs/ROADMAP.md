@@ -3,8 +3,8 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-20 — **PA (produto agregado: venda em par, ADR-015) — NO AR, falta o
-> E2E do usuário.** Pedido do Owner: parafuso R$0,60 + bucha R$0,20 são produtos independentes, mas o
+> **Última atualização:** 2026-07-20 — **PA (produto agregado: venda em par, ADR-015) — NO AR e
+> VALIDADO pelo usuário; ADR-015 fechado.** Pedido do Owner: parafuso R$0,60 + bucha R$0,20 são produtos independentes, mas o
 > **par sai R$0,70**; no PDV escolhe-se avulso ou par. **ADR-015 escrito e aprovado ANTES de codar**
 > (regra 4), com 3 decisões do Owner: par de 2 itens (colunas, não tabela de combo), par vale **dos dois
 > lados** (cadastra uma vez só), e comprovante em **linha única** (*"comprado separado o valor muda —
@@ -26,7 +26,11 @@
 > itens que envia** (`cartToSaleItems`), com a mesma função do servidor. Limite documentado: com
 > `Decimal(12,4)` o desvio pode chegar a **1 centavo** acima de ~100 pares, mas a tela sempre mostra o
 > que será cobrado. Core **+5 → 108/108** (teste de propriedade: exato de 1 a 100 pares, ≤1 centavo até
-> 600). Web `31a5e1d6`. **Próximo passo:** reteste do usuário (roteiro no registro).
+> 600). Web `31a5e1d6`. **E2E do usuário VALIDADO (5/5):** par baixa 1 de cada; cancelamento estorna 1
+> de cada; bucha zerada tira o par do PDV (parafuso segue avulso); par invertido recusado; 5 pares
+> fecham em R$3,50 sem erro. Commits `999bb45` + `992259e`. **Fatia PA CONCLUÍDA.** **Próximo passo:**
+> direções abertas — go-live (Supabase Pro/CORS/SMTP, ver `docs/plano-producao.md`), nova
+> funcionalidade, ou endurecimento.
 >
 > **Antes:** 2026-07-20 — **EP (visualizar/editar cadastro de produto + campo Fabricante) —
 > NO AR e VALIDADO pelo usuário.** Pedido do usuário. **Diagnóstico:** editar produto

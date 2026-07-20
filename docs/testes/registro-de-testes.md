@@ -2647,19 +2647,17 @@ o `discount` da linha como resíduo, poluindo o significado de desconto nos rela
 > O teste de propriedade (varrendo quantidade × combinações de preço) foi o que revelou o limite dos
 > 4 casas decimais — o caso dos 105 pares não aparecia em nenhum exemplo escolhido à mão.
 
-**E2E no navegador (usuário)** — ⏭️ pendente (reteste após a correção PA.1). Roteiro:
+**E2E no navegador (usuário) — produção, 2026-07-20 — ✅ VALIDADO** (após a correção PA.1)
 
-| Caso | Esperado |
-|---|---|
-| Cadastrar/editar o parafuso apontando a bucha + preço do par R$0,70 | salva; o painel mostra "Vendido em par com… avulsos R$0,80" |
-| Abrir a **bucha** no cadastro | mostra o mesmo par, com aviso de que está cadastrado no parafuso |
-| PDV: buscar **parafuso** | aparecem os botões "+ Unidade · R$0,60" e "+ par c/ Bucha · R$0,70 (N disp.)" |
-| PDV: buscar **bucha** | o botão do par aparece **também** (simetria) |
-| Vender 1 par | carrinho mostra 1 linha "Parafuso + Bucha · R$0,70"; total R$0,70 |
-| **Vender 5 pares (regressão PA.1)** | total R$3,50 e **confirma sem erro de pagamento** |
-| Comprovante | **uma linha** "Parafuso nº10 + Bucha nº10 (par)" — sem preços rateados |
-| Estoque após a venda | **baixa 1 de cada** produto (dois `StockMovement`) |
-| **Cancelar** a venda do par | estorna 1 de cada produto |
-| Histórico + **Reimprimir** | também mostram uma linha só |
-| Zerar o estoque da bucha | o botão do par sai/desabilita; o parafuso continua vendendo avulso |
-| Tentar cadastrar o par invertido (na bucha, apontando o parafuso) | recusado com mensagem explicando que já vale dos dois lados |
+| Caso | Esperado | Resultado |
+|---|---|---|
+| Vender o par | baixa **1 de cada** produto (dois `StockMovement`) | ✅ |
+| **Cancelar** a venda do par | estorna **1 de cada** produto | ✅ |
+| Zerar o estoque da bucha | o par sai do PDV; o parafuso segue vendendo avulso | ✅ |
+| Cadastrar o par **invertido** (na bucha, apontando o parafuso) | recusado — o par já vale dos dois lados | ✅ |
+| **Vender 5 pares (regressão PA.1)** | total R$3,50 e confirma **sem erro de pagamento** | ✅ |
+
+> **Fatia PA CONCLUÍDA — ADR-015 fechado.** Os quatro casos validados são justamente os que o teste
+> automatizado não alcança: são a prova de que gravar o par como **dois `OrderItem`** faz o estoque, o
+> estorno e a trava dos dois lados funcionarem pelo motor que já existia — nenhuma linha nova de
+> estoque/cancelamento/devolução foi escrita nesta fatia. O 5º caso fecha o bug de arredondamento.

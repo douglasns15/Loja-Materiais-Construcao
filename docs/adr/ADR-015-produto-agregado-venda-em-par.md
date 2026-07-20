@@ -1,7 +1,9 @@
 # ADR-015 — Produto agregado: venda em par com preço promocional (parafuso + bucha)
 
-- **Status:** **Aceito — IMPLEMENTADO e NO AR (2026-07-20), aguardando o E2E do Owner.** Migration
-  `0011` aprovada e aplicada; API `95498aff` + web `bf20b770`. Core 103/103.
+- **Status:** **Aceito — IMPLEMENTADO, NO AR e VALIDADO (2026-07-20).** Migration `0011` aprovada e
+  aplicada; API `95498aff` + web `31a5e1d6` (inclui a correção PA.1 do arredondamento do par com
+  quantidade > 1). Core 108/108. E2E do Owner ✅ — inclusive a prova de que o par baixa e estorna
+  1 de cada produto pelo motor de estoque que já existia.
 - **Data:** 2026-07-20
 - **Contexto de fase:** Fase 3, fatia **PA** (produto agregado), logo após a fatia EP
   (visualizar/editar cadastro de produto + Fabricante).
@@ -162,7 +164,15 @@ par simplesmente deixa de existir e o produto principal segue vendendo normal. (
        `CachedProduct` estendido (par vendável offline).
 7. [x] **Gates:** core 103/103, typecheck API+web, build web (18 rotas). **Deploy:** API `95498aff` +
        web `bf20b770`; smoke ✅ (`/health` 200, `/orders` sem token 401).
-8. [ ] **E2E do Owner** — roteiro no registro de testes.
+8. [x] **E2E do Owner VALIDADO (2026-07-20):** par baixa 1 de cada; cancelamento estorna 1 de cada;
+       bucha zerada tira o par do PDV (parafuso segue avulso); par invertido recusado; 5 pares fecham
+       em R$3,50 sem erro de pagamento (regressão do PA.1).
+9. [x] **🐞 PA.1 (achado no E2E, corrigido no mesmo dia):** o servidor arredonda **cada linha** a 2
+       casas, então o rateio *por unidade* fazia 5 pares de R$0,70 custarem R$3,51 enquanto a tela
+       somava R$3,50. Corrigido com **`splitPairLine`** (rateio sobre o total da linha, ciente da
+       quantidade) e — a proteção real — fazendo o PDV **somar exatamente os itens que envia**, com a
+       mesma função do servidor. Limite aceito: com `Decimal(12,4)` o desvio pode chegar a 1 centavo
+       acima de ~100 pares, mas a tela sempre mostra o que será cobrado. Detalhe em PA.1 no registro.
 
 ## Decisões de implementação (registradas durante o desenvolvimento)
 
