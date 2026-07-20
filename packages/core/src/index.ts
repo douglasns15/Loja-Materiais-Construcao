@@ -280,6 +280,62 @@ export function splitPairPrice(main: PairSide, paired: PairSide, pairPrice: numb
   return { mainUnitPrice: Number((pairPrice - pairedUnitPrice).toFixed(4)), pairedUnitPrice };
 }
 
+/**
+ * Rateio do par **para uma linha de venda com quantidade N** — é este o que o PDV deve usar
+ * ao montar o pedido.
+ *
+ * `splitPairPrice` acerta o preço de **1** par, mas o servidor calcula o total de cada linha
+ * como `round(quantity × unitPrice, 2)` (`calcSaleItemTotal`), e os dois arredondamentos podem
+ * subir juntos: 5 pares de R$0,70 dariam 5×0,5250 = 2,625 → **2,63** e 5×0,1750 = 0,875 →
+ * **0,88**, somando **R$3,51** em vez de R$3,50 (bug encontrado no E2E de 2026-07-20).
+ *
+ * Aqui o rateio é feito sobre o **total da linha**: arredonda-se o lado principal a 2 casas e o
+ * outro recebe a diferença, de modo que os dois totais somem exatamente `pairPrice × quantity`.
+ * O resíduo do arredondamento do preço unitário a 4 casas (limite do schema) é reconferido
+ * refazendo a conta do servidor e jogado no lado mais caro, que o absorve melhor.
+ *
+ * **Limite conhecido (aceito):** o preço unitário tem 4 casas (`Decimal(12,4)`), então em
+ * quantidades altas cada passo de 0,0001 move o total da linha em mais de um centavo e pode não
+ * existir combinação que feche exato — ex.: 105 pares de R$0,70 fecham em R$73,51, um centavo
+ * acima. A diferença é **sempre ≤ R$0,01 por linha**, e o PDV calcula o total do carrinho com
+ * ESTES mesmos valores (via `cartToSaleItems`), então o que o operador vê é o que o servidor
+ * cobra — nunca há "pagamento insuficiente". Fechar sempre exato exigiria usar o `discount` da
+ * linha como resíduo, poluindo o significado de desconto nos relatórios; não compensa.
+ */
+export function splitPairLine(
+  main: PairSide,
+  paired: PairSide,
+  pairPrice: number,
+  quantity: number,
+): PairSplit {
+  const qty = quantity > 0 ? quantity : 1;
+  const round2 = (n: number) => Number(n.toFixed(2));
+  const round4 = (n: number) => Number(n.toFixed(4));
+
+  const pairTotal = round2(pairPrice * qty);
+  const sum = main.salePrice + paired.salePrice;
+  const share = sum > 0 ? main.salePrice / sum : 0.5;
+
+  const mainTotal = round2(pairTotal * share);
+  const pairedTotal = round2(pairTotal - mainTotal);
+  let mainUnitPrice = round4(mainTotal / qty);
+  let pairedUnitPrice = round4(pairedTotal / qty);
+
+  // Refaz a conta do servidor: se o arredondamento a 4 casas do unitário mudou o total da
+  // linha (acontece quando total ÷ qty é dízima), a diferença vai para o lado mais caro.
+  const effMain = round2(mainUnitPrice * qty);
+  const effPaired = round2(pairedUnitPrice * qty);
+  const diff = round2(pairTotal - (effMain + effPaired));
+  if (diff !== 0) {
+    if (main.salePrice >= paired.salePrice) {
+      mainUnitPrice = round4((effMain + diff) / qty);
+    } else {
+      pairedUnitPrice = round4((effPaired + diff) / qty);
+    }
+  }
+  return { mainUnitPrice, pairedUnitPrice };
+}
+
 /** Configuração do par num produto (subconjunto de `Product`, ADR-015). */
 export interface PairConfig {
   /** Id do produto agregado. `null`/ausente = produto sem par. */

@@ -17,8 +17,16 @@
 > proporção dízima —, `hasPair`, `pairAvailableQty`, `groupPairedItems`). API: `validatePair`
 > (auto-referência, agregado inexistente, par invertido duplicado). Web: par no cadastro/edição, botão
 > **"+ par c/ …"** no PDV com trava dos **dois** estoques, carrinho/comprovante/histórico/reimpressão em
-> linha única, par vendável offline. Gates: core 103/103, typecheck API+web, build (18 rotas). **NO AR:**
-> API `95498aff` + web `bf20b770`; smoke ✅. **Próximo passo:** E2E do usuário (roteiro no registro).
+> linha única, par vendável offline. **NO AR:** API `95498aff` + web `bf20b770`; smoke ✅.
+> **🐞 PA.1 corrigido (mesmo dia, achado no E2E do usuário):** 5 pares de R$0,70 davam "Pagamento
+> insuficiente: total 3.51, pago 3.50" — o servidor arredonda **cada linha** a 2 casas, e o rateio *por
+> unidade* fazia os dois arredondamentos subirem juntos (2,625→2,63 + 0,875→0,88), enquanto o front
+> somava a linha do par (0,70×5). Correção em 2 camadas: **`splitPairLine`** (rateio sobre o **total da
+> linha**, ciente da quantidade) e — o que mata a classe de bug — o PDV passa a **somar exatamente os
+> itens que envia** (`cartToSaleItems`), com a mesma função do servidor. Limite documentado: com
+> `Decimal(12,4)` o desvio pode chegar a **1 centavo** acima de ~100 pares, mas a tela sempre mostra o
+> que será cobrado. Core **+5 → 108/108** (teste de propriedade: exato de 1 a 100 pares, ≤1 centavo até
+> 600). Web `31a5e1d6`. **Próximo passo:** reteste do usuário (roteiro no registro).
 >
 > **Antes:** 2026-07-20 — **EP (visualizar/editar cadastro de produto + campo Fabricante) —
 > NO AR e VALIDADO pelo usuário.** Pedido do usuário. **Diagnóstico:** editar produto

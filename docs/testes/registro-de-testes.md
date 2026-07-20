@@ -2606,7 +2606,48 @@ nunca esconde item; aceita `Decimal` serializado como string).
 | `GET /orders` sem token (smoke) | ✅ 401 |
 | `npm run deploy` (web, OpenNext) | ✅ Version `bf20b770` |
 
-**E2E no navegador (usuário)** — ⏭️ pendente. Roteiro sugerido:
+#### 🐞 PA.1 — "Pagamento insuficiente: total 3.51, pago 3.50" (achado no E2E do usuário, corrigido)
+
+**Sintoma:** 5 pares de R$0,70 — a tela somava **R$3,50** (correto), mas ao confirmar o servidor
+recusava dizendo que o total era **R$3,51**.
+
+**Causa raiz:** o servidor calcula o total de **cada linha** como `round(quantity × unitPrice, 2)`
+(`calcSaleItemTotal`). O rateio era feito **por unidade** (parafuso R$0,5250 / bucha R$0,1750) e, com
+quantidade 5, os dois arredondamentos subiram juntos: 5×0,5250 = 2,625 → **2,63** e 5×0,1750 = 0,875 →
+**0,88** = **R$3,51**. O front, por sua vez, somava a linha do par como 0,70 × 5 = R$3,50. O par é
+**uma linha na tela e dois itens no envio** — e as duas contas divergiam.
+
+**Correção, em duas camadas:**
+
+1. **`splitPairLine` (nova, no core):** o rateio passa a ser feito sobre o **total da linha**, não por
+   unidade — arredonda um lado a 2 casas e o outro recebe a diferença, de modo que os totais somem
+   `pairPrice × quantity`. Os preços avulsos passam a ser guardados no `CartItem` (em vez do rateio
+   pronto), porque o rateio **depende da quantidade** e ela muda enquanto o operador monta o carrinho.
+2. **Proteção estrutural (o que impede a classe de bug):** o PDV passa a calcular o total do carrinho
+   sobre **exatamente os itens que serão enviados** (`cartToSaleItems()`, com os pares já expandidos),
+   usando a mesma função do servidor. Somando o que se envia, front e servidor não têm como discordar
+   — qualquer arredondamento futuro aparece igual dos dois lados.
+
+**Limite conhecido e aceito:** `unitPrice` é `Decimal(12,4)`, então em quantidades altas cada passo de
+0,0001 move o total em mais de um centavo e pode não existir combinação exata (ex.: **105 pares** de
+R$0,70 fecham em R$73,51). O desvio é **sempre ≤ R$0,01 por linha** e o operador **cobra exatamente o
+que a tela mostra** (camada 2), então não há mais recusa de pagamento. Fechar sempre exato exigiria usar
+o `discount` da linha como resíduo, poluindo o significado de desconto nos relatórios — não compensa.
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Core: 5 pares de R$0,70 (o caso relatado) | R$3,50 | ✅ |
+| Core: 1 par (não regride o caso simples) | R$0,70 | ✅ |
+| Core: **fecha exato de 1 a 100 pares** em 6 combinações de preço (incl. dízima e centavos) | desvio 0 | ✅ |
+| Core: 101 a 600 pares | desvio ≤ R$0,01 | ✅ |
+| Core (Vitest) — total | +5 | ✅ **108/108** |
+| Typecheck `apps/web` + build (18 rotas) | sem erros | ✅ |
+| `npm run deploy` (web; a API não mudou) | publicado | ✅ Version `31a5e1d6` |
+
+> O teste de propriedade (varrendo quantidade × combinações de preço) foi o que revelou o limite dos
+> 4 casas decimais — o caso dos 105 pares não aparecia em nenhum exemplo escolhido à mão.
+
+**E2E no navegador (usuário)** — ⏭️ pendente (reteste após a correção PA.1). Roteiro:
 
 | Caso | Esperado |
 |---|---|
@@ -2615,6 +2656,7 @@ nunca esconde item; aceita `Decimal` serializado como string).
 | PDV: buscar **parafuso** | aparecem os botões "+ Unidade · R$0,60" e "+ par c/ Bucha · R$0,70 (N disp.)" |
 | PDV: buscar **bucha** | o botão do par aparece **também** (simetria) |
 | Vender 1 par | carrinho mostra 1 linha "Parafuso + Bucha · R$0,70"; total R$0,70 |
+| **Vender 5 pares (regressão PA.1)** | total R$3,50 e **confirma sem erro de pagamento** |
 | Comprovante | **uma linha** "Parafuso nº10 + Bucha nº10 (par)" — sem preços rateados |
 | Estoque após a venda | **baixa 1 de cada** produto (dois `StockMovement`) |
 | **Cancelar** a venda do par | estorna 1 de cada produto |

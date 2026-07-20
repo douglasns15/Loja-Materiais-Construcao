@@ -29,6 +29,7 @@ import {
   toBaseQuantity,
   effectiveBaseUnitPrice,
   splitPairPrice,
+  splitPairLine,
   hasPair,
   pairAvailableQty,
   groupPairedItems,
@@ -430,6 +431,73 @@ describe('ADR-015 — venda em par', () => {
     it('par mais caro que a soma dos avulsos ainda fecha exato', () => {
       const { mainUnitPrice, pairedUnitPrice } = splitPairPrice(parafuso, bucha, 1.0);
       expect(mainUnitPrice + pairedUnitPrice).toBe(1.0);
+    });
+  });
+
+  describe('splitPairLine (rateio da LINHA — regressão do E2E 2026-07-20)', () => {
+    // O servidor calcula o total de cada linha como round(qty × unitPrice, 2). O rateio por
+    // unidade fazia os dois arredondamentos subirem juntos: 5×0,5250 = 2,625 → 2,63 e
+    // 5×0,1750 = 0,875 → 0,88, dando R$3,51 num carrinho que exibia R$3,50.
+    const lineTotal = (unitPrice: number, qty: number) => calcSaleItemTotal({ quantity: qty, unitPrice });
+
+    it('5 pares de R$0,70 somam exatamente R$3,50 (o bug relatado)', () => {
+      const { mainUnitPrice, pairedUnitPrice } = splitPairLine(parafuso, bucha, 0.7, 5);
+      expect(lineTotal(mainUnitPrice, 5) + lineTotal(pairedUnitPrice, 5)).toBe(3.5);
+    });
+
+    it('1 par continua batendo (não regride o caso simples)', () => {
+      const { mainUnitPrice, pairedUnitPrice } = splitPairLine(parafuso, bucha, 0.7, 1);
+      expect(lineTotal(mainUnitPrice, 1) + lineTotal(pairedUnitPrice, 1)).toBe(0.7);
+    });
+
+    const precos: [number, number, number][] = [
+      [0.6, 0.2, 0.7], // parafuso + bucha
+      [2, 1, 2.5], // proporção que gera dízima no rateio
+      [1, 1, 1.99], // ímpar dividido em dois
+      [33.33, 11.11, 40], // valores quebrados
+      [0.01, 0.02, 0.03], // centavos
+      [0, 0, 1], // ambos sem preço avulso (rateio meio a meio)
+    ];
+    /** Diferença (em R$) entre o total cobrado pelo servidor e `pairPrice × qty`. */
+    const desvio = (a: number, b: number, pair: number, qty: number) => {
+      const { mainUnitPrice, pairedUnitPrice } = splitPairLine(
+        { salePrice: a, stockQty: 999 },
+        { salePrice: b, stockQty: 999 },
+        pair,
+        qty,
+      );
+      const cobrado = lineTotal(mainUnitPrice, qty) + lineTotal(pairedUnitPrice, qty);
+      const d = Number((cobrado - pair * qty).toFixed(2));
+      return d === 0 ? 0 : d; // normaliza o -0 do JS (mesmo valor, outra representação)
+    };
+
+    it('fecha EXATO em toda quantidade de balcão (1 a 100 pares)', () => {
+      for (const [a, b, pair] of precos) {
+        for (let qty = 1; qty <= 100; qty++) {
+          expect(desvio(a, b, pair, qty), `par ${pair} × ${qty} (avulsos ${a}/${b})`).toBe(0);
+        }
+      }
+    });
+
+    /**
+     * Acima disso, o preço unitário de 4 casas (`Decimal(12,4)`) pode não ter combinação exata —
+     * cada passo de 0,0001 já move o total em mais de um centavo. O contrato é que o desvio
+     * **nunca passa de 1 centavo por linha** (e o PDV cobra exatamente o que exibe, porque usa
+     * estes mesmos valores para somar o carrinho).
+     */
+    it('em quantidades altas o desvio nunca passa de 1 centavo', () => {
+      for (const [a, b, pair] of precos) {
+        for (let qty = 101; qty <= 600; qty++) {
+          expect(Math.abs(desvio(a, b, pair, qty)), `par ${pair} × ${qty}`).toBeLessThanOrEqual(
+            0.01,
+          );
+        }
+      }
+    });
+
+    it('mantém a proporção do rateio (o lado caro leva a maior fatia)', () => {
+      const { mainUnitPrice, pairedUnitPrice } = splitPairLine(parafuso, bucha, 0.7, 4);
+      expect(mainUnitPrice).toBeGreaterThan(pairedUnitPrice);
     });
   });
 

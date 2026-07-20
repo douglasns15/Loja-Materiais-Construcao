@@ -19,7 +19,7 @@ import {
   pairAvailableQty,
   productMatchesQuery,
   resolveSaleUnit,
-  splitPairPrice,
+  splitPairLine,
 } from '@nexoloja/core';
 import { apiGet, apiPost } from '@/lib/api';
 import { cacheCashSession, readCachedCashSession } from '@/lib/cashSessionCache';
@@ -76,9 +76,14 @@ type CartItem = {
   pair?: {
     partnerId: string;
     partnerName: string;
-    /** Preços já rateados pelo core (`splitPairPrice`) — somados dão o preço do par. */
-    mainUnitPrice: number;
-    partnerUnitPrice: number;
+    /**
+     * Preços **avulsos** dos dois lados — a base do rateio. Guardamos os avulsos (e não o
+     * resultado do rateio) porque o rateio depende da QUANTIDADE da linha: é feito sobre o
+     * total (`splitPairLine`) na hora de montar o pedido, senão o arredondamento por linha
+     * do servidor faz 5 pares de R$0,70 custarem R$3,51.
+     */
+    mainSalePrice: number;
+    partnerSalePrice: number;
     partnerStockQty: number;
   };
 };
@@ -231,12 +236,20 @@ export default function VendaPage() {
   }
 
   const discountValue = Math.max(0, Number(discount) || 0);
+  /**
+   * Total do carrinho calculado sobre **exatamente os itens que serão enviados** (pares já
+   * expandidos em dois, com o preço rateado), usando a mesma função do servidor. Antes o total
+   * era somado sobre as linhas do carrinho, e o par — uma linha na tela, dois itens no envio —
+   * podia divergir do servidor por centavos ("Pagamento insuficiente: total 3.51, pago 3.50",
+   * achado no E2E de 2026-07-20). Somando o que se envia, front e servidor não têm como discordar.
+   */
   const totals = useMemo(
     () =>
       calcSaleTotals(
-        cart.map((i) => ({ quantity: i.quantity, unitPrice: i.unitPrice })),
+        cartToSaleItems().map((i) => ({ quantity: i.quantity, unitPrice: i.unitPrice })),
         { discountAmount: discountValue },
       ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [cart, discountValue],
   );
   const discountTooHigh = discountValue > totals.subtotal;
@@ -315,18 +328,26 @@ export default function VendaPage() {
         ];
       }
       group += 1;
+      // Rateio sobre o TOTAL da linha (não por unidade): o servidor arredonda cada linha a 2
+      // casas, então ratear por unidade fazia os dois arredondamentos subirem juntos.
+      const split = splitPairLine(
+        { salePrice: c.pair.mainSalePrice, stockQty: 0 },
+        { salePrice: c.pair.partnerSalePrice, stockQty: 0 },
+        c.unitPrice, // preço do par
+        c.quantity,
+      );
       return [
         {
           productId: c.productId,
           quantity: c.quantity,
-          unitPrice: c.pair.mainUnitPrice,
+          unitPrice: split.mainUnitPrice,
           saleMode: 'BASE' as SaleUnitMode,
           pairGroup: group,
         },
         {
           productId: c.pair.partnerId,
           quantity: c.quantity,
-          unitPrice: c.pair.partnerUnitPrice,
+          unitPrice: split.pairedUnitPrice,
           saleMode: 'BASE' as SaleUnitMode,
           pairGroup: group,
         },
@@ -427,7 +448,6 @@ export default function VendaPage() {
 
     const mainSide = { salePrice: Number(p.salePrice), stockQty: Number(p.stockQty) };
     const partnerSide = { salePrice: Number(partner.salePrice), stockQty: Number(partner.stockQty) };
-    const split = splitPairPrice(mainSide, partnerSide, pairPrice);
 
     const key = `${p.id}:PAIR:${partner.id}`;
     const existing = cart.find((c) => c.key === key);
@@ -467,8 +487,9 @@ export default function VendaPage() {
           pair: {
             partnerId: partner.id,
             partnerName: partner.name,
-            mainUnitPrice: split.mainUnitPrice,
-            partnerUnitPrice: split.pairedUnitPrice,
+            // Avulsos: o rateio é feito no envio, quando a quantidade final é conhecida.
+            mainSalePrice: mainSide.salePrice,
+            partnerSalePrice: partnerSide.salePrice,
             partnerStockQty: partnerSide.stockQty,
           },
         },
