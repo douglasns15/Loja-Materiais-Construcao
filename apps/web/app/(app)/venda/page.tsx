@@ -34,6 +34,8 @@ type Product = {
   id: string;
   name: string;
   popularName: string | null;
+  /** Fabricante/marca — também entra na busca do PDV (ex.: digitar "Votoran"). */
+  manufacturer: string | null;
   sku: string;
   salePrice: string;
   costPrice: string;
@@ -218,7 +220,7 @@ export default function VendaPage() {
   const discountTooHigh = discountValue > totals.subtotal;
   const change = method === 'CASH' && received ? Number(received) - totals.total : 0;
 
-  // Busca do PDV: filtra por nome, nome popular ou SKU (função pura de packages/core).
+  // Busca do PDV: filtra por nome, nome popular, fabricante ou SKU (função pura de packages/core).
   const filteredProducts = useMemo(
     () => products.filter((p) => productMatchesQuery(p, productSearch)),
     [products, productSearch],
@@ -692,7 +694,7 @@ export default function VendaPage() {
           <div className="flex basis-full gap-2">
             <input
               type="search"
-              placeholder="Buscar ou escanear (nome, nome popular ou SKU)…"
+              placeholder="Buscar ou escanear (nome, popular, fabricante ou SKU)…"
               value={productSearch}
               onChange={(e) => setProductSearch(e.target.value)}
               onKeyDown={onProductSearchKeyDown}
@@ -716,7 +718,7 @@ export default function VendaPage() {
         </div>
 
         {/* Lista de resultados (autocomplete do PDV): aparece conforme se digita/escaneia e mostra
-            os produtos que casam com a busca (nome, nome popular ou SKU). Clicar adiciona ao carrinho
+            os produtos que casam com a busca (nome, popular, fabricante ou SKU). Clicar adiciona ao carrinho
             com a quantidade informada — sem precisar abrir dropdown. Sem termo, lista o catálogo todo
             (rolável) para navegar. Estoque zerado fica desabilitado. */}
         <ul className="mt-3 max-h-64 divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-200">
@@ -765,6 +767,7 @@ export default function VendaPage() {
                       <span className="block truncate font-medium">{p.name}</span>
                       <span className="block truncate text-xs text-gray-400">
                         {p.popularName ? `${p.popularName} · ` : ''}
+                        {p.manufacturer ? `${p.manufacturer} · ` : ''}
                         {p.sku}
                       </span>
                     </span>

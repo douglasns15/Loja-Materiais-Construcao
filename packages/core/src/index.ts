@@ -237,6 +237,7 @@ export function effectiveBaseUnitPrice(p: AltUnitConfig, mode: SaleUnitMode): nu
 export interface ProductSearchFields {
   name: string;
   popularName?: string | null;
+  manufacturer?: string | null;
   sku: string;
 }
 
@@ -253,15 +254,20 @@ export function normalizeSearchText(text: string): string {
 }
 
 /**
- * `true` se o produto casa com a busca por **nome oficial, nome popular OU SKU**
- * (digitar qualquer um dos três encontra o produto). Match por substring, acento-
- * e caixa-insensível. Query vazia casa tudo (sem filtro). Função pura reusada no
- * cadastro (apps/web) e no PDV.
+ * `true` se o produto casa com a busca por **nome oficial, nome popular, fabricante
+ * OU SKU** (digitar qualquer um dos quatro encontra o produto). Match por substring,
+ * acento- e caixa-insensível. Query vazia casa tudo (sem filtro). Função pura reusada
+ * no cadastro (apps/web) e no PDV.
  */
 export function productMatchesQuery(product: ProductSearchFields, query: string): boolean {
   const q = normalizeSearchText(query);
   if (!q) return true; // sem termo digitado → não filtra nada
-  const fields = [product.name, product.popularName ?? '', product.sku];
+  const fields = [
+    product.name,
+    product.popularName ?? '',
+    product.manufacturer ?? '',
+    product.sku,
+  ];
   return fields.some((field) => normalizeSearchText(field).includes(q));
 }
 

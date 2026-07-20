@@ -1,0 +1,511 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { updateProductSchema, unitTypeLabels, type UnitType } from '@nexoloja/shared';
+import { apiPatch } from '@/lib/api';
+
+/**
+ * Painel de **visualizar / editar** o cadastro de um produto (fatia EP).
+ *
+ * Abre a partir da linha da tela de Produtos. Nasce em modo leitura (o operador
+ * quer conferir o que está cadastrado) e vira formulário no botão "Editar", no
+ * mesmo padrão do card "Dados da loja" em Configurações: "Salvar" só habilita
+ * quando há alteração real, e o PATCH leva **apenas os campos alterados**.
+ *
+ * **Estoque é somente leitura aqui de propósito (ADR-001):** o saldo é cache de
+ * `StockMovement` e só muda por movimentação (tela de Estoque). Editar o cadastro
+ * nunca mexe em `stockQty`.
+ */
+
+export type ProductFull = {
+  id: string;
+  sku: string;
+  name: string;
+  popularName: string | null;
+  manufacturer: string | null;
+  description: string | null;
+  unit: UnitType;
+  costPrice: string;
+  salePrice: string;
+  stockQty: string;
+  minStockQty: string;
+  weightKg: string | null;
+  altUnit: UnitType | null;
+  conversionFactor: string | null;
+  altSalePrice: string | null;
+  marginPercent: number;
+  createdByName: string | null;
+  createdAt: string;
+  updatedByName: string | null;
+  updatedAt: string;
+};
+
+const BRL = (v: string | number) =>
+  Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+const QTY = (v: string | number) =>
+  Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 4 });
+
+/** Autoria (ADR-010): "<nome> · <data>", ou "—" quando não há registro (dados antigos). */
+const byLine = (name: string | null, iso?: string) =>
+  name ? `${name}${iso ? ` · ${new Date(iso).toLocaleDateString('pt-BR')}` : ''}` : '—';
+
+/** Campos do formulário — tudo string, como o usuário digita. */
+type FormState = {
+  name: string;
+  popularName: string;
+  manufacturer: string;
+  sku: string;
+  description: string;
+  unit: UnitType;
+  costPrice: string;
+  salePrice: string;
+  minStockQty: string;
+  weight: string;
+  weightUnit: 'kg' | 'g';
+  altUnit: UnitType | '';
+  conversionFactor: string;
+  altSalePrice: string;
+};
+
+/**
+ * Produto (como vem da API) → estado do formulário. O peso volta sempre em **kg**
+ * (forma canônica do banco); o operador troca para gramas se preferir.
+ */
+function toForm(p: ProductFull): FormState {
+  return {
+    name: p.name,
+    popularName: p.popularName ?? '',
+    manufacturer: p.manufacturer ?? '',
+    sku: p.sku,
+    description: p.description ?? '',
+    unit: p.unit,
+    costPrice: String(Number(p.costPrice)),
+    salePrice: String(Number(p.salePrice)),
+    minStockQty: String(Number(p.minStockQty)),
+    weight: p.weightKg === null ? '' : String(Number(p.weightKg)),
+    weightUnit: 'kg',
+    altUnit: p.altUnit ?? '',
+    conversionFactor: p.conversionFactor === null ? '' : String(Number(p.conversionFactor)),
+    altSalePrice: p.altSalePrice === null ? '' : String(Number(p.altSalePrice)),
+  };
+}
+
+/** Texto digitado → valor a enviar: vazio vira `null` (limpa a coluna), ADR do update. */
+const textOrNull = (v: string) => (v.trim() === '' ? null : v.trim());
+/** Número digitado → valor a enviar: vazio/zero vira `null`; senão o número. */
+const numOrNull = (v: string) => {
+  const n = Number(v);
+  return v.trim() === '' || !Number.isFinite(n) || n <= 0 ? null : n;
+};
+
+/**
+ * Monta o payload do PATCH com **só o que mudou** (compara com o produto original).
+ * Assim uma edição de preço não reescreve descrição/fabricante à toa, e o
+ * `updatedByName` (ADR-010) reflete uma alteração de verdade.
+ */
+function buildPatch(original: ProductFull, f: FormState): Record<string, unknown> {
+  const patch: Record<string, unknown> = {};
+
+  const weightRaw = Number(f.weight);
+  const weightKg =
+    f.weight.trim() === '' || !Number.isFinite(weightRaw) || weightRaw <= 0
+      ? null
+      : f.weightUnit === 'g'
+        ? weightRaw / 1000
+        : weightRaw;
+
+  const next = {
+    name: f.name.trim(),
+    sku: f.sku.trim(),
+    popularName: textOrNull(f.popularName),
+    manufacturer: textOrNull(f.manufacturer),
+    description: textOrNull(f.description),
+    unit: f.unit,
+    costPrice: Number(f.costPrice),
+    salePrice: Number(f.salePrice),
+    minStockQty: Number(f.minStockQty || 0),
+    weightKg,
+    altUnit: f.altUnit === '' ? null : f.altUnit,
+    conversionFactor: numOrNull(f.conversionFactor),
+    altSalePrice: numOrNull(f.altSalePrice),
+  };
+
+  const current = {
+    name: original.name,
+    sku: original.sku,
+    popularName: original.popularName,
+    manufacturer: original.manufacturer,
+    description: original.description,
+    unit: original.unit,
+    costPrice: Number(original.costPrice),
+    salePrice: Number(original.salePrice),
+    minStockQty: Number(original.minStockQty),
+    weightKg: original.weightKg === null ? null : Number(original.weightKg),
+    altUnit: original.altUnit,
+    conversionFactor:
+      original.conversionFactor === null ? null : Number(original.conversionFactor),
+    altSalePrice: original.altSalePrice === null ? null : Number(original.altSalePrice),
+  };
+
+  for (const key of Object.keys(next) as (keyof typeof next)[]) {
+    if (next[key] !== current[key]) patch[key] = next[key];
+  }
+  return patch;
+}
+
+export function ProductDetail({
+  product,
+  onClose,
+  onSaved,
+}: {
+  product: ProductFull;
+  onClose: () => void;
+  /** Chamado após um PATCH bem-sucedido, para a lista recarregar. */
+  onSaved: () => Promise<void> | void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState<FormState>(() => toForm(product));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Trocar de produto (clicar outra linha com o painel aberto) recomeça em leitura.
+  useEffect(() => {
+    setForm(toForm(product));
+    setEditing(false);
+    setError(null);
+  }, [product]);
+
+  // Esc fecha o painel (atalho de teclado no desktop, CLAUDE.md → menos cliques).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const patch = editing ? buildPatch(product, form) : {};
+  const changed = Object.keys(patch).length > 0;
+
+  async function onSave() {
+    setError(null);
+    if (!form.name.trim() || !form.sku.trim()) {
+      setError('Nome e SKU são obrigatórios.');
+      return;
+    }
+    const parsed = updateProductSchema.safeParse(patch);
+    if (!parsed.success) {
+      setError('Confira os campos: há valor inválido no formulário.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await apiPatch(`/products/${product.id}`, parsed.data);
+      await onSaved();
+      setEditing(false);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const inputCls = 'w-full rounded-lg border border-gray-300 px-3 py-2';
+  const labelCls = 'text-xs font-medium text-gray-500';
+
+  /** Linha de leitura: rótulo + valor (ou "—" quando vazio). */
+  const Row = ({ label, value }: { label: string; value: React.ReactNode }) => (
+    <div>
+      <dt className={labelCls}>{label}</dt>
+      <dd className="text-sm text-gray-900">{value || <span className="text-gray-400">—</span>}</dd>
+    </div>
+  );
+
+  return (
+    <div
+      className="fixed inset-0 z-40 flex items-end justify-center bg-black/30 p-0 sm:items-center sm:p-4"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-label={`Cadastro de ${product.name}`}
+        onClick={(e) => e.stopPropagation()}
+        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-2xl"
+      >
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="truncate text-lg font-bold">{product.name}</h2>
+            <p className="truncate text-xs text-gray-500">
+              {product.sku}
+              {product.manufacturer ? ` · ${product.manufacturer}` : ''}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="shrink-0 rounded-lg px-2 py-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+            aria-label="Fechar"
+          >
+            ✕
+          </button>
+        </div>
+
+        {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+
+        {!editing ? (
+          <>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
+              <Row label="Nome" value={product.name} />
+              <Row label="Nome popular" value={product.popularName} />
+              <Row label="Fabricante" value={product.manufacturer} />
+              <Row label="SKU / código de barras" value={product.sku} />
+              <Row label="Unidade de venda" value={unitTypeLabels[product.unit]} />
+              <Row
+                label="Peso"
+                value={product.weightKg === null ? null : `${QTY(product.weightKg)} kg`}
+              />
+              <Row label="Custo" value={BRL(product.costPrice)} />
+              <Row label="Venda" value={BRL(product.salePrice)} />
+              <Row label="Margem" value={`${product.marginPercent}%`} />
+              <Row
+                label="Estoque atual"
+                value={`${QTY(product.stockQty)} ${unitTypeLabels[product.unit]}`}
+              />
+              <Row label="Estoque mínimo" value={QTY(product.minStockQty)} />
+              <Row
+                label="Embalagem fechada"
+                value={
+                  product.altUnit && product.altSalePrice && product.conversionFactor
+                    ? `${unitTypeLabels[product.altUnit]} · ${QTY(product.conversionFactor)} por embalagem · ${BRL(product.altSalePrice)}`
+                    : null
+                }
+              />
+              <div className="col-span-2 sm:col-span-3">
+                <dt className={labelCls}>Descrição / observação</dt>
+                <dd className="whitespace-pre-wrap text-sm text-gray-900">
+                  {product.description || <span className="text-gray-400">—</span>}
+                </dd>
+              </div>
+            </dl>
+
+            {/* Autoria (ADR-010) — quem cadastrou e quem alterou por último. */}
+            <div className="mt-4 grid grid-cols-2 gap-4 border-t border-gray-100 pt-3 text-xs text-gray-500">
+              <div>Cadastrado por {byLine(product.createdByName, product.createdAt)}</div>
+              <div>Última alteração {byLine(product.updatedByName, product.updatedAt)}</div>
+            </div>
+
+            <p className="mt-3 text-xs text-gray-400">
+              O estoque não se edita pelo cadastro — o saldo só muda por movimentação, na tela
+              de Estoque (ADR-001).
+            </p>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Fechar
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+              >
+                Editar
+              </button>
+            </div>
+          </>
+        ) : (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void onSave();
+            }}
+            className="grid grid-cols-1 gap-3 sm:grid-cols-6"
+          >
+            <label className="sm:col-span-3">
+              <span className={labelCls}>Nome</span>
+              <input
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                className={inputCls}
+              />
+            </label>
+            <label className="sm:col-span-3">
+              <span className={labelCls}>Nome popular</span>
+              <input
+                value={form.popularName}
+                onChange={(e) => setForm({ ...form, popularName: e.target.value })}
+                className={inputCls}
+              />
+            </label>
+            <label className="sm:col-span-3">
+              <span className={labelCls}>Fabricante</span>
+              <input
+                value={form.manufacturer}
+                onChange={(e) => setForm({ ...form, manufacturer: e.target.value })}
+                maxLength={120}
+                placeholder="Ex.: Votorantim, Tigre"
+                className={inputCls}
+              />
+            </label>
+            <label className="sm:col-span-3">
+              <span className={labelCls}>SKU / código de barras</span>
+              <input
+                value={form.sku}
+                onChange={(e) => setForm({ ...form, sku: e.target.value })}
+                className={inputCls}
+              />
+            </label>
+            <label className="sm:col-span-2">
+              <span className={labelCls}>Custo</span>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={form.costPrice}
+                onChange={(e) => setForm({ ...form, costPrice: e.target.value })}
+                className={inputCls}
+              />
+            </label>
+            <label className="sm:col-span-2">
+              <span className={labelCls}>Venda</span>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={form.salePrice}
+                onChange={(e) => setForm({ ...form, salePrice: e.target.value })}
+                className={inputCls}
+              />
+            </label>
+            <label className="sm:col-span-2">
+              <span className={labelCls}>Estoque mínimo</span>
+              <input
+                type="number"
+                step="1"
+                min="0"
+                value={form.minStockQty}
+                onChange={(e) => setForm({ ...form, minStockQty: e.target.value })}
+                className={inputCls}
+              />
+            </label>
+            <label className="sm:col-span-3">
+              <span className={labelCls}>Unidade de venda</span>
+              <select
+                value={form.unit}
+                onChange={(e) => setForm({ ...form, unit: e.target.value as UnitType })}
+                className={`${inputCls} bg-white`}
+              >
+                {(Object.keys(unitTypeLabels) as UnitType[]).map((u) => (
+                  <option key={u} value={u}>
+                    {unitTypeLabels[u]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="sm:col-span-3">
+              <span className={labelCls}>Peso (vazio = sem peso)</span>
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  value={form.weight}
+                  onChange={(e) => setForm({ ...form, weight: e.target.value })}
+                  className={inputCls}
+                />
+                <select
+                  value={form.weightUnit}
+                  onChange={(e) =>
+                    setForm({ ...form, weightUnit: e.target.value as 'kg' | 'g' })
+                  }
+                  className="rounded-lg border border-gray-300 bg-white px-2 py-2"
+                  aria-label="Unidade do peso"
+                >
+                  <option value="kg">kg</option>
+                  <option value="g">g</option>
+                </select>
+              </div>
+            </div>
+            <label className="sm:col-span-6">
+              <span className={labelCls}>Descrição / observação</span>
+              <textarea
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+                maxLength={500}
+                rows={2}
+                className={`${inputCls} resize-y`}
+              />
+            </label>
+
+            {/* Venda em unidade alternativa (EF-3, ADR-013). Limpar a unidade desfaz a embalagem. */}
+            <fieldset className="rounded-xl border border-dashed border-gray-300 p-3 sm:col-span-6">
+              <legend className="px-1 text-xs font-medium text-gray-500">
+                Venda em unidade alternativa (opcional)
+              </legend>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <select
+                  value={form.altUnit}
+                  onChange={(e) =>
+                    setForm({ ...form, altUnit: e.target.value as UnitType | '' })
+                  }
+                  className={`${inputCls} bg-white`}
+                  aria-label="Unidade da embalagem alternativa"
+                >
+                  <option value="">— sem embalagem alternativa —</option>
+                  {(Object.keys(unitTypeLabels) as UnitType[]).map((u) => (
+                    <option key={u} value={u}>
+                      {unitTypeLabels[u]}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  placeholder={`Tamanho (${unitTypeLabels[form.unit]} por embalagem)`}
+                  type="number"
+                  step="any"
+                  min="0"
+                  value={form.conversionFactor}
+                  onChange={(e) => setForm({ ...form, conversionFactor: e.target.value })}
+                  className={inputCls}
+                />
+                <input
+                  placeholder="Preço da embalagem fechada"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={form.altSalePrice}
+                  onChange={(e) => setForm({ ...form, altSalePrice: e.target.value })}
+                  className={inputCls}
+                />
+              </div>
+            </fieldset>
+
+            <div className="flex justify-end gap-2 sm:col-span-6">
+              <button
+                type="button"
+                onClick={() => {
+                  setForm(toForm(product));
+                  setEditing(false);
+                  setError(null);
+                }}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Descartar
+              </button>
+              <button
+                type="submit"
+                disabled={!changed || saving}
+                className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-40"
+              >
+                {saving ? 'Salvando…' : 'Salvar alterações'}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}

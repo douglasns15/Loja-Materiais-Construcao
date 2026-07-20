@@ -384,7 +384,12 @@ describe('normalizeSearchText', () => {
 });
 
 describe('productMatchesQuery', () => {
-  const p = { name: 'Vergalhão CA-50 8mm', popularName: 'Ferro 8', sku: 'FE8' };
+  const p = {
+    name: 'Vergalhão CA-50 8mm',
+    popularName: 'Ferro 8',
+    manufacturer: 'Gerdau',
+    sku: 'FE8',
+  };
 
   it('casa pelo nome oficial (acento/caixa-insensível)', () => {
     expect(productMatchesQuery(p, 'vergalhao')).toBe(true);
@@ -400,6 +405,11 @@ describe('productMatchesQuery', () => {
     expect(productMatchesQuery(p, 'fe8')).toBe(true);
   });
 
+  it('casa pelo fabricante (busca por marca acha os produtos dela)', () => {
+    expect(productMatchesQuery(p, 'gerdau')).toBe(true);
+    expect(productMatchesQuery(p, 'GERD')).toBe(true);
+  });
+
   it('query vazia casa tudo (sem filtro)', () => {
     expect(productMatchesQuery(p, '')).toBe(true);
     expect(productMatchesQuery(p, '   ')).toBe(true);
@@ -409,10 +419,21 @@ describe('productMatchesQuery', () => {
     expect(productMatchesQuery(p, 'cimento')).toBe(false);
   });
 
-  it('funciona com popularName ausente (null)', () => {
-    const semPopular = { name: 'Cimento CP-II 50kg', popularName: null, sku: 'CIM50' };
+  it('funciona com popularName/manufacturer ausentes (null)', () => {
+    const semPopular = {
+      name: 'Cimento CP-II 50kg',
+      popularName: null,
+      manufacturer: null,
+      sku: 'CIM50',
+    };
     expect(productMatchesQuery(semPopular, 'cimento')).toBe(true);
     expect(productMatchesQuery(semPopular, 'ferro')).toBe(false);
+  });
+
+  it('funciona com os campos opcionais omitidos (produto antigo)', () => {
+    const minimo = { name: 'Areia média', sku: 'AR-M' };
+    expect(productMatchesQuery(minimo, 'areia')).toBe(true);
+    expect(productMatchesQuery(minimo, 'gerdau')).toBe(false);
   });
 });
 

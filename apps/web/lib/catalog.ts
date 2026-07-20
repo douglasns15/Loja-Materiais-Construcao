@@ -24,6 +24,8 @@ export interface CachedProduct {
   name: string;
   /** Nome popular/regional — mantido no cache p/ o operador localizar o produto offline. */
   popularName: string | null;
+  /** Fabricante/marca — também é campo de busca, então acompanha o espelho offline. */
+  manufacturer: string | null;
   sku: string;
   salePrice: string;
   costPrice: string;
@@ -54,6 +56,7 @@ export async function cacheProducts(products: CachedProduct[]): Promise<void> {
         id: p.id,
         name: p.name,
         popularName: p.popularName ?? null,
+        manufacturer: p.manufacturer ?? null,
         sku: p.sku,
         salePrice: p.salePrice,
         costPrice: p.costPrice,

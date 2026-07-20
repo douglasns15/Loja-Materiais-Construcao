@@ -7,20 +7,14 @@ import { apiGet, apiPatch, apiPost } from '@/lib/api';
 import { useOnline } from '@/lib/useOnline';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { BarcodeScanButton } from '@/components/BarcodeScanButton';
+import { ProductDetail, type ProductFull } from '@/components/ProductDetail';
 
-type Product = {
-  id: string;
-  sku: string;
-  name: string;
-  popularName: string | null;
-  costPrice: string;
-  salePrice: string;
-  stockQty: string;
-  minStockQty: string;
-  marginPercent: number;
-  updatedByName: string | null;
-  updatedAt: string;
-};
+/**
+ * A lista usa o cadastro **completo** (`ProductFull`) porque a linha abre o painel de
+ * visualizar/editar — assim o painel não precisa de um `GET /products/:id` extra
+ * (cost-zero: uma requisição a menos por clique).
+ */
+type Product = ProductFull;
 
 /** Autoria (ADR-010): "por <nome> · <data>", ou "—" quando não há registro (dados antigos). */
 const byLine = (name: string | null, iso?: string) =>
@@ -39,6 +33,7 @@ export default function ProductsPage() {
   const [form, setForm] = useState({
     name: '',
     popularName: '',
+    manufacturer: '',
     sku: '',
     description: '',
     unit: 'UNIT' as UnitType,
@@ -56,9 +51,14 @@ export default function ProductsPage() {
   });
   const [saving, setSaving] = useState(false);
 
-  // Busca local: filtra por nome, nome popular ou SKU (função pura de packages/core).
+  // Busca local: nome, nome popular, fabricante ou SKU (função pura de packages/core).
   const [search, setSearch] = useState('');
   const filtered = products.filter((p) => productMatchesQuery(p, search));
+
+  // Produto aberto no painel de visualizar/editar (null = painel fechado).
+  const [detailId, setDetailId] = useState<string | null>(null);
+  // Lê da lista (e não de um estado próprio) para o painel refletir o recarregamento pós-save.
+  const detail = products.find((p) => p.id === detailId) ?? null;
 
   // Enter-scan (leitor físico): destaca a linha do produto encontrado por alguns segundos.
   const [highlightId, setHighlightId] = useState<string | null>(null);
@@ -103,6 +103,8 @@ export default function ProductsPage() {
       name: form.name,
       // Nome popular é opcional: string vazia vira undefined (não envia coluna vazia).
       popularName: form.popularName.trim() || undefined,
+      // Fabricante/marca — opcional; também entra na busca (nome/popular/fabricante/SKU).
+      manufacturer: form.manufacturer.trim() || undefined,
       sku: form.sku,
       description: form.description.trim() || undefined,
       unit: form.unit,
@@ -128,6 +130,7 @@ export default function ProductsPage() {
       setForm({
         name: '',
         popularName: '',
+        manufacturer: '',
         sku: '',
         description: '',
         unit: 'UNIT',
@@ -235,7 +238,15 @@ export default function ProductsPage() {
           title="Nome popular/regional pelo qual o produto também é buscado no PDV. Ex.: 'Ferro 8' para 'Vergalhão CA-50 8mm'."
           className="rounded-lg border border-gray-300 px-3 py-2 sm:col-span-2"
         />
-        <div className="flex gap-2">
+        <input
+          placeholder="Fabricante (opcional)"
+          value={form.manufacturer}
+          onChange={(e) => setForm({ ...form, manufacturer: e.target.value })}
+          maxLength={120}
+          title="Fabricante/marca do produto (ex.: Votorantim, Tigre). Também é usado na busca."
+          className="rounded-lg border border-gray-300 px-3 py-2 sm:col-span-2"
+        />
+        <div className="flex gap-2 sm:col-span-2">
           <input
             placeholder="SKU / código de barras"
             value={form.sku}
@@ -388,7 +399,7 @@ export default function ProductsPage() {
       <div className="mb-3 flex gap-2 sm:max-w-md">
         <input
           type="search"
-          placeholder="Buscar ou escanear (nome, nome popular ou SKU)…"
+          placeholder="Buscar ou escanear (nome, popular, fabricante ou SKU)…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           onKeyDown={onSearchKeyDown}
@@ -403,18 +414,20 @@ export default function ProductsPage() {
           <thead className="bg-gray-100 text-left text-gray-600">
             <tr>
               <th className="px-4 py-2">Nome</th>
+              <th className="px-4 py-2">Fabricante</th>
               <th className="px-4 py-2">SKU</th>
               <th className="px-4 py-2 text-right">Custo</th>
               <th className="px-4 py-2 text-right">Venda</th>
               <th className="px-4 py-2 text-right">Margem</th>
               <th className="px-4 py-2">Última alteração</th>
               <th className="px-4 py-2 text-right">Estoque mín.</th>
+              <th className="px-4 py-2 text-right">Cadastro</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={9} className="px-4 py-6 text-center text-gray-400">
                   {search
                     ? 'Nenhum produto encontrado para a busca.'
                     : 'Nenhum produto cadastrado.'}
@@ -435,11 +448,20 @@ export default function ProductsPage() {
                     }`}
                   >
                     <td className="px-4 py-2">
-                      {p.name}
+                      {/* Nome clicável: abre o cadastro completo (visualizar/editar). */}
+                      <button
+                        type="button"
+                        onClick={() => setDetailId(p.id)}
+                        className="text-left font-medium text-gray-900 hover:text-blue-700 hover:underline"
+                        title="Ver / editar o cadastro deste produto"
+                      >
+                        {p.name}
+                      </button>
                       {p.popularName && (
                         <span className="block text-xs text-gray-400">{p.popularName}</span>
                       )}
                     </td>
+                    <td className="px-4 py-2 text-gray-500">{p.manufacturer ?? '—'}</td>
                     <td className="px-4 py-2 text-gray-500">{p.sku}</td>
                     <td className="px-4 py-2 text-right">{BRL(p.costPrice)}</td>
                     <td className="px-4 py-2 text-right">{BRL(p.salePrice)}</td>
@@ -470,6 +492,15 @@ export default function ProductsPage() {
                         </button>
                       </div>
                     </td>
+                    <td className="px-4 py-2 text-right">
+                      <button
+                        type="button"
+                        onClick={() => setDetailId(p.id)}
+                        className="rounded border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                      >
+                        Ver / editar
+                      </button>
+                    </td>
                   </tr>
                 );
               })
@@ -478,9 +509,19 @@ export default function ProductsPage() {
         </table>
       </div>
       <p className="mt-3 text-xs text-gray-400">
-        Estoque mínimo é o ponto de reposição — quando o saldo fica igual ou abaixo dele
-        (e maior que zero), o produto aparece como “baixo” na tela de Estoque.
+        Clique no nome do produto para ver o cadastro completo e editar. Estoque mínimo é o
+        ponto de reposição — quando o saldo fica igual ou abaixo dele (e maior que zero), o
+        produto aparece como “baixo” na tela de Estoque.
       </p>
+
+      {/* Painel de visualizar/editar o cadastro (fatia EP). */}
+      {detail && (
+        <ProductDetail
+          product={detail}
+          onClose={() => setDetailId(null)}
+          onSaved={load}
+        />
+      )}
     </div>
   );
 }

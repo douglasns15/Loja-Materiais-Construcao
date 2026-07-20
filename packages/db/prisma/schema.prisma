@@ -206,6 +206,9 @@ model Product {
   /// Nome popular/regional do produto — usado para busca no PDV além do nome oficial.
   /// Genérico p/ qualquer ramo. Ex.: "Ferro 8" p/ "Vergalhão CA-50 8mm"; "Dipirona" p/ "Dipirona Sódica 500mg".
   popularName     String?   @db.VarChar(150)
+  /// Fabricante/marca do produto (ex.: "Votorantim", "Tigre"). Genérico p/ qualquer ramo.
+  /// Também entra na busca (nome, nome popular, SKU e fabricante) — daí o índice abaixo.
+  manufacturer    String?   @db.VarChar(120)
   description     String?   @db.VarChar(500)
   imageUrl        String?   @db.VarChar(500)  // URL no Cloudflare R2 — nunca BLOB
   unit            UnitType  @default(UNIT)
@@ -248,6 +251,7 @@ model Product {
   @@unique([tenantId, sku])
   @@index([tenantId, name])
   @@index([tenantId, popularName])
+  @@index([tenantId, manufacturer])
   @@map("products")
 }
 

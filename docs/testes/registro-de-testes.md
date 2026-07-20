@@ -2480,3 +2480,79 @@ selo verde poderia mentir; o app já sinaliza o lado ruim via avisos offline + c
 > Mata o furo que o próprio usuário apontou: em vez de mentir "Online" quando alguém acessa de outro lugar,
 > mostra **quando** foi a última operação real — de qualquer dispositivo, de qualquer lugar. Commit `2f0f14b`
 > (diff limpo 79/6 após corrigir flip de EOL CRLF→LF introduzido pelos edits no Windows).
+
+### EP — Visualizar/editar cadastro de produto + campo Fabricante (2026-07-20)
+
+Pedido do usuário: **conseguir ver o cadastro de um produto já cadastrado ao pesquisá-lo, editar seus
+dados, e ter um campo "Fabricante"**.
+
+**Diagnóstico de impacto (antes de codar):** a **API já estava pronta** para edição — `PATCH /products/:id`
+aceita todos os campos do cadastro (`updateProductSchema` = `createProductSchema` sem `initialStock`,
+`.partial()`), já grava autoria (ADR-010) e já estava no ar desde a Fase 2; `GET /products/:id` idem. A
+lacuna era **só de UI**: a tela de Produtos só editava `minStockQty` inline. Portanto edição = zero impacto
+de backend. O **Fabricante**, sim, exigiu migration (coluna nova) — aprovada pelo usuário (regra 1 do
+CLAUDE.md) junto com a decisão de que ele **entra na busca**.
+
+**Migration `0010_product_manufacturer`** — coluna `manufacturer VARCHAR(120)` nullable em `products` +
+índice `products_tenantId_manufacturer_idx` (mesmo padrão do `popularName`/0007). **Aditiva e
+backward-compatible** (produtos atuais ficam NULL = comportamento inalterado); **sem alteração de RLS** —
+as políticas de linha da 0002 já cobrem colunas novas.
+
+**Core:** `productMatchesQuery` passa a casar por **nome, nome popular, fabricante OU SKU** (era três
+campos); `ProductSearchFields` ganhou `manufacturer?: string | null` — opcional, então produtos antigos e
+chamadores que não passam o campo seguem funcionando. **+2 testes → 84/84.**
+
+**Shared:** `manufacturer` no `createProductSchema` (≤120). O `updateProductSchema` deixou de ser um
+`.partial()` puro e passou a aceitar **`null`** nos campos opcionais (`popularName`, `manufacturer`,
+`description`, `categoryId`, `weightKg`, `conversionFactor`, `altUnit`, `altSalePrice`): **ausente = não
+mexe; `null` = limpar a coluna**. Sem isso não haveria como *apagar* um fabricante/descrição já gravado nem
+desfazer a embalagem alternativa (EF-3) de um produto — a edição só saberia preencher, nunca limpar.
+
+**Web:** novo `components/ProductDetail.tsx` — painel que abre pelo **nome do produto** (ou botão
+"Ver / editar") na tela de Produtos. Nasce em **leitura** (cadastro completo: nome, popular, fabricante,
+SKU, unidade, peso, custo/venda/margem, estoque atual e mínimo, embalagem fechada, descrição + autoria
+ADR-010 "cadastrado por" / "última alteração") e vira **formulário** no botão Editar, no padrão do card
+"Dados da loja" (Salvar/Descartar; **Salvar só habilita com alteração real**). O PATCH leva **apenas os
+campos alterados** (`buildPatch` compara com o original), então editar o preço não reescreve a descrição
+nem falseia o `updatedByName`. **Estoque é read-only no painel de propósito (ADR-001)** — saldo é cache de
+`StockMovement` e só muda por movimentação, na tela de Estoque. `Esc` fecha o painel. A lista já carrega o
+cadastro completo, então abrir o painel **não gasta uma requisição extra** (cost-zero). Campo Fabricante
+também no formulário de cadastro, nova coluna na tabela e no espelho offline (`CachedProduct`) + linha
+secundária e placeholder de busca do PDV.
+
+**Build / typecheck / core (local)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| `prisma migrate deploy` (0010) | aplicada no Supabase | ✅ |
+| `prisma migrate diff --exit-code` (pós-migration) | sem drift | ✅ "No difference detected" |
+| Core (Vitest) — `productMatchesQuery` por fabricante + campos omitidos | +2 | ✅ 84/84 |
+| Typecheck `apps/api` (`tsc --noEmit`, após `prisma generate`) | sem erros | ✅ |
+| Typecheck `apps/web` (`tsc --noEmit`) | sem erros | ✅ |
+| Build de produção (`next build`) | `/products` regenerada | ✅ 18 rotas (`/products` 7.41 kB) |
+
+> ⚠️ **O deploy da API é obrigatório nesta fatia** — mesmo sem mudança de rota. O Worker publicado carrega
+> o `@nexoloja/shared` e o Prisma Client **antigos**: o Zod **descarta** campo desconhecido e o client velho
+> não lê a coluna nova, então sem redeploy o `manufacturer` **nem salva nem retorna** (foi exatamente o que
+> aconteceu com o `popularName` em 2026-07-14).
+
+**Deploy + smoke (produção) — 2026-07-20**
+
+| Passo | Resultado |
+|---|---|
+| `wrangler deploy` (API — Zod/Prisma novos, com `manufacturer`) | ✅ Version `539b629b` |
+| `GET /health` (smoke) | ✅ `{ok:true, service:"nexoloja-api"}` |
+| `GET /products` sem token (smoke) | ✅ 401 (auth intacta) |
+| `npm run deploy` (web, OpenNext) | ✅ Version `fbb08eb5` (18 rotas) |
+
+**E2E no navegador (usuário)** — ⏭️ pendente. Roteiro sugerido:
+
+| Caso | Esperado |
+|---|---|
+| Cadastrar produto com **Fabricante** preenchido | salva e aparece na coluna Fabricante |
+| Buscar pelo **fabricante** (só a marca) | acha o produto |
+| Clicar no nome do produto | abre o cadastro completo em leitura (+ autoria) |
+| **Editar** → alterar preço → Salvar | persiste; "Salvar" fica desabilitado sem alteração |
+| **Editar** → apagar o Fabricante → Salvar | campo volta a "—" (o `null` limpa a coluna) |
+| Estoque no painel | somente leitura (não editável) |
+| Produto antigo (sem fabricante) | abre e edita normalmente |

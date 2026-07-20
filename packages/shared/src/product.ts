@@ -41,6 +41,9 @@ export const createProductSchema = z.object({
   /// Nome popular/regional do produto — usado na busca do PDV além do nome oficial.
   /// Opcional e genérico p/ qualquer ramo (ex.: "Ferro 8", "Dipirona").
   popularName: z.string().max(150).optional(),
+  /// Fabricante/marca do produto (ex.: "Votorantim", "Tigre"). Opcional e genérico
+  /// p/ qualquer ramo; também entra na busca, junto com nome, nome popular e SKU.
+  manufacturer: z.string().max(120).optional(),
   description: z.string().max(500).optional(),
   categoryId: z.string().uuid().optional(),
   unit: unitTypeSchema.default('UNIT'),
@@ -68,7 +71,25 @@ export const createProductSchema = z.object({
 });
 export type CreateProductInput = z.infer<typeof createProductSchema>;
 
-/// Payload para atualizar — todos os campos opcionais. `initialStock` é só de criação
-/// (mudar estoque é sempre via movimentação, nunca por edição do cadastro — ADR-001).
-export const updateProductSchema = createProductSchema.omit({ initialStock: true }).partial();
+/**
+ * Payload para atualizar — todos os campos opcionais. `initialStock` é só de criação
+ * (mudar estoque é sempre via movimentação, nunca por edição do cadastro — ADR-001).
+ *
+ * Os campos opcionais aceitam `null` além de ausente: **ausente = não mexe**, `null` =
+ * **limpar a coluna**. Sem isso não haveria como apagar um fabricante/descrição já
+ * gravado, nem desfazer a embalagem alternativa (EF-3) de um produto.
+ */
+export const updateProductSchema = createProductSchema
+  .omit({ initialStock: true })
+  .partial()
+  .extend({
+    popularName: z.string().max(150).nullable().optional(),
+    manufacturer: z.string().max(120).nullable().optional(),
+    description: z.string().max(500).nullable().optional(),
+    categoryId: z.string().uuid().nullable().optional(),
+    weightKg: z.number().positive().nullable().optional(),
+    conversionFactor: z.number().positive().nullable().optional(),
+    altUnit: unitTypeSchema.nullable().optional(),
+    altSalePrice: z.number().positive().nullable().optional(),
+  });
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;

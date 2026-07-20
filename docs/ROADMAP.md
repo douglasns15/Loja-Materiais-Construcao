@@ -3,7 +3,24 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-17 — **"Última atividade da loja" no painel do Super Usuário — NO AR e
+> **Última atualização:** 2026-07-20 — **EP (visualizar/editar cadastro de produto + campo Fabricante) —
+> NO AR, falta o E2E do usuário.** Pedido do usuário. **Diagnóstico:** editar produto
+> tinha **impacto ZERO de backend** — `PATCH /products/:id` já aceitava todos os campos, com autoria (ADR-010),
+> desde a Fase 2; a lacuna era só de UI (a tela só editava `minStockQty` inline). **Migration `0010`
+> APLICADA** (aprovada pelo usuário): `products.manufacturer VARCHAR(120)` nullable + índice
+> `[tenantId, manufacturer]` — aditiva, sem alteração de RLS, sem drift. Core: `productMatchesQuery` agora casa
+> por **nome, popular, fabricante ou SKU** (**+2 → 84/84**). Shared: `manufacturer` no create; o
+> `updateProductSchema` passou a aceitar **`null`** nos opcionais (**ausente = não mexe; `null` = limpar**) —
+> sem isso a edição só sabia preencher, nunca apagar. Web: novo `components/ProductDetail.tsx` — clicar no nome
+> do produto abre o **cadastro completo em leitura** (todos os campos + autoria) e o botão **Editar** vira
+> formulário (Salvar/Descartar, Salvar só habilita com alteração real, **PATCH só dos campos alterados**);
+> **estoque read-only ali de propósito** (ADR-001 — saldo só muda por movimentação). Fabricante também no
+> cadastro, na tabela, no PDV e no espelho offline. Gates: typecheck API+web ✅, build web (18 rotas) ✅, core
+> **84/84** ✅. ⚠️ **Deploy da API era obrigatório** mesmo sem rota nova (Zod/Prisma antigos descartariam o campo —
+> igual ao `popularName` em 14/07) — feito. **NO AR:** API `539b629b` + web `fbb08eb5`; smoke ✅.
+> **Próximo passo:** E2E do usuário no navegador (roteiro no registro de testes).
+>
+> **Antes:** 2026-07-17 — **"Última atividade da loja" no painel do Super Usuário — NO AR e
 > VALIDADO.** Ideia do usuário ("mostrar se a loja está online?") virou um sinal **honesto**: não existe
 > "online/offline por loja" (online/offline é do dispositivo/sessão, não do tenant; a API é única na edge), então
 > mostramos **quando foi a última operação real** — responde de verdade "está sendo usada?". **Cost-zero, sem
