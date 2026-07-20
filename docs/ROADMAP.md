@@ -4,7 +4,7 @@
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
 > **Última atualização:** 2026-07-20 — **EP (visualizar/editar cadastro de produto + campo Fabricante) —
-> NO AR, falta o E2E do usuário.** Pedido do usuário. **Diagnóstico:** editar produto
+> NO AR e VALIDADO pelo usuário.** Pedido do usuário. **Diagnóstico:** editar produto
 > tinha **impacto ZERO de backend** — `PATCH /products/:id` já aceitava todos os campos, com autoria (ADR-010),
 > desde a Fase 2; a lacuna era só de UI (a tela só editava `minStockQty` inline). **Migration `0010`
 > APLICADA** (aprovada pelo usuário): `products.manufacturer VARCHAR(120)` nullable + índice
@@ -18,7 +18,10 @@
 > cadastro, na tabela, no PDV e no espelho offline. Gates: typecheck API+web ✅, build web (18 rotas) ✅, core
 > **84/84** ✅. ⚠️ **Deploy da API era obrigatório** mesmo sem rota nova (Zod/Prisma antigos descartariam o campo —
 > igual ao `popularName` em 14/07) — feito. **NO AR:** API `539b629b` + web `fbb08eb5`; smoke ✅.
-> **Próximo passo:** E2E do usuário no navegador (roteiro no registro de testes).
+> **E2E do usuário validado 7/7** (cadastrar com fabricante, buscar pela marca, abrir o cadastro, editar
+> preço, **apagar o fabricante** — o `null` limpa a coluna —, estoque read-only, produto antigo edita
+> normal). Commit `23f975b`. **Fatia EP CONCLUÍDA.** **Próximo passo:** direções abertas — go-live
+> (Supabase Pro/CORS/SMTP, ver `docs/plano-producao.md`), nova funcionalidade, ou endurecimento.
 >
 > **Antes:** 2026-07-17 — **"Última atividade da loja" no painel do Super Usuário — NO AR e
 > VALIDADO.** Ideia do usuário ("mostrar se a loja está online?") virou um sinal **honesto**: não existe

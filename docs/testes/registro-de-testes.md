@@ -2545,14 +2545,18 @@ secundária e placeholder de busca do PDV.
 | `GET /products` sem token (smoke) | ✅ 401 (auth intacta) |
 | `npm run deploy` (web, OpenNext) | ✅ Version `fbb08eb5` (18 rotas) |
 
-**E2E no navegador (usuário)** — ⏭️ pendente. Roteiro sugerido:
+**E2E no navegador (usuário) — produção, 2026-07-20 — ✅ VALIDADO**
 
-| Caso | Esperado |
-|---|---|
-| Cadastrar produto com **Fabricante** preenchido | salva e aparece na coluna Fabricante |
-| Buscar pelo **fabricante** (só a marca) | acha o produto |
-| Clicar no nome do produto | abre o cadastro completo em leitura (+ autoria) |
-| **Editar** → alterar preço → Salvar | persiste; "Salvar" fica desabilitado sem alteração |
-| **Editar** → apagar o Fabricante → Salvar | campo volta a "—" (o `null` limpa a coluna) |
-| Estoque no painel | somente leitura (não editável) |
-| Produto antigo (sem fabricante) | abre e edita normalmente |
+| Caso | Esperado | Resultado |
+|---|---|---|
+| Cadastrar produto com **Fabricante** preenchido | salva e aparece na coluna Fabricante | ✅ |
+| Buscar pelo **fabricante** (só a marca) | acha o produto | ✅ |
+| Clicar no nome do produto | abre o cadastro completo em leitura (+ autoria) | ✅ |
+| **Editar** → alterar preço → Salvar | persiste; "Salvar" desabilitado sem alteração | ✅ |
+| **Editar** → apagar o Fabricante → Salvar | campo volta a "—" (o `null` limpa a coluna) | ✅ |
+| Estoque no painel | somente leitura (não editável) | ✅ |
+| Produto antigo (sem fabricante) | abre e edita normalmente | ✅ |
+
+> **Fatia EP CONCLUÍDA** — visualizar/editar cadastro de produto + Fabricante no ar e validados ponta a
+> ponta. Confirma na prática os dois caminhos que não tinham cobertura automatizada: o `null` do
+> `updateProductSchema` limpando coluna, e a coluna nullable convivendo com produtos anteriores à 0010.
