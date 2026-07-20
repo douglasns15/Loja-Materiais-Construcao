@@ -15,8 +15,11 @@ import {
   calcMarginPercent,
   calcSaleTotals,
   hasAltUnit,
+  hasPair,
+  pairAvailableQty,
   productMatchesQuery,
   resolveSaleUnit,
+  splitPairPrice,
 } from '@nexoloja/core';
 import { apiGet, apiPost } from '@/lib/api';
 import { cacheCashSession, readCachedCashSession } from '@/lib/cashSessionCache';
@@ -45,6 +48,9 @@ type Product = {
   altUnit: UnitType | null;
   altSalePrice: string | null;
   conversionFactor: string | null;
+  // Produto agregado — venda em par (ADR-015). Nulos ⇒ produto sem par.
+  pairedProductId: string | null;
+  pairPrice: string | null;
 };
 type CartItem = {
   /** Chave única da linha = `productId:saleMode` (o mesmo produto pode ir como metro E como rolo). */
@@ -61,6 +67,20 @@ type CartItem = {
   unitType: UnitType;
   baseUnitType: UnitType;
   conversionFactor: number;
+  /**
+   * Venda em par (ADR-015). Presente ⇒ esta linha é **um par**: no carrinho e no comprovante
+   * aparece como UMA linha ("Parafuso + Bucha nº10") com `unitPrice` = preço do par, mas na
+   * hora de enviar é **expandida em dois itens** com os preços rateados e o mesmo `pairGroup`
+   * (é o que mantém estoque, cancelamento e devolução funcionando item a item).
+   */
+  pair?: {
+    partnerId: string;
+    partnerName: string;
+    /** Preços já rateados pelo core (`splitPairPrice`) — somados dão o preço do par. */
+    mainUnitPrice: number;
+    partnerUnitPrice: number;
+    partnerStockQty: number;
+  };
 };
 
 /** Rótulo curto de uma unidade (sem o parêntese): "Metro (m)" → "Metro"; "Rolo" → "Rolo". */
@@ -93,8 +113,10 @@ function Summary({ items, total, discount }: { items: CartItem[]; total: number;
           <li key={i.key} className="flex justify-between py-1">
             <span>
               {i.quantity}
-              {i.saleMode === 'ALT' ? ` ${unitShort(i.unitType)}` : '×'} {i.name}
-              {i.saleMode === 'ALT' && (
+              {i.pair ? ` par${i.quantity > 1 ? 'es' : ''} ` : ''}
+              {!i.pair && (i.saleMode === 'ALT' ? ` ${unitShort(i.unitType)} ` : '× ')}
+              {i.name}
+              {i.saleMode === 'ALT' && !i.pair && (
                 <span className="text-gray-400">
                   {' '}
                   (≈ {i.quantity * i.conversionFactor} {unitShort(i.baseUnitType)})
@@ -236,9 +258,91 @@ export default function VendaPage() {
     };
   }
 
+  /**
+   * Resolve o par de um produto (ADR-015). O par vale dos **dois lados**: ou o produto aponta
+   * para o agregado (`pairedProductId`), ou outro produto aponta para ele. Devolve o parceiro e
+   * o preço do par, ou `null` se não há par vendável (sem cadastro, ou o parceiro sumiu do
+   * catálogo por soft-delete). O par é sempre na unidade-base — não se combina com embalagem (EF-3).
+   */
+  function resolvePair(p: Product): { partner: Product; pairPrice: number } | null {
+    if (hasPair({ pairedProductId: p.pairedProductId, pairPrice: Number(p.pairPrice) })) {
+      const partner = products.find((x) => x.id === p.pairedProductId);
+      if (partner) return { partner, pairPrice: Number(p.pairPrice) };
+    }
+    // Lado reverso: quem aponta para este produto (cadastrado no outro, vale igual).
+    const owner = products.find(
+      (x) =>
+        x.pairedProductId === p.id &&
+        hasPair({ pairedProductId: x.pairedProductId, pairPrice: Number(x.pairPrice) }),
+    );
+    return owner ? { partner: owner, pairPrice: Number(owner.pairPrice) } : null;
+  }
+
+  /**
+   * Quanto do estoque (em unidade-base) de um produto já está comprometido pelo carrinho,
+   * ignorando a linha `exceptKey`. Conta as três formas de o produto aparecer: linha avulsa
+   * (com o fator da embalagem), lado principal de um par e lado agregado de um par — cada par
+   * consome 1 de cada lado. Sem isso, misturar avulso e par estouraria o estoque real.
+   */
+  function baseUsedByProduct(productId: string, exceptKey?: string): number {
+    return cart
+      .filter((c) => c.key !== exceptKey)
+      .reduce((acc, c) => {
+        if (c.pair) {
+          const consumes = c.productId === productId || c.pair.partnerId === productId;
+          return acc + (consumes ? c.quantity : 0);
+        }
+        return acc + (c.productId === productId ? c.quantity * c.conversionFactor : 0);
+      }, 0);
+  }
+
+  /**
+   * Expande o carrinho no formato do payload da venda. **Cada par vira DOIS itens** com os
+   * preços já rateados e o mesmo `pairGroup` (numerado por venda) — o servidor grava dois
+   * `OrderItem`, então estoque, cancelamento e devolução seguem funcionando item a item.
+   */
+  function cartToSaleItems() {
+    let group = 0;
+    return cart.flatMap((c) => {
+      if (!c.pair) {
+        return [
+          {
+            productId: c.productId,
+            quantity: c.quantity,
+            unitPrice: c.unitPrice,
+            saleMode: c.saleMode, // EF-3: o servidor converte a baixa p/ unidade-base
+          },
+        ];
+      }
+      group += 1;
+      return [
+        {
+          productId: c.productId,
+          quantity: c.quantity,
+          unitPrice: c.pair.mainUnitPrice,
+          saleMode: 'BASE' as SaleUnitMode,
+          pairGroup: group,
+        },
+        {
+          productId: c.pair.partnerId,
+          quantity: c.quantity,
+          unitPrice: c.pair.partnerUnitPrice,
+          saleMode: 'BASE' as SaleUnitMode,
+          pairGroup: group,
+        },
+      ];
+    });
+  }
+
   /** Tooltip por item: margem de lucro e desconto máximo possível (até o custo). No modo embalagem
    *  (EF-3), a margem usa o preço efetivo POR UNIDADE-BASE (preço do rolo ÷ fator), comparável ao custo. */
   function itemTooltip(i: CartItem): string {
+    // Par (ADR-015): preço e custo da linha já são a soma dos dois lados, então a margem
+    // do par sai direto (é a margem do conjunto, que é o que interessa ao operador).
+    if (i.pair) {
+      const margin = calcMarginPercent(i.costPrice, i.unitPrice);
+      return `Par: ${i.name} • Margem do par: ${margin}%`;
+    }
     const effUnit = i.conversionFactor > 0 ? i.unitPrice / i.conversionFactor : i.unitPrice;
     const margin = calcMarginPercent(i.costPrice, effUnit);
     const maxDisc = Math.max(0, Number((i.unitPrice - i.costPrice * i.conversionFactor).toFixed(2)));
@@ -267,11 +371,10 @@ export default function VendaPage() {
     const key = `${p.id}:${effMode}`;
     const existing = cart.find((c) => c.key === key);
     const newQty = (existing?.quantity ?? 0) + q;
-    // Trava de estoque em UNIDADE-BASE: soma a base já consumida por OUTRAS linhas do mesmo produto
-    // (ex.: já tem uma linha em metro ao adicionar um rolo) + a base desta linha (EF-3).
-    const otherBase = cart
-      .filter((c) => c.productId === p.id && c.key !== key)
-      .reduce((acc, c) => acc + c.quantity * c.conversionFactor, 0);
+    // Trava de estoque em UNIDADE-BASE: soma a base já consumida por OUTRAS linhas do mesmo
+    // produto — inclusive as linhas de PAR, que também consomem este produto (ADR-015) — mais
+    // a base desta linha (EF-3).
+    const otherBase = baseUsedByProduct(p.id, key);
     if (otherBase + newQty * factorToBase > stock) {
       setError(`Estoque insuficiente para "${p.name}" (disponível: ${stock}).`);
       return;
@@ -299,6 +402,80 @@ export default function VendaPage() {
     setSelected('');
     setQty('1');
     // Limpa a busca para o próximo item/leitura de código começar do zero.
+    setProductSearch('');
+  }
+
+  /**
+   * Adiciona o **par** ao carrinho (ADR-015): uma linha só, com o preço do par, que na hora de
+   * enviar vira dois itens. O preço de cada lado sai do rateio puro do core (`splitPairPrice`),
+   * e a trava exige estoque **dos dois** produtos — o par consome 1 de cada.
+   */
+  function addPairToCart(productId: string = selected) {
+    setError(null);
+    const p = products.find((x) => x.id === productId);
+    const q = Number(qty);
+    if (!p || !(q > 0)) {
+      setError('Selecione um produto e uma quantidade válida.');
+      return;
+    }
+    const resolved = resolvePair(p);
+    if (!resolved) {
+      setError('Este produto não tem par cadastrado.');
+      return;
+    }
+    const { partner, pairPrice } = resolved;
+
+    const mainSide = { salePrice: Number(p.salePrice), stockQty: Number(p.stockQty) };
+    const partnerSide = { salePrice: Number(partner.salePrice), stockQty: Number(partner.stockQty) };
+    const split = splitPairPrice(mainSide, partnerSide, pairPrice);
+
+    const key = `${p.id}:PAIR:${partner.id}`;
+    const existing = cart.find((c) => c.key === key);
+    const newQty = (existing?.quantity ?? 0) + q;
+
+    // O par consome 1 de CADA lado: checa os dois estoques, já descontando o que o carrinho
+    // consumiu por outras linhas (avulsas ou de outro par).
+    const maxPairs = pairAvailableQty(mainSide, partnerSide);
+    const usedMain = baseUsedByProduct(p.id, key);
+    const usedPartner = baseUsedByProduct(partner.id, key);
+    if (newQty + usedMain > mainSide.stockQty || newQty + usedPartner > partnerSide.stockQty) {
+      setError(
+        `Estoque insuficiente para o par (disponível: ${Math.max(0, maxPairs - Math.max(usedMain, usedPartner))} par(es)).`,
+      );
+      return;
+    }
+
+    if (existing) {
+      setCart(cart.map((c) => (c.key === key ? { ...c, quantity: newQty } : c)));
+    } else {
+      setCart([
+        ...cart,
+        {
+          key,
+          productId: p.id,
+          name: `${p.name} + ${partner.name}`,
+          // A linha carrega o preço do PAR; o rateio fica guardado em `pair` para o envio.
+          unitPrice: pairPrice,
+          // Custo do par = soma dos custos, p/ a margem da linha sair correta.
+          costPrice: Number(p.costPrice) + Number(partner.costPrice),
+          quantity: q,
+          stockQty: maxPairs,
+          saleMode: 'BASE',
+          unitType: p.unit,
+          baseUnitType: p.unit,
+          conversionFactor: 1,
+          pair: {
+            partnerId: partner.id,
+            partnerName: partner.name,
+            mainUnitPrice: split.mainUnitPrice,
+            partnerUnitPrice: split.pairedUnitPrice,
+            partnerStockQty: partnerSide.stockQty,
+          },
+        },
+      ]);
+    }
+    setSelected('');
+    setQty('1');
     setProductSearch('');
   }
 
@@ -377,12 +554,8 @@ export default function VendaPage() {
       const sale = {
         id,
         cashSessionId: sessionId,
-        items: cart.map((c) => ({
-          productId: c.productId,
-          quantity: c.quantity,
-          unitPrice: c.unitPrice,
-          saleMode: c.saleMode, // EF-3: o servidor converte a baixa p/ unidade-base
-        })),
+        // Pares viram dois itens com preço rateado + `pairGroup` (ADR-015).
+        items: cartToSaleItems(),
         payments: [{ method, amount: totals.total }],
         ...(discountValue > 0 ? { discountAmount: discountValue } : {}),
       };
@@ -398,9 +571,9 @@ export default function VendaPage() {
         // trava de estoque coerente para as próximas vendas offline. O débito real é no sync (§3).
         const next = products.map((p) => {
           // EF-3: soma a baixa em UNIDADE-BASE de todas as linhas do produto (metro + rolo).
-          const baseSold = cart
-            .filter((c) => c.productId === p.id)
-            .reduce((acc, c) => acc + c.quantity * c.conversionFactor, 0);
+          // ADR-015: `baseUsedByProduct` já conta os PARES, que debitam 1 de cada lado —
+          // inclusive quando este produto é o agregado, e não o principal da linha.
+          const baseSold = baseUsedByProduct(p.id);
           return baseSold > 0 ? { ...p, stockQty: String(Number(p.stockQty) - baseSold) } : p;
         });
         setProducts(next);
@@ -420,12 +593,8 @@ export default function VendaPage() {
 
     // --- Online: grava direto na API (caminho de sempre) ---
     const payload = {
-      items: cart.map((c) => ({
-        productId: c.productId,
-        quantity: c.quantity,
-        unitPrice: c.unitPrice,
-        saleMode: c.saleMode, // EF-3
-      })),
+      // Pares viram dois itens com preço rateado + `pairGroup` (ADR-015).
+      items: cartToSaleItems(),
       payments: [{ method, amount: totals.total }],
       ...(discountValue > 0 ? { discountAmount: discountValue } : {}),
     };
@@ -633,8 +802,11 @@ export default function VendaPage() {
           store={store}
           items={view.items.map((i) => ({
             // EF-3: no comprovante, o nome carrega a embalagem vendida ("Fio — Rolo (100 m)").
-            name:
-              i.saleMode === 'ALT'
+            // ADR-015: o par já é UMA linha ("Parafuso + Bucha"), com o preço do par — o cliente
+            // não vê preços rateados, que mudariam se ele comprasse os itens separados.
+            name: i.pair
+              ? `${i.name} (par)`
+              : i.saleMode === 'ALT'
                 ? `${i.name} — ${unitShort(i.unitType)} (${i.conversionFactor} ${unitShort(i.baseUnitType)})`
                 : i.name,
             quantity: i.quantity,
@@ -731,8 +903,10 @@ export default function VendaPage() {
               const stock = Number(p.stockQty);
               const out = !(stock > 0);
               const alt = hasAltUnit(altConfig(p));
-              // Produto de unidade única: clicar na linha adiciona (fluxo de sempre, bom p/ scan).
-              if (!alt) {
+              // ADR-015: par vendável (dos dois lados) e com estoque nos DOIS produtos.
+              const pairInfo = resolvePair(p);
+              // Produto de unidade única e sem par: clicar na linha adiciona (bom p/ scan).
+              if (!alt && !pairInfo) {
                 return (
                   <li key={p.id}>
                     <button
@@ -758,8 +932,18 @@ export default function VendaPage() {
                   </li>
                 );
               }
-              // EF-3: produto com embalagem alternativa → dois botões (unidade-base × embalagem fechada).
+              // EF-3 / ADR-015: produto com embalagem alternativa e/ou par → botões de escolha
+              // (unidade-base × embalagem fechada × par).
               const factor = Number(p.conversionFactor);
+              const pairsLeft = pairInfo
+                ? pairAvailableQty(
+                    { salePrice: Number(p.salePrice), stockQty: stock },
+                    {
+                      salePrice: Number(pairInfo.partner.salePrice),
+                      stockQty: Number(pairInfo.partner.stockQty),
+                    },
+                  )
+                : 0;
               return (
                 <li key={p.id} className="px-3 py-2">
                   <div className="flex items-center justify-between gap-3">
@@ -784,15 +968,38 @@ export default function VendaPage() {
                     >
                       + {unitShort(p.unit)} · {BRL(p.salePrice)}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => addToCart(p.id, 'ALT')}
-                      disabled={out}
-                      title={`1 ${unitShort(p.altUnit as UnitType)} = ${factor} ${unitShort(p.unit)}`}
-                      className="rounded-lg border border-indigo-300 bg-indigo-50 px-2 py-1 text-xs text-indigo-700 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      + {unitShort(p.altUnit as UnitType)} ({factor} {unitShort(p.unit)}) · {BRL(p.altSalePrice as string)}
-                    </button>
+                    {alt && (
+                      <button
+                        type="button"
+                        onClick={() => addToCart(p.id, 'ALT')}
+                        disabled={out}
+                        title={`1 ${unitShort(p.altUnit as UnitType)} = ${factor} ${unitShort(p.unit)}`}
+                        className="rounded-lg border border-indigo-300 bg-indigo-50 px-2 py-1 text-xs text-indigo-700 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        + {unitShort(p.altUnit as UnitType)} ({factor} {unitShort(p.unit)}) · {BRL(p.altSalePrice as string)}
+                      </button>
+                    )}
+                    {/* Par (ADR-015): exige estoque dos DOIS produtos. */}
+                    {pairInfo && (
+                      <button
+                        type="button"
+                        onClick={() => addPairToCart(p.id)}
+                        disabled={pairsLeft <= 0}
+                        title={
+                          pairsLeft > 0
+                            ? `Par com ${pairInfo.partner.name} · avulsos ${BRL(
+                                Number(p.salePrice) + Number(pairInfo.partner.salePrice),
+                              )}`
+                            : `Sem estoque de "${pairInfo.partner.name}" para formar o par`
+                        }
+                        className="rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        + par c/ {pairInfo.partner.name} · {BRL(pairInfo.pairPrice)}
+                        {pairsLeft > 0 && (
+                          <span className="ml-1 text-emerald-500">({pairsLeft} disp.)</span>
+                        )}
+                      </button>
+                    )}
                   </div>
                 </li>
               );
@@ -826,15 +1033,22 @@ export default function VendaPage() {
                     <span title={itemTooltip(i)} className="cursor-help border-b border-dotted border-gray-300">
                       {i.name}
                     </span>
-                    {i.saleMode === 'ALT' && (
+                    {i.saleMode === 'ALT' && !i.pair && (
                       <span className="block text-xs text-gray-400">
                         embalagem fechada · ≈ {i.quantity * i.conversionFactor} {unitShort(i.baseUnitType)}
+                      </span>
+                    )}
+                    {/* Par (ADR-015): mostra que a linha baixa os dois produtos. */}
+                    {i.pair && (
+                      <span className="block text-xs text-emerald-600">
+                        par · baixa 1 de cada produto
                       </span>
                     )}
                   </td>
                   <td className="px-4 py-2 text-right">
                     {i.quantity}
-                    {i.saleMode === 'ALT' ? ` ${unitShort(i.unitType)}` : ''}
+                    {i.pair ? ` par${i.quantity > 1 ? 'es' : ''}` : ''}
+                    {i.saleMode === 'ALT' && !i.pair ? ` ${unitShort(i.unitType)}` : ''}
                   </td>
                   <td className="px-4 py-2 text-right">{BRL(i.unitPrice)}</td>
                   <td className="px-4 py-2 text-right">{BRL(i.unitPrice * i.quantity)}</td>

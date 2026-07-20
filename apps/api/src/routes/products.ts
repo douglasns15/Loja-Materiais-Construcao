@@ -13,6 +13,35 @@ function withMargin<T extends { costPrice: unknown; salePrice: unknown }>(p: T) 
   };
 }
 
+/**
+ * Guardas do par (ADR-015). Devolve a mensagem de erro, ou `null` se está tudo certo.
+ *
+ * - **Auto-referência:** um produto não pode ser o próprio par.
+ * - **Agregado precisa existir no tenant** (e não estar soft-deleted).
+ * - **Par invertido:** se a bucha já aponta para o parafuso, cadastrar o inverso criaria
+ *   DOIS preços para o mesmo par. O par é gravado de um lado só e lido dos dois.
+ */
+async function validatePair(
+  prisma: ReturnType<typeof createPrismaClient>,
+  tenantId: string,
+  productId: string | null,
+  pairedProductId: string | null | undefined,
+): Promise<string | null> {
+  if (!pairedProductId) return null;
+  if (productId && pairedProductId === productId) {
+    return 'Um produto não pode ser agregado a si mesmo.';
+  }
+  const paired = await prisma.product.findFirst({
+    where: { id: pairedProductId, tenantId, deletedAt: null },
+    select: { id: true, pairedProductId: true, name: true },
+  });
+  if (!paired) return 'Produto agregado não encontrado.';
+  if (paired.pairedProductId && paired.pairedProductId === productId) {
+    return `"${paired.name}" já tem este produto como agregado. O par vale para os dois lados — não precisa cadastrar de novo.`;
+  }
+  return null;
+}
+
 const products = new Hono<Env>();
 
 // Todas as rotas de produtos exigem autenticação (JWT do Supabase).
@@ -96,6 +125,9 @@ products.post('/', async (c) => {
     const userName = c.get('userName');
     // `initialStock` NÃO é coluna do produto — é convenição de cadastro (ver abaixo). Separa.
     const { initialStock, ...productData } = parsed.data;
+    // Par (ADR-015): valida antes de criar (produto novo ainda não tem id p/ auto-referência).
+    const pairError = await validatePair(prisma, tenantId, null, productData.pairedProductId);
+    if (pairError) return c.json({ ok: false, error: pairError }, 400);
     const authorship = {
       createdById: userId,
       createdByName: userName,
@@ -170,6 +202,11 @@ products.patch('/:id', async (c) => {
   try {
     const prisma = createPrismaClient(connectionString);
     const id = c.req.param('id');
+    // Par (ADR-015): mesmas guardas da criação, agora com o id para pegar auto-referência.
+    if (parsed.data.pairedProductId !== undefined) {
+      const pairError = await validatePair(prisma, tenantId, id, parsed.data.pairedProductId);
+      if (pairError) return c.json({ ok: false, error: pairError }, 400);
+    }
     // updateMany garante o escopo do tenant (proteção antes do RLS da Fase 2).
     const result = await prisma.product.updateMany({
       where: { id, tenantId, deletedAt: null },

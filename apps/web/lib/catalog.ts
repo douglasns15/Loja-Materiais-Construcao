@@ -36,6 +36,10 @@ export interface CachedProduct {
   altUnit: UnitType | null;
   altSalePrice: string | null;
   conversionFactor: string | null;
+  // Par (ADR-015) — no cache p/ o PDV oferecer "avulso × par" offline (o par é resolvido
+  // dos dois lados dentro do próprio catálogo espelhado, sem precisar da rede).
+  pairedProductId: string | null;
+  pairPrice: string | null;
 }
 
 /**
@@ -65,6 +69,8 @@ export async function cacheProducts(products: CachedProduct[]): Promise<void> {
         altUnit: p.altUnit ?? null,
         altSalePrice: p.altSalePrice ?? null,
         conversionFactor: p.conversionFactor ?? null,
+        pairedProductId: p.pairedProductId ?? null,
+        pairPrice: p.pairPrice ?? null,
       });
     }
     await txDone(tx);

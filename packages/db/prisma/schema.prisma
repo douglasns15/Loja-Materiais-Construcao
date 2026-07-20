@@ -224,6 +224,12 @@ model Product {
   /// unidade-base, então NÃO é `salePrice × conversionFactor`. Vazio ⇒ produto de uma unidade só.
   altUnit         UnitType?                     // Unidade da embalagem fechada (ex.: ROLL)
   altSalePrice    Decimal?  @db.Decimal(12, 4)  // Preço de 1 embalagem fechada
+  /// Produto agregado (ADR-015): o par "parafuso + bucha". Os dois seguem sendo produtos
+  /// independentes (preço e estoque próprios); juntos, saem por `pairPrice` — o preço TOTAL
+  /// do par, NÃO por item. Grava-se só de UM lado; o outro é resolvido por consulta reversa
+  /// (`pairedBy`), então é impossível os dois lados divergirem de preço. Vazio ⇒ sem par.
+  pairedProductId String?   @db.Uuid
+  pairPrice       Decimal?  @db.Decimal(12, 4)
   stockQty        Decimal   @default(0) @db.Decimal(12, 4)
   minStockQty     Decimal   @default(0) @db.Decimal(12, 4)
   isActive        Boolean   @default(true)
@@ -247,11 +253,16 @@ model Product {
   category        Category?  @relation(fields: [categoryId], references: [id])
   orderItems      OrderItem[]
   stockMovements  StockMovement[]
+  // Auto-relação do par (ADR-015). `SetNull`: se o agregado for apagado de vez, o par
+  // simplesmente deixa de existir e o produto principal segue vendendo avulso.
+  pairedProduct   Product?   @relation("ProductPair", fields: [pairedProductId], references: [id], onDelete: SetNull)
+  pairedBy        Product[]  @relation("ProductPair")
 
   @@unique([tenantId, sku])
   @@index([tenantId, name])
   @@index([tenantId, popularName])
   @@index([tenantId, manufacturer])
+  @@index([tenantId, pairedProductId])
   @@map("products")
 }
 
@@ -394,6 +405,11 @@ model OrderItem {
   unitPrice   Decimal  @db.Decimal(12, 4) // Preço na unidade vendida (ex.: preço do rolo)
   discount    Decimal  @default(0) @db.Decimal(12, 4)
   total       Decimal  @db.Decimal(12, 2)
+  /// Agrupamento do par (ADR-015). Itens do MESMO pedido com o mesmo `pairGroup` foram vendidos
+  /// juntos como par e imprimem como UMA linha no comprovante ("Parafuso + Bucha nº10"). Numerado
+  /// por pedido (1, 2, 3…) — a mesma venda pode ter vários pares. NULL = item avulso, que é o caso
+  /// de todos os pedidos anteriores a esta migration.
+  pairGroup   Int?     @db.SmallInt
 
   order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product     Product  @relation(fields: [productId], references: [id])

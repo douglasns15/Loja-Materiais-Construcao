@@ -238,6 +238,9 @@ orders.post('/', requireActiveTenant, async (c) => {
               unitPrice: item.unitPrice,
               discount: item.discount ?? 0,
               total: calcSaleItemTotal(item),
+              // Par (ADR-015): agrupa os dois itens vendidos juntos, p/ o comprovante imprimir
+              // UMA linha. Não afeta estoque nem estorno — cada item continua sendo um item.
+              pairGroup: item.pairGroup ?? null,
             })),
           },
           payments: {

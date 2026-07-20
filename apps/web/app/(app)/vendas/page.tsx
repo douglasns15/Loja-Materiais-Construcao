@@ -8,12 +8,21 @@ import {
   returnOrderSchema,
   type PaymentMethod,
 } from '@nexoloja/shared';
+import { groupPairedItems } from '@nexoloja/core';
 import { apiGet, apiPost } from '@/lib/api';
 import { useOnline } from '@/lib/useOnline';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { ReceiptPrint, type Store } from '@/components/ReceiptPrint';
 
-type OrderItem = { id: string; productName: string; quantity: string; unitPrice: string; total: string };
+type OrderItem = {
+  id: string;
+  productName: string;
+  quantity: string;
+  unitPrice: string;
+  total: string;
+  /** Agrupamento do par (ADR-015): os dois itens viram uma linha só na exibição. */
+  pairGroup: number | null;
+};
 type Payment = { id: string; method: string; amount: string };
 type OrderStatus = 'DRAFT' | 'CONFIRMED' | 'INVOICED' | 'CANCELLED' | 'RETURNED';
 type Order = {
@@ -237,12 +246,15 @@ export default function VendasPage() {
                 </div>
 
                 <ul className="mt-2 divide-y divide-gray-100 border-t border-gray-100 pt-2 text-sm">
-                  {o.items.map((it) => (
-                    <li key={it.id} className="flex justify-between py-1 text-gray-600">
+                  {/* Par (ADR-015): os dois itens aparecem como uma linha só, igual ao comprovante. */}
+                  {groupPairedItems(o.items).map((line, idx) => (
+                    <li key={idx} className="flex justify-between py-1 text-gray-600">
                       <span>
-                        {Number(it.quantity)}× {it.productName}
+                        {line.quantity}
+                        {line.isPair ? ` par${line.quantity > 1 ? 'es' : ''} ` : '× '}
+                        {line.label}
                       </span>
-                      <span>{BRL(it.total)}</span>
+                      <span>{BRL(line.total)}</span>
                     </li>
                   ))}
                 </ul>
@@ -337,10 +349,13 @@ export default function VendasPage() {
         <ReceiptPrint
           kind="sale"
           store={store}
-          items={printJob.order.items.map((i) => ({
-            name: i.productName,
-            quantity: Number(i.quantity),
-            unitPrice: Number(i.unitPrice),
+          // ADR-015: reimprime igual ao original — o par vira UMA linha ("Parafuso + Bucha
+          // (par)") com o preço do par. `unitPrice` é derivado do total ÷ qtd para a coluna
+          // "Unit." bater com a linha unificada.
+          items={groupPairedItems(printJob.order.items).map((line) => ({
+            name: line.isPair ? `${line.label} (par)` : line.label,
+            quantity: line.quantity,
+            unitPrice: line.quantity > 0 ? line.total / line.quantity : line.total,
           }))}
           total={Number(printJob.order.total)}
           discount={Number(printJob.order.discountAmount)}

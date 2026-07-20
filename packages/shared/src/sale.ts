@@ -27,6 +27,14 @@ export const saleItemSchema = z.object({
   discount: z.number().nonnegative().optional(),
   /// Modo de venda (EF-3). Default BASE mantém as vendas de unidade única inalteradas.
   saleMode: saleUnitModeSchema.default('BASE'),
+  /**
+   * Agrupamento do par (ADR-015). Dois itens do mesmo pedido com o MESMO `pairGroup` foram
+   * vendidos juntos como par (parafuso + bucha) e imprimem como uma linha só no comprovante.
+   * Numerado pelo cliente por pedido (1, 2, 3…). Ausente ⇒ item avulso, o caso de sempre.
+   * Os **preços já vêm rateados** do cliente (`splitPairPrice` do core), como qualquer
+   * `unitPrice`; o servidor não recalcula preço — só valida e grava.
+   */
+  pairGroup: z.number().int().positive().max(999).optional(),
 });
 export type SaleItemInput = z.infer<typeof saleItemSchema>;
 

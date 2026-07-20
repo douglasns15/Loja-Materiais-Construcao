@@ -33,6 +33,9 @@ export type ProductFull = {
   altUnit: UnitType | null;
   conversionFactor: string | null;
   altSalePrice: string | null;
+  // Produto agregado — venda em par (ADR-015).
+  pairedProductId: string | null;
+  pairPrice: string | null;
   marginPercent: number;
   createdByName: string | null;
   createdAt: string;
@@ -66,6 +69,8 @@ type FormState = {
   altUnit: UnitType | '';
   conversionFactor: string;
   altSalePrice: string;
+  pairedProductId: string;
+  pairPrice: string;
 };
 
 /**
@@ -88,6 +93,8 @@ function toForm(p: ProductFull): FormState {
     altUnit: p.altUnit ?? '',
     conversionFactor: p.conversionFactor === null ? '' : String(Number(p.conversionFactor)),
     altSalePrice: p.altSalePrice === null ? '' : String(Number(p.altSalePrice)),
+    pairedProductId: p.pairedProductId ?? '',
+    pairPrice: p.pairPrice === null ? '' : String(Number(p.pairPrice)),
   };
 }
 
@@ -129,6 +136,10 @@ function buildPatch(original: ProductFull, f: FormState): Record<string, unknown
     altUnit: f.altUnit === '' ? null : f.altUnit,
     conversionFactor: numOrNull(f.conversionFactor),
     altSalePrice: numOrNull(f.altSalePrice),
+    // Par (ADR-015): limpar o produto agregado zera também o preço do par (e vice-versa),
+    // senão sobraria metade da configuração no banco.
+    pairedProductId: textOrNull(f.pairedProductId),
+    pairPrice: f.pairedProductId.trim() === '' ? null : numOrNull(f.pairPrice),
   };
 
   const current = {
@@ -146,6 +157,8 @@ function buildPatch(original: ProductFull, f: FormState): Record<string, unknown
     conversionFactor:
       original.conversionFactor === null ? null : Number(original.conversionFactor),
     altSalePrice: original.altSalePrice === null ? null : Number(original.altSalePrice),
+    pairedProductId: original.pairedProductId,
+    pairPrice: original.pairPrice === null ? null : Number(original.pairPrice),
   };
 
   for (const key of Object.keys(next) as (keyof typeof next)[]) {
@@ -156,10 +169,13 @@ function buildPatch(original: ProductFull, f: FormState): Record<string, unknown
 
 export function ProductDetail({
   product,
+  allProducts,
   onClose,
   onSaved,
 }: {
   product: ProductFull;
+  /** Catálogo completo — alimenta o seletor do produto agregado e a leitura do par (ADR-015). */
+  allProducts: ProductFull[];
   onClose: () => void;
   /** Chamado após um PATCH bem-sucedido, para a lista recarregar. */
   onSaved: () => Promise<void> | void;
@@ -188,10 +204,27 @@ export function ProductDetail({
   const patch = editing ? buildPatch(product, form) : {};
   const changed = Object.keys(patch).length > 0;
 
+  // Par (ADR-015). O par vale dos DOIS lados: ou este produto aponta para o agregado,
+  // ou outro produto aponta para este. Na leitura mostramos qualquer um dos dois casos.
+  const pairedHere = product.pairedProductId
+    ? allProducts.find((p) => p.id === product.pairedProductId)
+    : undefined;
+  const pairedFromOther = allProducts.find((p) => p.pairedProductId === product.id);
+  const pairPartner = pairedHere ?? pairedFromOther;
+  const pairPriceShown = pairedHere ? product.pairPrice : (pairedFromOther?.pairPrice ?? null);
+  // Cadastrar o par pelo outro lado criaria dois preços para o mesmo par (a API recusa),
+  // então aqui o campo fica bloqueado, explicando onde editar.
+  const pairLockedByOther = !pairedHere && !!pairedFromOther;
+
   async function onSave() {
     setError(null);
     if (!form.name.trim() || !form.sku.trim()) {
       setError('Nome e SKU são obrigatórios.');
+      return;
+    }
+    // Par (ADR-015): agregado sem preço salvaria um par que o PDV nunca ofereceria.
+    if (form.pairedProductId && !(Number(form.pairPrice) > 0)) {
+      setError('Informe o preço do par (ou remova o produto agregado).');
       return;
     }
     const parsed = updateProductSchema.safeParse(patch);
@@ -279,6 +312,22 @@ export function ProductDetail({
                   product.altUnit && product.altSalePrice && product.conversionFactor
                     ? `${unitTypeLabels[product.altUnit]} · ${QTY(product.conversionFactor)} por embalagem · ${BRL(product.altSalePrice)}`
                     : null
+                }
+              />
+              {/* Par (ADR-015) — mostrado dos dois lados, e a economia calculada. */}
+              <Row
+                label="Vendido em par com"
+                value={
+                  pairPartner && pairPriceShown ? (
+                    <>
+                      {pairPartner.name} — par por{' '}
+                      <span className="font-medium">{BRL(pairPriceShown)}</span>
+                      <span className="block text-xs text-gray-400">
+                        avulsos: {BRL(Number(product.salePrice) + Number(pairPartner.salePrice))}
+                        {pairLockedByOther && ' · cadastrado no outro produto'}
+                      </span>
+                    </>
+                  ) : null
                 }
               />
               <div className="col-span-2 sm:col-span-3">
@@ -481,6 +530,68 @@ export function ProductDetail({
                   className={inputCls}
                 />
               </div>
+            </fieldset>
+
+            {/* Produto agregado — venda em par (ADR-015). */}
+            <fieldset className="rounded-xl border border-dashed border-gray-300 p-3 sm:col-span-6">
+              <legend className="px-1 text-xs font-medium text-gray-500">
+                Vendido em par (opcional) — ex.: parafuso + bucha
+              </legend>
+              {pairLockedByOther ? (
+                <p className="text-sm text-gray-500">
+                  Este par está cadastrado em <strong>{pairedFromOther?.name}</strong> e já vale
+                  para os dois lados. Para alterar o preço do par, edite aquele produto.
+                </p>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <select
+                      value={form.pairedProductId}
+                      onChange={(e) =>
+                        setForm({ ...form, pairedProductId: e.target.value })
+                      }
+                      className={`${inputCls} bg-white`}
+                      aria-label="Produto agregado"
+                    >
+                      <option value="">— sem produto agregado —</option>
+                      {allProducts
+                        .filter((p) => p.id !== product.id)
+                        .map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name} ({BRL(p.salePrice)})
+                          </option>
+                        ))}
+                    </select>
+                    <input
+                      placeholder="Preço do par (os dois juntos)"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={form.pairPrice}
+                      onChange={(e) => setForm({ ...form, pairPrice: e.target.value })}
+                      disabled={form.pairedProductId === ''}
+                      className={`${inputCls} disabled:bg-gray-50`}
+                    />
+                  </div>
+                  {/* Mostra o que o cliente economiza — confere o preço na hora de cadastrar. */}
+                  {form.pairedProductId && Number(form.pairPrice) > 0 && (
+                    <p className="mt-2 text-xs text-gray-500">
+                      Avulsos:{' '}
+                      {BRL(
+                        Number(form.salePrice || 0) +
+                          Number(
+                            allProducts.find((p) => p.id === form.pairedProductId)?.salePrice ?? 0,
+                          ),
+                      )}{' '}
+                      · no par: {BRL(Number(form.pairPrice))}
+                    </p>
+                  )}
+                  <p className="mt-2 text-xs text-gray-400">
+                    O preço é o total dos dois juntos. Vale para os dois lados — não precisa
+                    cadastrar de novo no outro produto.
+                  </p>
+                </>
+              )}
             </fieldset>
 
             <div className="flex justify-end gap-2 sm:col-span-6">

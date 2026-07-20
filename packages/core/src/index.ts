@@ -230,6 +230,144 @@ export function effectiveBaseUnitPrice(p: AltUnitConfig, mode: SaleUnitMode): nu
 }
 
 // =============================================================================
+// PRODUTO AGREGADO — venda em par (ADR-015)
+// =============================================================================
+// Dois produtos independentes (parafuso R$0,60 + bucha R$0,20) que, vendidos
+// juntos, saem por um preço próprio do par (R$0,70). A venda do par grava DOIS
+// `OrderItem` com o preço RATEADO — é o que mantém estoque, cancelamento e
+// devolução funcionando sem alteração (todos percorrem os itens, e o par são
+// dois itens de verdade). Estas funções puras fazem o rateio e a trava de estoque.
+
+/** Um lado do par: preço avulso e saldo em estoque. */
+export interface PairSide {
+  salePrice: number;
+  stockQty: number;
+}
+
+/** O valor a cobrar de cada lado do par, já rateado. */
+export interface PairSplit {
+  /** Preço unitário do produto principal (o que tem o par cadastrado). */
+  mainUnitPrice: number;
+  /** Preço unitário do produto agregado. */
+  pairedUnitPrice: number;
+}
+
+/**
+ * Rateia o **preço total do par** entre os dois produtos, proporcionalmente ao preço
+ * avulso de cada um. Ex.: parafuso R$0,60 + bucha R$0,20 (soma R$0,80) num par de
+ * R$0,70 ⇒ parafuso R$0,5250 e bucha R$0,1750.
+ *
+ * O **resíduo do arredondamento vai para o item mais caro**, então
+ * `mainUnitPrice + pairedUnitPrice` é **sempre exatamente** `pairPrice` — o total da
+ * venda nunca fica um centavo fora por causa do rateio.
+ *
+ * Casos de borda: se a soma dos avulsos for 0 (produtos de preço zero), divide o par
+ * meio a meio — nunca divide por zero. Precisão de 4 casas, igual a `unitPrice` no schema.
+ */
+export function splitPairPrice(main: PairSide, paired: PairSide, pairPrice: number): PairSplit {
+  const sum = main.salePrice + paired.salePrice;
+  // Sem referência de proporção (ambos zerados): meio a meio.
+  const mainShare = sum > 0 ? main.salePrice / sum : 0.5;
+
+  // Arredonda o lado MAIS BARATO e deixa o resto para o mais caro: o erro relativo do
+  // arredondamento fica no valor que melhor o absorve, e a soma fecha exata.
+  const mainIsCheaper = main.salePrice <= paired.salePrice;
+  if (mainIsCheaper) {
+    const mainUnitPrice = Number((pairPrice * mainShare).toFixed(4));
+    return { mainUnitPrice, pairedUnitPrice: Number((pairPrice - mainUnitPrice).toFixed(4)) };
+  }
+  const pairedUnitPrice = Number((pairPrice * (1 - mainShare)).toFixed(4));
+  return { mainUnitPrice: Number((pairPrice - pairedUnitPrice).toFixed(4)), pairedUnitPrice };
+}
+
+/** Configuração do par num produto (subconjunto de `Product`, ADR-015). */
+export interface PairConfig {
+  /** Id do produto agregado. `null`/ausente = produto sem par. */
+  pairedProductId?: string | null;
+  /** Preço TOTAL do par (não por item). */
+  pairPrice?: number | null;
+}
+
+/**
+ * `true` quando o produto TEM par vendável: precisa de `pairedProductId` e `pairPrice > 0`
+ * (os dois juntos). É o gate que o PDV usa para decidir se oferece "avulso × par".
+ * Não verifica estoque nem se o agregado existe — isso é `pairAvailableQty`/quem chama.
+ */
+export function hasPair(p: PairConfig): boolean {
+  return !!p.pairedProductId && p.pairPrice != null && p.pairPrice > 0;
+}
+
+/**
+ * Quantos **pares** podem ser vendidos com o estoque atual: o par consome 1 de cada lado,
+ * então é o **menor** dos dois saldos (nunca negativo). É a trava do PDV — vender o par
+ * exige estoque dos dois produtos, senão a venda deixaria um lado negativo.
+ */
+export function pairAvailableQty(main: PairSide, paired: PairSide): number {
+  return Math.max(0, Math.min(main.stockQty, paired.stockQty));
+}
+
+/** Item de pedido como vem do banco, no mínimo necessário para exibir (ADR-015). */
+export interface PairableItem {
+  productName: string;
+  quantity: number | string;
+  total: number | string;
+  /** Agrupamento do par; itens com o mesmo valor não-nulo foram vendidos juntos. */
+  pairGroup?: number | null;
+}
+
+/** Linha pronta para exibir/imprimir: um item avulso, ou um par já unificado. */
+export interface DisplayLine {
+  /** "Parafuso nº10" ou "Parafuso nº10 + Bucha nº10". */
+  label: string;
+  quantity: number;
+  /** Soma dos totais das linhas agrupadas (o valor cobrado pelo par). */
+  total: number;
+  /** `true` quando a linha representa um par (dois produtos). */
+  isPair: boolean;
+}
+
+/**
+ * Agrupa os itens de um pedido para **exibição**, unindo os que foram vendidos como par
+ * numa **linha só** — "Parafuso nº10 + Bucha nº10 · R$ 0,70" (decisão do Owner no ADR-015:
+ * mostrar duas linhas com preço rateado convida questionamento no balcão, já que comprado
+ * separado o valor muda).
+ *
+ * Itens sem `pairGroup` saem como estão, **na ordem original**. Um `pairGroup` órfão (só um
+ * item, o que não deveria acontecer) é tratado como item avulso — nunca esconde nada.
+ * Não altera o pedido: é só a camada de apresentação; o banco segue com dois itens.
+ */
+export function groupPairedItems(items: PairableItem[]): DisplayLine[] {
+  const lines: DisplayLine[] = [];
+  // Posição da linha de cada grupo já iniciado, para juntar o segundo item no mesmo lugar.
+  const groupLineIndex = new Map<number, number>();
+
+  for (const item of items) {
+    const qty = Number(item.quantity);
+    const total = Number(item.total);
+    const group = item.pairGroup;
+
+    if (group == null) {
+      lines.push({ label: item.productName, quantity: qty, total, isPair: false });
+      continue;
+    }
+    const at = groupLineIndex.get(group);
+    const line = at === undefined ? undefined : lines[at];
+    if (at === undefined || !line) {
+      groupLineIndex.set(group, lines.length);
+      lines.push({ label: item.productName, quantity: qty, total, isPair: false });
+    } else {
+      lines[at] = {
+        label: `${line.label} + ${item.productName}`,
+        quantity: line.quantity,
+        total: Number((line.total + total).toFixed(2)),
+        isPair: true,
+      };
+    }
+  }
+  return lines;
+}
+
+// =============================================================================
 // BUSCA DE PRODUTO (Product search) — cadastro e PDV
 // =============================================================================
 

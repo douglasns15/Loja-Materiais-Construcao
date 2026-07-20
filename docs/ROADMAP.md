@@ -3,7 +3,24 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-20 — **EP (visualizar/editar cadastro de produto + campo Fabricante) —
+> **Última atualização:** 2026-07-20 — **PA (produto agregado: venda em par, ADR-015) — NO AR, falta o
+> E2E do usuário.** Pedido do Owner: parafuso R$0,60 + bucha R$0,20 são produtos independentes, mas o
+> **par sai R$0,70**; no PDV escolhe-se avulso ou par. **ADR-015 escrito e aprovado ANTES de codar**
+> (regra 4), com 3 decisões do Owner: par de 2 itens (colunas, não tabela de combo), par vale **dos dois
+> lados** (cadastra uma vez só), e comprovante em **linha única** (*"comprado separado o valor muda —
+> mostrar uma linha evita questionamento"*). **Desenho central: o par grava DOIS `OrderItem` com preço
+> rateado** (0,5250 + 0,1750), não uma linha "kit" — por isso **estoque, cancelamento e devolução não
+> mudaram uma linha** (os três percorrem os itens) e os relatórios por produto seguem honestos.
+> **Migration `0011` APLICADA** (aprovada): `products.pairedProductId` (FK auto-relação) +
+> `products.pairPrice` + `order_items.pairGroup` + índice — aditiva, RLS intacta, sem drift. Core
+> **+21 → 103/103** (`splitPairPrice` — a soma é **sempre exatamente** o preço do par, testado até com
+> proporção dízima —, `hasPair`, `pairAvailableQty`, `groupPairedItems`). API: `validatePair`
+> (auto-referência, agregado inexistente, par invertido duplicado). Web: par no cadastro/edição, botão
+> **"+ par c/ …"** no PDV com trava dos **dois** estoques, carrinho/comprovante/histórico/reimpressão em
+> linha única, par vendável offline. Gates: core 103/103, typecheck API+web, build (18 rotas). **NO AR:**
+> API `95498aff` + web `bf20b770`; smoke ✅. **Próximo passo:** E2E do usuário (roteiro no registro).
+>
+> **Antes:** 2026-07-20 — **EP (visualizar/editar cadastro de produto + campo Fabricante) —
 > NO AR e VALIDADO pelo usuário.** Pedido do usuário. **Diagnóstico:** editar produto
 > tinha **impacto ZERO de backend** — `PATCH /products/:id` já aceitava todos os campos, com autoria (ADR-010),
 > desde a Fase 2; a lacuna era só de UI (a tela só editava `minStockQty` inline). **Migration `0010`

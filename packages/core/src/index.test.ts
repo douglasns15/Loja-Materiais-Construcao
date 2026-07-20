@@ -28,6 +28,10 @@ import {
   resolveSaleUnit,
   toBaseQuantity,
   effectiveBaseUnitPrice,
+  splitPairPrice,
+  hasPair,
+  pairAvailableQty,
+  groupPairedItems,
 } from './index';
 
 describe('calcSubtotal', () => {
@@ -374,6 +378,173 @@ describe('haltsQueue', () => {
     expect(haltsQueue('SYNCED')).toBe(false);
     expect(haltsQueue('RETRY')).toBe(true);
     expect(haltsQueue('FAILED')).toBe(true);
+  });
+});
+
+// =============================================================================
+// PRODUTO AGREGADO — venda em par (ADR-015)
+// =============================================================================
+
+describe('ADR-015 — venda em par', () => {
+  // O caso do Owner: parafuso R$0,60 + bucha R$0,20 (soma R$0,80), par por R$0,70.
+  const parafuso = { salePrice: 0.6, stockQty: 100 };
+  const bucha = { salePrice: 0.2, stockQty: 40 };
+
+  describe('splitPairPrice', () => {
+    it('rateia proporcionalmente ao preço avulso', () => {
+      expect(splitPairPrice(parafuso, bucha, 0.7)).toEqual({
+        mainUnitPrice: 0.525, // 0,60/0,80 × 0,70
+        pairedUnitPrice: 0.175, // 0,20/0,80 × 0,70
+      });
+    });
+
+    it('a soma das partes é EXATAMENTE o preço do par', () => {
+      const { mainUnitPrice, pairedUnitPrice } = splitPairPrice(parafuso, bucha, 0.7);
+      expect(mainUnitPrice + pairedUnitPrice).toBe(0.7);
+    });
+
+    it('fecha exato mesmo quando a proporção é dízima (resíduo no item mais caro)', () => {
+      // 2,00 + 1,00 = 3,00; par por 2,50 ⇒ 1,6667 e 0,8333 (soma 2,5 exata).
+      const a = { salePrice: 2, stockQty: 10 };
+      const b = { salePrice: 1, stockQty: 10 };
+      const { mainUnitPrice, pairedUnitPrice } = splitPairPrice(a, b, 2.5);
+      expect(mainUnitPrice + pairedUnitPrice).toBe(2.5);
+      expect(pairedUnitPrice).toBe(0.8333); // o mais barato é o arredondado
+    });
+
+    it('funciona com o par cadastrado no lado mais barato', () => {
+      const { mainUnitPrice, pairedUnitPrice } = splitPairPrice(bucha, parafuso, 0.7);
+      expect(mainUnitPrice).toBe(0.175);
+      expect(pairedUnitPrice).toBe(0.525);
+      expect(mainUnitPrice + pairedUnitPrice).toBe(0.7);
+    });
+
+    it('divide meio a meio quando ambos os avulsos são 0 (não divide por zero)', () => {
+      const zero = { salePrice: 0, stockQty: 5 };
+      expect(splitPairPrice(zero, zero, 1)).toEqual({
+        mainUnitPrice: 0.5,
+        pairedUnitPrice: 0.5,
+      });
+    });
+
+    it('par mais caro que a soma dos avulsos ainda fecha exato', () => {
+      const { mainUnitPrice, pairedUnitPrice } = splitPairPrice(parafuso, bucha, 1.0);
+      expect(mainUnitPrice + pairedUnitPrice).toBe(1.0);
+    });
+  });
+
+  describe('hasPair', () => {
+    it('true com produto agregado + preço do par', () => {
+      expect(hasPair({ pairedProductId: 'uuid-bucha', pairPrice: 0.7 })).toBe(true);
+    });
+
+    it('false sem produto agregado', () => {
+      expect(hasPair({ pairPrice: 0.7 })).toBe(false);
+      expect(hasPair({ pairedProductId: null, pairPrice: 0.7 })).toBe(false);
+    });
+
+    it('false sem preço do par (ou zerado)', () => {
+      expect(hasPair({ pairedProductId: 'uuid-bucha' })).toBe(false);
+      expect(hasPair({ pairedProductId: 'uuid-bucha', pairPrice: 0 })).toBe(false);
+      expect(hasPair({ pairedProductId: 'uuid-bucha', pairPrice: null })).toBe(false);
+    });
+  });
+
+  describe('groupPairedItems', () => {
+    it('une os dois itens do par numa linha só, somando os totais', () => {
+      const lines = groupPairedItems([
+        { productName: 'Parafuso nº10', quantity: 1, total: 0.53, pairGroup: 1 },
+        { productName: 'Bucha nº10', quantity: 1, total: 0.17, pairGroup: 1 },
+      ]);
+      expect(lines).toEqual([
+        { label: 'Parafuso nº10 + Bucha nº10', quantity: 1, total: 0.7, isPair: true },
+      ]);
+    });
+
+    it('mantém itens avulsos como estão, na ordem original', () => {
+      const lines = groupPairedItems([
+        { productName: 'Cimento', quantity: 2, total: 74 },
+        { productName: 'Tijolo', quantity: 3, total: 3.6, pairGroup: null },
+      ]);
+      expect(lines).toHaveLength(2);
+      expect(lines[0].label).toBe('Cimento');
+      expect(lines.every((l) => !l.isPair)).toBe(true);
+    });
+
+    it('separa vários pares na mesma venda e preserva o avulso', () => {
+      const lines = groupPairedItems([
+        { productName: 'Parafuso', quantity: 2, total: 1.05, pairGroup: 1 },
+        { productName: 'Bucha', quantity: 2, total: 0.35, pairGroup: 1 },
+        { productName: 'Cimento', quantity: 1, total: 37 },
+        { productName: 'Prego', quantity: 1, total: 0.4, pairGroup: 2 },
+        { productName: 'Martelo', quantity: 1, total: 20, pairGroup: 2 },
+      ]);
+      expect(lines).toHaveLength(3);
+      expect(lines[0]).toEqual({
+        label: 'Parafuso + Bucha',
+        quantity: 2,
+        total: 1.4,
+        isPair: true,
+      });
+      expect(lines[1].label).toBe('Cimento');
+      expect(lines[2].isPair).toBe(true);
+    });
+
+    it('a soma das linhas exibidas é igual à soma dos itens (nada some)', () => {
+      const items = [
+        { productName: 'Parafuso', quantity: 1, total: 0.53, pairGroup: 1 },
+        { productName: 'Bucha', quantity: 1, total: 0.17, pairGroup: 1 },
+        { productName: 'Cimento', quantity: 1, total: 37 },
+      ];
+      const soma = (ns: number[]) => Number(ns.reduce((a, b) => a + b, 0).toFixed(2));
+      expect(soma(groupPairedItems(items).map((l) => l.total))).toBe(
+        soma(items.map((i) => i.total)),
+      );
+    });
+
+    it('grupo órfão (só um item) vira item avulso — nunca esconde nada', () => {
+      const lines = groupPairedItems([
+        { productName: 'Parafuso', quantity: 1, total: 0.53, pairGroup: 1 },
+      ]);
+      expect(lines).toEqual([
+        { label: 'Parafuso', quantity: 1, total: 0.53, isPair: false },
+      ]);
+    });
+
+    it('aceita quantidade/total como string (Decimal serializado pela API)', () => {
+      const lines = groupPairedItems([
+        { productName: 'Parafuso', quantity: '2', total: '1.05', pairGroup: 1 },
+        { productName: 'Bucha', quantity: '2', total: '0.35', pairGroup: 1 },
+      ]);
+      expect(lines[0]).toEqual({
+        label: 'Parafuso + Bucha',
+        quantity: 2,
+        total: 1.4,
+        isPair: true,
+      });
+    });
+
+    it('pedido antigo (sem pairGroup em lugar nenhum) passa intacto', () => {
+      const items = [
+        { productName: 'Cimento', quantity: 2, total: 74 },
+        { productName: 'Tijolo', quantity: 3, total: 3.6 },
+      ];
+      expect(groupPairedItems(items)).toHaveLength(2);
+    });
+  });
+
+  describe('pairAvailableQty', () => {
+    it('o par é limitado pelo lado com menos estoque', () => {
+      expect(pairAvailableQty(parafuso, bucha)).toBe(40); // 100 parafusos, 40 buchas
+    });
+
+    it('sem estoque de um lado, nenhum par é vendável', () => {
+      expect(pairAvailableQty(parafuso, { salePrice: 0.2, stockQty: 0 })).toBe(0);
+    });
+
+    it('nunca devolve negativo (estoque negativo de reconciliação, ADR-011 §6)', () => {
+      expect(pairAvailableQty(parafuso, { salePrice: 0.2, stockQty: -5 })).toBe(0);
+    });
   });
 });
 

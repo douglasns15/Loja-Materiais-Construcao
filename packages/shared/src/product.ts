@@ -62,6 +62,15 @@ export const createProductSchema = z.object({
   altUnit: unitTypeSchema.optional(),
   altSalePrice: z.number().positive().optional(),
   /**
+   * Produto agregado — venda em par (ADR-015). `pairedProductId` é o outro produto do par
+   * (ex.: a bucha nº10 cadastrada no parafuso nº10) e `pairPrice` é o preço **TOTAL do par**
+   * (não por item). Os dois juntos habilitam a escolha "avulso × par" no PDV; qualquer um
+   * ausente ⇒ produto sem par. Cadastra-se de **um lado só** — o outro lado enxerga o mesmo
+   * par por consulta reversa, então os preços nunca divergem.
+   */
+  pairedProductId: z.string().uuid().optional(),
+  pairPrice: z.number().positive().optional(),
+  /**
    * Estoque inicial (opcional). Quando > 0, o cadastro NÃO grava o saldo direto no produto:
    * a API cria o produto e gera a **Entrada** (`StockMovement` INCOME) na MESMA transação
    * (ADR-001 — `stockQty` é cache; a movimentação é a fonte de verdade), já com a autoria
@@ -91,5 +100,8 @@ export const updateProductSchema = createProductSchema
     conversionFactor: z.number().positive().nullable().optional(),
     altUnit: unitTypeSchema.nullable().optional(),
     altSalePrice: z.number().positive().nullable().optional(),
+    // ADR-015: `null` desfaz o par (deixa de oferecer "avulso × par" no PDV).
+    pairedProductId: z.string().uuid().nullable().optional(),
+    pairPrice: z.number().positive().nullable().optional(),
   });
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;

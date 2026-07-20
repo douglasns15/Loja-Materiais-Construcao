@@ -2560,3 +2560,64 @@ secundária e placeholder de busca do PDV.
 > **Fatia EP CONCLUÍDA** — visualizar/editar cadastro de produto + Fabricante no ar e validados ponta a
 > ponta. Confirma na prática os dois caminhos que não tinham cobertura automatizada: o `null` do
 > `updateProductSchema` limpando coluna, e a coluna nullable convivendo com produtos anteriores à 0010.
+
+### PA — Produto agregado: venda em par (ADR-015) (2026-07-20)
+
+Pedido do Owner: parafuso nº10 (R$0,60) e bucha nº10 (R$0,20) são **produtos independentes**, mas o
+**par sai por R$0,70**; no PDV, poder vender avulso **ou** o par. **ADR-015 escrito e aprovado antes de
+codar** (regra 4), com 3 decisões do Owner: (1) escopo = **par de 2 itens** (colunas em `products`, não
+tabela de combo); (2) o par vale **dos dois lados** (cadastra uma vez); (3) comprovante em **linha
+única** — *"comprado em outro momento, separado, o valor muda; mostrar uma linha só evita
+questionamento"*.
+
+**Decisão central de desenho: o par grava DOIS `OrderItem` com o preço rateado**, não uma linha "kit".
+Vender 1 par por R$0,70 grava parafuso R$0,5250 + bucha R$0,1750 (proporcional ao avulso, resíduo no
+item mais caro). É o que faz a fatia sair barata: **estoque, cancelamento e devolução não mudaram uma
+linha** — os três percorrem `OrderItem`, e o par são dois itens de verdade. Além disso os relatórios por
+produto seguem honestos (cada um recebe sua fatia real de faturamento).
+
+**Migration `0011_product_pair`** — `products.pairedProductId` (uuid, FK auto-relação `ON DELETE SET
+NULL`) + `products.pairPrice` (Decimal 12,4) + `order_items.pairGroup` (SmallInt) + índice
+`[tenantId, pairedProductId]` (consulta reversa da simetria). Aditiva, **sem alteração de RLS**,
+produtos e pedidos atuais ficam `NULL` = comportamento inalterado.
+
+**Core (+21 → 103/103):** `splitPairPrice` (rateio; a soma é **sempre exatamente** o preço do par,
+testado inclusive com proporção dízima), `hasPair`, `pairAvailableQty` (menor dos dois saldos, nunca
+negativo) e `groupPairedItems` (une o par numa linha de exibição; **grupo órfão vira item avulso** —
+nunca esconde item; aceita `Decimal` serializado como string).
+
+**Build / typecheck / core (local)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| `prisma migrate deploy` (0011) | aplicada no Supabase | ✅ |
+| `prisma migrate diff --exit-code` (pós-migration) | sem drift | ✅ "No difference detected" |
+| Core (Vitest) — rateio, disponibilidade e agrupamento do par | +21 | ✅ 103/103 |
+| Typecheck `apps/api` | sem erros | ✅ |
+| Typecheck `apps/web` | sem erros | ✅ (1 achado corrigido: acesso indexado sob `noUncheckedIndexedAccess`) |
+| Build de produção (`next build`) | `/products`, `/venda`, `/vendas` regeneradas | ✅ 18 rotas |
+
+**Deploy + smoke (produção) — 2026-07-20**
+
+| Passo | Resultado |
+|---|---|
+| `wrangler deploy` (API — Zod/Prisma com o par + `validatePair`) | ✅ Version `95498aff` |
+| `GET /health` (smoke) | ✅ `{ok:true}` |
+| `GET /orders` sem token (smoke) | ✅ 401 |
+| `npm run deploy` (web, OpenNext) | ✅ Version `bf20b770` |
+
+**E2E no navegador (usuário)** — ⏭️ pendente. Roteiro sugerido:
+
+| Caso | Esperado |
+|---|---|
+| Cadastrar/editar o parafuso apontando a bucha + preço do par R$0,70 | salva; o painel mostra "Vendido em par com… avulsos R$0,80" |
+| Abrir a **bucha** no cadastro | mostra o mesmo par, com aviso de que está cadastrado no parafuso |
+| PDV: buscar **parafuso** | aparecem os botões "+ Unidade · R$0,60" e "+ par c/ Bucha · R$0,70 (N disp.)" |
+| PDV: buscar **bucha** | o botão do par aparece **também** (simetria) |
+| Vender 1 par | carrinho mostra 1 linha "Parafuso + Bucha · R$0,70"; total R$0,70 |
+| Comprovante | **uma linha** "Parafuso nº10 + Bucha nº10 (par)" — sem preços rateados |
+| Estoque após a venda | **baixa 1 de cada** produto (dois `StockMovement`) |
+| **Cancelar** a venda do par | estorna 1 de cada produto |
+| Histórico + **Reimprimir** | também mostram uma linha só |
+| Zerar o estoque da bucha | o botão do par sai/desabilita; o parafuso continua vendendo avulso |
+| Tentar cadastrar o par invertido (na bucha, apontando o parafuso) | recusado com mensagem explicando que já vale dos dois lados |

@@ -48,6 +48,9 @@ export default function ProductsPage() {
     altUnit: '' as UnitType | '',
     conversionFactor: '',
     altSalePrice: '',
+    // Produto agregado — venda em par (ADR-015). Vazios ⇒ produto sem par.
+    pairedProductId: '',
+    pairPrice: '',
   });
   const [saving, setSaving] = useState(false);
 
@@ -118,9 +121,18 @@ export default function ProductsPage() {
       altUnit: form.altUnit || undefined,
       conversionFactor: form.conversionFactor ? Number(form.conversionFactor) : undefined,
       altSalePrice: form.altSalePrice ? Number(form.altSalePrice) : undefined,
+      // Par (ADR-015): só vale com os dois preenchidos; sem produto agregado o preço é ignorado.
+      pairedProductId: form.pairedProductId || undefined,
+      pairPrice:
+        form.pairedProductId && form.pairPrice ? Number(form.pairPrice) : undefined,
     });
     if (!parsed.success) {
       setError('Confira os campos: nome, SKU e preços são obrigatórios.');
+      return;
+    }
+    // Par (ADR-015): agregado sem preço salvaria um par que o PDV nunca ofereceria.
+    if (form.pairedProductId && !(Number(form.pairPrice) > 0)) {
+      setError('Informe o preço do par (ou remova o produto agregado).');
       return;
     }
 
@@ -143,6 +155,8 @@ export default function ProductsPage() {
         altUnit: '',
         conversionFactor: '',
         altSalePrice: '',
+        pairedProductId: '',
+        pairPrice: '',
       });
       await load();
     } catch (e) {
@@ -384,6 +398,43 @@ export default function ProductsPage() {
             Preencha os três para habilitar a escolha “{unitTypeLabels[form.unit]} × embalagem” no PDV.
           </p>
         </fieldset>
+        {/* Produto agregado — venda em par (ADR-015). Ex.: parafuso nº10 + bucha nº10. */}
+        <fieldset className="rounded-xl border border-dashed border-gray-300 p-3 sm:col-span-6">
+          <legend className="px-1 text-xs font-medium text-gray-500">
+            Vendido em par (opcional) — ex.: parafuso + bucha, com preço do par
+          </legend>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <select
+              value={form.pairedProductId}
+              onChange={(e) => setForm({ ...form, pairedProductId: e.target.value })}
+              title="O outro produto do par. Cada um segue com seu preço e estoque próprios."
+              className="rounded-lg border border-gray-300 bg-white px-3 py-2"
+              aria-label="Produto agregado"
+            >
+              <option value="">— sem produto agregado —</option>
+              {products.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} ({BRL(p.salePrice)})
+                </option>
+              ))}
+            </select>
+            <input
+              placeholder="Preço do par (os dois juntos)"
+              type="number"
+              step="0.01"
+              min="0"
+              value={form.pairPrice}
+              onChange={(e) => setForm({ ...form, pairPrice: e.target.value })}
+              disabled={form.pairedProductId === ''}
+              title="Preço total dos dois itens vendidos juntos (ex.: R$ 0,70 o par)."
+              className="rounded-lg border border-gray-300 px-3 py-2 disabled:bg-gray-50"
+            />
+          </div>
+          <p className="mt-2 text-xs text-gray-400">
+            No PDV o operador escolhe vender avulso ou o par. Vale para os dois lados — não
+            precisa cadastrar de novo no outro produto.
+          </p>
+        </fieldset>
         <button
           type="submit"
           disabled={saving}
@@ -518,6 +569,7 @@ export default function ProductsPage() {
       {detail && (
         <ProductDetail
           product={detail}
+          allProducts={products}
           onClose={() => setDetailId(null)}
           onSaved={load}
         />
