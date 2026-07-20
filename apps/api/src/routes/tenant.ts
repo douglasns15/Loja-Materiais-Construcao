@@ -25,7 +25,15 @@ tenant.get('/', async (c) => {
     const prisma = createPrismaClient(connectionString);
     const data = await prisma.tenant.findUnique({
       where: { id: tenantId },
-      select: { name: true, logoUrl: true, cnpj: true, phone: true },
+      // ADR-016: as taxas da maquininha viajam junto — a UI usa para exibir a margem real.
+      select: {
+        name: true,
+        logoUrl: true,
+        cnpj: true,
+        phone: true,
+        cardFeeDebitPercent: true,
+        cardFeeCreditPercent: true,
+      },
     });
     if (!data) {
       return c.json({ ok: false, error: 'Loja não encontrada.' }, 404);
@@ -59,7 +67,15 @@ tenant.patch('/', requireAdmin, async (c) => {
     await prisma.tenant.update({ where: { id: tenantId }, data: parsed.data });
     const data = await prisma.tenant.findUnique({
       where: { id: tenantId },
-      select: { name: true, logoUrl: true, cnpj: true, phone: true },
+      // ADR-016: as taxas da maquininha viajam junto — a UI usa para exibir a margem real.
+      select: {
+        name: true,
+        logoUrl: true,
+        cnpj: true,
+        phone: true,
+        cardFeeDebitPercent: true,
+        cardFeeCreditPercent: true,
+      },
     });
     return c.json({ ok: true, data });
   } catch (err) {

@@ -3,7 +3,37 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-20 — **PA (produto agregado: venda em par, ADR-015) — NO AR e
+> **Última atualização:** 2026-07-20 — **FP (preço e margem por forma de pagamento, ADR-016) — NO AR,
+> aguardando E2E do Owner.** Pedido do Owner: "mais campos de Custo — Custo Débito e Custo Crédito —
+> e o PDV lê a forma de pagamento e insere o valor correspondente". No refinamento o pedido se
+> **separou em dois mecanismos independentes**, e a distinção é a decisão de produto da fatia:
+> **(1) taxa da maquininha** (%, por loja, em Configurações) que **só informa a margem real** e
+> **(2) acréscimo em R$ por produto** (opt-in, no cadastro) que é o único que **muda o preço
+> cobrado**. O Owner recusou explicitamente derivar o preço da taxa: *"o valor acrescentado não pode
+> ser automático — só os produtos que receberem valor no cadastro"*. **ADR-016 escrito e aprovado
+> ANTES de codar** (regra 4), com 4 decisões: acréscimo (não custo absoluto nem preço final — travado
+> com exemplo numérico), embutido no preço do item no comprovante, só débito/crédito (sem
+> parcelamento), e os dois mecanismos separados. **Desenho central: o acréscimo entra no `unitPrice`**,
+> como o par e a embalagem já faziam — por isso **estoque, cancelamento, devolução, caixa, relatórios
+> e o protocolo de sync não mudaram uma linha**. No PDV o carrinho guarda o **preço base** e o
+> efetivo é **derivado** (`pricedCart`) da forma de pagamento, que é escolhida *depois* de montar o
+> carrinho: trocar Dinheiro → Crédito reprecifica tela, totais, comprovante e payload de uma vez —
+> mantendo a invariante do PA.1 (o front soma exatamente o que envia). **Migration `0012` APLICADA**
+> (aprovada): `products.surchargeDebit/surchargeCredit` + `tenants.cardFeeDebitPercent/CreditPercent`
+> — 4 colunas nullable, RLS intacta, sem drift. Core **+29 → 137/137** (`surchargePerBaseUnit`,
+> `resolveSurcharge` — proporcional na embalagem —, `priceForPaymentMethod`,
+> `pairPriceForPaymentMethod` — acréscimo **antes** do rateio, com teste de propriedade de 1 a 100
+> pares —, `cardFeePercentFor`, `netMarginPercent`). **🔎 Achado dos testes:** o acréscimo repõe o
+> **lucro em R$**, mas **não** a **margem %** (o denominador cresce junto): no caso do Owner, +R$1,50
+> leva o lucro de R$12,00 → R$12,15, mas a margem de 32,43% → 31,56%; repor a margem % exigiria
+> +R$2,02. Documentado no ADR — é para essa escolha que a margem real na tela existe. Web: campos no
+> cadastro/edição de produto (com prévia "no crédito sai R$…"), taxas em Configurações, acréscimo
+> visível na linha do carrinho + aviso do total, margem real no tooltip do PDV e no painel do produto,
+> espelho offline atualizado. ⚠️ Deploy da API obrigatório mesmo sem rota nova (Zod/Prisma antigos
+> descartariam os campos — mesmo tropeço do `popularName` e do `manufacturer`). **NO AR:** API
+> `060acc7e` + web `58fbe607`; smoke ✅. **Falta:** E2E do Owner.
+>
+> **Antes:** 2026-07-20 — **PA (produto agregado: venda em par, ADR-015) — NO AR e
 > VALIDADO pelo usuário; ADR-015 fechado.** Pedido do Owner: parafuso R$0,60 + bucha R$0,20 são produtos independentes, mas o
 > **par sai R$0,70**; no PDV escolhe-se avulso ou par. **ADR-015 escrito e aprovado ANTES de codar**
 > (regra 4), com 3 decisões do Owner: par de 2 itens (colunas, não tabela de combo), par vale **dos dois

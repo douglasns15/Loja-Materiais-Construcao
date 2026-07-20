@@ -20,6 +20,9 @@ type Store = {
   logoUrl: string | null;
   cnpj: string | null;
   phone: string | null;
+  // Taxas da maquininha (ADR-016) — só informam a margem real; nunca alteram preço de venda.
+  cardFeeDebitPercent: number | string | null;
+  cardFeeCreditPercent: number | string | null;
 };
 
 export default function ConfiguracoesPage() {
@@ -35,7 +38,13 @@ export default function ConfiguracoesPage() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Formulário dos dados cadastrais (card "Dados da loja"), independente da logo.
-  const [form, setForm] = useState({ name: '', cnpj: '', phone: '' });
+  const [form, setForm] = useState({
+    name: '',
+    cnpj: '',
+    phone: '',
+    cardFeeDebitPercent: '',
+    cardFeeCreditPercent: '',
+  });
   const [savingData, setSavingData] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
   const [dataSuccess, setDataSuccess] = useState<string | null>(null);
@@ -46,8 +55,17 @@ export default function ConfiguracoesPage() {
       name: s.name ?? '',
       cnpj: formatCnpj(s.cnpj),
       phone: formatPhoneBr(s.phone),
+      cardFeeDebitPercent: s.cardFeeDebitPercent == null ? '' : String(Number(s.cardFeeDebitPercent)),
+      cardFeeCreditPercent:
+        s.cardFeeCreditPercent == null ? '' : String(Number(s.cardFeeCreditPercent)),
     });
   }
+
+  /** Campo de taxa digitado → valor a enviar: vazio vira `null` (limpa a coluna). */
+  const feeOrNull = (v: string) => {
+    const n = Number(v);
+    return v.trim() === '' || !Number.isFinite(n) ? null : n;
+  };
 
   async function load() {
     try {
@@ -135,6 +153,8 @@ export default function ConfiguracoesPage() {
         name: form.name.trim(),
         cnpj: onlyDigits(form.cnpj) || null,
         phone: onlyDigits(form.phone) || null,
+        cardFeeDebitPercent: feeOrNull(form.cardFeeDebitPercent),
+        cardFeeCreditPercent: feeOrNull(form.cardFeeCreditPercent),
       });
       setStore(updated);
       fillForm(updated);
@@ -152,7 +172,11 @@ export default function ConfiguracoesPage() {
     !!store &&
     (form.name.trim() !== (store.name ?? '') ||
       onlyDigits(form.cnpj) !== onlyDigits(store.cnpj) ||
-      onlyDigits(form.phone) !== onlyDigits(store.phone));
+      onlyDigits(form.phone) !== onlyDigits(store.phone) ||
+      feeOrNull(form.cardFeeDebitPercent) !==
+        (store.cardFeeDebitPercent == null ? null : Number(store.cardFeeDebitPercent)) ||
+      feeOrNull(form.cardFeeCreditPercent) !==
+        (store.cardFeeCreditPercent == null ? null : Number(store.cardFeeCreditPercent)));
 
   // RBAC (ADR-008): Configurações é área administrativa. A API já bloqueia as escritas;
   // aqui evitamos exibir a tela para quem não é Admin (acesso direto pela URL).
@@ -291,6 +315,59 @@ export default function ConfiguracoesPage() {
                 placeholder="Só números (ex.: 11987654321)"
                 className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
               />
+            </div>
+          </div>
+
+          {/*
+            Taxas da maquininha (ADR-016). Deliberadamente NÃO alteram preço de venda: servem
+            para a tela mostrar a margem REAL por modalidade. Quem sobe o preço é o acréscimo
+            opt-in de cada produto, no cadastro.
+          */}
+          <div className="border-t border-gray-100 pt-4">
+            <h3 className="text-sm font-medium text-gray-900">Taxas da maquininha</h3>
+            <p className="mt-1 text-xs text-gray-500">
+              Percentual que a operadora desconta de cada venda no cartão. Usado só para calcular
+              a <strong>margem real</strong> dos produtos — <strong>não</strong> altera o preço
+              cobrado do cliente. Para cobrar mais no cartão, preencha o acréscimo no cadastro do
+              produto.
+            </p>
+            <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label htmlFor="fee-debit" className="block text-sm font-medium text-gray-700">
+                  Débito (%)
+                </label>
+                <input
+                  id="fee-debit"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  value={form.cardFeeDebitPercent}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, cardFeeDebitPercent: e.target.value }))
+                  }
+                  placeholder="ex.: 1,5"
+                  className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+                />
+              </div>
+              <div>
+                <label htmlFor="fee-credit" className="block text-sm font-medium text-gray-700">
+                  Crédito (%)
+                </label>
+                <input
+                  id="fee-credit"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  value={form.cardFeeCreditPercent}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, cardFeeCreditPercent: e.target.value }))
+                  }
+                  placeholder="ex.: 3,5"
+                  className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+                />
+              </div>
             </div>
           </div>
 

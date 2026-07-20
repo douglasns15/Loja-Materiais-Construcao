@@ -71,6 +71,14 @@ export const createProductSchema = z.object({
   pairedProductId: z.string().uuid().optional(),
   pairPrice: z.number().positive().optional(),
   /**
+   * Acréscimo por forma de pagamento (ADR-016). Valor em R$ por **unidade-base** que é somado
+   * ao preço quando a venda é no débito/crédito — é quanto o preço SOBE, não um custo nem o
+   * preço final. **Opt-in por produto:** ausente ⇒ o produto não muda de preço naquela forma
+   * de pagamento (nunca é derivado da taxa da maquininha da loja, que só informa margem).
+   */
+  surchargeDebit: z.number().positive().optional(),
+  surchargeCredit: z.number().positive().optional(),
+  /**
    * Estoque inicial (opcional). Quando > 0, o cadastro NÃO grava o saldo direto no produto:
    * a API cria o produto e gera a **Entrada** (`StockMovement` INCOME) na MESMA transação
    * (ADR-001 — `stockQty` é cache; a movimentação é a fonte de verdade), já com a autoria
@@ -103,5 +111,8 @@ export const updateProductSchema = createProductSchema
     // ADR-015: `null` desfaz o par (deixa de oferecer "avulso × par" no PDV).
     pairedProductId: z.string().uuid().nullable().optional(),
     pairPrice: z.number().positive().nullable().optional(),
+    // ADR-016: `null` remove o acréscimo (o produto volta a ter preço único).
+    surchargeDebit: z.number().positive().nullable().optional(),
+    surchargeCredit: z.number().positive().nullable().optional(),
   });
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;

@@ -19,7 +19,11 @@ import {
   pairAvailableQty,
   productMatchesQuery,
   resolveSaleUnit,
+  resolveSurcharge,
   splitPairLine,
+  surchargePerBaseUnit,
+  cardFeePercentFor,
+  netMarginPercent,
 } from '@nexoloja/core';
 import { apiGet, apiPost } from '@/lib/api';
 import { cacheCashSession, readCachedCashSession } from '@/lib/cashSessionCache';
@@ -32,6 +36,12 @@ import { ReceiptPrint, type Store } from '@/components/ReceiptPrint';
 import { StoreDisabledNotice } from '@/components/StoreDisabledNotice';
 import { OfflineSalesNotice } from '@/components/OfflineSalesNotice';
 import { BarcodeScanButton } from '@/components/BarcodeScanButton';
+
+/** Taxas da maquininha que vêm junto no `GET /tenant` (ADR-016). */
+type StoreCardFees = {
+  cardFeeDebitPercent: number | string | null;
+  cardFeeCreditPercent: number | string | null;
+};
 
 type Product = {
   id: string;
@@ -51,12 +61,22 @@ type Product = {
   // Produto agregado — venda em par (ADR-015). Nulos ⇒ produto sem par.
   pairedProductId: string | null;
   pairPrice: string | null;
+  // Acréscimo por forma de pagamento (ADR-016). Nulos ⇒ preço igual em qualquer forma.
+  surchargeDebit: string | null;
+  surchargeCredit: string | null;
 };
 type CartItem = {
   /** Chave única da linha = `productId:saleMode` (o mesmo produto pode ir como metro E como rolo). */
   key: string;
   productId: string;
   name: string;
+  /**
+   * Preço **base** da unidade vendida — SEM o acréscimo por forma de pagamento (ADR-016).
+   *
+   * O acréscimo não pode ser congelado aqui: a forma de pagamento é escolhida depois de o
+   * carrinho estar montado, e trocar de Dinheiro para Crédito no fim tem de reprecificar a
+   * tela toda. Por isso ele fica em `surcharge*` e o preço efetivo é DERIVADO em `pricedCart`.
+   */
   unitPrice: number;
   costPrice: number;
   quantity: number;
@@ -67,6 +87,13 @@ type CartItem = {
   unitType: UnitType;
   baseUnitType: UnitType;
   conversionFactor: number;
+  /**
+   * Acréscimo por forma de pagamento (ADR-016), em R$ **por unidade vendida desta linha** —
+   * já composto com a embalagem (EF-3: × fator) e com o par (soma dos dois lados). Zero quando
+   * o produto não tem acréscimo cadastrado, que é o caso da maior parte do catálogo.
+   */
+  surchargeDebit: number;
+  surchargeCredit: number;
   /**
    * Venda em par (ADR-015). Presente ⇒ esta linha é **um par**: no carrinho e no comprovante
    * aparece como UMA linha ("Parafuso + Bucha nº10") com `unitPrice` = preço do par, mas na
@@ -175,6 +202,11 @@ export default function VendaPage() {
   const [busy, setBusy] = useState(false);
   const [view, setView] = useState<View | null>(null);
   const [store, setStore] = useState<Store | null>(null);
+  // Taxas da maquininha da loja (ADR-016) — informam a margem REAL no tooltip; nunca mudam preço.
+  const [cardFees, setCardFees] = useState<{
+    cardFeeDebitPercent: number | null;
+    cardFeeCreditPercent: number | null;
+  } | null>(null);
   const [printModel, setPrintModel] = useState<'80mm' | 'A4'>('80mm');
 
   async function loadProducts() {
@@ -187,7 +219,18 @@ export default function VendaPage() {
   useEffect(() => {
     (async () => {
       try {
-        apiGet<Store>('/tenant').then(setStore).catch(() => {});
+        // O mesmo GET traz as taxas da maquininha (ADR-016), usadas só no tooltip de margem real.
+        apiGet<Store & StoreCardFees>('/tenant')
+          .then((s) => {
+            setStore(s);
+            setCardFees({
+              cardFeeDebitPercent:
+                s.cardFeeDebitPercent == null ? null : Number(s.cardFeeDebitPercent),
+              cardFeeCreditPercent:
+                s.cardFeeCreditPercent == null ? null : Number(s.cardFeeCreditPercent),
+            });
+          })
+          .catch(() => {});
         const session = await apiGet<{
           id: string;
           openedAt: string;
@@ -236,6 +279,41 @@ export default function VendaPage() {
   }
 
   const discountValue = Math.max(0, Number(discount) || 0);
+
+  /**
+   * Carrinho **reprecificado pela forma de pagamento** (ADR-016) — o preço do cartão só existe
+   * aqui, derivado, nunca congelado na linha. Trocar o método reprecifica tudo de uma vez:
+   * carrinho, totais, comprovante e o payload da venda saem todos deste mesmo array, então não
+   * existe caminho em que a tela mostre um preço e o servidor cobre outro.
+   */
+  const pricedCart = useMemo(
+    () =>
+      cart.map((c) => {
+        const extra = method === 'DEBIT_CARD' ? c.surchargeDebit : method === 'CREDIT_CARD' ? c.surchargeCredit : 0;
+        return extra > 0
+          ? { ...c, unitPrice: Number((c.unitPrice + extra).toFixed(4)) }
+          : c;
+      }),
+    [cart, method],
+  );
+  /** Quanto o carrinho inteiro subiu por causa da forma de pagamento (0 = nenhum acréscimo). */
+  const surchargeTotal = useMemo(
+    () =>
+      Number(
+        cart
+          .reduce((acc, c) => {
+            const extra =
+              method === 'DEBIT_CARD'
+                ? c.surchargeDebit
+                : method === 'CREDIT_CARD'
+                  ? c.surchargeCredit
+                  : 0;
+            return acc + extra * c.quantity;
+          }, 0)
+          .toFixed(2),
+      ),
+    [cart, method],
+  );
   /**
    * Total do carrinho calculado sobre **exatamente os itens que serão enviados** (pares já
    * expandidos em dois, com o preço rateado), usando a mesma função do servidor. Antes o total
@@ -249,8 +327,10 @@ export default function VendaPage() {
         cartToSaleItems().map((i) => ({ quantity: i.quantity, unitPrice: i.unitPrice })),
         { discountAmount: discountValue },
       ),
+    // `method` entra nas deps porque o acréscimo por forma de pagamento (ADR-016) reprecifica
+    // o carrinho — sem isso, trocar Dinheiro → Crédito mostraria o total antigo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [cart, discountValue],
+    [cart, discountValue, method],
   );
   const discountTooHigh = discountValue > totals.subtotal;
   const change = method === 'CASH' && received ? Number(received) - totals.total : 0;
@@ -260,6 +340,18 @@ export default function VendaPage() {
     () => products.filter((p) => productMatchesQuery(p, productSearch)),
     [products, productSearch],
   );
+
+  /**
+   * Config de acréscimo por forma de pagamento (ADR-016) de um produto, no formato do core.
+   * Inclui a config de embalagem porque `resolveSurcharge` precisa do fator para o modo ALT.
+   */
+  function surchargeCfg(p: Product) {
+    return {
+      ...altConfig(p),
+      surchargeDebit: p.surchargeDebit != null ? Number(p.surchargeDebit) : null,
+      surchargeCredit: p.surchargeCredit != null ? Number(p.surchargeCredit) : null,
+    };
+  }
 
   /** Config de unidade alternativa (EF-3) de um produto, no formato do core. */
   function altConfig(p: Product) {
@@ -316,7 +408,9 @@ export default function VendaPage() {
    */
   function cartToSaleItems() {
     let group = 0;
-    return cart.flatMap((c) => {
+    // Parte do carrinho JÁ reprecificado (ADR-016) — o `unitPrice` daqui é o que será cobrado,
+    // e no par o acréscimo entra antes do rateio, mantendo a soma exata dos dois itens.
+    return pricedCart.flatMap((c) => {
       if (!c.pair) {
         return [
           {
@@ -358,18 +452,22 @@ export default function VendaPage() {
   /** Tooltip por item: margem de lucro e desconto máximo possível (até o custo). No modo embalagem
    *  (EF-3), a margem usa o preço efetivo POR UNIDADE-BASE (preço do rolo ÷ fator), comparável ao custo. */
   function itemTooltip(i: CartItem): string {
+    // Taxa da forma de pagamento escolhida (ADR-016): a margem mostrada é a REAL, já
+    // descontada a maquininha. Sem taxa cadastrada, é a margem de sempre.
+    const fee = cardFeePercentFor(cardFees ?? {}, method);
+    const feeNote = fee > 0 ? ` (líq. da taxa de ${fee}%)` : '';
     // Par (ADR-015): preço e custo da linha já são a soma dos dois lados, então a margem
     // do par sai direto (é a margem do conjunto, que é o que interessa ao operador).
     if (i.pair) {
-      const margin = calcMarginPercent(i.costPrice, i.unitPrice);
-      return `Par: ${i.name} • Margem do par: ${margin}%`;
+      const margin = netMarginPercent(i.costPrice, i.unitPrice, fee);
+      return `Par: ${i.name} • Margem do par: ${margin}%${feeNote}`;
     }
     const effUnit = i.conversionFactor > 0 ? i.unitPrice / i.conversionFactor : i.unitPrice;
-    const margin = calcMarginPercent(i.costPrice, effUnit);
+    const margin = netMarginPercent(i.costPrice, effUnit, fee);
     const maxDisc = Math.max(0, Number((i.unitPrice - i.costPrice * i.conversionFactor).toFixed(2)));
     return maxDisc > 0
-      ? `Margem: ${margin}% • Desconto possível: até ${BRL(maxDisc)}/un`
-      : `Margem: ${margin}% • Sem margem para desconto`;
+      ? `Margem: ${margin}%${feeNote} • Desconto possível: até ${BRL(maxDisc)}/un`
+      : `Margem: ${margin}%${feeNote} • Sem margem para desconto`;
   }
 
   // `productId` padrão = seleção do dropdown; o scanner/Enter passa o id do único match da busca.
@@ -417,6 +515,10 @@ export default function VendaPage() {
           unitType,
           baseUnitType: p.unit,
           conversionFactor: factorToBase,
+          // ADR-016: acréscimo por unidade VENDIDA — na embalagem fechada o core já multiplica
+          // pelo fator (um rolo de 100 m sobe 100 × o acréscimo do metro).
+          surchargeDebit: resolveSurcharge(surchargeCfg(p), 'DEBIT_CARD', effMode),
+          surchargeCredit: resolveSurcharge(surchargeCfg(p), 'CREDIT_CARD', effMode),
         },
       ]);
     }
@@ -484,6 +586,20 @@ export default function VendaPage() {
           unitType: p.unit,
           baseUnitType: p.unit,
           conversionFactor: 1,
+          // ADR-016: o par consome 1 de cada lado, então os DOIS acréscimos incidem. Somados
+          // aqui, entram no preço do par ANTES do rateio — a soma dos dois itens segue exata.
+          surchargeDebit: Number(
+            (
+              surchargePerBaseUnit(surchargeCfg(p), 'DEBIT_CARD') +
+              surchargePerBaseUnit(surchargeCfg(partner), 'DEBIT_CARD')
+            ).toFixed(4),
+          ),
+          surchargeCredit: Number(
+            (
+              surchargePerBaseUnit(surchargeCfg(p), 'CREDIT_CARD') +
+              surchargePerBaseUnit(surchargeCfg(partner), 'CREDIT_CARD')
+            ).toFixed(4),
+          ),
           pair: {
             partnerId: partner.id,
             partnerName: partner.name,
@@ -557,7 +673,8 @@ export default function VendaPage() {
       total: totals.total,
       discount: discountValue,
       method,
-      items: cart,
+      // Snapshot já reprecificado (ADR-016) — o comprovante imprime o que foi cobrado.
+      items: pricedCart,
       date: new Date().toLocaleString('pt-BR'),
     };
 
@@ -650,7 +767,9 @@ export default function VendaPage() {
       kind: 'quote',
       total: totals.total,
       discount: discountValue,
-      items: cart,
+      // O orçamento sai no preço da forma de pagamento selecionada (ADR-016) — por isso o
+      // método aparece junto, para o cliente saber a que preço a cotação se refere.
+      items: pricedCart,
       date: new Date().toLocaleString('pt-BR'),
     });
   }
@@ -707,7 +826,7 @@ export default function VendaPage() {
           <p className="inline-flex items-center gap-2 rounded-full bg-blue-100 px-3 py-1 text-sm font-medium text-blue-700">
             Confira antes de confirmar
           </p>
-          <Summary items={cart} total={totals.total} discount={discountValue} />
+          <Summary items={pricedCart} total={totals.total} discount={discountValue} />
           <div className="flex justify-between text-sm text-gray-500">
             <span>Pagamento</span>
             <span>{PAYMENT_METHOD_LABELS[method]}</span>
@@ -1048,7 +1167,7 @@ export default function VendaPage() {
                 </td>
               </tr>
             ) : (
-              cart.map((i) => (
+              pricedCart.map((i) => (
                 <tr key={i.key} className="border-t border-gray-100">
                   <td className="px-4 py-2">
                     <span title={itemTooltip(i)} className="cursor-help border-b border-dotted border-gray-300">
@@ -1063,6 +1182,14 @@ export default function VendaPage() {
                     {i.pair && (
                       <span className="block text-xs text-emerald-600">
                         par · baixa 1 de cada produto
+                      </span>
+                    )}
+                    {/* Acréscimo por forma de pagamento (ADR-016): sempre visível na linha —
+                        o operador precisa saber por que o preço não é o de tabela. */}
+                    {(method === 'DEBIT_CARD' ? i.surchargeDebit : method === 'CREDIT_CARD' ? i.surchargeCredit : 0) > 0 && (
+                      <span className="block text-xs text-amber-600">
+                        +{BRL(method === 'DEBIT_CARD' ? i.surchargeDebit : i.surchargeCredit)}/un no{' '}
+                        {method === 'DEBIT_CARD' ? 'débito' : 'crédito'}
                       </span>
                     )}
                   </td>
@@ -1088,6 +1215,14 @@ export default function VendaPage() {
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-3 rounded-2xl bg-white p-4 shadow-sm">
           <label className="block text-sm font-medium">Forma de pagamento</label>
+          {/* Trocar a forma de pagamento reprecifica o carrinho na hora (ADR-016). O aviso
+              explica a diferença antes de o cliente perguntar. */}
+          {surchargeTotal > 0 && (
+            <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+              Acréscimo de <strong>{BRL(surchargeTotal)}</strong> no{' '}
+              {method === 'DEBIT_CARD' ? 'débito' : 'crédito'} — já incluído nos preços acima.
+            </p>
+          )}
           <select
             value={method}
             onChange={(e) => setMethod(e.target.value as PaymentMethod)}

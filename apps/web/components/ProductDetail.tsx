@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { updateProductSchema, unitTypeLabels, type UnitType } from '@nexoloja/shared';
+import { cardFeePercentFor, netMarginPercent, surchargePerBaseUnit } from '@nexoloja/core';
 import { apiPatch } from '@/lib/api';
 
 /**
@@ -36,6 +37,9 @@ export type ProductFull = {
   // Produto agregado — venda em par (ADR-015).
   pairedProductId: string | null;
   pairPrice: string | null;
+  // Acréscimo por forma de pagamento (ADR-016) — R$ por unidade-base; null ⇒ preço único.
+  surchargeDebit: string | null;
+  surchargeCredit: string | null;
   marginPercent: number;
   createdByName: string | null;
   createdAt: string;
@@ -48,6 +52,20 @@ const BRL = (v: string | number) =>
 
 const QTY = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 4 });
+
+/**
+ * Acréscimos do produto no formato do core (ADR-016) — a API devolve `Decimal` como string.
+ */
+const toSurcharge = (p: ProductFull) => ({
+  surchargeDebit: p.surchargeDebit === null ? null : Number(p.surchargeDebit),
+  surchargeCredit: p.surchargeCredit === null ? null : Number(p.surchargeCredit),
+});
+
+/** Taxas da maquininha da loja (ADR-016), como o painel as recebe da tela de Produtos. */
+export type CardFees = {
+  cardFeeDebitPercent?: number | null;
+  cardFeeCreditPercent?: number | null;
+};
 
 /** Autoria (ADR-010): "<nome> · <data>", ou "—" quando não há registro (dados antigos). */
 const byLine = (name: string | null, iso?: string) =>
@@ -71,6 +89,8 @@ type FormState = {
   altSalePrice: string;
   pairedProductId: string;
   pairPrice: string;
+  surchargeDebit: string;
+  surchargeCredit: string;
 };
 
 /**
@@ -95,6 +115,8 @@ function toForm(p: ProductFull): FormState {
     altSalePrice: p.altSalePrice === null ? '' : String(Number(p.altSalePrice)),
     pairedProductId: p.pairedProductId ?? '',
     pairPrice: p.pairPrice === null ? '' : String(Number(p.pairPrice)),
+    surchargeDebit: p.surchargeDebit === null ? '' : String(Number(p.surchargeDebit)),
+    surchargeCredit: p.surchargeCredit === null ? '' : String(Number(p.surchargeCredit)),
   };
 }
 
@@ -140,6 +162,9 @@ function buildPatch(original: ProductFull, f: FormState): Record<string, unknown
     // senão sobraria metade da configuração no banco.
     pairedProductId: textOrNull(f.pairedProductId),
     pairPrice: f.pairedProductId.trim() === '' ? null : numOrNull(f.pairPrice),
+    // ADR-016: limpar o campo remove o acréscimo (produto volta a ter preço único).
+    surchargeDebit: numOrNull(f.surchargeDebit),
+    surchargeCredit: numOrNull(f.surchargeCredit),
   };
 
   const current = {
@@ -159,6 +184,10 @@ function buildPatch(original: ProductFull, f: FormState): Record<string, unknown
     altSalePrice: original.altSalePrice === null ? null : Number(original.altSalePrice),
     pairedProductId: original.pairedProductId,
     pairPrice: original.pairPrice === null ? null : Number(original.pairPrice),
+    surchargeDebit:
+      original.surchargeDebit === null ? null : Number(original.surchargeDebit),
+    surchargeCredit:
+      original.surchargeCredit === null ? null : Number(original.surchargeCredit),
   };
 
   for (const key of Object.keys(next) as (keyof typeof next)[]) {
@@ -170,12 +199,15 @@ function buildPatch(original: ProductFull, f: FormState): Record<string, unknown
 export function ProductDetail({
   product,
   allProducts,
+  cardFees,
   onClose,
   onSaved,
 }: {
   product: ProductFull;
   /** Catálogo completo — alimenta o seletor do produto agregado e a leitura do par (ADR-015). */
   allProducts: ProductFull[];
+  /** Taxas da maquininha da loja (ADR-016) — só para exibir a margem real; nunca mudam preço. */
+  cardFees?: CardFees | null;
   onClose: () => void;
   /** Chamado após um PATCH bem-sucedido, para a lista recarregar. */
   onSaved: () => Promise<void> | void;
@@ -301,6 +333,39 @@ export function ProductDetail({
               <Row label="Custo" value={BRL(product.costPrice)} />
               <Row label="Venda" value={BRL(product.salePrice)} />
               <Row label="Margem" value={`${product.marginPercent}%`} />
+              {/*
+                Preço e margem por forma de pagamento (ADR-016). Só aparece quando há algo a
+                dizer: acréscimo cadastrado no produto OU taxa da maquininha cadastrada na loja.
+                A margem aqui é a REAL — já descontada a taxa —, que é o número que decide se o
+                acréscimo está no tamanho certo.
+              */}
+              {(['DEBIT_CARD', 'CREDIT_CARD'] as const).map((m) => {
+                const extra = surchargePerBaseUnit(toSurcharge(product), m);
+                const fee = cardFeePercentFor(cardFees ?? {}, m);
+                if (extra === 0 && fee === 0) return null;
+                const preco = Number(product.salePrice) + extra;
+                const margem = netMarginPercent(Number(product.costPrice), preco, fee);
+                return (
+                  <Row
+                    key={m}
+                    label={m === 'DEBIT_CARD' ? 'No débito' : 'No crédito'}
+                    value={
+                      <>
+                        {BRL(preco)}
+                        {extra > 0 && (
+                          <span className="text-gray-400"> (+{BRL(extra)})</span>
+                        )}
+                        <span
+                          className={`block text-xs ${margem < 0 ? 'text-red-600' : 'text-gray-400'}`}
+                        >
+                          margem real {margem}%
+                          {fee > 0 && ` · taxa ${fee}%`}
+                        </span>
+                      </>
+                    }
+                  />
+                );
+              })}
               <Row
                 label="Estoque atual"
                 value={`${QTY(product.stockQty)} ${unitTypeLabels[product.unit]}`}
@@ -591,6 +656,54 @@ export function ProductDetail({
                     cadastrar de novo no outro produto.
                   </p>
                 </>
+              )}
+            </fieldset>
+
+            {/* Acréscimo por forma de pagamento (ADR-016) — opt-in por produto. */}
+            <fieldset className="rounded-xl border border-dashed border-gray-300 p-3 sm:col-span-6">
+              <legend className="px-1 text-xs font-medium text-gray-500">
+                Acréscimo por forma de pagamento — quanto o preço SOBE no cartão
+              </legend>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <input
+                  placeholder="Acréscimo no débito (R$)"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={form.surchargeDebit}
+                  onChange={(e) => setForm({ ...form, surchargeDebit: e.target.value })}
+                  className={inputCls}
+                  aria-label="Acréscimo no débito"
+                />
+                <input
+                  placeholder="Acréscimo no crédito (R$)"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={form.surchargeCredit}
+                  onChange={(e) => setForm({ ...form, surchargeCredit: e.target.value })}
+                  className={inputCls}
+                  aria-label="Acréscimo no crédito"
+                />
+              </div>
+              {/* Prévia do preço resultante — evita a confusão "digitei o preço final?". */}
+              {Number(form.salePrice) > 0 &&
+              (Number(form.surchargeDebit) > 0 || Number(form.surchargeCredit) > 0) ? (
+                <p className="mt-2 text-xs text-gray-500">
+                  À vista {BRL(form.salePrice)} · no débito{' '}
+                  <strong>
+                    {BRL(Number(form.salePrice) + (Number(form.surchargeDebit) || 0))}
+                  </strong>{' '}
+                  · no crédito{' '}
+                  <strong>
+                    {BRL(Number(form.salePrice) + (Number(form.surchargeCredit) || 0))}
+                  </strong>
+                </p>
+              ) : (
+                <p className="mt-2 text-xs text-gray-400">
+                  Vazio = mesmo preço em qualquer forma de pagamento. Dinheiro e PIX nunca têm
+                  acréscimo.
+                </p>
               )}
             </fieldset>
 

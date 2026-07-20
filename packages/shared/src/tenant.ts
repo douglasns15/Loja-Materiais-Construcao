@@ -64,6 +64,14 @@ export const updateTenantSchema = z.object({
     .nullish()
     .transform((v) => onlyDigits(v) || null)
     .refine((v) => v === null || v.length <= 11, { message: 'Telefone inválido.' }),
+  /**
+   * Taxa da maquininha por modalidade, em PERCENTUAL (ADR-016). Ex.: 3.5 = 3,5%.
+   * Serve só para exibir a **margem real** — nunca altera o preço cobrado do cliente (quem
+   * altera preço é o acréscimo opt-in de cada produto). `null` = não cadastrada ⇒ a margem é
+   * exibida como sempre foi. Teto de 100% porque acima disso a venda nunca fecharia.
+   */
+  cardFeeDebitPercent: z.number().min(0).max(100).nullish(),
+  cardFeeCreditPercent: z.number().min(0).max(100).nullish(),
 });
 export type UpdateTenantInput = z.infer<typeof updateTenantSchema>;
 

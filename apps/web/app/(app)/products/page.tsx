@@ -7,7 +7,7 @@ import { apiGet, apiPatch, apiPost } from '@/lib/api';
 import { useOnline } from '@/lib/useOnline';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { BarcodeScanButton } from '@/components/BarcodeScanButton';
-import { ProductDetail, type ProductFull } from '@/components/ProductDetail';
+import { ProductDetail, type CardFees, type ProductFull } from '@/components/ProductDetail';
 
 /**
  * A lista usa o cadastro **completo** (`ProductFull`) porque a linha abre o painel de
@@ -51,12 +51,19 @@ export default function ProductsPage() {
     // Produto agregado — venda em par (ADR-015). Vazios ⇒ produto sem par.
     pairedProductId: '',
     pairPrice: '',
+    // Acréscimo por forma de pagamento (ADR-016). Vazios ⇒ preço único em todas as formas.
+    surchargeDebit: '',
+    surchargeCredit: '',
   });
   const [saving, setSaving] = useState(false);
 
   // Busca local: nome, nome popular, fabricante ou SKU (função pura de packages/core).
   const [search, setSearch] = useState('');
   const filtered = products.filter((p) => productMatchesQuery(p, search));
+
+  // Taxas da maquininha da loja (ADR-016) — só para o painel exibir a margem REAL por
+  // modalidade. Nunca alteram preço; falha silenciosa (a margem simplesmente não desconta taxa).
+  const [cardFees, setCardFees] = useState<CardFees | null>(null);
 
   // Produto aberto no painel de visualizar/editar (null = painel fechado).
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -83,6 +90,9 @@ export default function ProductsPage() {
 
   useEffect(() => {
     load();
+    apiGet<CardFees>('/tenant')
+      .then(setCardFees)
+      .catch(() => setCardFees(null));
   }, []);
 
   // Remove o destaque da linha escaneada depois de alguns segundos.
@@ -125,6 +135,10 @@ export default function ProductsPage() {
       pairedProductId: form.pairedProductId || undefined,
       pairPrice:
         form.pairedProductId && form.pairPrice ? Number(form.pairPrice) : undefined,
+      // Acréscimo por pagamento (ADR-016): opt-in — vazio não vira coluna, o produto
+      // simplesmente não muda de preço no cartão.
+      surchargeDebit: form.surchargeDebit ? Number(form.surchargeDebit) : undefined,
+      surchargeCredit: form.surchargeCredit ? Number(form.surchargeCredit) : undefined,
     });
     if (!parsed.success) {
       setError('Confira os campos: nome, SKU e preços são obrigatórios.');
@@ -157,6 +171,8 @@ export default function ProductsPage() {
         altSalePrice: '',
         pairedProductId: '',
         pairPrice: '',
+        surchargeDebit: '',
+        surchargeCredit: '',
       });
       await load();
     } catch (e) {
@@ -435,6 +451,50 @@ export default function ProductsPage() {
             precisa cadastrar de novo no outro produto.
           </p>
         </fieldset>
+        {/* Acréscimo por forma de pagamento (ADR-016). Opt-in: só sobe o preço de quem for
+            preenchido aqui — nunca é derivado da taxa da maquininha da loja. */}
+        <fieldset className="rounded-xl border border-dashed border-gray-300 p-3 sm:col-span-6">
+          <legend className="px-1 text-xs font-medium text-gray-500">
+            Acréscimo por forma de pagamento (opcional) — quanto o preço SOBE no cartão
+          </legend>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <input
+              placeholder="Acréscimo no débito (R$)"
+              type="number"
+              step="0.01"
+              min="0"
+              value={form.surchargeDebit}
+              onChange={(e) => setForm({ ...form, surchargeDebit: e.target.value })}
+              title="Quanto SOMAR ao preço quando a venda for no débito. Não é o preço final nem um custo."
+              className="rounded-lg border border-gray-300 px-3 py-2"
+            />
+            <input
+              placeholder="Acréscimo no crédito (R$)"
+              type="number"
+              step="0.01"
+              min="0"
+              value={form.surchargeCredit}
+              onChange={(e) => setForm({ ...form, surchargeCredit: e.target.value })}
+              title="Quanto SOMAR ao preço quando a venda for no crédito. Não é o preço final nem um custo."
+              className="rounded-lg border border-gray-300 px-3 py-2"
+            />
+          </div>
+          {/* Prévia do preço resultante — evita a confusão "digitei o preço final?". */}
+          {Number(form.salePrice) > 0 &&
+          (Number(form.surchargeDebit) > 0 || Number(form.surchargeCredit) > 0) ? (
+            <p className="mt-2 text-xs text-gray-500">
+              Preço à vista {BRL(form.salePrice)} · no débito{' '}
+              <strong>{BRL(Number(form.salePrice) + (Number(form.surchargeDebit) || 0))}</strong> ·
+              no crédito{' '}
+              <strong>{BRL(Number(form.salePrice) + (Number(form.surchargeCredit) || 0))}</strong>
+            </p>
+          ) : (
+            <p className="mt-2 text-xs text-gray-400">
+              Deixe vazio para cobrar o mesmo preço em qualquer forma de pagamento. Dinheiro e PIX
+              nunca têm acréscimo.
+            </p>
+          )}
+        </fieldset>
         <button
           type="submit"
           disabled={saving}
@@ -570,6 +630,7 @@ export default function ProductsPage() {
         <ProductDetail
           product={detail}
           allProducts={products}
+          cardFees={cardFees}
           onClose={() => setDetailId(null)}
           onSaved={load}
         />

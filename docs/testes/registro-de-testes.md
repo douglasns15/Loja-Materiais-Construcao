@@ -2661,3 +2661,71 @@ o `discount` da linha como resíduo, poluindo o significado de desconto nos rela
 > automatizado não alcança: são a prova de que gravar o par como **dois `OrderItem`** faz o estoque, o
 > estorno e a trava dos dois lados funcionarem pelo motor que já existia — nenhuma linha nova de
 > estoque/cancelamento/devolução foi escrita nesta fatia. O 5º caso fecha o bug de arredondamento.
+
+---
+
+### 3.FP — Preço e margem por forma de pagamento (ADR-016) — 2026-07-20
+
+ADR-016 **escrito e aprovado antes de codar** (regra 4). O pedido do Owner ("mais campos de Custo,
+e o PDV insere o valor da forma de pagamento") separou-se em **dois mecanismos independentes**:
+**(1) taxa da maquininha** por loja (%, em Configurações) que **só informa a margem real** e
+**(2) acréscimo em R$ por produto** (opt-in, no cadastro) que é o único que **muda o preço cobrado**.
+Derivar preço da taxa foi recusado pelo Owner. O acréscimo entra **embutido no `unitPrice`** (mesmo
+padrão do par e da embalagem), então **estoque, cancelamento, devolução, caixa, relatórios e o
+protocolo de sync não mudaram**. Migration **`0012`** (4 colunas nullable, RLS intacta).
+
+**Migration / build / core (local)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| `migrate diff` (banco → schema) | só as 4 colunas, sem drift | ✅ |
+| `migrate deploy` (`0012`) + `migrate status` | aplicada / up to date | ✅ |
+| Core: `surchargePerBaseUnit` (opt-in, CASH/PIX zerados, campos ausentes) | — | ✅ |
+| Core: `resolveSurcharge` — embalagem fechada é proporcional (rolo 100 m: R$0,02/m → +R$2,00) | — | ✅ |
+| Core: `priceForPaymentMethod` — caso do Owner R$37 → **R$38,50** no crédito | — | ✅ |
+| Core: `pairPriceForPaymentMethod` — par soma os DOIS lados (R$0,70 → R$0,75) | — | ✅ |
+| Core: **acréscimo antes do rateio** — os 2 itens do par somam exato, de 1 a 100 pares | desvio 0 | ✅ |
+| Core: `netMarginPercent` (sem taxa = margem de sempre; pode ser negativa) | — | ✅ |
+| Core (Vitest) — total | +29 | ✅ **137/137** |
+| Typecheck `apps/api` (`tsc --noEmit`) | sem erros | ✅ |
+| Typecheck `apps/web` + build (18 rotas) | sem erros | ✅ |
+
+**🔎 Achado (durante os testes): o acréscimo repõe LUCRO, não repõe MARGEM %**
+
+O primeiro teste que escrevi afirmava que o acréscimo levaria a margem no crédito acima da margem à
+vista. **Falhou — e a asserção é que estava errada**, não o código:
+
+| | Preço | Taxa (3,5%) | Lucro em R$ | Margem % |
+|---|---|---|---|---|
+| À vista | 37,00 | — | **12,00** | **32,43%** |
+| Crédito +R$1,50 | 38,50 | 1,3475 | **12,15** | **31,56%** |
+
+O acréscimo entra também no denominador. Equilíbrios para esse produto: **+R$1,34** repõe o lucro em
+reais; **+R$2,02** repõe a margem %. Registrado no ADR — é exatamente para essa escolha que a margem
+real aparece na tela.
+
+**Deploy + smoke (produção)**
+
+⚠️ Deploy da API **obrigatório** mesmo sem rota nova: Zod/Prisma antigos descartariam os campos
+(mesmo tropeço do `popularName` em 14/07 e do `manufacturer` na fatia EP).
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| `npm run deploy` (API) | publicado | ✅ Version `060acc7e` |
+| `npm run deploy` (web) | publicado | ✅ Version `58fbe607` |
+| `GET /health` | 200 | ✅ `{"ok":true,"service":"nexoloja-api"}` |
+| `GET /tenant` sem token | 401 | ✅ |
+| web `/login` | 200 | ✅ |
+
+**E2E do Owner — ⏭️ PENDENTE**
+
+| Caso | Esperado |
+|---|---|
+| Cadastrar taxas (débito 1,5% / crédito 3,5%) em Configurações | salva; margem real passa a aparecer |
+| Produto **sem** acréscimo, vendido no crédito | preço **não muda** (opt-in) |
+| Cadastrar acréscimo no crédito (ex.: R$1,50) | prévia mostra o preço do crédito |
+| No PDV, trocar Dinheiro → Crédito com o carrinho montado | preços e total **reprecificam na hora** |
+| Concluir a venda no crédito | total cobrado = o da tela (sem "pagamento insuficiente") |
+| Comprovante | imprime o preço do cartão, em linha única |
+| Vender o **par** com acréscimo nos dois lados | par sobe pela soma; total fecha exato |
+| Apagar o acréscimo (campo vazio) | produto volta ao preço único |

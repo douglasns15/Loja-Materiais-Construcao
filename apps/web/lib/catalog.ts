@@ -40,6 +40,10 @@ export interface CachedProduct {
   // dos dois lados dentro do próprio catálogo espelhado, sem precisar da rede).
   pairedProductId: string | null;
   pairPrice: string | null;
+  // Acréscimo por forma de pagamento (ADR-016) — espelhado para a venda offline cobrar o
+  // mesmo preço de cartão que cobraria online. Nulos ⇒ preço único.
+  surchargeDebit: string | null;
+  surchargeCredit: string | null;
 }
 
 /**
@@ -71,6 +75,8 @@ export async function cacheProducts(products: CachedProduct[]): Promise<void> {
         conversionFactor: p.conversionFactor ?? null,
         pairedProductId: p.pairedProductId ?? null,
         pairPrice: p.pairPrice ?? null,
+        surchargeDebit: p.surchargeDebit ?? null,
+        surchargeCredit: p.surchargeCredit ?? null,
       });
     }
     await txDone(tx);

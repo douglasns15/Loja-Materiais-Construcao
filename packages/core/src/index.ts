@@ -652,3 +652,130 @@ export function syncBackoffMs(attempts: number): number {
 export function haltsQueue(outcome: SyncOutcome): boolean {
   return outcome !== 'SYNCED';
 }
+
+// =============================================================================
+// PREÇO E MARGEM POR FORMA DE PAGAMENTO (ADR-016)
+// =============================================================================
+// Dois mecanismos INDEPENDENTES, propositalmente não acoplados:
+//
+//  1. ACRÉSCIMO por produto (`surchargeDebit`/`surchargeCredit`) — opt-in, em R$ por
+//     unidade-base. É o único que MUDA O PREÇO cobrado do cliente. Vazio ⇒ preço normal.
+//  2. TAXA da maquininha por loja (`cardFee*Percent`) — em %, usada só para exibir a
+//     MARGEM REAL. Nunca altera preço.
+//
+// Decisão do Owner: o preço do cartão NÃO é derivado da taxa. Só sobe o preço de quem ele
+// marcar no cadastro. Ver docs/adr/ADR-016-preco-e-margem-por-forma-de-pagamento.md.
+
+/** Formas de pagamento que o PDV oferece (espelha `paymentMethodSchema` de shared). */
+export type PaymentMethodCode = 'CASH' | 'DEBIT_CARD' | 'CREDIT_CARD' | 'PIX';
+
+/** Acréscimos cadastrados num produto. Nulos ⇒ o produto não acresce nada. */
+export interface SurchargeConfig {
+  surchargeDebit?: number | null;
+  surchargeCredit?: number | null;
+}
+
+/** Taxas da maquininha cadastradas na loja. Nulas ⇒ margem exibida sem desconto de taxa. */
+export interface CardFeeConfig {
+  cardFeeDebitPercent?: number | null;
+  cardFeeCreditPercent?: number | null;
+}
+
+/**
+ * Acréscimo em R$ por **unidade-base** para a forma de pagamento escolhida.
+ * `CASH` e `PIX` nunca acrescem (retornam 0), e valores negativos são ignorados — o campo é
+ * "quanto o preço SOBE"; desconto por forma de pagamento é outra coisa e não está no escopo.
+ */
+export function surchargePerBaseUnit(p: SurchargeConfig, method: PaymentMethodCode): number {
+  const raw =
+    method === 'DEBIT_CARD'
+      ? p.surchargeDebit
+      : method === 'CREDIT_CARD'
+        ? p.surchargeCredit
+        : null;
+  if (raw == null || !(raw > 0)) return 0;
+  return Number(raw.toFixed(4));
+}
+
+/**
+ * Acréscimo em R$ por **unidade vendida**, já composto com a embalagem fechada (EF-3, ADR-013).
+ *
+ * O acréscimo é cadastrado na unidade-base; vendendo a embalagem ele é aplicado
+ * **proporcionalmente** (`× conversionFactor`), porque a taxa do cartão que ele repassa incide
+ * sobre o valor da venda: um rolo de 100 m com R$0,02/m sobe R$2,00, não R$0,02. Um acréscimo
+ * fixo por linha faria o rolo de R$150 subir o mesmo que 1 metro de R$2.
+ */
+export function resolveSurcharge(
+  p: AltUnitConfig & SurchargeConfig,
+  method: PaymentMethodCode,
+  mode: SaleUnitMode,
+): number {
+  const perBase = surchargePerBaseUnit(p, method);
+  if (perBase === 0) return 0;
+  const { factorToBase } = resolveSaleUnit(p, mode);
+  return Number((perBase * factorToBase).toFixed(4));
+}
+
+/**
+ * Preço a cobrar por 1 unidade vendida na forma de pagamento escolhida = preço do modo
+ * (`resolveSaleUnit`) + acréscimo do modo. **É esta função que o PDV e o carrinho usam** — o
+ * `unitPrice` enviado no pedido já sai daqui, embutido (ADR-016: sem linha de acréscimo à parte,
+ * o que mantém estoque/cancelamento/devolução/caixa intocados).
+ */
+export function priceForPaymentMethod(
+  p: AltUnitConfig & SurchargeConfig,
+  method: PaymentMethodCode,
+  mode: SaleUnitMode,
+): number {
+  const { unitPrice } = resolveSaleUnit(p, mode);
+  return Number((unitPrice + resolveSurcharge(p, method, mode)).toFixed(4));
+}
+
+/**
+ * Preço TOTAL do par (ADR-015) na forma de pagamento escolhida: `pairPrice` + o acréscimo dos
+ * **dois** lados (cada par consome 1 de cada produto, então os dois acréscimos incidem).
+ *
+ * Deve ser aplicado **antes** do rateio do `splitPairLine` — assim a soma dos dois `OrderItem`
+ * continua fechando exata no centavo, que é a propriedade que o bug PA.1 ensinou a proteger.
+ * O par é sempre na unidade-base, então não há fator de embalagem aqui.
+ */
+export function pairPriceForPaymentMethod(
+  main: SurchargeConfig,
+  paired: SurchargeConfig,
+  pairPrice: number,
+  method: PaymentMethodCode,
+): number {
+  const extra = surchargePerBaseUnit(main, method) + surchargePerBaseUnit(paired, method);
+  return Number((pairPrice + extra).toFixed(4));
+}
+
+/** Taxa da maquininha (%) da forma de pagamento. `CASH`/`PIX` ⇒ 0; não cadastrada ⇒ 0. */
+export function cardFeePercentFor(t: CardFeeConfig, method: PaymentMethodCode): number {
+  const raw =
+    method === 'DEBIT_CARD'
+      ? t.cardFeeDebitPercent
+      : method === 'CREDIT_CARD'
+        ? t.cardFeeCreditPercent
+        : null;
+  if (raw == null || !(raw > 0)) return 0;
+  return Number(raw.toFixed(2));
+}
+
+/**
+ * Margem **real** em % — o que sobra depois de a maquininha cobrar a dela.
+ *
+ * `(preço − taxa − custo) ÷ preço`, com a taxa incidindo sobre o preço efetivamente cobrado
+ * (que já inclui o acréscimo, se houver). Com `feePercent = 0` é idêntica a `calcMarginPercent`,
+ * então a exibição de sempre continua valendo para dinheiro/PIX e para lojas sem taxa cadastrada.
+ * Pode ser **negativa** — e é justamente aí que ela ganha o seu sustento: avisar que a venda no
+ * crédito dá prejuízo. Retorna 0 se o preço for <= 0. Arredondada a 2 casas.
+ */
+export function netMarginPercent(
+  costPrice: number,
+  unitPrice: number,
+  feePercent: number,
+): number {
+  if (unitPrice <= 0) return 0;
+  const fee = (unitPrice * feePercent) / 100;
+  return Number((((unitPrice - fee - costPrice) / unitPrice) * 100).toFixed(2));
+}

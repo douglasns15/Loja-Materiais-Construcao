@@ -96,6 +96,12 @@ model Tenant {
   cnpj        String?  @unique @db.VarChar(18)
   phone       String?  @db.VarChar(20)
   logoUrl     String?  @db.VarChar(500)          // URL no Cloudflare R2 — nunca BLOB
+  /// Taxa da maquininha por modalidade, em PERCENTUAL (ADR-016). Ex.: 3.50 = 3,5%.
+  /// Serve APENAS para exibir a margem REAL (o que sobra depois da taxa) — nunca altera o preço
+  /// cobrado do cliente. Quem altera preço é o acréscimo opt-in de cada produto. Vazio ⇒ margem
+  /// exibida como sempre foi (sem desconto de taxa).
+  cardFeeDebitPercent  Decimal? @db.Decimal(5, 2)
+  cardFeeCreditPercent Decimal? @db.Decimal(5, 2)
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -230,6 +236,14 @@ model Product {
   /// (`pairedBy`), então é impossível os dois lados divergirem de preço. Vazio ⇒ sem par.
   pairedProductId String?   @db.Uuid
   pairPrice       Decimal?  @db.Decimal(12, 4)
+  /// Acréscimo por forma de pagamento (ADR-016). Valor em R$ POR UNIDADE-BASE que é somado ao
+  /// preço quando a venda é no débito/crédito — é quanto o preço SOBE, não um custo nem o preço
+  /// final. Opt-in por produto: vazio ⇒ o produto não muda de preço naquela forma de pagamento
+  /// (nunca é derivado automaticamente da taxa da maquininha do tenant, que é só informativa).
+  /// Na embalagem fechada (EF-3) é aplicado proporcionalmente (× `conversionFactor`); no par
+  /// (ADR-015), os acréscimos dos dois lados se somam ANTES do rateio. CASH/PIX nunca acrescem.
+  surchargeDebit  Decimal?  @db.Decimal(12, 4)
+  surchargeCredit Decimal?  @db.Decimal(12, 4)
   stockQty        Decimal   @default(0) @db.Decimal(12, 4)
   minStockQty     Decimal   @default(0) @db.Decimal(12, 4)
   isActive        Boolean   @default(true)
