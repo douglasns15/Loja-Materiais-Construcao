@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   PAYMENT_METHOD_LABELS,
   type CashSessionReport,
@@ -41,7 +41,8 @@ function presetRange(preset: 'today' | '7d' | '30d'): { from: string; to: string
  * Célula "Fechado em" com popover do turno (ADR-010): abertura/fechamento + quem abriu/fechou.
  * Funciona no desktop (hover do mouse) e no celular/PWA (toque abre/fecha). Fecha ao tocar fora,
  * Esc, rolar ou redimensionar. Usa `position: fixed` (calculado do gatilho) para não ser cortado
- * pelo `overflow-x-auto` da tabela. Não duplica as colunas financeiras — só o que não está na tabela.
+ * pelo `overflow-x-auto` da tabela, e VIRA PARA CIMA quando não cabe abaixo (linha perto do rodapé).
+ * Não duplica as colunas financeiras — só o que não está na tabela.
  */
 function CashSessionSummary({
   s,
@@ -50,10 +51,11 @@ function CashSessionSummary({
   s: CashSessionReport;
   children: React.ReactNode;
 }) {
+  const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
   const hideTimer = useRef<number | null>(null);
-  const open = pos !== null;
 
   const clearTimer = useCallback(() => {
     if (hideTimer.current !== null) {
@@ -64,23 +66,46 @@ function CashSessionSummary({
 
   const show = useCallback(() => {
     clearTimer();
-    const r = triggerRef.current?.getBoundingClientRect();
-    if (!r) return;
-    const width = 260;
-    // Encaixa na viewport (celular estreito): nunca deixa o popover sair pela direita/esquerda.
-    const left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8));
-    setPos({ top: r.bottom + 6, left });
+    setOpen(true);
   }, [clearTimer]);
 
   const hide = useCallback(() => {
     clearTimer();
+    setOpen(false);
     setPos(null);
   }, [clearTimer]);
 
   const scheduleHide = useCallback(() => {
     clearTimer();
-    hideTimer.current = window.setTimeout(() => setPos(null), 150);
+    hideTimer.current = window.setTimeout(() => {
+      setOpen(false);
+      setPos(null);
+    }, 150);
   }, [clearTimer]);
+
+  // Posiciona o popover só DEPOIS de renderizado, medindo a altura real: encaixa na viewport na
+  // horizontal e VIRA PARA CIMA quando não cabe abaixo do gatilho (linha perto do rodapé — antes
+  // ficava sempre abaixo e era cortada). `useLayoutEffect` calcula antes da pintura (sem piscar).
+  useLayoutEffect(() => {
+    if (!open) return;
+    const trigger = triggerRef.current?.getBoundingClientRect();
+    const pop = popRef.current;
+    if (!trigger || !pop) return;
+    const margin = 8;
+    const gap = 6;
+    const width = pop.offsetWidth || 260;
+    const height = pop.offsetHeight;
+    // Nunca deixa sair pela direita/esquerda (celular estreito).
+    const left = Math.max(margin, Math.min(trigger.left, window.innerWidth - width - margin));
+    const spaceBelow = window.innerHeight - trigger.bottom;
+    const fitsBelow = spaceBelow >= height + gap + margin;
+    // Prefere abaixo; vira para cima quando não cabe embaixo e há mais espaço em cima.
+    let top =
+      fitsBelow || spaceBelow >= trigger.top ? trigger.bottom + gap : trigger.top - height - gap;
+    // Trava dentro da viewport na vertical (nunca corta topo nem base).
+    top = Math.max(margin, Math.min(top, window.innerHeight - height - margin));
+    setPos({ top, left });
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -123,14 +148,20 @@ function CashSessionSummary({
       >
         {children}
       </button>
-      {open && pos && (
+      {open && (
         <div
+          ref={popRef}
           role="tooltip"
           onPointerEnter={clearTimer}
           onPointerLeave={(e) => {
             if (e.pointerType === 'mouse') scheduleHide();
           }}
-          style={{ top: pos.top, left: pos.left }}
+          style={{
+            top: pos?.top ?? 0,
+            left: pos?.left ?? 0,
+            // Fica invisível até o layout effect medir e posicionar (evita flash no canto).
+            visibility: pos ? 'visible' : 'hidden',
+          }}
           className="fixed z-30 w-[260px] rounded-lg border border-gray-200 bg-white p-3 text-left text-xs shadow-xl"
         >
           <p className="mb-2 font-semibold text-gray-700">Turno do caixa</p>
