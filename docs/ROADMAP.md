@@ -3,7 +3,17 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-20 — **FP (preço e margem por forma de pagamento, ADR-016) — NO AR,
+> **Última atualização:** 2026-07-21 — **Fix de UX no Relatórios — NO AR e VALIDADO.** O popover do
+> turno (ADR-010) na célula "Fechado em" era posicionado sempre **abaixo** do gatilho e **antes de
+> renderizar**, sem conhecer a própria altura — com a linha perto do rodapé (ex.: filtro com 1
+> fechamento) estourava a tela e era cortado. Correção **100% client-side** (`apps/web/app/(app)/
+> relatorios/page.tsx`, sem migration nem deploy de API): monta invisível e posiciona num
+> `useLayoutEffect` medindo `offsetHeight`, **vira para cima** quando não cabe abaixo e **clampa na
+> viewport** na vertical. Typecheck + build (18 rotas) ✅; web `278bdd64`; smoke ✅; **E2E do usuário
+> validado** ("agora está mostrando sem cortar"). Commit `89296b9`. Ver "UI.Relatorios.Popover" no
+> registro.
+>
+> **Antes:** 2026-07-20 — **FP (preço e margem por forma de pagamento, ADR-016) — NO AR,
 > aguardando E2E do Owner.** Pedido do Owner: "mais campos de Custo — Custo Débito e Custo Crédito —
 > e o PDV lê a forma de pagamento e insere o valor correspondente". No refinamento o pedido se
 > **separou em dois mecanismos independentes**, e a distinção é a decisão de produto da fatia:

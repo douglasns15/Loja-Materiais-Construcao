@@ -2729,3 +2729,36 @@ real aparece na tela.
 | Comprovante | imprime o preço do cartão, em linha única |
 | Vender o **par** com acréscimo nos dois lados | par sobe pela soma; total fecha exato |
 | Apagar o acréscimo (campo vazio) | produto volta ao preço único |
+
+---
+
+### UI.Relatorios.Popover — "Fechado em" vira para cima quando não cabe abaixo (2026-07-21)
+
+Correção de usabilidade pedida no uso: na tela **Relatórios**, o popover do turno (ADR-010 —
+abertura/fechamento + quem abriu/fechou) que aparece ao passar o mouse/tocar na data em **"Fechado
+em"** era posicionado **sempre abaixo** do gatilho (`top = r.bottom`) e **antes de renderizar** — sem
+conhecer a própria altura. Com a linha perto do rodapé da viewport (ex.: filtro com **um único
+fechamento** lá embaixo), o balão estourava a tela para baixo e era cortado.
+
+**Correção (100% client-side, sem migration nem deploy de API):** o popover passa a ser montado
+invisível (`visibility: hidden`) e posicionado num `useLayoutEffect` (antes da pintura, sem piscar),
+medindo o `offsetHeight` real: **vira para cima** quando não cabe abaixo e há mais espaço em cima, e
+**clampa dentro da viewport** na vertical (nunca corta topo nem base). O clamp horizontal (celular
+estreito) foi mantido. Arquivo: `apps/web/app/(app)/relatorios/page.tsx`.
+
+**Build / deploy**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Typecheck `apps/web` (`tsc --noEmit`) | sem erros | ✅ exit 0 |
+| Build de produção (`next build`) | rota `/relatorios` gerada | ✅ 18 rotas, sem erros |
+| `npm run deploy` (web) | publicado | ✅ Version `278bdd64-c2e8-49bd-b009-137980605712` |
+| Smoke `GET /relatorios` (produção) | 200 | ✅ |
+
+**E2E do usuário — ✅ VALIDADO (2026-07-21)**
+
+| Caso | Resultado |
+|---|---|
+| Filtrar 1 fechamento no rodapé → passar o mouse na data | ✅ balão abre **inteiro**, virando para cima (sem cortar) |
+
+Commit `89296b9`.
