@@ -18,19 +18,15 @@ http://localhost:3000/
 
 <> Ah, e na coluna de usuários, no painel do super usuário, ter como clicar no número de usuários e ver quais são, inclusive, ter alguma opção de gerar nova senha, tanto para o super usuário quanto para o admin de cada loja, para aqueles casos em que um usuário, por ventura esqueça sua senha
 
-<> ah.2, relatórios ter a possibilidade de mostrar quantas vendas foram em dinheiro, pix, débito e crédito, mostrando valor e uma coluna ao lado da porcentagem que esse valor representa para o total do dia, semana e mês.
-
 <> ah.4, no histórico de vendas, caso tenha sido pago em dinheiro, mostrar tmbm o valor recebido e o troco!
 
 <> Design geral do app, modernizar!!
 
 <> Na documentação, tudo que faz consulta para mostrar algo tela, também deve ser explicado de onde vem a info e qual a lógica pra de determinada informação
 
-<> Produtos que dependendo da forma de pagamento, tem acréscimo no valor.. tipo caso do cimento
-
 <> Ao pesquisar produto mostrar todas as informações cadastradas nele, hj não está mostrando e tmbm adicionar campo Marca/Fabricante/Grupo
 
-<> Ao remover um logo e subir um novo, as impressões estão sendo feitas sem o logo, parece estar se perdendo.
+***<> Ao remover um logo e subir um novo, as impressões estão sendo feitas sem o logo, parece estar se perdendo.
 
 ## Subir servidor
 
