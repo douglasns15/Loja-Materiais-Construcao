@@ -28,6 +28,26 @@ http://localhost:3000/
 
 ***<> Ao remover um logo e subir um novo, as impressões estão sendo feitas sem o logo, parece estar se perdendo.
 
+<> crédito parcelado no valor total da compra, liberar campo para adicionar valor extra
+
+<> mais de uma forma de pagamento
+
+<> enquadrar melhor a tela de produtos
+
+<> e formatar campos numéricos referente a valor, colocar as casas decimais, moeda.. algo que deixe claro que ali é o valor em dinheiro
+
+<> filtrar por campo, em cada cabeçalho ter opção de filtrar 
+
+<> Reposição de estoque, ter opção de fechar e abrir itens.. para deixar a tela mais agradável
+
+<> Mostrar marca dos produtos no PDV
+
+<> Logo hora aparece , hora não aparece
+
+<> tela de histórico de vendas, precisa agrupar os pedidos e ter como filtrar assim como ter opção de pesquisar por notas, na nota impressa também tem que sair um número de nota
+
+
+
 ## Subir servidor
 
 cd C:\Users\Douglas\Documents\GitHub\Loja-Materiais-Construcao
