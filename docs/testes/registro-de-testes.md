@@ -2798,13 +2798,16 @@ cadastro e (2) **remover** produto — nas duas formas: **Excluir** (definitivo)
 | Smoke `GET /products?includeInactive=true` sem token | 401 | ✅ |
 | Smoke web `/products` | 200 | ✅ |
 
-**E2E do usuário — ⏭️ PENDENTE**
+**E2E do usuário — ✅ VALIDADO (2026-07-21)**
 
-| Caso | Esperado |
+| Caso | Resultado |
 |---|---|
-| **Copiar** um produto | form preenche com os dados; SKU/estoque inicial/par vazios; aviso "Copiado de…" |
-| Adicionar o copiado com SKU novo | cria produto novo (não colide) |
-| **Desativar** um produto | some do PDV/venda e do dropdown do Estoque; na lista fica acinzentado + "Inativo" |
-| **Reativar** | volta a aparecer no PDV e some o selo |
-| **Excluir** um produto simples | confirmação → some da lista; histórico preservado |
-| **Excluir** um produto que forma **par** | confirmação **avisa do par**; após excluir, o PDV não oferece mais o par (o outro lado segue avulso) |
+| **Copiar** um produto | ✅ form preenche com os dados; SKU/estoque inicial/par vazios; aviso "Copiado de…" |
+| Adicionar o copiado com SKU novo | ✅ cria produto novo (não colide) |
+| **Desativar** um produto | ✅ some do PDV/venda e do dropdown do Estoque; na lista fica acinzentado + "Inativo" |
+| **Reativar** | ✅ volta a aparecer no PDV e some o selo |
+| **Excluir** um produto simples | ✅ confirmação → some da lista; histórico preservado |
+| **Excluir** um produto que forma **par** | ✅ confirmação **avisa do par**; após excluir, o PDV não oferece mais o par (o outro lado segue avulso) |
+| **(bônus do usuário)** venda antiga com o item **excluído** que fazia par | ✅ **permanece no histórico de vendas** — o soft-delete tira do catálogo mas preserva a integridade referencial do `OrderItem` |
+
+Commit `1f3b52c`. **Fatia CD CONCLUÍDA e VALIDADA.**

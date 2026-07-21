@@ -3,8 +3,10 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-21 — **CD (Copiar produto + Excluir/Desativar) — NO AR, aguardando
-> E2E do usuário.** Pedido do usuário na tela de Produtos: (1) **Copiar** um produto como base de um
+> **Última atualização:** 2026-07-21 — **CD (Copiar produto + Excluir/Desativar) — NO AR e VALIDADO
+> pelo usuário.** E2E 7/7, incluindo o **bônus** do usuário: uma venda antiga com o item **excluído**
+> que fazia par **permaneceu no histórico** — o soft-delete tira do catálogo mas preserva a integridade
+> referencial do `OrderItem`. Pedido do usuário na tela de Produtos: (1) **Copiar** um produto como base de um
 > novo cadastro e (2) **remover** produto — as duas formas: **Excluir** (definitivo, "uma vez excluído
 > já era") e **Desativar/Reativar** (reversível, para tirar de circulação e poder voltar). **Surpresa
 > boa: zero migration** — a coluna `isActive` já existia no `0_init` (dormente) e o `DELETE /products`
@@ -18,8 +20,9 @@
 > aviso quando desfaz um par) e **Desativar/Reativar** no rodapé. ⚠️ Deploy da **API obrigatório**
 > mesmo sem migration (Zod antigo descartaria `isActive` — mesmo tropeço do `popularName`/`manufacturer`).
 > Gates: typecheck API ✅, core **137/137** ✅, build web (18 rotas) ✅. **NO AR:** API `79b94595` + web
-> `922f0c5f`; smoke ✅ (health, 401 sem token, web 200). **Falta:** E2E do usuário. Ver "UI.Produtos.CD"
-> no registro.
+> `922f0c5f`; smoke ✅ (health, 401 sem token, web 200). **E2E do usuário validado 7/7.** Commit
+> `1f3b52c`. Ver "UI.Produtos.CD" no registro. **Próximo passo:** direções abertas — E2E do Owner da
+> fatia FP (pendente), go-live (Supabase Pro/CORS/SMTP), nova funcionalidade, ou endurecimento.
 >
 > **Antes:** 2026-07-21 — **Fix de UX no Relatórios — NO AR e VALIDADO.** O popover do
 > turno (ADR-010) na célula "Fechado em" era posicionado sempre **abaixo** do gatilho e **antes de
