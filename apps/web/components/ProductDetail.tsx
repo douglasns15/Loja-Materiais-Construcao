@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { updateProductSchema, unitTypeLabels, type UnitType } from '@nexoloja/shared';
 import { cardFeePercentFor, netMarginPercent, surchargePerBaseUnit } from '@nexoloja/core';
-import { apiPatch } from '@/lib/api';
+import { apiDelete, apiPatch } from '@/lib/api';
 
 /**
  * Painel de **visualizar / editar** o cadastro de um produto (fatia EP).
@@ -40,6 +40,8 @@ export type ProductFull = {
   // Acréscimo por forma de pagamento (ADR-016) — R$ por unidade-base; null ⇒ preço único.
   surchargeDebit: string | null;
   surchargeCredit: string | null;
+  // Desativar/Reativar: `false` = fora de circulação (some do PDV/Estoque), reversível.
+  isActive: boolean;
   marginPercent: number;
   createdByName: string | null;
   createdAt: string;
@@ -216,12 +218,17 @@ export function ProductDetail({
   const [form, setForm] = useState<FormState>(() => toForm(product));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Passo de confirmação da exclusão (ação destrutiva → deliberada, sem window.confirm).
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  // Trava dupla-clique em desativar/reativar (PATCH isActive).
+  const [togglingActive, setTogglingActive] = useState(false);
 
   // Trocar de produto (clicar outra linha com o painel aberto) recomeça em leitura.
   useEffect(() => {
     setForm(toForm(product));
     setEditing(false);
     setError(null);
+    setConfirmingDelete(false);
   }, [product]);
 
   // Esc fecha o painel (atalho de teclado no desktop, CLAUDE.md → menos cliques).
@@ -276,6 +283,34 @@ export function ProductDetail({
     }
   }
 
+  /** Soft-delete (ADR-004) — definitivo. Fecha o painel e recarrega a lista. */
+  async function onDelete() {
+    setError(null);
+    setSaving(true);
+    try {
+      await apiDelete(`/products/${product.id}`);
+      await onSaved();
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+      setSaving(false);
+    }
+  }
+
+  /** Desativar/Reativar — reversível (PATCH isActive). Mantém o painel aberto para ver o novo estado. */
+  async function onToggleActive() {
+    setError(null);
+    setTogglingActive(true);
+    try {
+      await apiPatch(`/products/${product.id}`, { isActive: !product.isActive });
+      await onSaved();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setTogglingActive(false);
+    }
+  }
+
   const inputCls = 'w-full rounded-lg border border-gray-300 px-3 py-2';
   const labelCls = 'text-xs font-medium text-gray-500';
 
@@ -300,7 +335,14 @@ export function ProductDetail({
       >
         <div className="mb-4 flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="truncate text-lg font-bold">{product.name}</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="truncate text-lg font-bold">{product.name}</h2>
+              {!product.isActive && (
+                <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                  Inativo
+                </span>
+              )}
+            </div>
             <p className="truncate text-xs text-gray-500">
               {product.sku}
               {product.manufacturer ? ` · ${product.manufacturer}` : ''}
@@ -414,22 +456,86 @@ export function ProductDetail({
               de Estoque (ADR-001).
             </p>
 
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Fechar
-              </button>
-              <button
-                type="button"
-                onClick={() => setEditing(true)}
-                className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
-              >
-                Editar
-              </button>
-            </div>
+            {confirmingDelete ? (
+              // Confirmação da exclusão (definitiva). Avisa quando desfaz um par (ADR-015).
+              <div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4">
+                <p className="text-sm font-medium text-red-800">
+                  Excluir “{product.name}” definitivamente?
+                </p>
+                <p className="mt-1 text-xs text-red-700">
+                  O produto sai do catálogo e do PDV e <strong>não poderá ser reativado</strong> (o
+                  histórico de vendas e estoque é preservado). Para tirar só temporariamente, use
+                  <strong> Desativar</strong>.
+                </p>
+                {pairPartner && (
+                  <p className="mt-2 text-xs text-red-700">
+                    ⚠️ Este produto forma <strong>par</strong> com “{pairPartner.name}”. Ao excluir,
+                    o par deixa de ser oferecido no PDV.
+                  </p>
+                )}
+                <div className="mt-3 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingDelete(false)}
+                    disabled={saving}
+                    className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onDelete}
+                    disabled={saving}
+                    className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60"
+                  >
+                    {saving ? 'Excluindo…' : 'Excluir definitivamente'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
+                {/* Ações do ciclo de vida do produto (reversível × definitiva). */}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={onToggleActive}
+                    disabled={togglingActive}
+                    className="rounded-lg border border-amber-300 px-4 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50 disabled:opacity-60"
+                    title={
+                      product.isActive
+                        ? 'Tira o produto de circulação (some do PDV/Estoque). Pode reativar depois.'
+                        : 'Volta o produto para o catálogo e o PDV.'
+                    }
+                  >
+                    {togglingActive ? '…' : product.isActive ? 'Desativar' : 'Reativar'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingDelete(true)}
+                    className="rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+                    title="Exclui o produto definitivamente (não reativa)."
+                  >
+                    Excluir
+                  </button>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Fechar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditing(true)}
+                    className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+                  >
+                    Editar
+                  </button>
+                </div>
+              </div>
+            )}
           </>
         ) : (
           <form
@@ -620,7 +726,7 @@ export function ProductDetail({
                     >
                       <option value="">— sem produto agregado —</option>
                       {allProducts
-                        .filter((p) => p.id !== product.id)
+                        .filter((p) => p.id !== product.id && p.isActive)
                         .map((p) => (
                           <option key={p.id} value={p.id}>
                             {p.name} ({BRL(p.salePrice)})

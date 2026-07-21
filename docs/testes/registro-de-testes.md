@@ -2762,3 +2762,49 @@ estreito) foi mantido. Arquivo: `apps/web/app/(app)/relatorios/page.tsx`.
 | Filtrar 1 fechamento no rodapé → passar o mouse na data | ✅ balão abre **inteiro**, virando para cima (sem cortar) |
 
 Commit `89296b9`.
+
+---
+
+### UI.Produtos.CD — Copiar produto + Excluir/Desativar (2026-07-21)
+
+Pedido do usuário na tela de Produtos: (1) **Copiar** um produto para servir de base a um novo
+cadastro e (2) **remover** produto — nas duas formas: **Excluir** (definitivo) e **Desativar/Reativar**
+(reversível). **Sem migration** — a coluna `isActive` já existia no `0_init` (dormente) e o
+`DELETE /products` (soft-delete ADR-004) já existia; o que faltava era lógica de API + UI.
+
+**Desenho**
+- **shared** (`product.ts`): `updateProductSchema` passa a aceitar `isActive` (senão o Zod descarta).
+- **API** (`products.ts`): `GET /products` traz **só ativos por padrão** (PDV, Estoque e qualquer
+  consumidor de `/products` deixam de oferecer inativos sem mudar nada) e aceita `?includeInactive=true`
+  (só a tela de gestão usa); `DELETE` agora, **numa transação**, também **zera o vínculo de par reverso**
+  (ADR-015 — no soft-delete o `onDelete:SetNull` do FK não dispara, então o outro lado ficaria apontando
+  p/ um produto sumido); `PATCH` liga/desliga `isActive` (autoria ADR-010).
+- **web Produtos** (`products/page.tsx`): botão **Copiar** na linha → preenche o form com os dados do
+  produto, mas **zera SKU (código único), estoque inicial (não duplica Entrada) e par (config. deliberada)**;
+  aviso "Copiado de X". Lista com `includeInactive=true`: inativos **acinzentados + selo "Inativo"**.
+- **web ProductDetail** (`ProductDetail.tsx`): **Excluir** (confirmação inline, com **aviso quando desfaz
+  um par**) e **Desativar/Reativar** no rodapé do modo leitura; selo "Inativo" no cabeçalho.
+
+**Build / deploy**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Typecheck `apps/api` (`tsc --noEmit`) | sem erros | ✅ |
+| Core (Vitest) — regressão | 137/137 | ✅ |
+| Build de produção (`next build`) | rota `/products` gerada | ✅ 18 rotas, sem erros |
+| `npm run deploy` (API) — ⚠️ obrigatório (Zod descartaria `isActive`) | publicado | ✅ Version `79b94595` |
+| `npm run deploy` (web) | publicado | ✅ Version `922f0c5f` |
+| Smoke `GET /health` | 200 `{ok:true}` | ✅ |
+| Smoke `GET /products?includeInactive=true` sem token | 401 | ✅ |
+| Smoke web `/products` | 200 | ✅ |
+
+**E2E do usuário — ⏭️ PENDENTE**
+
+| Caso | Esperado |
+|---|---|
+| **Copiar** um produto | form preenche com os dados; SKU/estoque inicial/par vazios; aviso "Copiado de…" |
+| Adicionar o copiado com SKU novo | cria produto novo (não colide) |
+| **Desativar** um produto | some do PDV/venda e do dropdown do Estoque; na lista fica acinzentado + "Inativo" |
+| **Reativar** | volta a aparecer no PDV e some o selo |
+| **Excluir** um produto simples | confirmação → some da lista; histórico preservado |
+| **Excluir** um produto que forma **par** | confirmação **avisa do par**; após excluir, o PDV não oferece mais o par (o outro lado segue avulso) |

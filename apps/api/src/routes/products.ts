@@ -47,7 +47,14 @@ const products = new Hono<Env>();
 // Todas as rotas de produtos exigem autenticação (JWT do Supabase).
 products.use('*', requireAuth);
 
-/** Lista produtos ativos (não deletados) do tenant. */
+/**
+ * Lista produtos do tenant (nunca os soft-deletados).
+ *
+ * Por padrão traz **só os ativos** (`isActive`) — assim PDV, Estoque e qualquer outro
+ * consumidor de `/products` deixam de oferecer produtos desativados sem precisar mudar nada.
+ * A tela de gestão de Produtos pede `?includeInactive=true` para também listar os inativos
+ * (acinzentados, com opção de reativar).
+ */
 products.get('/', async (c) => {
   const tenantId = getTenantId(c);
   if (!tenantId) {
@@ -60,8 +67,9 @@ products.get('/', async (c) => {
 
   try {
     const prisma = createPrismaClient(connectionString);
+    const includeInactive = c.req.query('includeInactive') === 'true';
     const items = await prisma.product.findMany({
-      where: { tenantId, deletedAt: null },
+      where: { tenantId, deletedAt: null, ...(includeInactive ? {} : { isActive: true }) },
       orderBy: { name: 'asc' },
       take: 100,
     });
@@ -227,7 +235,12 @@ products.patch('/:id', async (c) => {
   }
 });
 
-/** Soft-delete (ADR-004): marca `deletedAt`. */
+/**
+ * Soft-delete (ADR-004): marca `deletedAt`. **Definitivo** — não há reativação (diferente de
+ * `isActive`, que é reversível). Numa transação, também **desfaz o par (ADR-015) do outro lado**:
+ * no soft-delete o `onDelete: SetNull` do FK não dispara, então o produto que apontava para este
+ * ficaria referenciando um item que sumiu do catálogo. Zeramos esse vínculo reverso.
+ */
 products.delete('/:id', async (c) => {
   const tenantId = getTenantId(c);
   if (!tenantId) {
@@ -240,12 +253,29 @@ products.delete('/:id', async (c) => {
 
   try {
     const prisma = createPrismaClient(connectionString);
-    const result = await prisma.product.updateMany({
-      where: { id: c.req.param('id'), tenantId, deletedAt: null },
-      // Autoria (ADR-010): quem excluiu + snapshot (o "quando" é o próprio deletedAt).
-      data: { deletedAt: new Date(), deletedById: c.get('userId'), deletedByName: c.get('userName') },
+    const id = c.req.param('id');
+    const userId = c.get('userId');
+    const userName = c.get('userName');
+    const count = await prisma.$transaction(async (tx) => {
+      const del = await tx.product.updateMany({
+        where: { id, tenantId, deletedAt: null },
+        // Autoria (ADR-010): quem excluiu + snapshot (o "quando" é o próprio deletedAt).
+        data: { deletedAt: new Date(), deletedById: userId, deletedByName: userName },
+      });
+      if (del.count === 0) return 0;
+      // Par (ADR-015): limpa o vínculo reverso para não deixar referência pendurada.
+      await tx.product.updateMany({
+        where: { pairedProductId: id, tenantId, deletedAt: null },
+        data: {
+          pairedProductId: null,
+          pairPrice: null,
+          updatedById: userId,
+          updatedByName: userName,
+        },
+      });
+      return del.count;
     });
-    if (result.count === 0) {
+    if (count === 0) {
       return c.json({ ok: false, error: 'Produto não encontrado.' }, 404);
     }
     return c.json({ ok: true });

@@ -114,5 +114,9 @@ export const updateProductSchema = createProductSchema
     // ADR-016: `null` remove o acréscimo (o produto volta a ter preço único).
     surchargeDebit: z.number().positive().nullable().optional(),
     surchargeCredit: z.number().positive().nullable().optional(),
+    // Desativar/Reativar: `false` tira o produto de circulação (some do PDV/Estoque, mas o
+    // cadastro e o histórico ficam); `true` reativa. Distinto do soft-delete (`deletedAt`),
+    // que é definitivo. Só existe no update — o produto sempre nasce ativo.
+    isActive: z.boolean().optional(),
   });
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;

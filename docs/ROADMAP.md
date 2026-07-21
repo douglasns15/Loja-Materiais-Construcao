@@ -3,7 +3,25 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-21 — **Fix de UX no Relatórios — NO AR e VALIDADO.** O popover do
+> **Última atualização:** 2026-07-21 — **CD (Copiar produto + Excluir/Desativar) — NO AR, aguardando
+> E2E do usuário.** Pedido do usuário na tela de Produtos: (1) **Copiar** um produto como base de um
+> novo cadastro e (2) **remover** produto — as duas formas: **Excluir** (definitivo, "uma vez excluído
+> já era") e **Desativar/Reativar** (reversível, para tirar de circulação e poder voltar). **Surpresa
+> boa: zero migration** — a coluna `isActive` já existia no `0_init` (dormente) e o `DELETE /products`
+> (soft-delete ADR-004) já existia. **shared:** `updateProductSchema` aceita `isActive`. **API:** `GET
+> /products` traz só **ativos por padrão** (PDV/Estoque ficam corretos sem tocar em nada) e aceita
+> `?includeInactive=true` (só a tela de gestão usa); `DELETE` agora, numa transação, **limpa o vínculo
+> de par reverso** (ADR-015 — o outro lado não fica apontando p/ um produto que sumiu; no soft-delete o
+> `onDelete:SetNull` do FK não dispara); `PATCH` liga/desliga `isActive`. **Web Produtos:** botão
+> **Copiar** na linha (preenche o form, mas zera SKU/estoque inicial/par — únicos/deliberados), lista
+> com inativos acinzentados + selo "Inativo". **Web ProductDetail:** **Excluir** (confirmação inline +
+> aviso quando desfaz um par) e **Desativar/Reativar** no rodapé. ⚠️ Deploy da **API obrigatório**
+> mesmo sem migration (Zod antigo descartaria `isActive` — mesmo tropeço do `popularName`/`manufacturer`).
+> Gates: typecheck API ✅, core **137/137** ✅, build web (18 rotas) ✅. **NO AR:** API `79b94595` + web
+> `922f0c5f`; smoke ✅ (health, 401 sem token, web 200). **Falta:** E2E do usuário. Ver "UI.Produtos.CD"
+> no registro.
+>
+> **Antes:** 2026-07-21 — **Fix de UX no Relatórios — NO AR e VALIDADO.** O popover do
 > turno (ADR-010) na célula "Fechado em" era posicionado sempre **abaixo** do gatilho e **antes de
 > renderizar**, sem conhecer a própria altura — com a linha perto do rodapé (ex.: filtro com 1
 > fechamento) estourava a tela e era cortado. Correção **100% client-side** (`apps/web/app/(app)/

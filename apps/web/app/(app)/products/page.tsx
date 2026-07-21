@@ -56,6 +56,8 @@ export default function ProductsPage() {
     surchargeCredit: '',
   });
   const [saving, setSaving] = useState(false);
+  // Nome do produto usado como base pelo botão "Copiar" (mostra um aviso sobre o form).
+  const [copiedFromName, setCopiedFromName] = useState<string | null>(null);
 
   // Busca local: nome, nome popular, fabricante ou SKU (função pura de packages/core).
   const [search, setSearch] = useState('');
@@ -81,7 +83,9 @@ export default function ProductsPage() {
 
   async function load() {
     try {
-      setProducts(await apiGet<Product[]>('/products'));
+      // `includeInactive`: a tela de gestão mostra também os desativados (acinzentados, com
+      // Reativar no painel). O PDV/Estoque seguem chamando `/products` sem o parâmetro (só ativos).
+      setProducts(await apiGet<Product[]>('/products?includeInactive=true'));
       setError(null);
     } catch (e) {
       setError((e as Error).message);
@@ -174,6 +178,7 @@ export default function ProductsPage() {
         surchargeDebit: '',
         surchargeCredit: '',
       });
+      setCopiedFromName(null);
       await load();
     } catch (e) {
       setError((e as Error).message);
@@ -217,6 +222,41 @@ export default function ProductsPage() {
     handleScannedCode(search);
   }
 
+  /**
+   * "Copiar": usa um produto como base para um novo cadastro — preenche o formulário com os
+   * dados dele, mas **zera o que tem de ser único/deliberado**: SKU (código de barras é único),
+   * estoque inicial (não duplica a Entrada) e o par (ADR-015 — configuração por produto). O
+   * operador então ajusta o nome/SKU e adiciona.
+   */
+  function copyFrom(p: Product) {
+    setForm({
+      name: p.name,
+      popularName: p.popularName ?? '',
+      manufacturer: p.manufacturer ?? '',
+      sku: '',
+      description: p.description ?? '',
+      unit: p.unit,
+      costPrice: String(Number(p.costPrice)),
+      salePrice: String(Number(p.salePrice)),
+      weight: p.weightKg === null ? '' : String(Number(p.weightKg)),
+      weightUnit: 'kg',
+      minStockQty: String(Number(p.minStockQty)),
+      initialStock: '',
+      altUnit: p.altUnit ?? '',
+      conversionFactor: p.conversionFactor === null ? '' : String(Number(p.conversionFactor)),
+      altSalePrice: p.altSalePrice === null ? '' : String(Number(p.altSalePrice)),
+      pairedProductId: '',
+      pairPrice: '',
+      surchargeDebit: p.surchargeDebit === null ? '' : String(Number(p.surchargeDebit)),
+      surchargeCredit: p.surchargeCredit === null ? '' : String(Number(p.surchargeCredit)),
+    });
+    setCopiedFromName(p.name);
+    setDetailId(null);
+    setError(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    requestAnimationFrame(() => nameRef.current?.focus());
+  }
+
   /** Salva o estoque mínimo de um produto (PATCH parcial). */
   async function saveMin(p: Product) {
     const raw = minEdits[p.id];
@@ -254,6 +294,23 @@ export default function ProductsPage() {
         onSubmit={onCreate}
         className="mb-6 grid grid-cols-1 gap-3 rounded-2xl bg-white p-4 shadow-sm sm:grid-cols-6"
       >
+        {copiedFromName && (
+          <div className="flex items-start justify-between gap-2 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700 sm:col-span-6">
+            <span>
+              Copiado de <strong>{copiedFromName}</strong> como base. Defina um <strong>SKU</strong>{' '}
+              novo (código de barras é único) e ajuste o que precisar. Estoque inicial e par não são
+              copiados.
+            </span>
+            <button
+              type="button"
+              onClick={() => setCopiedFromName(null)}
+              className="shrink-0 text-blue-400 hover:text-blue-700"
+              aria-label="Dispensar aviso"
+            >
+              ✕
+            </button>
+          </div>
+        )}
         <input
           ref={nameRef}
           placeholder="Nome"
@@ -428,11 +485,13 @@ export default function ProductsPage() {
               aria-label="Produto agregado"
             >
               <option value="">— sem produto agregado —</option>
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} ({BRL(p.salePrice)})
-                </option>
-              ))}
+              {products
+                .filter((p) => p.isActive)
+                .map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} ({BRL(p.salePrice)})
+                  </option>
+                ))}
             </select>
             <input
               placeholder="Preço do par (os dois juntos)"
@@ -556,18 +615,25 @@ export default function ProductsPage() {
                     id={`prod-row-${p.id}`}
                     className={`border-t border-gray-100 transition-colors ${
                       highlightId === p.id ? 'bg-yellow-100' : ''
-                    }`}
+                    } ${!p.isActive ? 'bg-gray-50' : ''}`}
                   >
                     <td className="px-4 py-2">
                       {/* Nome clicável: abre o cadastro completo (visualizar/editar). */}
                       <button
                         type="button"
                         onClick={() => setDetailId(p.id)}
-                        className="text-left font-medium text-gray-900 hover:text-blue-700 hover:underline"
+                        className={`text-left font-medium hover:text-blue-700 hover:underline ${
+                          p.isActive ? 'text-gray-900' : 'text-gray-400'
+                        }`}
                         title="Ver / editar o cadastro deste produto"
                       >
                         {p.name}
                       </button>
+                      {!p.isActive && (
+                        <span className="ml-2 rounded-full bg-amber-100 px-1.5 py-0.5 align-middle text-[10px] font-medium text-amber-700">
+                          Inativo
+                        </span>
+                      )}
                       {p.popularName && (
                         <span className="block text-xs text-gray-400">{p.popularName}</span>
                       )}
@@ -604,13 +670,23 @@ export default function ProductsPage() {
                       </div>
                     </td>
                     <td className="px-4 py-2 text-right">
-                      <button
-                        type="button"
-                        onClick={() => setDetailId(p.id)}
-                        className="rounded border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
-                      >
-                        Ver / editar
-                      </button>
+                      <div className="flex justify-end gap-1">
+                        <button
+                          type="button"
+                          onClick={() => copyFrom(p)}
+                          className="rounded border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                          title="Usar como base para um novo produto (não copia SKU, estoque inicial nem par)"
+                        >
+                          Copiar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDetailId(p.id)}
+                          className="rounded border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                        >
+                          Ver / editar
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
