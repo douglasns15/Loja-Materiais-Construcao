@@ -16,7 +16,7 @@ http://localhost:3000/
 
 ## Leia docs/ROADMAP.md e docs/testes/registro-de-testes.md e vamos continuar
 
-<> Ah, e na coluna de usuários, no painel do super usuário, ter como clicar no número de usuários e ver quais são, inclusive, ter alguma opção de gerar nova senha, tanto para o super usuário quanto para o admin de cada loja, para aqueles casos em que um usuário, por ventura esqueça sua senha
+<> Ah, e na coluna de usuários, no painel do super usuário, ter como clicar no número de usu	ários e ver quais são, inclusive, ter alguma opção de gerar nova senha, tanto para o super usuário quanto para o admin de cada loja, para aqueles casos em que um usuário, por ventura esqueça sua senha
 
 <> ah.4, no histórico de vendas, caso tenha sido pago em dinheiro, mostrar tmbm o valor recebido e o troco!
 
@@ -46,7 +46,7 @@ http://localhost:3000/
 
 <> tela de histórico de vendas, precisa agrupar os pedidos e ter como filtrar assim como ter opção de pesquisar por notas, na nota impressa também tem que sair um número de nota
 
-
+<> Em "Venda de unidade alternativa" no cadastro de Produto, ter a opção barra, pra inserir a metragem da barra completa e o valor da venda de uma barra. Mas a lógica deve ser invertida, no cadastro principal deve ter a opção Rolo, Barra, etc, ou seja dos itens fechados, o valor fechado deve ser no cadastro principal e na "Venda de unidade alternativa" é que deve ter a opção de venda por metro, fracionada. Entendeu?
 
 ## Subir servidor
 
