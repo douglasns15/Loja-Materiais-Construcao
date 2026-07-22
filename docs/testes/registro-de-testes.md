@@ -2811,3 +2811,36 @@ cadastro e (2) **remover** produto — nas duas formas: **Excluir** (definitivo)
 | **(bônus do usuário)** venda antiga com o item **excluído** que fazia par | ✅ **permanece no histórico de vendas** — o soft-delete tira do catálogo mas preserva a integridade referencial do `OrderItem` |
 
 Commit `1f3b52c`. **Fatia CD CONCLUÍDA e VALIDADA.**
+
+### UI.Produtos.FP-fix — painel de produto quebrava com taxa de maquininha cadastrada (2026-07-22)
+
+**Bug (reportado pelo usuário):** na tela de Produtos, clicar em **Ver / editar** trazia a fronteira de
+erro do grupo `(app)` ("Algo deu errado ao abrir a tela"), e recarregar/reabrir não resolvia. A lista
+carregava normal; só o **painel** (`ProductDetail`) quebrava.
+
+**Causa raiz — descasamento de tipo da fatia FP (ADR-016):** `cardFeeDebitPercent`/`cardFeeCreditPercent`
+são `Decimal` no Prisma; `GET /tenant` os devolve **crus**, e em JSON `Decimal` vira **string** (`"3.50"`),
+igual a `costPrice`/`salePrice`. No core, `cardFeePercentFor` fazia `raw.toFixed(2)` — e `.toFixed` só
+existe em `number` → `TypeError: raw.toFixed is not a function`, lançado **durante o render** do painel.
+A tela de **Nova Venda já convertia** os fees com `Number(...)`; a tela de **Produtos não** — passava o
+valor cru direto ao `ProductDetail`, confiando no tipo `CardFees` que declara `number` (mentira).
+Só disparava com **taxa da maquininha cadastrada** (com `null`, a função retorna 0 antes do `.toFixed`) —
+por isso começou depois que o Owner configurou a taxa, e o reload não ajudava (o banco sempre devolve string).
+
+**Correção (2 camadas, sem migration, só front):**
+- **A real** (`products/page.tsx`): converte os fees com `Number(...)` ao buscar `/tenant`, espelhando a Nova Venda.
+- **Blindagem** (`packages/core/src/index.ts`): `cardFeePercentFor` e `surchargePerBaseUnit` coagem com
+  `Number()` antes do `.toFixed` — um `Decimal`-string nunca mais derruba a tela.
+
+**Build / deploy**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Core (Vitest) — 2 testes de regressão (fee/acréscimo como string) | 139/139 | ✅ |
+| Typecheck `apps/web` + `apps/api` (`tsc --noEmit`) | sem erros | ✅ exit 0 |
+| Build de produção (`opennextjs-cloudflare build`) | 18 rotas | ✅ |
+| `npm run deploy` (web) — API não muda (core vai no bundle do web) | publicado | ✅ Version `4bd4e540-c4c8-458b-ae3c-668636142bb9` |
+| Smoke web `/login` | 200 | ✅ |
+
+**E2E do usuário — ✅ VALIDADO (2026-07-22):** com taxa de maquininha cadastrada, **Ver / editar** abre o
+painel normalmente (margem real por débito/crédito). Commit `939d919`. **Bug FP-fix RESOLVIDO e VALIDADO.**

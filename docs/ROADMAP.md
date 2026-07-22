@@ -3,7 +3,23 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-21 — **CD (Copiar produto + Excluir/Desativar) — NO AR e VALIDADO
+> **Última atualização:** 2026-07-22 — **Fix de disponibilidade na tela de Produtos — NO AR e VALIDADO
+> pelo usuário.** Bug reportado: **Ver / editar** produto caía na fronteira de erro ("Algo deu errado ao
+> abrir a tela") e reload não resolvia — só o painel `ProductDetail` quebrava, a lista carregava normal.
+> **Causa raiz (descasamento de tipo da fatia FP/ADR-016):** `cardFee*Percent` são `Decimal` no Prisma e
+> `GET /tenant` os devolve **crus** → em JSON viram **string** (`"3.50"`); no core `cardFeePercentFor` fazia
+> `raw.toFixed(2)`, que só existe em `number` → `TypeError` **no render**. A Nova Venda já convertia com
+> `Number(...)`; a tela de Produtos passava o valor cru ao painel. Só disparava **com taxa de maquininha
+> cadastrada** (com `null` retornava 0 antes do `.toFixed`), por isso surgiu depois que o Owner configurou a
+> taxa e o reload não ajudava. **Correção (só front, sem migration):** (1) `products/page.tsx` converte os
+> fees com `Number(...)` ao ler `/tenant`, como a Nova Venda; (2) blindagem no core — `cardFeePercentFor` e
+> `surchargePerBaseUnit` coagem com `Number()` antes do `.toFixed` (+2 testes → **139/139**). Gates:
+> typecheck web+API ✅, build 18 rotas ✅. **NO AR:** web `4bd4e540`; smoke `/login` 200 ✅. **E2E do usuário
+> validado** (painel abre normal com taxa cadastrada). Commit `939d919`. Ver "UI.Produtos.FP-fix" no
+> registro. **Próximo passo:** direções abertas — E2E do Owner da fatia FP (pendente), go-live (Supabase
+> Pro/CORS/SMTP), nova funcionalidade, ou endurecimento.
+>
+> **Antes:** 2026-07-21 — **CD (Copiar produto + Excluir/Desativar) — NO AR e VALIDADO
 > pelo usuário.** E2E 7/7, incluindo o **bônus** do usuário: uma venda antiga com o item **excluído**
 > que fazia par **permaneceu no histórico** — o soft-delete tira do catálogo mas preserva a integridade
 > referencial do `OrderItem`. Pedido do usuário na tela de Produtos: (1) **Copiar** um produto como base de um
