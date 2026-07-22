@@ -22,10 +22,12 @@ suppliers.get('/', async (c) => {
 
   try {
     const prisma = createPrismaClient(connectionString);
+    // SEM teto: o `take: 100` truncava silenciosamente em ordem alfabética — passando de 100
+    // fornecedores, os de nome "tardio" sumiam da lista mesmo existindo no banco (mesma classe
+    // do bug de Produtos). Escopo já é o do tenant (RLS); catálogo grande → busca no servidor.
     const items = await prisma.supplier.findMany({
       where: { tenantId, deletedAt: null },
       orderBy: { name: 'asc' },
-      take: 100,
     });
     return c.json({ ok: true, data: items });
   } catch (err) {

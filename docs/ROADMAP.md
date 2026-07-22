@@ -3,7 +3,22 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-22 — **Fix de disponibilidade na tela de Produtos — NO AR e VALIDADO
+> **Última atualização:** 2026-07-22 — **Fix de truncamento silencioso das listas de cadastro (take:100)
+> — NO AR, aguardando E2E do usuário.** Bug grave reportado: ao cadastrar vários produtos, um ("Vass…")
+> **sumiu** de Produtos, Estoque e Venda após "Adicionar", mas **existia no banco** (o `POST` retornou 201).
+> **Causa raiz:** `GET /products` fazia `findMany({ orderBy: { name:'asc' }, take: 100 })` — passando de
+> **100 produtos**, a API devolvia só os 100 primeiros **em ordem alfabética**; nomes tardios (V…) caíam
+> fora e sumiam das três telas (todas leem `GET /products`), e a busca client-side também não achava. **Não
+> houve perda de dado — só invisibilidade.** **Achado sistêmico:** o mesmo `take:100` estava em Clientes,
+> Fornecedores e Categorias. **Correção (escolha do usuário "cadastros todos"; sem migration):** removido o
+> teto de `GET /products`, `/customers`, `/suppliers`, `/categories` — o escopo já é o do tenant (RLS), listar
+> tudo é o correto (se um dia um catálogo ficar enorme, o caminho é busca no servidor `?q=` + paginação, não
+> corte cego). Typecheck API ✅; **NO AR:** API `687c3f28`; smoke health 200 + 401 sem token ✅. **Falta:** E2E
+> do usuário (hard-refresh e conferir "Vass…" de volta). **Limitação conhecida aberta:** Histórico de
+> Vendas/Relatórios ainda têm teto (crescem sem limite → pedem paginação de verdade, tarefa própria). Ver
+> "API.Listas.Take100" no registro.
+>
+> **Antes:** 2026-07-22 — **Fix de disponibilidade na tela de Produtos — NO AR e VALIDADO
 > pelo usuário.** Bug reportado: **Ver / editar** produto caía na fronteira de erro ("Algo deu errado ao
 > abrir a tela") e reload não resolvia — só o painel `ProductDetail` quebrava, a lista carregava normal.
 > **Causa raiz (descasamento de tipo da fatia FP/ADR-016):** `cardFee*Percent` são `Decimal` no Prisma e

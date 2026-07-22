@@ -68,10 +68,15 @@ products.get('/', async (c) => {
   try {
     const prisma = createPrismaClient(connectionString);
     const includeInactive = c.req.query('includeInactive') === 'true';
+    // SEM teto: um PDV jamais pode esconder um produto do catálogo. O `take: 100` anterior
+    // truncava silenciosamente em ordem alfabética — passando de 100 produtos, os de nome
+    // "tardio" (ex.: "Vass…") sumiam de Produtos/Estoque/Venda mesmo existindo no banco. O
+    // escopo já é o catálogo do próprio tenant (RLS), então listar tudo é o correto. Se algum
+    // dia um catálogo ficar realmente grande, o caminho é busca no servidor (`?q=`) + paginação,
+    // não um corte cego que oculta dados.
     const items = await prisma.product.findMany({
       where: { tenantId, deletedAt: null, ...(includeInactive ? {} : { isActive: true }) },
       orderBy: { name: 'asc' },
-      take: 100,
     });
     return c.json({ ok: true, data: items.map(withMargin) });
   } catch (err) {

@@ -2844,3 +2844,34 @@ por isso começou depois que o Owner configurou a taxa, e o reload não ajudava 
 
 **E2E do usuário — ✅ VALIDADO (2026-07-22):** com taxa de maquininha cadastrada, **Ver / editar** abre o
 painel normalmente (margem real por débito/crédito). Commit `939d919`. **Bug FP-fix RESOLVIDO e VALIDADO.**
+
+### API.Listas.Take100 — cadastros sumindo após 100 itens (truncamento silencioso) — 2026-07-22
+
+**Bug (reportado pelo usuário):** cadastrando vários produtos, um deles ("Vass…") **não apareceu** em
+Produtos, Estoque nem Venda após "Adicionar produto" — mas **existia no banco** (`select * from products
+where name like '%Vass%'` achou as duas tentativas). O `POST` retornava 201 (form limpava como sucesso).
+
+**Causa raiz — truncamento silencioso:** `GET /products` fazia `findMany({ orderBy: { name: 'asc' },
+take: 100 })`. Passando de **100 produtos**, a API devolvia só os 100 primeiros **em ordem alfabética** —
+nomes "tardios" (V…) caíam fora e sumiam das três telas (todas consomem `GET /products`:
+[estoque:81], [venda:213], [products:88]). A busca é **client-side** (filtra o array já carregado), então
+também não achava. Não houve perda de dado — só invisibilidade. Disparou exatamente ao cruzar 100 cadastros.
+
+**Achado sistêmico:** o mesmo `take: 100` estava em **Clientes, Fornecedores e Categorias** — mesma classe
+de bug latente. (Histórico de Vendas/Relatórios/Movimentações também têm teto, mas esses crescem sem limite
+e pedem **paginação de verdade** — ficam para tarefa própria; ver limitação abaixo.)
+
+**Correção (escolha do usuário: "cadastros todos"; sem migration):** removido o `take` de `GET /products`,
+`/customers`, `/suppliers` e `/categories` — o escopo já é o catálogo do próprio tenant (RLS), então listar
+tudo é o correto. Ordenação por nome mantida.
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Typecheck `apps/api` (`tsc --noEmit`) | sem erros | ✅ exit 0 |
+| `npm run deploy` (API) | publicado | ✅ Version `687c3f28` |
+| Smoke `GET /health` | 200 `{ok:true}` | ✅ (após cold-start) |
+| Smoke `GET /products?includeInactive=true` sem token | 401 | ✅ |
+
+**E2E do usuário — ⏭️ pendente:** hard-refresh (Ctrl+Shift+R) e conferir que "Vass…" volta a aparecer em
+Produtos/Estoque/Venda. **Limitação conhecida (aberta):** **Histórico de Vendas ainda mostra só as ~100
+vendas mais recentes** (`orders.ts` take:100) — corrigir com paginação/filtro por período no servidor.
