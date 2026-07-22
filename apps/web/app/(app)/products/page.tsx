@@ -94,8 +94,23 @@ export default function ProductsPage() {
 
   useEffect(() => {
     load();
-    apiGet<CardFees>('/tenant')
-      .then(setCardFees)
+    // As taxas da maquininha (ADR-016) vêm do Prisma como `Decimal` → JSON as **string**
+    // (ex.: "3.50"), igual a costPrice/salePrice. O core (`cardFeePercentFor`) faz `.toFixed`,
+    // que só existe em `number` — então convertemos aqui, exatamente como a tela de Nova Venda
+    // já faz. Sem isso, abrir o painel de um produto com taxa cadastrada quebrava a tela inteira
+    // (`"3.50".toFixed is not a function` → fronteira de erro).
+    apiGet<{
+      cardFeeDebitPercent: number | string | null;
+      cardFeeCreditPercent: number | string | null;
+    }>('/tenant')
+      .then((s) =>
+        setCardFees({
+          cardFeeDebitPercent:
+            s.cardFeeDebitPercent == null ? null : Number(s.cardFeeDebitPercent),
+          cardFeeCreditPercent:
+            s.cardFeeCreditPercent == null ? null : Number(s.cardFeeCreditPercent),
+        }),
+      )
       .catch(() => setCardFees(null));
   }, []);
 

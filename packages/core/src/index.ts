@@ -693,8 +693,11 @@ export function surchargePerBaseUnit(p: SurchargeConfig, method: PaymentMethodCo
       : method === 'CREDIT_CARD'
         ? p.surchargeCredit
         : null;
-  if (raw == null || !(raw > 0)) return 0;
-  return Number(raw.toFixed(4));
+  // Coerção defensiva: os valores vêm do Prisma como `Decimal` e chegam ao cliente como
+  // **string** (JSON). Sem `Number(...)`, `raw.toFixed` estouraria ("... is not a function").
+  const n = raw == null ? 0 : Number(raw);
+  if (!(n > 0)) return 0;
+  return Number(n.toFixed(4));
 }
 
 /**
@@ -757,8 +760,12 @@ export function cardFeePercentFor(t: CardFeeConfig, method: PaymentMethodCode): 
       : method === 'CREDIT_CARD'
         ? t.cardFeeCreditPercent
         : null;
-  if (raw == null || !(raw > 0)) return 0;
-  return Number(raw.toFixed(2));
+  // Coerção defensiva: a taxa vem do Prisma como `Decimal` e chega ao cliente como **string**
+  // (JSON). Sem `Number(...)`, `raw.toFixed` estouraria ("... is not a function") — foi o que
+  // derrubava o painel de produto quando a loja tinha taxa da maquininha cadastrada.
+  const n = raw == null ? 0 : Number(raw);
+  if (!(n > 0)) return 0;
+  return Number(n.toFixed(2));
 }
 
 /**

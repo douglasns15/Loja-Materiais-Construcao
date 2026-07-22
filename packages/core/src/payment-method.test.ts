@@ -172,6 +172,28 @@ describe('ADR-016 — preço e margem por forma de pagamento', () => {
       expect(cardFeePercentFor({}, 'CREDIT_CARD')).toBe(0);
       expect(cardFeePercentFor({ cardFeeCreditPercent: null }, 'CREDIT_CARD')).toBe(0);
     });
+
+    it('aceita a taxa como string (Decimal do Prisma → JSON) sem quebrar', () => {
+      // Regressão: a taxa vem do `GET /tenant` como string ("3.50"); antes o `.toFixed`
+      // estourava e derrubava o painel de produto. Agora coage p/ number.
+      const lojaStr = { cardFeeDebitPercent: '1.5', cardFeeCreditPercent: '3.5' } as unknown as {
+        cardFeeDebitPercent: number;
+        cardFeeCreditPercent: number;
+      };
+      expect(cardFeePercentFor(lojaStr, 'DEBIT_CARD')).toBe(1.5);
+      expect(cardFeePercentFor(lojaStr, 'CREDIT_CARD')).toBe(3.5);
+    });
+  });
+
+  describe('surchargePerBaseUnit — coerção defensiva', () => {
+    it('aceita o acréscimo como string (Decimal do Prisma → JSON) sem quebrar', () => {
+      const p = { surchargeDebit: '1.50', surchargeCredit: '2.00' } as unknown as {
+        surchargeDebit: number;
+        surchargeCredit: number;
+      };
+      expect(surchargePerBaseUnit(p, 'DEBIT_CARD')).toBe(1.5);
+      expect(surchargePerBaseUnit(p, 'CREDIT_CARD')).toBe(2);
+    });
   });
 
   describe('netMarginPercent', () => {
