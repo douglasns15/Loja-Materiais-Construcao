@@ -275,6 +275,83 @@ export function splitWholeAndRemainder(
   return { whole, remainderMeters };
 }
 
+/**
+ * Unidades fechadas que podem ser a PRINCIPAL com corte por metro (ADR-017). A barra/rolo é
+ * o `unit` do produto; o estoque fica na unidade fina (metro), desacoplado. Distingue-se do
+ * EF-3 antigo (base fina + `altUnit` fechada), que NÃO entra por aqui.
+ */
+export const CLOSED_PRIMARY_UNITS = ['BARRA', 'ROLL'] as const;
+
+/** Config de um produto de unidade fechada (ADR-017). Preços já como número (Decimal→number). */
+export interface ClosedPrimaryConfig {
+  unit: string;
+  /** Tamanho da barra/rolo em metros (unidade fina por unidade fechada). */
+  conversionFactor?: number | null;
+  /** Preço da barra/rolo fechada (sempre presente). */
+  salePrice: number;
+  /** Preço por metro — OPCIONAL. Nulo ⇒ o produto só vende a unidade fechada inteira. */
+  altSalePrice?: number | null;
+}
+
+/**
+ * `true` se o produto é **unidade fechada como principal** (ADR-017): `unit` é fechada (barra/rolo)
+ * e tem `conversionFactor` (tamanho) > 0. Só esses têm o estoque lido/gravado em metros com a
+ * barra baixando `qtd × tamanho`.
+ */
+export function isClosedPrimary(p: { unit: string; conversionFactor?: number | null }): boolean {
+  return (
+    (CLOSED_PRIMARY_UNITS as readonly string[]).includes(p.unit) &&
+    p.conversionFactor != null &&
+    Number(p.conversionFactor) > 0
+  );
+}
+
+/** `true` se, além de fechado, o produto pode ser vendido por metro (tem preço/metro). */
+export function sellsByMeter(p: {
+  unit: string;
+  conversionFactor?: number | null;
+  altSalePrice?: number | null;
+}): boolean {
+  return isClosedPrimary(p) && p.altSalePrice != null && Number(p.altSalePrice) > 0;
+}
+
+/** Modo de venda de um produto de unidade fechada (ADR-017). */
+export type ClosedSaleMode = 'WHOLE' | 'METER';
+
+export interface ClosedSaleResolved {
+  /** Preço por unidade vendida (1 barra OU 1 metro). */
+  unitPrice: number;
+  /** Metros que 1 unidade vendida baixa do estoque (barra ⇒ tamanho; metro ⇒ 1). */
+  metersPerUnit: number;
+}
+
+/**
+ * Resolve preço e o débito de estoque (em metros) para o modo escolhido de um produto de
+ * unidade fechada (ADR-017). `WHOLE` (padrão) ⇒ preço da barra e baixa `tamanho` metros; `METER`
+ * (só se `sellsByMeter`) ⇒ preço por metro e baixa 1 metro. **Guarda:** se pedirem `METER` sem
+ * preço/metro, cai para `WHOLE` (nunca cobra preço indefinido) — espelha o fallback do EF-3.
+ */
+export function resolveClosedSale(p: ClosedPrimaryConfig, mode: ClosedSaleMode): ClosedSaleResolved {
+  const length = Number(p.conversionFactor ?? 0);
+  if (mode === 'METER' && sellsByMeter(p)) {
+    return { unitPrice: Number(p.altSalePrice), metersPerUnit: 1 };
+  }
+  return { unitPrice: p.salePrice, metersPerUnit: length > 0 ? length : 1 };
+}
+
+/**
+ * Metros a baixar do estoque (ledger, ADR-001) para `qty` unidades vendidas no modo escolhido —
+ * é o que a trava de estoque e o `StockMovement` usam para um produto de unidade fechada.
+ */
+export function closedStockMeters(
+  p: ClosedPrimaryConfig,
+  mode: ClosedSaleMode,
+  qty: number,
+): number {
+  const { metersPerUnit } = resolveClosedSale(p, mode);
+  return Number((qty * metersPerUnit).toFixed(4));
+}
+
 // =============================================================================
 // PRODUTO AGREGADO — venda em par (ADR-015)
 // =============================================================================

@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
   METER_SALE_STEP,
+  closedStockMeters,
+  isClosedPrimary,
   isValidMeterStep,
   metersFromWhole,
+  resolveClosedSale,
+  sellsByMeter,
   splitWholeAndRemainder,
 } from './index';
+
+const barra6 = { unit: 'BARRA', conversionFactor: 6, salePrice: 48, altSalePrice: 9 };
+const barraSemCorte = { unit: 'BARRA', conversionFactor: 6, salePrice: 48, altSalePrice: null };
 
 // =============================================================================
 // UNIDADE FECHADA COMO PRINCIPAL — Barra/Rolo + fracionada por metro (ADR-017)
@@ -71,6 +78,40 @@ describe('ADR-017 — barra/rolo como unidade fechada principal', () => {
       for (let i = 0; i < 12; i++) meters = Number((meters - 0.5).toFixed(4));
       expect(meters).toBe(0);
       expect(splitWholeAndRemainder(meters, 6)).toEqual({ whole: 0, remainderMeters: 0 });
+    });
+  });
+
+  describe('isClosedPrimary / sellsByMeter (detecção)', () => {
+    it('barra/rolo com tamanho é unidade fechada principal', () => {
+      expect(isClosedPrimary(barra6)).toBe(true);
+      expect(isClosedPrimary({ unit: 'ROLL', conversionFactor: 100 })).toBe(true);
+    });
+
+    it('não pega produto comum nem EF-3 antigo (base fina + alt fechada)', () => {
+      expect(isClosedPrimary({ unit: 'UNIT', conversionFactor: null })).toBe(false);
+      expect(isClosedPrimary({ unit: 'METER', conversionFactor: 100 })).toBe(false); // EF-3 antigo
+      expect(isClosedPrimary({ unit: 'BARRA', conversionFactor: 0 })).toBe(false); // sem tamanho
+    });
+
+    it('sellsByMeter só quando há preço por metro (opcional)', () => {
+      expect(sellsByMeter(barra6)).toBe(true);
+      expect(sellsByMeter(barraSemCorte)).toBe(false); // preço/metro vazio ⇒ só barra inteira
+    });
+  });
+
+  describe('resolveClosedSale / closedStockMeters (preço + baixa em metros)', () => {
+    it('barra inteira: preço da barra, baixa o tamanho em metros', () => {
+      expect(resolveClosedSale(barra6, 'WHOLE')).toEqual({ unitPrice: 48, metersPerUnit: 6 });
+      expect(closedStockMeters(barra6, 'WHOLE', 2)).toBe(12); // 2 barras = 12 m
+    });
+
+    it('por metro: preço por metro, baixa 1 m por metro vendido', () => {
+      expect(resolveClosedSale(barra6, 'METER')).toEqual({ unitPrice: 9, metersPerUnit: 1 });
+      expect(closedStockMeters(barra6, 'METER', 2.5)).toBe(2.5); // 2,5 m baixam 2,5 m
+    });
+
+    it('pedir METER sem preço por metro cai para barra inteira (fallback seguro)', () => {
+      expect(resolveClosedSale(barraSemCorte, 'METER')).toEqual({ unitPrice: 48, metersPerUnit: 6 });
     });
   });
 });

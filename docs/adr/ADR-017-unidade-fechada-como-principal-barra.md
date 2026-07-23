@@ -37,31 +37,33 @@ O motor do ADR-013 **já** guarda o estoque na unidade fina e converte o fechado
 produto "base = metro + alternativa = rolo" e um produto "principal = barra + fracionado = metro" têm a
 **mesma forma no banco** — muda só **qual lado a UI chama de principal**. Portanto:
 
-- **Não há coluna nova.** Reusa `unit`/`salePrice`/`costPrice` (a régua fina, metro) e
-  `altUnit`/`altSalePrice`/`conversionFactor` (o fechado).
+- **Não há coluna nova.** Reusa `unit` (agora a unidade FECHADA), `salePrice`/`costPrice` (preço/custo
+  da **barra**, NOT NULL), `conversionFactor` (tamanho da barra em metros) e `altUnit`/`altSalePrice`
+  (a régua fina — metro — e o **preço por metro OPCIONAL**, pois `altSalePrice` é nullable).
 - A migration é **só** `ALTER TYPE "UnitType" ADD VALUE 'BARRA'` (aditiva; não toca dado; RLS intacta).
+  O que muda por código é o **core + a leitura de estoque** (ver §1), não o schema.
 
 ## Decisão
 
-### 1. O ledger de estoque continua na unidade FINA (metro) — precisão
+### 1. Estoque em METROS (unidade fina), desacoplado da unidade principal — precisão
 
-O `StockMovement`/`stockQty` seguem em **metros** (a unidade fina), **exatamente como hoje**. Motivo:
-**precisão**. A regra do meio metro só é exata em metros — 0,5 m guardado "em barras" viraria dízima
-(0,5 ÷ 6 = 0,0833…) e, somando muitas vendas, o saldo desviaria (12 × 0,0833 ≠ 1 barra). Guardando em
-metros, tanto a venda de 0,5 m quanto a entrada de "10 barras × 6 m" são exatas. **ADR-001 permanece
-intacto — zero mudança no ledger.**
+O `stockQty`/`StockMovement` de um produto de unidade fechada ficam em **metros** (a unidade fina),
+**desacoplados** do `unit` (que é `BARRA`). Motivo: **precisão**. A regra do meio metro só é exata em
+metros — 0,5 m guardado "em barras" viraria dízima (0,5 ÷ 6 = 0,0833…) e, somando muitas vendas, o saldo
+desviaria e poderia até **bloquear o último corte válido** por falta aparente. Guardando em metros, tanto
+0,5 m quanto "10 barras × 6 m" são exatos. **Consequência:** o core ganha o conceito de **unidade fechada
+como principal** — a venda da **barra** baixa `qtd × tamanho` metros e a venda **por metro** baixa `qtd`
+metros. É o motor do EF-3 com os papéis invertidos; a razão do ledger (ADR-001) segue em unidade fina.
 
-### 2. A unidade FECHADA (Barra/Rolo) é a de primeira classe na UI
+### 2. A unidade FECHADA (Barra/Rolo) é a de primeira classe
 
-Embora o ledger seja em metros, o operador **cadastra, compra, precifica e enxerga em barras**:
+O operador **cadastra, compra, precifica e enxerga em barras**:
 
 - **Cadastro principal:** unidade = **Barra** (ou Rolo…), **tamanho da barra em metros** (ex.: 6),
-  **preço da barra** (fechado) e **custo da barra**.
-- **Venda em unidade alternativa:** **preço por metro** (fracionado). **Refino de implementação (2026-07-22):**
-  como o ledger fica em metros (precisão do 0,5 m), o preço por metro é o preço da unidade-base e portanto
-  **um campo normal do cadastro** — no v1 **toda barra pode ser vendida inteira ou por metro**. Um marcador
-  **"não corta"** (só inteira) fica como evolução de 1 coluna booleana, se o Owner pedir (não altera este
-  motor).
+  **preço da barra** (`salePrice`) e **custo da barra** (`costPrice`).
+- **Venda por metro (opcional):** **preço por metro** em `altSalePrice` (nullable). **Vazio ⇒ o produto só
+  vende barra inteira** (o PDV não oferece "por metro") — sem marcador/checkbox, a ausência do preço é o
+  sinal. Preenchido ⇒ o PDV oferece também a venda fracionada.
 - **Saldo:** exibido como **unidades inteiras + sobra em metros** — `inteiros = piso(metros ÷ tamanho)`
   e `sobra = metros − inteiros × tamanho`. Ex.: 298 m com barra de 6 m → **49 barras + 4 m** (não
   "49,67 barras"). **Idêntico para rolo** (ex.: **12 rolos + 30 m**). O total em metros também fica visível.
@@ -76,10 +78,11 @@ Embora o ledger seja em metros, o operador **cadastra, compra, precifica e enxer
 - **Preço por metro é independente** do preço da barra (o corte avulso costuma sair mais caro por metro
   que a barra fechada) — não é derivado.
 
-### 4. Custo e margem por barra (derivados por metro)
+### 4. Custo e margem por barra (por metro é derivado)
 
-O Owner informa **custo da barra**; guardamos `costPrice` (por metro) = **custo da barra ÷ tamanho**. A
-margem é mostrada tanto por barra quanto por metro (derivada), como o EF-3 já faz com `effectiveBaseUnitPrice`.
+O Owner informa **custo da barra**, guardado direto em `costPrice`. A margem da **barra** = `(salePrice −
+costPrice)/salePrice`. A margem **por metro** é derivada: preço/metro (`altSalePrice`) contra custo/metro
+(`costPrice ÷ tamanho`). Nenhuma das duas exige campo novo.
 
 ### Decisões do Owner registradas (2026-07-22)
 
@@ -93,20 +96,24 @@ margem é mostrada tanto por barra quanto por metro (derivada), como o EF-3 já 
 
 ---
 
-## Mapa de dados (reuso do schema EF-3 — sem coluna nova)
+## Mapa de dados (reuso do schema — sem coluna nova)
 
 | Campo | Passa a guardar |
 |---|---|
-| `unit` | unidade **fina** = `METER` (ledger/salePrice) |
-| `salePrice` | **preço por metro** (venda fracionada) |
-| `costPrice` | custo por metro = **custo da barra ÷ tamanho** |
-| `altUnit` | **`BARRA`** (unidade fechada = principal na UI) |
-| `altSalePrice` | **preço da barra** (fechado) |
+| `unit` | **`BARRA`** (ou `ROLL`) — a unidade fechada, principal |
+| `salePrice` | **preço da barra** (fechado) — NOT NULL |
+| `costPrice` | **custo da barra** — NOT NULL |
 | `conversionFactor` | **tamanho da barra em metros** (ex.: 6) |
+| `altUnit` | `METER` — a subdivisão fina |
+| `altSalePrice` | **preço por metro** — **nullable ⇒ opcional** (vazio = só barra inteira) |
+| `stockQty` / `StockMovement` | **em METROS** — desacoplado do `unit` (precisão do 0,5 m) |
 
-> **Compat:** produtos EF-3 já cadastrados (rolo × metro) têm a mesma forma — passam a ser **apresentados**
-> com o fechado como principal também, de forma consistente. **Nenhum dado muda**; é só apresentação + o
-> modo padrão do PDV.
+> **Detecção:** "unidade fechada como principal" = `unit ∈ {BARRA, ROLL}` **com** `conversionFactor` > 0.
+> Para esses, o estoque é lido/gravado em metros e a venda da barra baixa `qtd × conversionFactor`.
+>
+> **Compat:** os produtos EF-3 antigos (rolo × metro cadastrados com `unit=METER` + `altUnit=ROLL`) têm a
+> forma **oposta** (base fina como principal) e seguem funcionando pelo caminho antigo do motor — a
+> detecção acima não os pega. São poucos (dado de teste); podem ser reconciliados ou deixados como estão.
 
 ## Impacto no banco (a aprovar)
 
@@ -118,32 +125,35 @@ margem é mostrada tanto por barra quanto por metro (derivada), como o EF-3 já 
 
 ## Consequências / superfície a tocar (só depois de aprovar)
 
-- **`packages/core`** (funções puras + testes, regra 2): validação **múltiplo de 0,5 m** (`isValidMeterStep`),
-  conversões `barsFromMeters`/`metersFromBars`, e um "modo padrão = fechado". Sem mudar `toBaseQuantity`
-  (o ledger segue em metros).
-- **`packages/shared`:** cadastro/edição passam a coletar tamanho + preço/custo da barra; `saleMode`
-  padrão = fechado; validação do passo de 0,5 m no item de venda por metro.
-- **`apps/api`:** `POST /orders` — trava de estoque e `StockMovement` **seguem em metros** (nada muda no
-  ledger); só valida o passo de 0,5 m. Entrada de estoque em barras converte para metros.
-- **`apps/web`:** cadastro (`/products` + `ProductDetail`) com a apresentação invertida; **Estoque**
-  mostra saldo em barras (metros ÷ tamanho) + metros, e a **Entrada em barras**; **PDV** com padrão barra
-  inteira + opção "por metro" (passo 0,5); **comprovante** imprime "1 barra (6 m)" ou "2,5 m"; espelho
+- **`packages/core`** (funções puras + testes, regra 2): `isValidMeterStep` (múltiplo de 0,5 — ✅ feito),
+  `metersFromWhole` (entrada em barras → metros — ✅ feito), `splitWholeAndRemainder` (exibição — ✅ feito),
+  e o **resolvedor de unidade fechada**: dado o produto e o modo (barra × metro), devolve preço e **quanto
+  baixar em metros** (barra ⇒ `qtd × tamanho`; metro ⇒ `qtd`). É o EF-3 com papéis invertidos.
+- **`packages/shared`:** cadastro/edição coletam tamanho + preço/custo da barra + preço/metro **opcional**;
+  o item de venda por metro valida o passo de 0,5 m.
+- **`apps/api`:** `POST /orders` — para produto de unidade fechada, a trava de estoque e o `StockMovement`
+  usam o débito em metros do resolvedor (barra ⇒ `qtd × tamanho`); valida o passo de 0,5 m na venda por
+  metro. Entrada de estoque (`/stock`) recebe metros (o web converte barras → metros).
+- **`apps/web`:** cadastro (`/products` + `ProductDetail`) com a apresentação invertida; **Estoque** mostra
+  saldo em barras + sobra em metros e a **Entrada em barras**; **PDV** com padrão barra inteira + opção "por
+  metro" (passo 0,5) quando houver preço/metro; **comprovante** imprime "1 barra (6 m)" ou "2,5 m"; espelho
   offline do catálogo atualizado.
-- **Risco principal:** é uma **inversão de apresentação em várias telas** — exige varredura cuidadosa
-  (Produtos, Estoque, PDV, comprovante, ProductDetail, cache offline) para nenhuma continuar mostrando o
-  metro como principal. O motor de estoque/venda em si quase não muda (menor risco).
+- **Risco principal:** inversão em várias telas **+** o resolvedor de unidade fechada no core/API (débito da
+  barra em metros). Exige varredura cuidadosa (Produtos, Estoque, PDV, comprovante, ProductDetail, cache
+  offline) e testes de estoque no core. Correção: o ADR não é "só apresentação" — o motor ganha o modo
+  fechado-principal; o ledger em si (razão em unidade fina) continua intacto (ADR-001).
 
 ## Action Items (após aprovação)
 
-1. [ ] **Owner aprova o ADR** (esta decisão) e a **migration do enum**.
-2. [ ] Migration `ALTER TYPE "UnitType" ADD VALUE 'BARRA'` (via `migrate diff` + `migrate deploy`).
-3. [ ] `packages/core`: `isValidMeterStep(0,5)`, `barsFromMeters`/`metersFromBars`,
-       `splitWholeAndRemainder(metros, tamanho)` → `{ inteiros, sobraMetros }` (exibição "49 barras + 4 m"),
-       testes Vitest.
-4. [ ] `packages/shared`: coleta por barra + passo de 0,5 m + `saleMode` padrão fechado.
-5. [ ] `apps/api`: validação do passo; entrada em barras → metros; ledger inalterado.
-6. [ ] `apps/web`: cadastro/PDV/estoque/comprovante/ProductDetail/cache com apresentação invertida.
-7. [ ] Gates (core, tsc api+web, build web) → deploy (API + web) → E2E do Owner.
+1. [x] **Owner aprovou** o ADR e a migration do enum (2026-07-22).
+2. [x] Migration `0013` (`ALTER TYPE "UnitType" ADD VALUE 'BARRA'`) aplicada no Supabase.
+3. [x] `packages/core` (parte 1): `isValidMeterStep`, `metersFromWhole`, `splitWholeAndRemainder` + testes.
+4. [ ] `packages/core` (parte 2): `isClosedPrimary` + resolvedor fechado (preço + débito em metros da
+       barra × do metro), testes.
+5. [ ] `packages/shared`: coleta por barra + preço/metro opcional + passo de 0,5 m no item de venda.
+6. [ ] `apps/api`: `POST /orders` usa o débito em metros do resolvedor p/ unidade fechada; valida o passo.
+7. [ ] `apps/web`: cadastro/PDV/estoque/comprovante/ProductDetail/cache com apresentação invertida.
+8. [ ] Gates (core, tsc api+web, build web) → deploy (API + web) → E2E do Owner.
 
 ## Relacionadas
 
