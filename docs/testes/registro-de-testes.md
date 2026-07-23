@@ -2877,3 +2877,40 @@ voltaram a aparecer em Produtos/Estoque/Venda. Commit `917fa24`. **Bug Take100 R
 **Limitação conhecida (aberta):** **Histórico de Vendas e Relatórios ainda têm teto** (`orders.ts`
 take:100; `reports.ts` take:200/1000) — crescem sem limite, pedem paginação/filtro por período no servidor
 (tarefa própria já aberta como próximo passo).
+
+### ADR-017 — Barra/Rolo como unidade fechada principal + venda por metro (2026-07-22)
+
+Pedido do Owner: cadastrar o produto pela **unidade fechada** (Barra, Rolo) com o **preço fechado**, e a
+**venda por metro** (fracionada) como opção. Nova unidade **Barra**. **ADR-017 escrito e aprovado ANTES de
+codar** (regra 4), com o Owner decidindo: contar em barra, só `BARRA` no enum, venda por metro em
+**múltiplos de 0,5 m**, entrada **em barras**, saldo exibido como **"X barras + Y m"**, e preço por metro
+**opcional** (vazio ⇒ só barra inteira, sem marcador).
+
+**Desenho (mapeamento no schema — sem coluna nova):** `unit=BARRA` (principal), `salePrice`/`costPrice` =
+preço/custo da **barra** (NOT NULL), `conversionFactor` = **tamanho da barra em metros**, `altUnit=METER` +
+`altSalePrice` = **preço por metro** (nullable ⇒ opcional). **O estoque fica em METROS** (desacoplado do
+`unit`) por **precisão** — 0,5 m é exato em metros, mas seria dízima em barras (poderia até bloquear o
+último corte). O motor é o EF-3 (ADR-013) com **papéis invertidos**: a barra baixa `qtd × tamanho` metros;
+o metro baixa `qtd`. Cancelamento/devolução usam `baseQuantity` (metros) — **sem mudança**.
+
+**Migration `0013`** APLICADA (aprovada): `ALTER TYPE "UnitType" ADD VALUE 'BARRA'` — aditiva, não toca
+dado/RLS.
+
+| Gate | Resultado |
+|---|---|
+| Core (Vitest) — `isValidMeterStep`, `metersFromWhole`, `splitWholeAndRemainder`, `isClosedPrimary`, `sellsByMeter`, `resolveClosedSale`, `closedStockMeters` | ✅ **+17 → 156/156** |
+| Typecheck `apps/api` + `apps/web` | ✅ exit 0 |
+| Build web (OpenNext) | ✅ |
+| Migration `0013` aplicada + status up to date | ✅ |
+| `npm run deploy` API + web | ✅ API `5c426eb7` + web `0041891a` |
+| Smoke API `/health` + web `/login` | ✅ 200/200 |
+
+**Web:** PDV (padrão **barra inteira** + botão **"por metro"** com passo 0,5), cadastro (bloco invertido:
+tamanho + preço da barra + preço por metro opcional; entrada inicial em barras), Estoque (saldo "X barras +
+Y m" + entrada em barras), ProductDetail (leitura/edição invertida). Cache offline já traz os campos.
+
+**E2E do Owner — ⏭️ pendente (hard-refresh):** (1) cadastrar uma **Barra** (ex.: Vergalhão, 6 m, R$48,
+custo R$36, por metro R$9); (2) estoque inicial em barras → confere "X barras" no Estoque; (3) vender 1
+barra → baixa 6 m; (4) vender **2,5 m** → baixa 2,5 m e o saldo vira "barras + sobra"; (5) tentar **0,7 m**
+→ recusa (múltiplos de 0,5); (6) cadastrar barra **sem** preço por metro → PDV só oferece barra inteira;
+(7) editar a barra no ProductDetail sem corromper. Commits `015d687`/`61a5773` + o deste deploy.

@@ -4,8 +4,15 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   createStockMovementSchema,
   inventoryAdjustmentSchema,
+  unitTypeLabels,
+  type UnitType,
 } from '@nexoloja/shared';
-import { isLowStock, replenishmentShortfall } from '@nexoloja/core';
+import {
+  isClosedPrimary,
+  isLowStock,
+  replenishmentShortfall,
+  splitWholeAndRemainder,
+} from '@nexoloja/core';
 import { apiGet, apiPost } from '@/lib/api';
 import { useOnline } from '@/lib/useOnline';
 import { OfflineNotice } from '@/components/OfflineNotice';
@@ -19,7 +26,24 @@ type Product = {
   unit: string;
   stockQty: string;
   minStockQty: string;
+  // ADR-017: tamanho da barra/rolo em metros (unidade fechada). Nulo ⇒ produto comum.
+  conversionFactor: string | null;
 };
+
+/**
+ * Saldo legível (ADR-017). Para unidade fechada (barra/rolo), o `stockQty` é em metros: mostra
+ * "X barras + Y m". Para os demais, o número na unidade de venda, como sempre.
+ */
+function fmtStock(p: { unit: string; stockQty: string; conversionFactor: string | null }): string {
+  const qty = Number(p.stockQty);
+  if (isClosedPrimary({ unit: p.unit, conversionFactor: p.conversionFactor != null ? Number(p.conversionFactor) : null })) {
+    const barLen = Number(p.conversionFactor);
+    const { whole, remainderMeters } = splitWholeAndRemainder(qty, barLen);
+    const unitName = unitTypeLabels[p.unit as UnitType].toLowerCase();
+    return `${whole} ${unitName}${remainderMeters > 0 ? ` + ${QTY(remainderMeters)} m` : ''}`;
+  }
+  return QTY(qty);
+}
 
 type Supplier = { id: string; name: string };
 
@@ -153,16 +177,35 @@ export default function EstoquePage() {
 
   const adjustProduct = products.find((p) => p.id === adjust.productId);
 
+  // ADR-017: produto de entrada é de unidade fechada? Então a quantidade digitada é em BARRAS.
+  const entryProduct = products.find((p) => p.id === entry.productId);
+  const entryClosed =
+    !!entryProduct &&
+    isClosedPrimary({
+      unit: entryProduct.unit,
+      conversionFactor: entryProduct.conversionFactor != null ? Number(entryProduct.conversionFactor) : null,
+    });
+
   async function onEntry(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setNotice(null);
 
+    // ADR-017: para unidade fechada a entrada é em BARRAS → converte para metros (ledger em
+    // metros); o custo, se informado, é por barra → por metro.
+    const barLen = entryClosed ? Number(entryProduct!.conversionFactor) : 1;
+    const qtyMeters = entryClosed ? Number(entry.quantity) * barLen : Number(entry.quantity);
+    const unitCostMeters = entry.unitCost
+      ? entryClosed && barLen > 0
+        ? Number(entry.unitCost) / barLen
+        : Number(entry.unitCost)
+      : undefined;
+
     const parsed = createStockMovementSchema.safeParse({
       productId: entry.productId,
       type: 'INCOME',
-      quantity: Number(entry.quantity),
-      unitCost: entry.unitCost ? Number(entry.unitCost) : undefined,
+      quantity: qtyMeters,
+      unitCost: unitCostMeters,
       supplierId: entry.supplierId || undefined,
       reason: entry.reason || undefined,
     });
@@ -258,7 +301,7 @@ export default function EstoquePage() {
                   <td
                     className={`px-4 py-2 text-right font-medium ${out ? 'text-red-700' : 'text-amber-800'}`}
                   >
-                    {QTY(p.stockQty)}
+                    {fmtStock(p)}
                   </td>
                   <td className="px-4 py-2 text-right text-amber-800/70">{QTY(p.minStockQty)}</td>
                   <td className="px-4 py-2 text-right font-semibold text-amber-900">
@@ -291,21 +334,22 @@ export default function EstoquePage() {
               <option value="">Selecione o produto…</option>
               {products.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name} ({QTY(p.stockQty)} em estoque)
+                  {p.name} ({fmtStock(p)} em estoque)
                 </option>
               ))}
             </select>
             <input
-              placeholder="Quantidade"
+              placeholder={entryClosed ? 'Quantidade (barras)' : 'Quantidade'}
               type="number"
-              step="any"
+              step={entryClosed ? '1' : 'any'}
               min="0"
               value={entry.quantity}
               onChange={(e) => setEntry({ ...entry, quantity: e.target.value })}
+              title={entryClosed ? 'Quantas barras/rolos inteiros entram (convertido para metros pelo tamanho).' : undefined}
               className="rounded-lg border border-gray-300 px-3 py-2"
             />
             <input
-              placeholder="Custo unitário (opcional)"
+              placeholder={entryClosed ? 'Custo por barra (opcional)' : 'Custo unitário (opcional)'}
               type="number"
               step="0.01"
               min="0"
@@ -354,7 +398,7 @@ export default function EstoquePage() {
               <option value="">Selecione o produto…</option>
               {products.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name} ({QTY(p.stockQty)} em estoque)
+                  {p.name} ({fmtStock(p)} em estoque)
                 </option>
               ))}
             </select>
@@ -456,7 +500,7 @@ export default function EstoquePage() {
                     <td
                       className={`px-4 py-2 text-right font-medium ${low ? 'text-amber-700' : ''}`}
                     >
-                      {QTY(p.stockQty)}
+                      {fmtStock(p)}
                     </td>
                     <td className="px-4 py-2 text-right text-gray-500">{QTY(p.minStockQty)}</td>
                     <td className="px-4 py-2 text-right text-green-700">{QTY(s.income)}</td>
@@ -465,7 +509,7 @@ export default function EstoquePage() {
                       className={`px-4 py-2 text-right ${diverges ? 'text-amber-700' : 'text-gray-500'}`}
                       title={
                         diverges
-                          ? `Saldo pelo histórico (Σ entradas − Σ saídas) = ${QTY(reconciled)}, diferente do saldo atual ${QTY(p.stockQty)}.`
+                          ? `Saldo pelo histórico (Σ entradas − Σ saídas) = ${QTY(reconciled)}, diferente do saldo atual ${fmtStock(p)}.`
                           : 'Saldo confere com o histórico (ADR-001).'
                       }
                     >

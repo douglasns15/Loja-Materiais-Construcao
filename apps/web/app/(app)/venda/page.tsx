@@ -14,13 +14,19 @@ import {
 import {
   calcMarginPercent,
   calcSaleTotals,
+  closedStockMeters,
   hasAltUnit,
   hasPair,
+  isClosedPrimary,
+  isValidMeterStep,
   pairAvailableQty,
   productMatchesQuery,
+  resolveClosedSale,
   resolveSaleUnit,
   resolveSurcharge,
+  sellsByMeter,
   splitPairLine,
+  splitWholeAndRemainder,
   surchargePerBaseUnit,
   cardFeePercentFor,
   netMarginPercent,
@@ -87,6 +93,13 @@ type CartItem = {
   unitType: UnitType;
   baseUnitType: UnitType;
   conversionFactor: number;
+  /**
+   * ADR-017: `true` quando a linha é de um produto de **unidade fechada** (barra/rolo). Aqui o
+   * `conversionFactor` é o TAMANHO em metros por unidade vendida (barra = tamanho; metro = 1), o
+   * ledger é em metros e o `costPrice` já é o custo POR UNIDADE VENDIDA (não por metro), então a
+   * margem/tooltip usa preço − custo direto, sem multiplicar pelo fator.
+   */
+  closed?: boolean;
   /**
    * Acréscimo por forma de pagamento (ADR-016), em R$ **por unidade vendida desta linha** —
    * já composto com a embalagem (EF-3: × fator) e com o par (soma dos dois lados). Zero quando
@@ -462,6 +475,15 @@ export default function VendaPage() {
       const margin = netMarginPercent(i.costPrice, i.unitPrice, fee);
       return `Par: ${i.name} • Margem do par: ${margin}%${feeNote}`;
     }
+    // ADR-017: unidade fechada — `costPrice` já é por unidade vendida (barra ou metro), então a
+    // margem é preço − custo direto (sem multiplicar pelo fator, que aqui é o tamanho em metros).
+    if (i.closed) {
+      const margin = netMarginPercent(i.costPrice, i.unitPrice, fee);
+      const maxDisc = Math.max(0, Number((i.unitPrice - i.costPrice).toFixed(2)));
+      return maxDisc > 0
+        ? `Margem: ${margin}%${feeNote} • Desconto possível: até ${BRL(maxDisc)}/un`
+        : `Margem: ${margin}%${feeNote} • Sem margem para desconto`;
+    }
     const effUnit = i.conversionFactor > 0 ? i.unitPrice / i.conversionFactor : i.unitPrice;
     const margin = netMarginPercent(i.costPrice, effUnit, fee);
     const maxDisc = Math.max(0, Number((i.unitPrice - i.costPrice * i.conversionFactor).toFixed(2)));
@@ -480,11 +502,58 @@ export default function VendaPage() {
       setError('Selecione um produto e uma quantidade válida.');
       return;
     }
-    const cfg = altConfig(p);
-    const useAlt = mode === 'ALT' && hasAltUnit(cfg);
-    const effMode: SaleUnitMode = useAlt ? 'ALT' : 'BASE';
-    const { unitPrice, factorToBase } = resolveSaleUnit(cfg, effMode);
-    const unitType = useAlt ? (p.altUnit as UnitType) : p.unit;
+    const closed = isClosedPrimary({
+      unit: p.unit,
+      conversionFactor: p.conversionFactor != null ? Number(p.conversionFactor) : null,
+    });
+
+    let unitPrice: number;
+    let factorToBase: number; // metros por unidade vendida (base = 1)
+    let unitType: UnitType;
+    let effMode: SaleUnitMode;
+    let lineCost: number; // custo POR UNIDADE VENDIDA (para a margem/tooltip)
+    let surchargeDebit: number;
+    let surchargeCredit: number;
+
+    if (closed) {
+      // ADR-017: unidade fechada como principal. `mode==='ALT'` só corta se houver preço/metro;
+      // senão barra inteira. Ledger em metros: barra baixa `tamanho`; metro baixa 1.
+      const ccfg = {
+        unit: p.unit,
+        conversionFactor: Number(p.conversionFactor),
+        salePrice: Number(p.salePrice),
+        altSalePrice: p.altSalePrice != null ? Number(p.altSalePrice) : null,
+      };
+      const barLen = Number(p.conversionFactor);
+      const closedMode = mode === 'ALT' && sellsByMeter(ccfg) ? 'METER' : 'WHOLE';
+      if (closedMode === 'METER' && !isValidMeterStep(q)) {
+        setError('A venda por metro deve ser em múltiplos de 0,5 m (mín. 0,5 m).');
+        return;
+      }
+      const r = resolveClosedSale(ccfg, closedMode);
+      unitPrice = r.unitPrice;
+      factorToBase = r.metersPerUnit; // barra = tamanho; metro = 1
+      unitType = closedMode === 'METER' ? (p.altUnit ?? p.unit) : p.unit;
+      effMode = closedMode === 'METER' ? 'ALT' : 'BASE';
+      // Custo por unidade vendida: a barra é o custo cheio; o metro é o custo ÷ tamanho.
+      lineCost =
+        closedMode === 'METER' && barLen > 0 ? Number((Number(p.costPrice) / barLen).toFixed(4)) : Number(p.costPrice);
+      // ADR-016: acréscimo por unidade vendida = acréscimo por metro × metros da unidade.
+      surchargeDebit = Number((surchargePerBaseUnit(surchargeCfg(p), 'DEBIT_CARD') * factorToBase).toFixed(4));
+      surchargeCredit = Number((surchargePerBaseUnit(surchargeCfg(p), 'CREDIT_CARD') * factorToBase).toFixed(4));
+    } else {
+      const cfg = altConfig(p);
+      const useAlt = mode === 'ALT' && hasAltUnit(cfg);
+      effMode = useAlt ? 'ALT' : 'BASE';
+      const resolved = resolveSaleUnit(cfg, effMode);
+      unitPrice = resolved.unitPrice;
+      factorToBase = resolved.factorToBase;
+      unitType = useAlt ? (p.altUnit as UnitType) : p.unit;
+      lineCost = Number(p.costPrice);
+      // ADR-016: acréscimo por unidade VENDIDA — na embalagem fechada o core já multiplica pelo fator.
+      surchargeDebit = resolveSurcharge(surchargeCfg(p), 'DEBIT_CARD', effMode);
+      surchargeCredit = resolveSurcharge(surchargeCfg(p), 'CREDIT_CARD', effMode);
+    }
 
     const stock = Number(p.stockQty);
     const key = `${p.id}:${effMode}`;
@@ -508,17 +577,16 @@ export default function VendaPage() {
           productId: p.id,
           name: p.name,
           unitPrice,
-          costPrice: Number(p.costPrice),
+          costPrice: lineCost,
           quantity: q,
           stockQty: stock,
           saleMode: effMode,
           unitType,
-          baseUnitType: p.unit,
+          baseUnitType: closed ? ('METER' as UnitType) : p.unit,
           conversionFactor: factorToBase,
-          // ADR-016: acréscimo por unidade VENDIDA — na embalagem fechada o core já multiplica
-          // pelo fator (um rolo de 100 m sobe 100 × o acréscimo do metro).
-          surchargeDebit: resolveSurcharge(surchargeCfg(p), 'DEBIT_CARD', effMode),
-          surchargeCredit: resolveSurcharge(surchargeCfg(p), 'CREDIT_CARD', effMode),
+          closed,
+          surchargeDebit,
+          surchargeCredit,
         },
       ]);
     }
@@ -1042,6 +1110,63 @@ export default function VendaPage() {
             filteredProducts.map((p) => {
               const stock = Number(p.stockQty);
               const out = !(stock > 0);
+              // ADR-017: unidade fechada (barra/rolo) como principal — botões próprios (barra
+              // inteira × por metro) e estoque exibido em barras + sobra em metros.
+              const closedP = isClosedPrimary({
+                unit: p.unit,
+                conversionFactor: p.conversionFactor != null ? Number(p.conversionFactor) : null,
+              });
+              if (closedP) {
+                const barLen = Number(p.conversionFactor);
+                const { whole, remainderMeters } = splitWholeAndRemainder(stock, barLen);
+                const canMeter = sellsByMeter({
+                  unit: p.unit,
+                  conversionFactor: barLen,
+                  altSalePrice: p.altSalePrice != null ? Number(p.altSalePrice) : null,
+                });
+                const unitName = unitShort(p.unit);
+                return (
+                  <li key={p.id} className="px-3 py-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium">{p.name}</span>
+                        <span className="block truncate text-xs text-gray-400">
+                          {p.popularName ? `${p.popularName} · ` : ''}
+                          {p.manufacturer ? `${p.manufacturer} · ` : ''}
+                          {p.sku}
+                        </span>
+                      </span>
+                      <span className={`shrink-0 text-xs ${out ? 'text-red-500' : 'text-gray-400'}`}>
+                        {out
+                          ? 'sem estoque'
+                          : `est. ${whole} ${unitName.toLowerCase()}${remainderMeters > 0 ? ` + ${remainderMeters} m` : ''}`}
+                      </span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => addToCart(p.id, 'BASE')}
+                        disabled={out}
+                        title={`1 ${unitName} = ${barLen} m`}
+                        className="rounded-lg border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        + {unitName} ({barLen} m) · {BRL(p.salePrice)}
+                      </button>
+                      {canMeter && (
+                        <button
+                          type="button"
+                          onClick={() => addToCart(p.id, 'ALT')}
+                          disabled={out}
+                          title="Venda por metro — digite a metragem em múltiplos de 0,5 m no campo Qtd"
+                          className="rounded-lg border border-indigo-300 bg-indigo-50 px-2 py-1 text-xs text-indigo-700 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          + por metro · {BRL(p.altSalePrice as string)}/m
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                );
+              }
               const alt = hasAltUnit(altConfig(p));
               // ADR-015: par vendável (dos dois lados) e com estoque nos DOIS produtos.
               const pairInfo = resolvePair(p);

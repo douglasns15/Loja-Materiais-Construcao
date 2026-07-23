@@ -1,6 +1,7 @@
 # ADR-017 — Unidade fechada (Barra/Rolo) como principal + venda fracionada por metro (amenda o ADR-013)
 
-- **Status:** **Aceito (2026-07-22).** Owner aprovou o desenho e a migration do enum. Em implementação.
+- **Status:** **Aceito e NO AR (2026-07-22), aguardando E2E do Owner.** Owner aprovou o desenho e a
+  migration do enum. Implementado ponta a ponta (API `5c426eb7` + web `0041891a`).
 - **Data:** 2026-07-22
 - **Contexto de fase:** Fase 3, evolução do módulo de estoque fino (EF-3). Amenda a **convenção de
   apresentação** do [ADR-013](./ADR-013-venda-em-unidade-alternativa.md) — não substitui o motor.
@@ -150,10 +151,15 @@ costPrice)/salePrice`. A margem **por metro** é derivada: preço/metro (`altSal
 3. [x] `packages/core` (parte 1): `isValidMeterStep`, `metersFromWhole`, `splitWholeAndRemainder` + testes.
 4. [ ] `packages/core` (parte 2): `isClosedPrimary` + resolvedor fechado (preço + débito em metros da
        barra × do metro), testes.
-5. [ ] `packages/shared`: coleta por barra + preço/metro opcional + passo de 0,5 m no item de venda.
-6. [ ] `apps/api`: `POST /orders` usa o débito em metros do resolvedor p/ unidade fechada; valida o passo.
-7. [ ] `apps/web`: cadastro/PDV/estoque/comprovante/ProductDetail/cache com apresentação invertida.
-8. [ ] Gates (core, tsc api+web, build web) → deploy (API + web) → E2E do Owner.
+5. [x] `packages/shared`: `BARRA` no enum + rótulo; o cadastro coleta por barra (a validação do passo
+       de 0,5 m fica no core/API + PDV).
+6. [x] `apps/api`: `POST /orders` usa `closedStockMeters` p/ unidade fechada (barra ⇒ `qtd × tamanho`;
+       metro ⇒ `qtd`) e valida o passo de 0,5 m no online. Cancelamento/devolução usam `baseQuantity` (metros).
+7. [x] `apps/web`: **PDV** (padrão barra inteira + "por metro" 0,5), **cadastro** (bloco barra invertido),
+       **Estoque** (saldo "X barras + Y m" + entrada em barras), **ProductDetail** (leitura/edição invertida),
+       cache offline já traz os campos. *(Comprovante usa o snapshot da unidade vendida — barra/metro.)*
+8. [x] Gates: core **156/156**, typecheck api+web ✅, build web ✅. **NO AR:** API `5c426eb7` + web
+       `0041891a`; smoke health/login 200. **Falta:** E2E do Owner.
 
 ## Relacionadas
 

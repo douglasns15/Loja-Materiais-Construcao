@@ -1,6 +1,14 @@
 import { Hono } from 'hono';
 import { createPrismaClient } from '@nexoloja/db';
-import { calcSaleItemTotal, calcSaleTotals, hasAltUnit, toBaseQuantity } from '@nexoloja/core';
+import {
+  calcSaleItemTotal,
+  calcSaleTotals,
+  closedStockMeters,
+  hasAltUnit,
+  isClosedPrimary,
+  isValidMeterStep,
+  toBaseQuantity,
+} from '@nexoloja/core';
 import { cancelOrderSchema, createSaleSchema, returnOrderSchema } from '@nexoloja/shared';
 import { type Env, getConnectionString, getTenantId } from '../lib/request';
 import { requireActiveTenant, requireAuth } from '../middleware/auth';
@@ -176,14 +184,33 @@ orders.post('/', requireActiveTenant, async (c) => {
         return c.json({ ok: false, error: 'Produto inexistente na venda.' }, 400);
       }
       const altCfg = {
+        unit: p.unit,
         salePrice: Number(p.salePrice),
         altUnit: p.altUnit,
         altSalePrice: p.altSalePrice != null ? Number(p.altSalePrice) : null,
         conversionFactor: p.conversionFactor != null ? Number(p.conversionFactor) : null,
       };
-      const isAlt = item.saleMode === 'ALT' && hasAltUnit(altCfg);
-      const baseQty = toBaseQuantity(altCfg, item.saleMode, item.quantity);
-      const soldUnit = isAlt ? (p.altUnit ?? p.unit) : p.unit;
+      let baseQty: number;
+      let soldUnit: (typeof products)[number]['unit'];
+      if (isClosedPrimary(altCfg)) {
+        // ADR-017: unidade fechada como principal. `saleMode` BASE = barra/rolo INTEIRO (baixa
+        // `qtd × tamanho` metros); ALT = por metro (baixa `qtd` metros). O ledger é em metros e a
+        // unidade vendida no comprovante INVERTE (barra ⇒ `unit`; metro ⇒ `altUnit`).
+        const mode = item.saleMode === 'ALT' ? 'METER' : 'WHOLE';
+        if (mode === 'METER' && !isOffline && !isValidMeterStep(item.quantity)) {
+          return c.json(
+            { ok: false, error: `A venda por metro de "${p.name}" deve ser em múltiplos de 0,5 m.` },
+            400,
+          );
+        }
+        baseQty = closedStockMeters(altCfg, mode, item.quantity);
+        soldUnit = mode === 'WHOLE' ? p.unit : (p.altUnit ?? p.unit);
+      } else {
+        // EF-3 (ADR-013) / produto comum: BASE = unidade fina; ALT = embalagem (× conversionFactor).
+        const isAlt = item.saleMode === 'ALT' && hasAltUnit(altCfg);
+        baseQty = toBaseQuantity(altCfg, item.saleMode, item.quantity);
+        soldUnit = isAlt ? (p.altUnit ?? p.unit) : p.unit;
+      }
       // Estoque insuficiente (em unidade-base): bloqueia no online; no offline registra e deixa
       // negativo p/ reconciliação (§6). A venda offline de EF-3 também traz `saleMode` no envelope.
       if (!isOffline && Number(p.stockQty) < baseQty) {

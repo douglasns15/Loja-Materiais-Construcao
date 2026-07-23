@@ -121,6 +121,10 @@ export default function ProductsPage() {
     return () => clearTimeout(t);
   }, [highlightId]);
 
+  // ADR-017: unidade fechada (barra/rolo) como principal — muda a apresentação do cadastro
+  // (tamanho + preço da barra + preço por metro opcional) e a conversão da entrada em barras.
+  const isClosedUnit = form.unit === 'BARRA' || form.unit === 'ROLL';
+
   async function onCreate(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -145,9 +149,17 @@ export default function ProductsPage() {
       weightKg,
       minStockQty: form.minStockQty ? Number(form.minStockQty) : undefined,
       // Se preenchido, a API gera a Entrada de estoque atomicamente (ADR-001); vazio = nasce em 0.
-      initialStock: form.initialStock ? Number(form.initialStock) : undefined,
+      // ADR-017: p/ unidade fechada (barra/rolo) o estoque inicial é digitado em BARRAS e vira
+      // metros (× tamanho), pois o ledger é em metros.
+      initialStock: form.initialStock
+        ? isClosedUnit && Number(form.conversionFactor) > 0
+          ? Number(form.initialStock) * Number(form.conversionFactor)
+          : Number(form.initialStock)
+        : undefined,
       // Unidade alternativa (EF-3): só envia se preenchido; os 3 juntos habilitam o modo no PDV.
-      altUnit: form.altUnit || undefined,
+      // ADR-017: na unidade fechada, altUnit é fixo em METER (a régua fina) e o preço por metro
+      // (opcional) mora em altSalePrice; conversionFactor é o tamanho da barra em metros.
+      altUnit: isClosedUnit ? 'METER' : form.altUnit || undefined,
       conversionFactor: form.conversionFactor ? Number(form.conversionFactor) : undefined,
       altSalePrice: form.altSalePrice ? Number(form.altSalePrice) : undefined,
       // Par (ADR-015): só vale com os dois preenchidos; sem produto agregado o preço é ignorado.
@@ -361,7 +373,7 @@ export default function ProductsPage() {
           />
         </div>
         <input
-          placeholder="Custo"
+          placeholder={isClosedUnit ? 'Custo da barra' : 'Custo'}
           type="number"
           step="0.01"
           value={form.costPrice}
@@ -369,7 +381,7 @@ export default function ProductsPage() {
           className="rounded-lg border border-gray-300 px-3 py-2"
         />
         <input
-          placeholder="Venda"
+          placeholder={isClosedUnit ? 'Preço da barra' : 'Venda'}
           type="number"
           step="0.01"
           value={form.salePrice}
@@ -422,13 +434,17 @@ export default function ProductsPage() {
           className="rounded-lg border border-gray-300 px-3 py-2"
         />
         <input
-          placeholder="Estoque inicial (opcional)"
+          placeholder={isClosedUnit ? 'Estoque inicial (barras)' : 'Estoque inicial (opcional)'}
           type="number"
           step="any"
           min="0"
           value={form.initialStock}
           onChange={(e) => setForm({ ...form, initialStock: e.target.value })}
-          title="Se preenchido, gera uma Entrada de estoque no cadastro (aparece no Estoque como 'Estoque inicial'). Deixe vazio para o produto nascer com 0."
+          title={
+            isClosedUnit
+              ? 'Quantas barras/rolos inteiros entram no cadastro. Convertido para metros pelo tamanho (ex.: 10 barras × 6 m = 60 m).'
+              : "Se preenchido, gera uma Entrada de estoque no cadastro (aparece no Estoque como 'Estoque inicial'). Deixe vazio para o produto nascer com 0."
+          }
           className="rounded-lg border border-gray-300 px-3 py-2 sm:col-span-2"
         />
         {/* Descrição/observação (opcional, até 500 caracteres). */}
@@ -441,7 +457,43 @@ export default function ProductsPage() {
           title="Detalhes ou observações do produto (opcional). Ex.: marca, especificação técnica, cor."
           className="resize-y rounded-lg border border-gray-300 px-3 py-2 sm:col-span-4"
         />
+        {/* ADR-017: barra/rolo como principal — tamanho da barra + preço por metro (opcional). */}
+        {isClosedUnit && (
+          <fieldset className="rounded-xl border border-dashed border-indigo-300 bg-indigo-50/40 p-3 sm:col-span-6">
+            <legend className="px-1 text-xs font-medium text-indigo-700">
+              {unitTypeLabels[form.unit]} — tamanho e venda por metro
+            </legend>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <input
+                placeholder={`Tamanho: 1 ${unitTypeLabels[form.unit]} = ? metros`}
+                type="number"
+                step="any"
+                min="0"
+                value={form.conversionFactor}
+                onChange={(e) => setForm({ ...form, conversionFactor: e.target.value })}
+                title="Comprimento de 1 barra/rolo em metros (ex.: barra de 6 m → 6). O estoque é contado em metros."
+                className="rounded-lg border border-gray-300 px-3 py-2"
+              />
+              <input
+                placeholder="Preço por metro (opcional)"
+                type="number"
+                step="0.01"
+                min="0"
+                value={form.altSalePrice}
+                onChange={(e) => setForm({ ...form, altSalePrice: e.target.value })}
+                title="Preço do corte avulso por metro. Deixe vazio para vender só a barra/rolo inteiro."
+                className="rounded-lg border border-gray-300 px-3 py-2"
+              />
+            </div>
+            <p className="mt-2 text-xs text-gray-500">
+              Custo e preço acima são da <strong>{unitTypeLabels[form.unit]} inteira</strong>. O
+              estoque é contado em metros e mostrado como barras + sobra. Preço por metro vazio ⇒
+              só vende inteiro.
+            </p>
+          </fieldset>
+        )}
         {/* Venda em unidade alternativa (EF-3, ADR-013): embalagem fechada com preço próprio. */}
+        {!isClosedUnit && (
         <fieldset className="rounded-xl border border-dashed border-gray-300 p-3 sm:col-span-6">
           <legend className="px-1 text-xs font-medium text-gray-500">
             Venda em unidade alternativa (opcional) — ex.: fio por metro OU rolo fechado
@@ -486,6 +538,7 @@ export default function ProductsPage() {
             Preencha os três para habilitar a escolha “{unitTypeLabels[form.unit]} × embalagem” no PDV.
           </p>
         </fieldset>
+        )}
         {/* Produto agregado — venda em par (ADR-015). Ex.: parafuso nº10 + bucha nº10. */}
         <fieldset className="rounded-xl border border-dashed border-gray-300 p-3 sm:col-span-6">
           <legend className="px-1 text-xs font-medium text-gray-500">

@@ -2,7 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { updateProductSchema, unitTypeLabels, type UnitType } from '@nexoloja/shared';
-import { cardFeePercentFor, netMarginPercent, surchargePerBaseUnit } from '@nexoloja/core';
+import {
+  cardFeePercentFor,
+  isClosedPrimary,
+  netMarginPercent,
+  splitWholeAndRemainder,
+  surchargePerBaseUnit,
+} from '@nexoloja/core';
 import { apiDelete, apiPatch } from '@/lib/api';
 
 /**
@@ -255,6 +261,19 @@ export function ProductDetail({
   // então aqui o campo fica bloqueado, explicando onde editar.
   const pairLockedByOther = !pairedHere && !!pairedFromOther;
 
+  // ADR-017: unidade fechada (barra/rolo) como principal. O estoque é em metros; aqui é exibido
+  // como barras + sobra, e a apresentação (custo/preço = da barra; venda por metro opcional) inverte.
+  const closed = isClosedPrimary({
+    unit: product.unit,
+    conversionFactor: product.conversionFactor != null ? Number(product.conversionFactor) : null,
+  });
+  const barLen = product.conversionFactor != null ? Number(product.conversionFactor) : 0;
+  const stockLabel = (() => {
+    if (!closed) return `${QTY(product.stockQty)} ${unitTypeLabels[product.unit]}`;
+    const { whole, remainderMeters } = splitWholeAndRemainder(Number(product.stockQty), barLen);
+    return `${whole} ${unitTypeLabels[product.unit].toLowerCase()}${remainderMeters > 0 ? ` + ${QTY(remainderMeters)} m` : ''}`;
+  })();
+
   async function onSave() {
     setError(null);
     if (!form.name.trim() || !form.sku.trim()) {
@@ -372,9 +391,21 @@ export function ProductDetail({
                 label="Peso"
                 value={product.weightKg === null ? null : `${QTY(product.weightKg)} kg`}
               />
-              <Row label="Custo" value={BRL(product.costPrice)} />
-              <Row label="Venda" value={BRL(product.salePrice)} />
+              <Row label={closed ? 'Custo da barra' : 'Custo'} value={BRL(product.costPrice)} />
+              <Row label={closed ? 'Preço da barra' : 'Venda'} value={BRL(product.salePrice)} />
               <Row label="Margem" value={`${product.marginPercent}%`} />
+              {closed && (
+                <Row
+                  label="Tamanho da barra"
+                  value={barLen > 0 ? `${QTY(barLen)} m` : null}
+                />
+              )}
+              {closed && (
+                <Row
+                  label="Venda por metro"
+                  value={product.altSalePrice ? `${BRL(product.altSalePrice)}/m` : null}
+                />
+              )}
               {/*
                 Preço e margem por forma de pagamento (ADR-016). Só aparece quando há algo a
                 dizer: acréscimo cadastrado no produto OU taxa da maquininha cadastrada na loja.
@@ -408,19 +439,18 @@ export function ProductDetail({
                   />
                 );
               })}
-              <Row
-                label="Estoque atual"
-                value={`${QTY(product.stockQty)} ${unitTypeLabels[product.unit]}`}
-              />
+              <Row label="Estoque atual" value={stockLabel} />
               <Row label="Estoque mínimo" value={QTY(product.minStockQty)} />
-              <Row
-                label="Embalagem fechada"
-                value={
-                  product.altUnit && product.altSalePrice && product.conversionFactor
-                    ? `${unitTypeLabels[product.altUnit]} · ${QTY(product.conversionFactor)} por embalagem · ${BRL(product.altSalePrice)}`
-                    : null
-                }
-              />
+              {!closed && (
+                <Row
+                  label="Embalagem fechada"
+                  value={
+                    product.altUnit && product.altSalePrice && product.conversionFactor
+                      ? `${unitTypeLabels[product.altUnit]} · ${QTY(product.conversionFactor)} por embalagem · ${BRL(product.altSalePrice)}`
+                      : null
+                  }
+                />
+              )}
               {/* Par (ADR-015) — mostrado dos dois lados, e a economia calculada. */}
               <Row
                 label="Vendido em par com"
@@ -580,7 +610,7 @@ export function ProductDetail({
               />
             </label>
             <label className="sm:col-span-2">
-              <span className={labelCls}>Custo</span>
+              <span className={labelCls}>{closed ? 'Custo da barra' : 'Custo'}</span>
               <input
                 type="number"
                 step="0.01"
@@ -591,7 +621,7 @@ export function ProductDetail({
               />
             </label>
             <label className="sm:col-span-2">
-              <span className={labelCls}>Venda</span>
+              <span className={labelCls}>{closed ? 'Preço da barra' : 'Venda'}</span>
               <input
                 type="number"
                 step="0.01"
@@ -661,47 +691,79 @@ export function ProductDetail({
               />
             </label>
 
-            {/* Venda em unidade alternativa (EF-3, ADR-013). Limpar a unidade desfaz a embalagem. */}
-            <fieldset className="rounded-xl border border-dashed border-gray-300 p-3 sm:col-span-6">
-              <legend className="px-1 text-xs font-medium text-gray-500">
-                Venda em unidade alternativa (opcional)
-              </legend>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <select
-                  value={form.altUnit}
-                  onChange={(e) =>
-                    setForm({ ...form, altUnit: e.target.value as UnitType | '' })
-                  }
-                  className={`${inputCls} bg-white`}
-                  aria-label="Unidade da embalagem alternativa"
-                >
-                  <option value="">— sem embalagem alternativa —</option>
-                  {(Object.keys(unitTypeLabels) as UnitType[]).map((u) => (
-                    <option key={u} value={u}>
-                      {unitTypeLabels[u]}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  placeholder={`Tamanho (${unitTypeLabels[form.unit]} por embalagem)`}
-                  type="number"
-                  step="any"
-                  min="0"
-                  value={form.conversionFactor}
-                  onChange={(e) => setForm({ ...form, conversionFactor: e.target.value })}
-                  className={inputCls}
-                />
-                <input
-                  placeholder="Preço da embalagem fechada"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={form.altSalePrice}
-                  onChange={(e) => setForm({ ...form, altSalePrice: e.target.value })}
-                  className={inputCls}
-                />
-              </div>
-            </fieldset>
+            {/* ADR-017: unidade fechada (barra/rolo) — tamanho + preço por metro (opcional). */}
+            {closed ? (
+              <fieldset className="rounded-xl border border-dashed border-indigo-300 bg-indigo-50/40 p-3 sm:col-span-6">
+                <legend className="px-1 text-xs font-medium text-indigo-700">
+                  {unitTypeLabels[form.unit]} — tamanho e venda por metro
+                </legend>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <input
+                    placeholder={`Tamanho: 1 ${unitTypeLabels[form.unit]} = ? metros`}
+                    type="number"
+                    step="any"
+                    min="0"
+                    value={form.conversionFactor}
+                    onChange={(e) => setForm({ ...form, conversionFactor: e.target.value })}
+                    className={inputCls}
+                  />
+                  <input
+                    placeholder="Preço por metro (opcional)"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={form.altSalePrice}
+                    onChange={(e) => setForm({ ...form, altSalePrice: e.target.value })}
+                    className={inputCls}
+                  />
+                </div>
+                <p className="mt-2 text-xs text-gray-500">
+                  Custo e preço acima são da <strong>{unitTypeLabels[form.unit]} inteira</strong>. O
+                  estoque é contado em metros. Preço por metro vazio ⇒ só vende inteiro.
+                </p>
+              </fieldset>
+            ) : (
+              <fieldset className="rounded-xl border border-dashed border-gray-300 p-3 sm:col-span-6">
+                <legend className="px-1 text-xs font-medium text-gray-500">
+                  Venda em unidade alternativa (opcional)
+                </legend>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <select
+                    value={form.altUnit}
+                    onChange={(e) =>
+                      setForm({ ...form, altUnit: e.target.value as UnitType | '' })
+                    }
+                    className={`${inputCls} bg-white`}
+                    aria-label="Unidade da embalagem alternativa"
+                  >
+                    <option value="">— sem embalagem alternativa —</option>
+                    {(Object.keys(unitTypeLabels) as UnitType[]).map((u) => (
+                      <option key={u} value={u}>
+                        {unitTypeLabels[u]}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    placeholder={`Tamanho (${unitTypeLabels[form.unit]} por embalagem)`}
+                    type="number"
+                    step="any"
+                    min="0"
+                    value={form.conversionFactor}
+                    onChange={(e) => setForm({ ...form, conversionFactor: e.target.value })}
+                    className={inputCls}
+                  />
+                  <input
+                    placeholder="Preço da embalagem fechada"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={form.altSalePrice}
+                    onChange={(e) => setForm({ ...form, altSalePrice: e.target.value })}
+                    className={inputCls}
+                  />
+                </div>
+              </fieldset>
+            )}
 
             {/* Produto agregado — venda em par (ADR-015). */}
             <fieldset className="rounded-xl border border-dashed border-gray-300 p-3 sm:col-span-6">

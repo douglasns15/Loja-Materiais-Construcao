@@ -3,7 +3,23 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-22 — **Fix de truncamento silencioso das listas de cadastro (take:100)
+> **Última atualização:** 2026-07-22 — **ADR-017 (Barra/Rolo como unidade fechada principal + venda por
+> metro) — NO AR, aguardando E2E do Owner.** Pedido do Owner: cadastrar pela **unidade fechada** (Barra,
+> Rolo) com o **preço fechado**; a **venda por metro** vira a opção fracionada; nova unidade **Barra**.
+> **ADR-017 escrito e aprovado ANTES de codar** (regra 4). Decisões do Owner: contar em barra, só `BARRA` no
+> enum, venda por metro em **múltiplos de 0,5 m**, entrada **em barras**, saldo **"X barras + Y m"**, preço
+> por metro **opcional** (vazio ⇒ só inteiro). **Sem coluna nova:** `unit=BARRA`, `salePrice/costPrice` = da
+> barra, `conversionFactor` = tamanho (m), `altSalePrice` = preço/metro (nullable). **Estoque em METROS**
+> (desacoplado do `unit`) por **precisão** — o motor é o EF-3 (ADR-013) com **papéis invertidos** (barra
+> baixa `qtd × tamanho`; metro baixa `qtd`); cancelamento/devolução usam `baseQuantity`, sem mudança.
+> **Migration `0013`** (`ALTER TYPE UnitType ADD VALUE 'BARRA'`) aplicada. Core **+17 → 156/156**
+> (`isValidMeterStep`, `metersFromWhole`, `splitWholeAndRemainder`, `isClosedPrimary`, `sellsByMeter`,
+> `resolveClosedSale`, `closedStockMeters`). Web: PDV (barra inteira × por metro 0,5), cadastro invertido,
+> Estoque ("barras + sobra" + entrada em barras), ProductDetail invertido. Gates: typecheck api+web ✅, build
+> web ✅. **NO AR:** API `5c426eb7` + web `0041891a`; smoke 200/200. **Falta:** E2E do Owner (roteiro no
+> registro, "ADR-017"). Ver ADR-017 e "ADR-017" no registro.
+>
+> **Antes:** 2026-07-22 — **Fix de truncamento silencioso das listas de cadastro (take:100)
 > — NO AR e VALIDADO pelo usuário** (após publicar, os produtos além dos 100 voltaram a aparecer). Bug grave reportado: ao cadastrar vários produtos, um ("Vass…")
 > **sumiu** de Produtos, Estoque e Venda após "Adicionar", mas **existia no banco** (o `POST` retornou 201).
 > **Causa raiz:** `GET /products` fazia `findMany({ orderBy: { name:'asc' }, take: 100 })` — passando de
