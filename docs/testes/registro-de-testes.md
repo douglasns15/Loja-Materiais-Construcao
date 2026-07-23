@@ -2956,9 +2956,16 @@ preservada: quem abriu/fechou/vendeu segue gravado por pessoa.
 | Migration | ✅ nenhuma necessária |
 
 **⚠️ Deploy da API obrigatório** para valer em produção (mudança é server-side). Ao subir, o `/current` da
-Amanda passa a retornar o caixa que o Douglas abriu — o problema some sem ação manual de dados.
+Amanda passou a retornar o caixa que o Douglas abriu — o problema sumiu **sem nenhuma ação manual de
+dados** (nenhum caixa órfão precisou ser fechado ou migrado).
 
-**E2E do Owner — ⏭️ pendente (após deploy):** (1) Douglas abre o caixa; (2) Amanda loga em outro
+| Deploy | Resultado |
+|---|---|
+| `npm run deploy` da API | ✅ Version `3bd5cade` |
+| Smoke `/health` + `/cash-sessions/current` sem token | ✅ 200 + 401 |
+
+**E2E do Owner — ✅ VALIDADO (2026-07-23):** (1) Douglas abre o caixa; (2) Amanda loga em outro
 dispositivo → **vê o caixa aberto** (não mais "fechado"); (3) Amanda vende → a venda entra no mesmo caixa;
 (4) Douglas vê a venda da Amanda no Histórico do caixa; (5) Amanda **fecha** o caixa → soma as vendas dos
 dois; (6) tentar abrir um segundo caixa com a loja já aberta → 409 "A loja já tem um caixa aberto".
+Commit `cbccb3f`. **Fatia ADR-018 CONCLUÍDA — bug de produção fechado.**

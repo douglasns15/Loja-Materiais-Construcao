@@ -1,8 +1,9 @@
 # ADR-018 — Caixa compartilhado por loja (uma sessão de caixa por tenant, não por operador)
 
-- **Status:** **Aceito e CÓDIGO PRONTO (2026-07-23), aguardando deploy da API + E2E.** Owner escolheu o
-  modelo compartilhado e "qualquer operador fecha". Implementado em `cashSessions.ts` e `orders.ts`
-  (remoção do filtro `userId` na resolução do caixa); typecheck API ✅; sem migration.
+- **Status:** **Aceito, NO AR e VALIDADO pelo Owner (2026-07-23).** Owner escolheu o modelo compartilhado e
+  "qualquer operador fecha". Implementado em `cashSessions.ts` e `orders.ts` (remoção do filtro `userId` na
+  resolução do caixa); typecheck API ✅; sem migration. API `3bd5cade`; commit `cbccb3f`. E2E do Owner
+  validado — a segunda operadora passou a enxergar e operar o caixa aberto da loja.
 - **Data:** 2026-07-23
 - **Contexto de fase:** Fase 3, correção de semântica reportada em produção.
 - **Deciders:** Owner do produto.

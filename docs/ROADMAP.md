@@ -3,8 +3,8 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-23 — **ADR-018 (Caixa compartilhado por loja) — CÓDIGO PRONTO, aguardando
-> deploy da API + E2E.** Bug grave reportado pelo Owner: ele abriu o caixa com o próprio usuário
+> **Última atualização:** 2026-07-23 — **ADR-018 (Caixa compartilhado por loja) — NO AR e VALIDADO pelo
+> Owner.** Bug grave reportado pelo Owner: ele abriu o caixa com o próprio usuário
 > (`douglasns.work`) e outra operadora da **mesma loja** (`amanda.ns92`), ao logar, via **"caixa fechado"**.
 > **Causa raiz:** o caixa nascera **por operador** — toda resolução de "há caixa aberto?" filtrava por
 > `{tenantId, userId, closedAt:null}` (em `cashSessions.ts` e `orders.ts`), então cada usuário só via o
@@ -13,9 +13,12 @@
 > para todos; **qualquer operador fecha**. **Sem migration** (`CashSession.userId` vira "quem abriu"; sem
 > constraint única por usuário; RLS por `tenantId` intacto). Autoria (ADR-010) preservada. Mudança
 > **puramente de query** (remoção do filtro `userId` em 8 pontos). Relatórios **já** eram por loja — ficaram
-> coerentes de graça. Typecheck API ✅; front sem mudança (só exibe o retorno de `/current`). **Falta:**
-> `npm run deploy` da API + E2E (Douglas abre → Amanda vê aberto → vende no mesmo caixa → fecha somando os
-> dois). Ver ADR-018 e "ADR-018" no registro.
+> coerentes de graça. Typecheck API ✅; front sem mudança (só exibe o retorno de `/current`). **NO AR:** API
+> `3bd5cade`; smoke 200 + 401 ✅. **E2E do Owner VALIDADO** (Douglas abre → Amanda vê aberto → vende no
+> mesmo caixa → fecha somando os dois; 2º caixa recusado com 409) — **sem nenhuma ação manual de dados**, o
+> caixa já aberto passou a ser enxergado por todos. Commit `cbccb3f`. **Fatia CONCLUÍDA.** Ver ADR-018 e
+> "ADR-018" no registro. **Próximo passo:** direções abertas — go-live (Supabase Pro/CORS/SMTP, ver
+> `docs/plano-producao.md`), nova funcionalidade, ou endurecimento.
 >
 > **Antes:** 2026-07-23 — **ADR-017 (Barra/Rolo como unidade fechada principal + venda por
 > metro) — NO AR e VALIDADO pelo Owner (E2E 7/7).** Pedido do Owner: cadastrar pela **unidade fechada** (Barra,
