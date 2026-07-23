@@ -66,6 +66,7 @@ enum UnitType {
   THOUSAND   // Milheiro (mil) — ex: tijolos
   BAG        // Saco (sc) — ex: cimento
   ROLL       // Rolo — ex: manta, tela
+  BARRA      // Barra — ex: vergalhão/perfil vendido em barra fechada, cortável por metro (ADR-017)
 }
 
 /// Papel do usuário dentro de um tenant

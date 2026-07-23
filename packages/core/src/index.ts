@@ -229,6 +229,52 @@ export function effectiveBaseUnitPrice(p: AltUnitConfig, mode: SaleUnitMode): nu
   return Number((unitPrice / factorToBase).toFixed(4));
 }
 
+// -----------------------------------------------------------------------------
+// UNIDADE FECHADA COMO PRINCIPAL — Barra/Rolo + venda fracionada por metro (ADR-017)
+// -----------------------------------------------------------------------------
+// A unidade fechada (barra/rolo) é a de primeira classe na UI, mas o LEDGER de
+// estoque continua em unidade fina (metro) por precisão — 0,5 m é exato em metros,
+// mas seria dízima em "barras". Estas funções puras fazem a régua fina ↔ fechado
+// e a validação do passo de meio metro. O ledger (ADR-001) não muda.
+
+/** Passo mínimo/incremento da venda fracionada por metro (ADR-017): meio metro. */
+export const METER_SALE_STEP = 0.5;
+
+/**
+ * `true` se `meters` é uma venda fracionada válida: **múltiplo de 0,5 m** e **≥ 0,5 m**
+ * (ADR-017 — evita saldos muito quebrados). Tolerância a ruído de ponto flutuante.
+ */
+export function isValidMeterStep(meters: number, step: number = METER_SALE_STEP): boolean {
+  if (!(step > 0) || !Number.isFinite(meters) || meters < step) return false;
+  const ratio = meters / step;
+  return Math.abs(ratio - Math.round(ratio)) < 1e-9;
+}
+
+/** Total de metros que N unidades fechadas representam (entrada de estoque em barras). */
+export function metersFromWhole(wholeUnits: number, unitLengthMeters: number): number {
+  if (!(unitLengthMeters > 0)) return 0;
+  return Number((wholeUnits * unitLengthMeters).toFixed(4));
+}
+
+/**
+ * Decompõe um saldo em metros em **unidades fechadas inteiras + sobra em metros**, para
+ * exibição (ADR-017): ex.: 298 m com barra de 6 m → `{ whole: 49, remainderMeters: 4 }`
+ * ("49 barras + 4 m", não "49,67 barras"). Vale igual para rolo. `unitLength <= 0` ⇒ tudo
+ * como sobra (produto sem tamanho definido). O ratio é arredondado antes do piso para não
+ * deixar um múltiplo exato (300 ÷ 6) cair para 49 por ruído de ponto flutuante.
+ */
+export function splitWholeAndRemainder(
+  meters: number,
+  unitLengthMeters: number,
+): { whole: number; remainderMeters: number } {
+  if (!(unitLengthMeters > 0)) {
+    return { whole: 0, remainderMeters: Number(meters.toFixed(4)) };
+  }
+  const whole = Math.floor(Number((meters / unitLengthMeters).toFixed(6)));
+  const remainderMeters = Number((meters - whole * unitLengthMeters).toFixed(4));
+  return { whole, remainderMeters };
+}
+
 // =============================================================================
 // PRODUTO AGREGADO — venda em par (ADR-015)
 // =============================================================================

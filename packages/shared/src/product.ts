@@ -16,6 +16,7 @@ export const unitTypeSchema = z.enum([
   'THOUSAND',
   'BAG',
   'ROLL',
+  'BARRA',
 ]);
 export type UnitType = z.infer<typeof unitTypeSchema>;
 
@@ -31,6 +32,7 @@ export const unitTypeLabels: Record<UnitType, string> = {
   THOUSAND: 'Milheiro (mil)',
   BAG: 'Saco (sc)',
   ROLL: 'Rolo',
+  BARRA: 'Barra',
 };
 
 /// Payload para criar um produto. `tenantId` NÃO entra aqui — vem do contexto

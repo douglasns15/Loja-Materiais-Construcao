@@ -4,7 +4,7 @@
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
 > **Última atualização:** 2026-07-22 — **Fix de truncamento silencioso das listas de cadastro (take:100)
-> — NO AR, aguardando E2E do usuário.** Bug grave reportado: ao cadastrar vários produtos, um ("Vass…")
+> — NO AR e VALIDADO pelo usuário** (após publicar, os produtos além dos 100 voltaram a aparecer). Bug grave reportado: ao cadastrar vários produtos, um ("Vass…")
 > **sumiu** de Produtos, Estoque e Venda após "Adicionar", mas **existia no banco** (o `POST` retornou 201).
 > **Causa raiz:** `GET /products` fazia `findMany({ orderBy: { name:'asc' }, take: 100 })` — passando de
 > **100 produtos**, a API devolvia só os 100 primeiros **em ordem alfabética**; nomes tardios (V…) caíam

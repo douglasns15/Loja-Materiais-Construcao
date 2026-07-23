@@ -2872,6 +2872,8 @@ tudo é o correto. Ordenação por nome mantida.
 | Smoke `GET /health` | 200 `{ok:true}` | ✅ (após cold-start) |
 | Smoke `GET /products?includeInactive=true` sem token | 401 | ✅ |
 
-**E2E do usuário — ⏭️ pendente:** hard-refresh (Ctrl+Shift+R) e conferir que "Vass…" volta a aparecer em
-Produtos/Estoque/Venda. **Limitação conhecida (aberta):** **Histórico de Vendas ainda mostra só as ~100
-vendas mais recentes** (`orders.ts` take:100) — corrigir com paginação/filtro por período no servidor.
+**E2E do usuário — ✅ VALIDADO (2026-07-22):** após publicar, os produtos além dos 100 (incl. "Vass…")
+voltaram a aparecer em Produtos/Estoque/Venda. Commit `917fa24`. **Bug Take100 RESOLVIDO e VALIDADO.**
+**Limitação conhecida (aberta):** **Histórico de Vendas e Relatórios ainda têm teto** (`orders.ts`
+take:100; `reports.ts` take:200/1000) — crescem sem limite, pedem paginação/filtro por período no servidor
+(tarefa própria já aberta como próximo passo).
