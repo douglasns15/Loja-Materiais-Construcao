@@ -2909,8 +2909,56 @@ dado/RLS.
 tamanho + preço da barra + preço por metro opcional; entrada inicial em barras), Estoque (saldo "X barras +
 Y m" + entrada em barras), ProductDetail (leitura/edição invertida). Cache offline já traz os campos.
 
-**E2E do Owner — ⏭️ pendente (hard-refresh):** (1) cadastrar uma **Barra** (ex.: Vergalhão, 6 m, R$48,
-custo R$36, por metro R$9); (2) estoque inicial em barras → confere "X barras" no Estoque; (3) vender 1
-barra → baixa 6 m; (4) vender **2,5 m** → baixa 2,5 m e o saldo vira "barras + sobra"; (5) tentar **0,7 m**
-→ recusa (múltiplos de 0,5); (6) cadastrar barra **sem** preço por metro → PDV só oferece barra inteira;
-(7) editar a barra no ProductDetail sem corromper. Commits `015d687`/`61a5773` + o deste deploy.
+**E2E do Owner — ✅ VALIDADO 7/7 (2026-07-23, hard-refresh):** (1) cadastrar uma **Barra** (ex.: Vergalhão,
+6 m, R$48, custo R$36, por metro R$9); (2) estoque inicial em barras → confere "X barras" no Estoque; (3)
+vender 1 barra → baixa 6 m; (4) vender **2,5 m** → baixa 2,5 m e o saldo vira "barras + sobra"; (5) tentar
+**0,7 m** → recusa (múltiplos de 0,5); (6) cadastrar barra **sem** preço por metro → PDV só oferece barra
+inteira; (7) editar a barra no ProductDetail sem corromper. Commits `015d687`/`61a5773` + o deste deploy.
+**Fatia ADR-017 CONCLUÍDA.**
+
+---
+
+### ADR-018 — Caixa compartilhado por loja (2026-07-23)
+
+**Bug reportado pelo Owner (produção):** ele abriu o caixa com `douglasns.work@gmail.com` e operou normal;
+**outra operadora da MESMA loja** (`amanda.ns92@hotmail.com`), ao logar, via **"caixa fechado"**.
+
+**Causa raiz:** a sessão de caixa era resolvida **por operador** — todas as consultas de "há caixa
+aberto?" filtravam por `{ tenantId, userId, closedAt: null }`. Cada usuário só enxergava o próprio caixa.
+Nunca foi um ADR (escolha de implementação "uma por operador"). Não bate com a loja real (um caixa físico,
+vários operadores).
+
+**Decisão (ADR-018, aprovada ANTES de codar — regra 4):** caixa **por LOJA**. Owner escolheu: (1) um caixa
+por loja (compartilhado) e (2) **qualquer operador** pode fechar. **Sem migration** — `CashSession.userId`
+vira "quem abriu", não há constraint única por usuário, RLS por `tenantId` intacto. Autoria (ADR-010)
+preservada: quem abriu/fechou/vendeu segue gravado por pessoa.
+
+**Mudança (puramente de query — remoção do filtro `userId`):**
+
+| Arquivo | Ponto | Antes → Depois |
+|---|---|---|
+| `cashSessions.ts` | `/current` | `{tenantId, userId, closedAt:null}` → `{tenantId, closedAt:null}` |
+| `cashSessions.ts` | `/open` (bloqueio 409) | idem — 409 agora é "A loja já tem um caixa aberto" |
+| `cashSessions.ts` | `/close` | idem — qualquer operador fecha |
+| `orders.ts` | `GET /` (vendas do caixa) | idem |
+| `orders.ts` | venda online | idem |
+| `orders.ts` | venda offline (idempotente) | `{id, tenantId, userId}` → `{id, tenantId}` |
+| `orders.ts` | cancelamento | idem |
+| `orders.ts` | devolução | idem |
+
+> Relatórios (`GET /reports/cash-sessions`) **já** consultavam por loja (`{tenantId, closedAt}`) — nada a
+> mudar, ficaram coerentes de graça.
+
+| Gate | Resultado |
+|---|---|
+| Typecheck `apps/api` (`tsc --noEmit`) | ✅ exit 0 |
+| Front: nenhuma trava por operador (`/venda`, `/caixa`, `/vendas` só exibem o retorno de `/current`) | ✅ sem mudança de web |
+| Migration | ✅ nenhuma necessária |
+
+**⚠️ Deploy da API obrigatório** para valer em produção (mudança é server-side). Ao subir, o `/current` da
+Amanda passa a retornar o caixa que o Douglas abriu — o problema some sem ação manual de dados.
+
+**E2E do Owner — ⏭️ pendente (após deploy):** (1) Douglas abre o caixa; (2) Amanda loga em outro
+dispositivo → **vê o caixa aberto** (não mais "fechado"); (3) Amanda vende → a venda entra no mesmo caixa;
+(4) Douglas vê a venda da Amanda no Histórico do caixa; (5) Amanda **fecha** o caixa → soma as vendas dos
+dois; (6) tentar abrir um segundo caixa com a loja já aberta → 409 "A loja já tem um caixa aberto".

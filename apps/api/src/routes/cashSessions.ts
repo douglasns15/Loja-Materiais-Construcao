@@ -46,10 +46,10 @@ async function cashMovementsNet(
   return netCashMovements(movements.map((m) => ({ type: m.type, amount: Number(m.amount) })));
 }
 
-/** Sessão de caixa aberta do operador atual + valor esperado até agora. */
+/** Sessão de caixa aberta DA LOJA + valor esperado até agora (ADR-018: caixa compartilhado por tenant,
+ * não por operador — qualquer operador enxerga o mesmo caixa aberto). */
 cashSessions.get('/current', async (c) => {
   const tenantId = getTenantId(c);
-  const userId = c.get('userId');
   const connectionString = getConnectionString(c.env);
   if (!tenantId || !connectionString) {
     return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
@@ -57,8 +57,9 @@ cashSessions.get('/current', async (c) => {
 
   try {
     const prisma = createPrismaClient(connectionString);
+    // ADR-018: caixa por loja — sem filtro por `userId`.
     const session = await prisma.cashSession.findFirst({
-      where: { tenantId, userId, closedAt: null },
+      where: { tenantId, closedAt: null },
     });
     if (!session) {
       return c.json({ ok: true, data: null });
@@ -76,8 +77,8 @@ cashSessions.get('/current', async (c) => {
   }
 });
 
-/** Abre uma sessão de caixa (uma por operador por vez). Bloqueado em loja inativa (ADR-009);
- * fechar o caixa segue liberado (ação de encerramento). */
+/** Abre uma sessão de caixa (ADR-018: uma por LOJA por vez — quem abre, abre para todos os operadores).
+ * Bloqueado em loja inativa (ADR-009); fechar o caixa segue liberado (ação de encerramento). */
 cashSessions.post('/open', requireActiveTenant, async (c) => {
   const tenantId = getTenantId(c);
   const userId = c.get('userId');
@@ -93,12 +94,13 @@ cashSessions.post('/open', requireActiveTenant, async (c) => {
 
   try {
     const prisma = createPrismaClient(connectionString);
+    // ADR-018: caixa por loja — bloqueia se a LOJA já tem um caixa aberto (qualquer operador).
     const existing = await prisma.cashSession.findFirst({
-      where: { tenantId, userId, closedAt: null },
+      where: { tenantId, closedAt: null },
       select: { id: true },
     });
     if (existing) {
-      return c.json({ ok: false, error: 'Já existe um caixa aberto.' }, 409);
+      return c.json({ ok: false, error: 'A loja já tem um caixa aberto.' }, 409);
     }
     const created = await prisma.cashSession.create({
       // Autoria (ADR-010): `userId` (com FK) é quem abriu; `openedByName` é o snapshot do nome.
@@ -116,7 +118,8 @@ cashSessions.post('/open', requireActiveTenant, async (c) => {
   }
 });
 
-/** Fecha o caixa aberto; calcula o esperado e registra divergência (ADR-004). */
+/** Fecha o caixa aberto da loja; calcula o esperado e registra divergência (ADR-004).
+ * ADR-018: qualquer operador pode fechar o caixa compartilhado. */
 cashSessions.post('/close', async (c) => {
   const tenantId = getTenantId(c);
   const userId = c.get('userId');
@@ -132,8 +135,9 @@ cashSessions.post('/close', async (c) => {
 
   try {
     const prisma = createPrismaClient(connectionString);
+    // ADR-018: caixa por loja — fecha o caixa aberto da loja (independe de quem abriu).
     const session = await prisma.cashSession.findFirst({
-      where: { tenantId, userId, closedAt: null },
+      where: { tenantId, closedAt: null },
     });
     if (!session) {
       return c.json({ ok: false, error: 'Não há caixa aberto.' }, 404);

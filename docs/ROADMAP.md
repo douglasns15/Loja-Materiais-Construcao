@@ -3,8 +3,22 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-22 — **ADR-017 (Barra/Rolo como unidade fechada principal + venda por
-> metro) — NO AR, aguardando E2E do Owner.** Pedido do Owner: cadastrar pela **unidade fechada** (Barra,
+> **Última atualização:** 2026-07-23 — **ADR-018 (Caixa compartilhado por loja) — CÓDIGO PRONTO, aguardando
+> deploy da API + E2E.** Bug grave reportado pelo Owner: ele abriu o caixa com o próprio usuário
+> (`douglasns.work`) e outra operadora da **mesma loja** (`amanda.ns92`), ao logar, via **"caixa fechado"**.
+> **Causa raiz:** o caixa nascera **por operador** — toda resolução de "há caixa aberto?" filtrava por
+> `{tenantId, userId, closedAt:null}` (em `cashSessions.ts` e `orders.ts`), então cada usuário só via o
+> próprio caixa. Nunca virou ADR. Não bate com a loja real (um caixa físico, vários operadores).
+> **Decisão do Owner (ADR-018, aprovada ANTES de codar — regra 4):** caixa **por LOJA** — quem abre, abre
+> para todos; **qualquer operador fecha**. **Sem migration** (`CashSession.userId` vira "quem abriu"; sem
+> constraint única por usuário; RLS por `tenantId` intacto). Autoria (ADR-010) preservada. Mudança
+> **puramente de query** (remoção do filtro `userId` em 8 pontos). Relatórios **já** eram por loja — ficaram
+> coerentes de graça. Typecheck API ✅; front sem mudança (só exibe o retorno de `/current`). **Falta:**
+> `npm run deploy` da API + E2E (Douglas abre → Amanda vê aberto → vende no mesmo caixa → fecha somando os
+> dois). Ver ADR-018 e "ADR-018" no registro.
+>
+> **Antes:** 2026-07-23 — **ADR-017 (Barra/Rolo como unidade fechada principal + venda por
+> metro) — NO AR e VALIDADO pelo Owner (E2E 7/7).** Pedido do Owner: cadastrar pela **unidade fechada** (Barra,
 > Rolo) com o **preço fechado**; a **venda por metro** vira a opção fracionada; nova unidade **Barra**.
 > **ADR-017 escrito e aprovado ANTES de codar** (regra 4). Decisões do Owner: contar em barra, só `BARRA` no
 > enum, venda por metro em **múltiplos de 0,5 m**, entrada **em barras**, saldo **"X barras + Y m"**, preço
@@ -16,8 +30,8 @@
 > (`isValidMeterStep`, `metersFromWhole`, `splitWholeAndRemainder`, `isClosedPrimary`, `sellsByMeter`,
 > `resolveClosedSale`, `closedStockMeters`). Web: PDV (barra inteira × por metro 0,5), cadastro invertido,
 > Estoque ("barras + sobra" + entrada em barras), ProductDetail invertido. Gates: typecheck api+web ✅, build
-> web ✅. **NO AR:** API `5c426eb7` + web `0041891a`; smoke 200/200. **Falta:** E2E do Owner (roteiro no
-> registro, "ADR-017"). Ver ADR-017 e "ADR-017" no registro.
+> web ✅. **NO AR:** API `5c426eb7` + web `0041891a`; smoke 200/200. **E2E do Owner VALIDADO 7/7
+> (2026-07-23)** — fatia CONCLUÍDA. Ver ADR-017 e "ADR-017" no registro.
 >
 > **Antes:** 2026-07-22 — **Fix de truncamento silencioso das listas de cadastro (take:100)
 > — NO AR e VALIDADO pelo usuário** (após publicar, os produtos além dos 100 voltaram a aparecer). Bug grave reportado: ao cadastrar vários produtos, um ("Vass…")

@@ -26,7 +26,6 @@ orders.use('*', requireAuth);
  */
 orders.get('/', async (c) => {
   const tenantId = getTenantId(c);
-  const userId = c.get('userId');
   const connectionString = getConnectionString(c.env);
   if (!tenantId || !connectionString) {
     return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
@@ -51,8 +50,9 @@ orders.get('/', async (c) => {
       return c.json({ ok: true, data: list });
     }
 
+    // ADR-018: caixa por loja — lista as vendas do caixa aberto da loja (sem filtro por `userId`).
     const session = await prisma.cashSession.findFirst({
-      where: { tenantId, userId, closedAt: null },
+      where: { tenantId, closedAt: null },
       select: { id: true },
     });
     if (!session) {
@@ -134,14 +134,15 @@ orders.post('/', requireActiveTenant, async (c) => {
     }
 
     // Caixa da venda: no offline, o do envelope (pode já estar fechado no momento do sync — a venda
-    // pertence àquela sessão); no online, o caixa aberto do operador. Sempre validado tenant+user.
+    // pertence àquela sessão); no online, o caixa aberto da loja. ADR-018: caixa por loja, validado só
+    // por `tenantId` (RLS) — qualquer operador vende no mesmo caixa.
     const session = isOffline
       ? await prisma.cashSession.findFirst({
-          where: { id: sale.cashSessionId, tenantId, userId },
+          where: { id: sale.cashSessionId, tenantId },
           select: { id: true, closedAt: true },
         })
       : await prisma.cashSession.findFirst({
-          where: { tenantId, userId, closedAt: null },
+          where: { tenantId, closedAt: null },
           select: { id: true, closedAt: true },
         });
     if (!session) {
@@ -389,9 +390,9 @@ orders.post('/:id/cancel', async (c) => {
   try {
     const prisma = createPrismaClient(connectionString);
 
-    // Caixa aberto do operador: o cancelamento só vale para vendas dele.
+    // ADR-018: caixa por loja — cancela vendas do caixa aberto da loja (independe de quem operou).
     const session = await prisma.cashSession.findFirst({
-      where: { tenantId, userId, closedAt: null },
+      where: { tenantId, closedAt: null },
       select: { id: true },
     });
     if (!session) {
@@ -510,9 +511,9 @@ orders.post('/:id/return', async (c) => {
   try {
     const prisma = createPrismaClient(connectionString);
 
-    // Caixa aberto do operador: destino da saída de dinheiro da devolução.
+    // ADR-018: caixa por loja — destino da saída de dinheiro da devolução é o caixa aberto da loja.
     const session = await prisma.cashSession.findFirst({
-      where: { tenantId, userId, closedAt: null },
+      where: { tenantId, closedAt: null },
       select: { id: true },
     });
     if (!session) {
