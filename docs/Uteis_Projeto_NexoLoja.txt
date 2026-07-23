@@ -46,7 +46,7 @@ http://localhost:3000/
 
 <> tela de histórico de vendas, precisa agrupar os pedidos e ter como filtrar assim como ter opção de pesquisar por notas, na nota impressa também tem que sair um número de nota
 
-<> Em "Venda de unidade alternativa" no cadastro de Produto, ter a opção barra, pra inserir a metragem da barra completa e o valor da venda de uma barra. Mas a lógica deve ser invertida, no cadastro principal deve ter a opção Rolo, Barra, etc, ou seja dos itens fechados, o valor fechado deve ser no cadastro principal e na "Venda de unidade alternativa" é que deve ter a opção de venda por metro, fracionada. Entendeu?
+<> Em "Venda de unidade alternativa" no cadastro de Produto, ter a opção barra, pra inserir a metragem da barra completa e o valor da venda de uma barra. Mas a lógica deve ser invertida, no cadastro principal deve ter a opção Rolo, Barra, etc, ou seja dos itens fechados, o valor fechado deve ser no cadastro principal e na "Venda de unidade alternativa" é que deve ter a opção de venda por metro, fracionada. Entendeu? ----- Deu certo, agora é ajuste fino, no cadastro do produto, quando seleciono Rolo ele continua pedindo valor de Barra.
 
 ## Subir servidor
 
