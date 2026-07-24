@@ -4,7 +4,7 @@
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
 > **Última atualização:** 2026-07-24 — **UX da tela de Produtos (rótulos acima dos campos + preço da
-> unidade fechada + listagem mais larga) — NO AR, aguardando E2E do Owner.** Três pedidos do Owner no
+> unidade fechada + listagem mais larga) — NO AR e VALIDADO pelo Owner.** Três pedidos do Owner no
 > cadastro de Produtos, todos **100% de UI (sem migration, sem tocar na API)**: (1) o nome de cada campo
 > ficava só no **placeholder** e sumia ao preencher → novo helper `Field` põe o **rótulo acima** do controle
 > (Nome, Nome popular, Fabricante, SKU, Custo, Preço, Unidade, Peso, Estoque mín., Estoque inicial,
@@ -13,8 +13,10 @@
 > certo (`unitArticle`): "Preço do rolo" / "Preço da barra"; (3) a **listagem** usava pouca largura e os
 > botões finais ficavam cortados → container `max-w-4xl` → `max-w-6xl` (a tabela de 9 colunas respira sem
 > arrastar; `overflow-x-auto` mantido p/ telas estreitas). Gates: typecheck web ✅, build web (18 rotas,
-> `/products` 10.3 kB) ✅. **NO AR:** web `55660117`; smoke `/login` 200 ✅. **Falta:** E2E do Owner. Ver
-> "UI.Produtos.UX" no registro. **Próximo passo:** direções abertas — go-live (Supabase Pro/CORS/SMTP, ver
+> `/products` 10.3 kB) ✅. **NO AR:** web `55660117`; smoke `/login` 200 ✅. **E2E do Owner VALIDADO
+> (2026-07-24):** "tudo funcionou corretamente" (rótulos acima dos campos, "Preço do rolo" ao selecionar
+> Rolo, e a listagem mais larga sem corte lateral). **Fatia UI.Produtos.UX CONCLUÍDA.** Ver "UI.Produtos.UX"
+> no registro. **Próximo passo:** direções abertas — go-live (Supabase Pro/CORS/SMTP, ver
 > `docs/plano-producao.md`), nova funcionalidade, ou endurecimento.
 >
 > **Antes:** 2026-07-24 — **UX da tela de Estoque (seções colapsáveis + busca/ordenação +

@@ -3051,5 +3051,6 @@ sem migration e sem tocar na API**:
 | Deploy web | ✅ `npm run deploy` — Version `55660117` |
 | Smoke `/login` | ✅ 200 |
 
-**E2E do Owner — ⏭️ pendente** (login → Produtos: conferir rótulos acima dos campos, "Preço do rolo" ao
-selecionar Rolo, e a listagem mais larga sem corte lateral).
+**E2E do Owner — ✅ VALIDADO (2026-07-24):** "Tudo funcionou corretamente" (rótulos acima dos campos,
+"Preço do rolo" ao selecionar Rolo, e a listagem mais larga sem corte lateral). Publicado no git pelo Owner.
+**Fatia UI.Produtos.UX CONCLUÍDA.**
