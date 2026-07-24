@@ -18,8 +18,10 @@
 > lembra seu estado), deixando visível só o que o operador quer no momento. **Mudança 100% de UI: sem
 > migration, sem tocar na API** (`GET /products` já traz todos os campos; `/stock/movements?productId=` já
 > traz as justificativas). Gates: typecheck web ✅, build web (18 rotas, `/estoque` 7.29 kB) ✅. **E2E do
-> Owner do 1º lote VALIDADO** ("está funcionando perfeitamente"); falta só o E2E da extensão do colapso.
-> Ver "UI.Estoque.UX" no registro.
+> Owner VALIDADO nos dois lotes** (1º lote "está funcionando perfeitamente"; extensão do colapso das três
+> seções "publiquei e testei, funcionou corretamente"). **Fatia UI.Estoque.UX CONCLUÍDA.** Ver
+> "UI.Estoque.UX" no registro. **Próximo passo:** direções abertas — go-live (Supabase Pro/CORS/SMTP, ver
+> `docs/plano-producao.md`), nova funcionalidade, ou endurecimento.
 >
 > **Antes:** 2026-07-23 — **ADR-018 (Caixa compartilhado por loja) — NO AR e VALIDADO pelo
 > Owner.** Bug grave reportado pelo Owner: ele abriu o caixa com o próprio usuário

@@ -3015,5 +3015,9 @@ atual" está minimizada, a busca/ordenação some e sobra um "N produtos"; a tab
 |---|---|
 | Typecheck web (`tsc --noEmit`) | ✅ exit 0 |
 | Build web (`next build`) | ✅ 18 rotas, `/estoque` 7.29 kB |
+| Deploy web | ✅ `npm run deploy` — Version `43d0a291` |
+| Smoke `/login` | ✅ 200 |
 
-**Falta:** E2E do Owner da extensão (minimizar/expandir as três seções e conferir a persistência de cada uma).
+**E2E do Owner da extensão — ✅ VALIDADO (2026-07-24):** "Já publiquei e testei, funcionou corretamente"
+(minimizar/expandir as três seções com persistência independente de cada uma). Commit `15a3559`.
+**Fatia UI.Estoque.UX CONCLUÍDA.**
