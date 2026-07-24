@@ -42,6 +42,7 @@ import { ReceiptPrint, type Store } from '@/components/ReceiptPrint';
 import { StoreDisabledNotice } from '@/components/StoreDisabledNotice';
 import { OfflineSalesNotice } from '@/components/OfflineSalesNotice';
 import { BarcodeScanButton } from '@/components/BarcodeScanButton';
+import { MoneyInput } from '@/components/MoneyInput';
 
 /** Taxas da maquininha que vêm junto no `GET /tenant` (ADR-016). */
 type StoreCardFees = {
@@ -1396,13 +1397,10 @@ export default function VendaPage() {
               <label htmlFor="desc" className="text-sm text-gray-600">
                 Desconto (R$)
               </label>
-              <input
+              <MoneyInput
                 id="desc"
-                type="number"
-                step="0.01"
-                min="0"
                 value={discount}
-                onChange={(e) => setDiscount(e.target.value)}
+                onChange={setDiscount}
                 placeholder="0,00"
                 className="w-28 rounded-lg border border-gray-300 px-2 py-1 text-right"
               />

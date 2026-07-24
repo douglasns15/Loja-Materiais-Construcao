@@ -8,6 +8,7 @@ import { useMe } from '@/lib/useMe';
 import { useOnline } from '@/lib/useOnline';
 import { StoreDisabledNotice } from '@/components/StoreDisabledNotice';
 import { OfflineSalesNotice } from '@/components/OfflineSalesNotice';
+import { MoneyInput } from '@/components/MoneyInput';
 
 type CashSession = {
   id: string;
@@ -159,12 +160,10 @@ export default function CaixaPage() {
 
           <form onSubmit={onClose} className="space-y-3 rounded-2xl bg-white p-5 shadow-sm">
             <h2 className="font-medium">Fechar caixa</h2>
-            <input
+            <MoneyInput
               placeholder="Valor contado (R$)"
-              type="number"
-              step="0.01"
               value={closing}
-              onChange={(e) => setClosing(e.target.value)}
+              onChange={setClosing}
               className="w-full rounded-lg border border-gray-300 px-3 py-2"
             />
             <textarea
@@ -221,12 +220,10 @@ export default function CaixaPage() {
               <span className="h-2 w-2 rounded-full bg-gray-400" /> Caixa fechado
             </div>
             <h2 className="font-medium">Abrir caixa</h2>
-            <input
+            <MoneyInput
               placeholder="Valor de abertura (R$)"
-              type="number"
-              step="0.01"
               value={opening}
-              onChange={(e) => setOpening(e.target.value)}
+              onChange={setOpening}
               disabled={!online}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 disabled:bg-gray-100"
             />

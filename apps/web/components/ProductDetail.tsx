@@ -10,6 +10,7 @@ import {
   surchargePerBaseUnit,
 } from '@nexoloja/core';
 import { apiDelete, apiPatch } from '@/lib/api';
+import { MoneyInput } from '@/components/MoneyInput';
 
 /**
  * Painel de **visualizar / editar** o cadastro de um produto (fatia EP).
@@ -267,6 +268,9 @@ export function ProductDetail({
     unit: product.unit,
     conversionFactor: product.conversionFactor != null ? Number(product.conversionFactor) : null,
   });
+  // Artigo correto p/ os rótulos de custo/preço da unidade fechada (evita "Preço da Rolo"),
+  // baseado na unidade que está sendo editada (form), não só na original.
+  const unitArticle = form.unit === 'ROLL' ? 'do rolo' : 'da barra';
   const barLen = product.conversionFactor != null ? Number(product.conversionFactor) : 0;
   const stockLabel = (() => {
     if (!closed) return `${QTY(product.stockQty)} ${unitTypeLabels[product.unit]}`;
@@ -610,24 +614,18 @@ export function ProductDetail({
               />
             </label>
             <label className="sm:col-span-2">
-              <span className={labelCls}>{closed ? 'Custo da barra' : 'Custo'}</span>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
+              <span className={labelCls}>{closed ? `Custo ${unitArticle}` : 'Custo'}</span>
+              <MoneyInput
                 value={form.costPrice}
-                onChange={(e) => setForm({ ...form, costPrice: e.target.value })}
+                onChange={(v) => setForm({ ...form, costPrice: v })}
                 className={inputCls}
               />
             </label>
             <label className="sm:col-span-2">
-              <span className={labelCls}>{closed ? 'Preço da barra' : 'Venda'}</span>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
+              <span className={labelCls}>{closed ? `Preço ${unitArticle}` : 'Venda'}</span>
+              <MoneyInput
                 value={form.salePrice}
-                onChange={(e) => setForm({ ...form, salePrice: e.target.value })}
+                onChange={(v) => setForm({ ...form, salePrice: v })}
                 className={inputCls}
               />
             </label>
@@ -707,13 +705,10 @@ export function ProductDetail({
                     onChange={(e) => setForm({ ...form, conversionFactor: e.target.value })}
                     className={inputCls}
                   />
-                  <input
+                  <MoneyInput
                     placeholder="Preço por metro (opcional)"
-                    type="number"
-                    step="0.01"
-                    min="0"
                     value={form.altSalePrice}
-                    onChange={(e) => setForm({ ...form, altSalePrice: e.target.value })}
+                    onChange={(v) => setForm({ ...form, altSalePrice: v })}
                     className={inputCls}
                   />
                 </div>
@@ -752,13 +747,10 @@ export function ProductDetail({
                     onChange={(e) => setForm({ ...form, conversionFactor: e.target.value })}
                     className={inputCls}
                   />
-                  <input
+                  <MoneyInput
                     placeholder="Preço da embalagem fechada"
-                    type="number"
-                    step="0.01"
-                    min="0"
                     value={form.altSalePrice}
-                    onChange={(e) => setForm({ ...form, altSalePrice: e.target.value })}
+                    onChange={(v) => setForm({ ...form, altSalePrice: v })}
                     className={inputCls}
                   />
                 </div>
@@ -795,13 +787,10 @@ export function ProductDetail({
                           </option>
                         ))}
                     </select>
-                    <input
+                    <MoneyInput
                       placeholder="Preço do par (os dois juntos)"
-                      type="number"
-                      step="0.01"
-                      min="0"
                       value={form.pairPrice}
-                      onChange={(e) => setForm({ ...form, pairPrice: e.target.value })}
+                      onChange={(v) => setForm({ ...form, pairPrice: v })}
                       disabled={form.pairedProductId === ''}
                       className={`${inputCls} disabled:bg-gray-50`}
                     />
@@ -833,23 +822,17 @@ export function ProductDetail({
                 Acréscimo por forma de pagamento — quanto o preço SOBE no cartão
               </legend>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <input
+                <MoneyInput
                   placeholder="Acréscimo no débito (R$)"
-                  type="number"
-                  step="0.01"
-                  min="0"
                   value={form.surchargeDebit}
-                  onChange={(e) => setForm({ ...form, surchargeDebit: e.target.value })}
+                  onChange={(v) => setForm({ ...form, surchargeDebit: v })}
                   className={inputCls}
                   aria-label="Acréscimo no débito"
                 />
-                <input
+                <MoneyInput
                   placeholder="Acréscimo no crédito (R$)"
-                  type="number"
-                  step="0.01"
-                  min="0"
                   value={form.surchargeCredit}
-                  onChange={(e) => setForm({ ...form, surchargeCredit: e.target.value })}
+                  onChange={(v) => setForm({ ...form, surchargeCredit: v })}
                   className={inputCls}
                   aria-label="Acréscimo no crédito"
                 />

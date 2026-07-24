@@ -3054,3 +3054,53 @@ sem migration e sem tocar na API**:
 **E2E do Owner — ✅ VALIDADO (2026-07-24):** "Tudo funcionou corretamente" (rótulos acima dos campos,
 "Preço do rolo" ao selecionar Rolo, e a listagem mais larga sem corte lateral). Publicado no git pelo Owner.
 **Fatia UI.Produtos.UX CONCLUÍDA.**
+
+---
+
+## UI.MoneyInput — campos monetários formatam em BRL ao sair do campo (2026-07-24)
+
+Pedido do Owner: nos campos de dinheiro (Custo, Valor em real, etc.), ao terminar de digitar e mudar de
+campo, exibir sempre o valor **formatado em BRL** (com casas decimais e "R$"), deixando claro que é
+monetário. Vale para a tela de **Produtos e todas as outras** com campo de dinheiro. **100% de UI — sem
+migration e sem tocar na API.**
+
+Novo componente reutilizável **`apps/web/components/MoneyInput.tsx`**: enquanto o operador digita aceita
+número com vírgula OU ponto (e ignora letras/símbolos colados); ao **blur** mostra `R$ 0,00`. Guarda no
+estado o valor **canônico** (ponto decimal), idêntico ao antigo `type="number"`, então quem consome com
+`Number(value)` (venda, caixa, margem, estoque) **não muda em nada**. Função pura `parseMoneyInput`
+exportada.
+
+**Heurística de separador decimal** (validada por script, `node -e`): só trata o último separador como
+decimal quando tem **1–2 dígitos** depois (centavos); com 3+ ou nenhum, todos os separadores são de milhar
+e o valor é inteiro.
+
+| Entrada | Canônico | Exibido |
+|---|---|---|
+| `12,90` / `12.90` | `12.9` | R$ 12,90 |
+| `1.234,50` | `1234.5` | R$ 1.234,50 |
+| `1.000` | `1000` | **R$ 1.000,00** (milhar, não R$ 1,00) |
+| `1.000.000` | `1000000` | R$ 1.000.000,00 |
+| `0,5` / `,5` | `0.5` | R$ 0,50 |
+| `R$ 8,00` | `8` | R$ 8,00 |
+| `` (vazio) | `` | (placeholder) |
+
+**Campos convertidos** (monetários apenas; percentuais e quantidades ficaram como `type="number"`):
+- **Produtos** (cadastro): Custo, Preço, Preço por metro, Preço da embalagem, Preço do par, Acréscimo débito, Acréscimo crédito.
+- **ProductDetail** (ver/editar): os mesmos 6 campos. Bônus: o rótulo fixo "Custo/Preço da barra" da edição
+  também passou a respeitar a unidade (`unitArticle`: "do rolo" / "da barra").
+- **Nova Venda** (PDV): Desconto.
+- **Caixa**: Valor de abertura + Valor contado (fechamento).
+- **Estoque**: Custo unitário / por barra da entrada.
+
+| Gate | Resultado |
+|---|---|
+| Typecheck web (`tsc --noEmit`) | ✅ exit 0 |
+| Build web (`next build`) | ✅ 18 rotas, `/products` 10.6 kB · `/venda` 12.1 kB · `/caixa` 3.38 kB · `/estoque` 7.6 kB |
+| `parseMoneyInput` (casos de borda via `node -e`) | ✅ 15/15 |
+| Migration | ✅ nenhuma |
+| Deploy de API | ✅ não necessário |
+| Deploy web | ✅ `npm run deploy` — Version `e527d848` |
+| Smoke `/login` | ✅ 200 |
+
+**E2E do Owner — ⏭️ pendente** (login → digitar em Custo/Preço/Desconto/Caixa e sair do campo: conferir a
+formatação `R$ 0,00`; conferir que a venda/fechamento seguem batendo os valores).

@@ -21,6 +21,7 @@ import { OfflineNotice } from '@/components/OfflineNotice';
 import { useMe } from '@/lib/useMe';
 import { StoreDisabledNotice } from '@/components/StoreDisabledNotice';
 import { StockDetail, type StockProduct } from '@/components/StockDetail';
+import { MoneyInput } from '@/components/MoneyInput';
 
 // `GET /products` devolve a linha completa do produto; o detalhe de estoque (StockDetail)
 // usa esses campos extras (custo/venda, peso, descrição…), então o tipo espelha o StockProduct.
@@ -448,13 +449,10 @@ export default function EstoquePage() {
               title={entryClosed ? 'Quantas barras/rolos inteiros entram (convertido para metros pelo tamanho).' : undefined}
               className="rounded-lg border border-gray-300 px-3 py-2"
             />
-            <input
+            <MoneyInput
               placeholder={entryClosed ? 'Custo por barra (opcional)' : 'Custo unitário (opcional)'}
-              type="number"
-              step="0.01"
-              min="0"
               value={entry.unitCost}
-              onChange={(e) => setEntry({ ...entry, unitCost: e.target.value })}
+              onChange={(v) => setEntry({ ...entry, unitCost: v })}
               className="rounded-lg border border-gray-300 px-3 py-2"
             />
             <select

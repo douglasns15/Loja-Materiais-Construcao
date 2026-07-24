@@ -7,6 +7,7 @@ import { apiGet, apiPatch, apiPost } from '@/lib/api';
 import { useOnline } from '@/lib/useOnline';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { BarcodeScanButton } from '@/components/BarcodeScanButton';
+import { MoneyInput } from '@/components/MoneyInput';
 import { ProductDetail, type CardFees, type ProductFull } from '@/components/ProductDetail';
 
 /**
@@ -405,20 +406,16 @@ export default function ProductsPage() {
           </div>
         </div>
         <Field label={isClosedUnit ? `Custo ${unitArticle}` : 'Custo'}>
-          <input
-            type="number"
-            step="0.01"
+          <MoneyInput
             value={form.costPrice}
-            onChange={(e) => setForm({ ...form, costPrice: e.target.value })}
+            onChange={(v) => setForm({ ...form, costPrice: v })}
             className="w-full rounded-lg border border-gray-300 px-3 py-2"
           />
         </Field>
         <Field label={isClosedUnit ? `Preço ${unitArticle}` : 'Preço de venda'}>
-          <input
-            type="number"
-            step="0.01"
+          <MoneyInput
             value={form.salePrice}
-            onChange={(e) => setForm({ ...form, salePrice: e.target.value })}
+            onChange={(v) => setForm({ ...form, salePrice: v })}
             className="w-full rounded-lg border border-gray-300 px-3 py-2"
           />
         </Field>
@@ -518,13 +515,10 @@ export default function ProductsPage() {
                 title="Comprimento de 1 barra/rolo em metros (ex.: barra de 6 m → 6). O estoque é contado em metros."
                 className="rounded-lg border border-gray-300 px-3 py-2"
               />
-              <input
+              <MoneyInput
                 placeholder="Preço por metro (opcional)"
-                type="number"
-                step="0.01"
-                min="0"
                 value={form.altSalePrice}
-                onChange={(e) => setForm({ ...form, altSalePrice: e.target.value })}
+                onChange={(v) => setForm({ ...form, altSalePrice: v })}
                 title="Preço do corte avulso por metro. Deixe vazio para vender só a barra/rolo inteiro."
                 className="rounded-lg border border-gray-300 px-3 py-2"
               />
@@ -567,13 +561,10 @@ export default function ProductsPage() {
               title="Quantas unidades-base cabem em 1 embalagem fechada. Ex.: rolo de 100 m → 100."
               className="rounded-lg border border-gray-300 px-3 py-2"
             />
-            <input
+            <MoneyInput
               placeholder="Preço da embalagem fechada"
-              type="number"
-              step="0.01"
-              min="0"
               value={form.altSalePrice}
-              onChange={(e) => setForm({ ...form, altSalePrice: e.target.value })}
+              onChange={(v) => setForm({ ...form, altSalePrice: v })}
               title="Preço próprio de 1 embalagem fechada (costuma sair mais barato por unidade-base que o avulso)."
               className="rounded-lg border border-gray-300 px-3 py-2"
             />
@@ -605,13 +596,10 @@ export default function ProductsPage() {
                   </option>
                 ))}
             </select>
-            <input
+            <MoneyInput
               placeholder="Preço do par (os dois juntos)"
-              type="number"
-              step="0.01"
-              min="0"
               value={form.pairPrice}
-              onChange={(e) => setForm({ ...form, pairPrice: e.target.value })}
+              onChange={(v) => setForm({ ...form, pairPrice: v })}
               disabled={form.pairedProductId === ''}
               title="Preço total dos dois itens vendidos juntos (ex.: R$ 0,70 o par)."
               className="rounded-lg border border-gray-300 px-3 py-2 disabled:bg-gray-50"
@@ -629,23 +617,17 @@ export default function ProductsPage() {
             Acréscimo por forma de pagamento (opcional) — quanto o preço SOBE no cartão
           </legend>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <input
+            <MoneyInput
               placeholder="Acréscimo no débito (R$)"
-              type="number"
-              step="0.01"
-              min="0"
               value={form.surchargeDebit}
-              onChange={(e) => setForm({ ...form, surchargeDebit: e.target.value })}
+              onChange={(v) => setForm({ ...form, surchargeDebit: v })}
               title="Quanto SOMAR ao preço quando a venda for no débito. Não é o preço final nem um custo."
               className="rounded-lg border border-gray-300 px-3 py-2"
             />
-            <input
+            <MoneyInput
               placeholder="Acréscimo no crédito (R$)"
-              type="number"
-              step="0.01"
-              min="0"
               value={form.surchargeCredit}
-              onChange={(e) => setForm({ ...form, surchargeCredit: e.target.value })}
+              onChange={(v) => setForm({ ...form, surchargeCredit: v })}
               title="Quanto SOMAR ao preço quando a venda for no crédito. Não é o preço final nem um custo."
               className="rounded-lg border border-gray-300 px-3 py-2"
             />

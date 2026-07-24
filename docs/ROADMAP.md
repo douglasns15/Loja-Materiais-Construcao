@@ -3,7 +3,24 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-24 — **UX da tela de Produtos (rótulos acima dos campos + preço da
+> **Última atualização:** 2026-07-24 — **Campos monetários formatam em BRL ao sair do campo
+> (`MoneyInput`) — NO AR, aguardando E2E do Owner.** Pedido do Owner: em todo campo de dinheiro (Custo,
+> valor em real…), ao terminar de digitar e mudar de campo, exibir sempre o valor **formatado em moeda**
+> ("R$ 0,00", com casas decimais), deixando claro que é monetário — na tela de Produtos **e em todas as
+> outras**. **100% de UI, sem migration e sem tocar na API.** Novo componente reutilizável
+> `apps/web/components/MoneyInput.tsx`: enquanto digita aceita vírgula OU ponto; ao **blur** formata em BRL;
+> guarda o valor **canônico** (ponto decimal) igual ao antigo `type="number"`, então venda/caixa/margem/
+> estoque (`Number(value)`) **não mudam**. Heurística do separador validada por script (só é decimal com
+> 1–2 dígitos depois; senão é milhar → "1.000" = R$ 1.000,00, não R$ 1,00). Aplicado nos campos monetários
+> de **Produtos** (cadastro + ver/editar: Custo, Preço, por metro, embalagem, par, acréscimos débito/
+> crédito), **Nova Venda** (Desconto), **Caixa** (abertura + fechamento) e **Estoque** (custo da entrada);
+> percentuais (taxa da maquininha) e quantidades ficaram como estavam. Bônus: o "Custo/Preço da barra" fixo
+> na edição do produto também passou a respeitar a unidade ("do rolo"/"da barra"). Gates: typecheck web ✅,
+> build web (18 rotas) ✅, `parseMoneyInput` 15/15 (`node -e`) ✅. **NO AR:** web `e527d848`; smoke `/login`
+> 200 ✅. **Falta:** E2E do Owner. Ver "UI.MoneyInput" no registro. **Próximo passo:** direções abertas —
+> go-live (Supabase Pro/CORS/SMTP, ver `docs/plano-producao.md`), nova funcionalidade, ou endurecimento.
+>
+> **Antes:** 2026-07-24 — **UX da tela de Produtos (rótulos acima dos campos + preço da
 > unidade fechada + listagem mais larga) — NO AR e VALIDADO pelo Owner.** Três pedidos do Owner no
 > cadastro de Produtos, todos **100% de UI (sem migration, sem tocar na API)**: (1) o nome de cada campo
 > ficava só no **placeholder** e sumia ao preencher → novo helper `Field` põe o **rótulo acima** do controle
