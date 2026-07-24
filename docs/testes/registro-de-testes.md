@@ -2987,7 +2987,7 @@ superfície na UI.
 | Achar produto em "Estoque atual" | rolar a página | **busca** (nome/apelido/fabricante/SKU via `productMatchesQuery`), checkbox **"Só baixo"**, **ordenação por qualquer coluna** (clique no cabeçalho, inverte no 2º clique, seta ↑/↓), contador "X de Y" |
 | Ver características + histórico + justificativas | clicava e filtrava a tabela global lá embaixo; justificativa não aparecia | clicar no produto abre **modal de detalhe** com características (unidade, custo/venda, margem, peso, fabricante, descrição, saldo/mínimo, Σ entradas/saídas) + **histórico do produto** com filtros próprios (Tipo/Motivo/período), **custo unitário e motivo por linha**, e paginação "Mostrar mais" (evita tela corrida) |
 
-**Gates**
+**Gates (1º lote)**
 
 | Gate | Resultado |
 |---|---|
@@ -2995,6 +2995,25 @@ superfície na UI.
 | Build web (`next build`) | ✅ 18 rotas, `/estoque` 7.13 kB (188 kB First Load) |
 | Migration | ✅ nenhuma |
 | Deploy de API | ✅ não necessário (nenhuma rota nova/alterada) |
+| Deploy web | ✅ `npm run deploy` — Version `6a41e08c` |
+| Smoke `/login` | ✅ 200 |
 
-**Falta:** E2E do Owner (colapsar/expandir e conferir persistência; buscar/ordenar; clicar num produto e
-ver a justificativa de uma Entrada/Ajuste no histórico do modal).
+**E2E do Owner — ✅ VALIDADO (2026-07-24):** "Testei e está funcionando perfeitamente" (colapsar/expandir
+com persistência, buscar/ordenar, e o histórico do produto com as justificativas visíveis no modal).
+Commit `83b09ce`.
+
+**Extensão — seções "Estoque atual" e "Movimentações recentes" também colapsáveis (2026-07-24)**
+
+Ideia do Owner após validar o 1º lote: aplicar o mesmo botão de minimizar às outras duas seções, para
+deixar visível só o que interessa no momento. A lógica de `localStorage` das três seções foi extraída no
+hook `usePersistedOpen(key)` e o indicador de seta virou o componente `Chevron`. Cada seção lembra seu
+próprio estado (`estoque:replenishOpen` / `estoque:stockOpen` / `estoque:movementsOpen`). Quando "Estoque
+atual" está minimizada, a busca/ordenação some e sobra um "N produtos"; a tabela e os filtros de
+"Movimentações" também recolhem. **Segue 100% de UI, sem migration e sem tocar na API.**
+
+| Gate (extensão) | Resultado |
+|---|---|
+| Typecheck web (`tsc --noEmit`) | ✅ exit 0 |
+| Build web (`next build`) | ✅ 18 rotas, `/estoque` 7.29 kB |
+
+**Falta:** E2E do Owner da extensão (minimizar/expandir as três seções e conferir a persistência de cada uma).

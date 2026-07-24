@@ -3,8 +3,8 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-24 — **UX da tela de Estoque (painel colapsável + busca/ordenação +
-> detalhe do produto) — NO AR, aguardando E2E do Owner.** Pedido do Owner, três pontos: (1) o painel
+> **Última atualização:** 2026-07-24 — **UX da tela de Estoque (seções colapsáveis + busca/ordenação +
+> detalhe do produto) — NO AR e VALIDADO pelo Owner.** Pedido do Owner, três pontos: (1) o painel
 > **"Reposição de estoque"** cresce e atrapalha → agora é **colapsável** (cabeçalho vira botão com seta;
 > estado lembrado em `localStorage`, badge de contagem visível mesmo minimizado); (2) achar produto na
 > tabela **"Estoque atual"** exigia rolar a página → **busca** (nome/apelido/fabricante/SKU, via
@@ -12,10 +12,14 @@
 > cabeçalho, ↑/↓); (3) as **justificativas** de Entrada/Ajuste **não apareciam em lugar nenhum** e a lista
 > global crescia → clicar no produto abre um **modal de detalhe** (`components/StockDetail.tsx`) com as
 > **características** do item + o **histórico daquele produto**, com filtros próprios (Tipo/Motivo/período),
-> **custo unitário e motivo por linha** e paginação "Mostrar mais". **Mudança 100% de UI: sem migration,
-> sem tocar na API** (`GET /products` já traz todos os campos; `/stock/movements?productId=` já traz as
-> justificativas). Gates: typecheck web ✅, build web (18 rotas, `/estoque` 7.13 kB) ✅. **Falta:** E2E do
-> Owner. Ver "UI.Estoque.UX" no registro.
+> **custo unitário e motivo por linha** e paginação "Mostrar mais". **Extensão (mesmo dia, pedido do Owner
+> após validar o 1º lote):** o mesmo botão de minimizar foi aplicado a **"Estoque atual"** e
+> **"Movimentações recentes"** — as **três seções** agora colapsam (hook `usePersistedOpen`, cada uma
+> lembra seu estado), deixando visível só o que o operador quer no momento. **Mudança 100% de UI: sem
+> migration, sem tocar na API** (`GET /products` já traz todos os campos; `/stock/movements?productId=` já
+> traz as justificativas). Gates: typecheck web ✅, build web (18 rotas, `/estoque` 7.29 kB) ✅. **E2E do
+> Owner do 1º lote VALIDADO** ("está funcionando perfeitamente"); falta só o E2E da extensão do colapso.
+> Ver "UI.Estoque.UX" no registro.
 >
 > **Antes:** 2026-07-23 — **ADR-018 (Caixa compartilhado por loja) — NO AR e VALIDADO pelo
 > Owner.** Bug grave reportado pelo Owner: ele abriu o caixa com o próprio usuário

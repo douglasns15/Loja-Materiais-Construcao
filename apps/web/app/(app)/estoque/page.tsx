@@ -31,6 +31,34 @@ type SortKey = 'name' | 'sku' | 'stock' | 'min' | 'income' | 'expense' | 'balanc
 type SortState = { key: SortKey; dir: 'asc' | 'desc' };
 
 /**
+ * Estado "aberto/minimizado" de uma seção, lembrado entre sessões (localStorage).
+ * Começa no `initial` e lê a preferência salva após montar (evita divergência de
+ * hidratação com o SSR). Usado nos três painéis colapsáveis da tela de Estoque.
+ */
+function usePersistedOpen(key: string, initial = true) {
+  const [open, setOpen] = useState(initial);
+  useEffect(() => {
+    const v = localStorage.getItem(key);
+    if (v === '0') setOpen(false);
+    else if (v === '1') setOpen(true);
+  }, [key]);
+  const toggle = () =>
+    setOpen((v) => {
+      const next = !v;
+      localStorage.setItem(key, next ? '1' : '0');
+      return next;
+    });
+  return [open, toggle] as const;
+}
+
+/** Seta ▸ que gira 90° quando a seção está aberta — indicador de colapso reutilizado. */
+function Chevron({ open, className = 'text-gray-400' }: { open: boolean; className?: string }) {
+  return (
+    <span className={`transition-transform ${open ? 'rotate-90' : ''} ${className}`}>▸</span>
+  );
+}
+
+/**
  * Saldo legível (ADR-017). Para unidade fechada (barra/rolo), o `stockQty` é em metros: mostra
  * "X barras + Y m". Para os demais, o número na unidade de venda, como sempre.
  */
@@ -85,20 +113,11 @@ export default function EstoquePage() {
   // os demais são aplicados no cliente sobre a lista carregada.
   const [filters, setFilters] = useState(EMPTY_FILTERS);
 
-  // Painel de reposição colapsável — pode incomodar quando cresce, então é minimizável e
-  // o estado é lembrado entre sessões (localStorage). Começa aberto; lê a preferência salva
-  // após montar (evita divergência de hidratação com o SSR).
-  const [replenishOpen, setReplenishOpen] = useState(true);
-  useEffect(() => {
-    if (localStorage.getItem('estoque:replenishOpen') === '0') setReplenishOpen(false);
-  }, []);
-  function toggleReplenish() {
-    setReplenishOpen((v) => {
-      const next = !v;
-      localStorage.setItem('estoque:replenishOpen', next ? '1' : '0');
-      return next;
-    });
-  }
+  // Seções colapsáveis (minimizáveis) — cada uma lembra o próprio estado entre sessões, para
+  // o operador deixar visível só o que quer ver naquele momento.
+  const [replenishOpen, toggleReplenish] = usePersistedOpen('estoque:replenishOpen');
+  const [stockOpen, toggleStock] = usePersistedOpen('estoque:stockOpen');
+  const [movementsOpen, toggleMovements] = usePersistedOpen('estoque:movementsOpen');
 
   // "Estoque atual": busca (nome/apelido/fabricante/SKU), filtro "só baixo" e ordenação por
   // qualquer coluna — para achar o produto sem rolar a página inteira.
@@ -344,9 +363,7 @@ export default function EstoquePage() {
             className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-amber-100/50"
           >
             <h2 className="flex items-center gap-2 font-semibold text-amber-900">
-              <span className={`text-amber-700 transition-transform ${replenishOpen ? 'rotate-90' : ''}`}>
-                ▸
-              </span>
+              <Chevron open={replenishOpen} className="text-amber-700" />
               Reposição de estoque
             </h2>
             <span className="rounded-full bg-amber-200 px-3 py-1 text-xs font-medium text-amber-900">
@@ -522,30 +539,44 @@ export default function EstoquePage() {
       </div>
 
       {/* Estoque atual por produto */}
-      <div className="mt-6 overflow-x-auto rounded-2xl bg-white shadow-sm">
+      <div className="mt-6 overflow-hidden rounded-2xl bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
-          <h2 className="font-semibold">Estoque atual</h2>
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              value={stockSearch}
-              onChange={(e) => setStockSearch(e.target.value)}
-              placeholder="Buscar produto ou SKU…"
-              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-900"
-            />
-            <label className="flex items-center gap-1.5 text-sm text-gray-600">
+          <button
+            type="button"
+            onClick={toggleStock}
+            aria-expanded={stockOpen}
+            className="flex items-center gap-2 font-semibold hover:text-gray-600"
+          >
+            <Chevron open={stockOpen} />
+            Estoque atual
+          </button>
+          {stockOpen ? (
+            <div className="flex flex-wrap items-center gap-2">
               <input
-                type="checkbox"
-                checked={lowOnly}
-                onChange={(e) => setLowOnly(e.target.checked)}
-                className="h-4 w-4 rounded border-gray-300"
+                value={stockSearch}
+                onChange={(e) => setStockSearch(e.target.value)}
+                placeholder="Buscar produto ou SKU…"
+                className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-900"
               />
-              Só baixo
-            </label>
-            <span className="text-xs text-gray-400">
-              {visibleStock.length} de {products.length}
-            </span>
-          </div>
+              <label className="flex items-center gap-1.5 text-sm text-gray-600">
+                <input
+                  type="checkbox"
+                  checked={lowOnly}
+                  onChange={(e) => setLowOnly(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+                Só baixo
+              </label>
+              <span className="text-xs text-gray-400">
+                {visibleStock.length} de {products.length}
+              </span>
+            </div>
+          ) : (
+            <span className="text-xs text-gray-400">{products.length} produtos</span>
+          )}
         </div>
+        {stockOpen && (
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-100 text-left text-gray-600">
             <tr>
@@ -649,17 +680,29 @@ export default function EstoquePage() {
           entradas − Σ saídas (deve bater com o saldo atual — ADR-001). Clique num cabeçalho para
           ordenar.
         </p>
+        </div>
+        )}
       </div>
 
       {/* Histórico de movimentações */}
-      <div className="mt-6 overflow-x-auto rounded-2xl bg-white shadow-sm">
+      <div className="mt-6 overflow-hidden rounded-2xl bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
-          <h2 className="font-semibold">Movimentações recentes</h2>
+          <button
+            type="button"
+            onClick={toggleMovements}
+            aria-expanded={movementsOpen}
+            className="flex items-center gap-2 font-semibold hover:text-gray-600"
+          >
+            <Chevron open={movementsOpen} />
+            Movimentações recentes
+          </button>
           <span className="text-xs text-gray-400">
             {filteredMovements.length} de {movements.length}
           </span>
         </div>
 
+        {movementsOpen && (
+        <>
         {/* Barra de filtros */}
         <div className="flex flex-wrap items-end gap-2 border-t border-gray-100 px-4 py-3">
           <label className="flex flex-col text-xs text-gray-500">
@@ -727,6 +770,7 @@ export default function EstoquePage() {
           )}
         </div>
 
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-100 text-left text-gray-600">
             <tr>
@@ -774,6 +818,9 @@ export default function EstoquePage() {
             )}
           </tbody>
         </table>
+        </div>
+        </>
+        )}
       </div>
 
       {/* Detalhe do produto (características + histórico de movimentações) — abre ao clicar
