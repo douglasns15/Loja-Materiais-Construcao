@@ -24,15 +24,13 @@ http://localhost:3000/
 
 <> Na documentação, tudo que faz consulta para mostrar algo tela, também deve ser explicado de onde vem a info e qual a lógica pra de determinada informação
 
-<> Ao pesquisar produto mostrar todas as informações cadastradas nele, hj não está mostrando e tmbm adicionar campo Marca/Fabricante/Grupo
-
 ***<> Ao remover um logo e subir um novo, as impressões estão sendo feitas sem o logo, parece estar se perdendo.
+
+<> Caixa, mostrar o que entrou e o que saiu do caixa
 
 <> crédito parcelado no valor total da compra, liberar campo para adicionar valor extra
 
 <> mais de uma forma de pagamento
-
-<> enquadrar melhor a tela de produtos
 
 <> e formatar campos numéricos referente a valor, colocar as casas decimais, moeda.. algo que deixe claro que ali é o valor em dinheiro
 
@@ -42,7 +40,9 @@ http://localhost:3000/
 
 <> Logo hora aparece , hora não aparece
 
-<> tela de histórico de vendas, precisa agrupar os pedidos e ter como filtrar assim como ter opção de pesquisar por notas, na nota impressa também tem que sair um número de nota
+<> tela de histórico de vendas, precisa agrupar os pedidos e ter como filtrar assim como ter opção de pesquisar por notas, na nota impressa também tem que sair um número de nota.. e no histórico de vendas, tem q mostrar literalmente tudo da venda, se foi em dinheiro, mostrar quando foi recebido, se teve troco mostrar troco.
+
+<> Em relatórios, no botão Hoje ter nele algo assim "< Hoje >" se clicar na seta "<" pra esquerda volta pros dias anteriores e a seta para direita ">" a partir do momento que vc volta para o dia anterior, ele libera pra ser clicada e voltar até no máximo o dia de Hoje.
 
 
 ## Subir servidor
