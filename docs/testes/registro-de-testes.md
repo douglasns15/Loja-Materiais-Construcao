@@ -3103,8 +3103,10 @@ e o valor é inteiro.
 | Deploy web | ✅ `npm run deploy` — Version `e527d848` |
 | Smoke `/login` | ✅ 200 |
 
-**E2E do Owner — ⏭️ pendente** (login → digitar em Custo/Preço/Desconto/Caixa e sair do campo: conferir a
-formatação `R$ 0,00`; conferir que a venda/fechamento seguem batendo os valores).
+**E2E do Owner — ✅ VALIDADO (2026-07-24):** campos monetários formatam em `R$` ao sair; o Owner exercitou o
+fluxo em produção e apontou o único campo que faltava (**Valor recebido**), corrigido em seguida (web
+`1547a2cc`) e também validado. Venda/fechamento seguem batendo os valores. Publicado no git pelo Owner.
+**Fatia UI.MoneyInput CONCLUÍDA.**
 
 ---
 
@@ -3135,5 +3137,6 @@ migration e sem tocar na API**:
 | Deploy web | ✅ `npm run deploy` — Version `2903e0d3` |
 | Smoke `/login` | ✅ 200 |
 
-**E2E do Owner — ⏭️ pendente** (login → PDV: conferir marca na busca; no carrinho, ajustar Qtd com − / + e
-digitando; conferir a trava de estoque, o passo 0,5 no metro e que o total/troco acompanham).
+**E2E do Owner — ✅ VALIDADO (2026-07-24):** "está tudo certo" (marca na busca; ajuste de Qtd no carrinho
+com − / + e digitação; trava de estoque respeitada). Publicado no git pelo Owner. **Fatia UI.PDV.UX
+CONCLUÍDA.**
