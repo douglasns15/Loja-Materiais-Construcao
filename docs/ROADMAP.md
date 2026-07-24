@@ -3,7 +3,21 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-24 — **Campos monetários formatam em BRL ao sair do campo
+> **Última atualização:** 2026-07-24 — **UX da Nova Venda (marca na busca + edição de quantidade no
+> carrinho) — NO AR, aguardando E2E do Owner.** Duas melhorias do Owner no PDV, **100% de UI (sem migration,
+> sem tocar na API)**: (1) a linha de busca do produto mostra `popular · marca · SKU` — as ramificações de
+> rolo/barra e embalagem/par já traziam as três partes; só a **comum** (unidade única) estava sem a **marca**,
+> agora corrigida; (2) **editar a quantidade da linha já no carrinho** — mantida a forma atual (campo
+> Quantidade antes de adicionar) **e** somada edição inline na coluna Qtd com **− / +** (passo 0,5 no metro,
+> 1 nos demais) + digitação direta. `changeLineQty` reusa a **mesma trava de estoque** do `addToCart`
+> (`baseUsedByProduct`; par checa os dois lados; metro em múltiplos de 0,5); qtd ≤ 0 remove a linha; estouro
+> de estoque avisa e não altera. Como o carrinho é a única fonte de totais/comprovante/payload (invariante do
+> PA.1), a edição reprecifica tudo junto. Gates: typecheck web ✅, build web (18 rotas, `/venda` 12.5 kB) ✅.
+> **NO AR:** web `2903e0d3`; smoke `/login` 200 ✅. **Falta:** E2E do Owner. Ver "UI.PDV.UX" no registro.
+> **Próximo passo:** direções abertas — go-live (Supabase Pro/CORS/SMTP, ver `docs/plano-producao.md`), nova
+> funcionalidade, ou endurecimento.
+>
+> **Antes:** 2026-07-24 — **Campos monetários formatam em BRL ao sair do campo
 > (`MoneyInput`) — NO AR, aguardando E2E do Owner.** Pedido do Owner: em todo campo de dinheiro (Custo,
 > valor em real…), ao terminar de digitar e mudar de campo, exibir sempre o valor **formatado em moeda**
 > ("R$ 0,00", com casas decimais), deixando claro que é monetário — na tela de Produtos **e em todas as

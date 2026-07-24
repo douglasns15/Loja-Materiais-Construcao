@@ -3105,3 +3105,35 @@ e o valor é inteiro.
 
 **E2E do Owner — ⏭️ pendente** (login → digitar em Custo/Preço/Desconto/Caixa e sair do campo: conferir a
 formatação `R$ 0,00`; conferir que a venda/fechamento seguem batendo os valores).
+
+---
+
+## UI.PDV.UX — marca na busca + edição de quantidade no carrinho (2026-07-24)
+
+Duas melhorias do Owner na tela **Nova Venda** (`apps/web/app/(app)/venda/page.tsx`), **100% de UI — sem
+migration e sem tocar na API**:
+
+1. **Nome popular + marca na linha de busca.** A linha secundária (abaixo do nome do produto) mostra
+   `popular · marca · SKU`. As ramificações de rolo/barra e de embalagem/par já mostravam as três partes; só
+   a ramificação **comum** (produto de unidade única, sem par) estava sem a **marca** — corrigido para casar
+   com as demais. Cada parte só aparece se preenchida.
+2. **Editar a quantidade de cada item já no carrinho.** Mantida a forma atual (campo Quantidade antes de
+   adicionar, bom para leitor de código) **e** adicionada edição inline na coluna **Qtd**: botões **− / +**
+   (passo **0,5** para venda por metro, **1** nos demais) + **digitação direta**. Nova função `changeLineQty`
+   reusa a **mesma trava de estoque** do `addToCart` (`baseUsedByProduct` — soma o que outras linhas
+   consomem; par ADR-015 checa os dois lados; metro ADR-017 exige múltiplos de 0,5). Quantidade ≤ 0 remove a
+   linha; apagar o campo para redigitar **não** remove (só o botão "remover"). Estouro de estoque mostra o
+   aviso e não altera. Como o carrinho é a única fonte de totais/comprovante/payload (invariante do PA.1), a
+   edição reprecifica tudo junto sem risco de divergência front×servidor.
+
+| Gate | Resultado |
+|---|---|
+| Typecheck web (`tsc --noEmit`) | ✅ exit 0 |
+| Build web (`next build`) | ✅ 18 rotas, `/venda` 12.5 kB (197 kB First Load) |
+| Migration | ✅ nenhuma |
+| Deploy de API | ✅ não necessário |
+| Deploy web | ✅ `npm run deploy` — Version `2903e0d3` |
+| Smoke `/login` | ✅ 200 |
+
+**E2E do Owner — ⏭️ pendente** (login → PDV: conferir marca na busca; no carrinho, ajustar Qtd com − / + e
+digitando; conferir a trava de estoque, o passo 0,5 no metro e que o total/troco acompanham).

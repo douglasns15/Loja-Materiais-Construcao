@@ -717,6 +717,47 @@ export default function VendaPage() {
     setCart(cart.filter((c) => c.key !== key));
   }
 
+  /** Linha vendida por metro (ADR-017): quantidade em múltiplos de 0,5 m. */
+  const isMeterLine = (c: CartItem) => c.saleMode === 'ALT' && c.baseUnitType === 'METER';
+
+  /**
+   * Edita a quantidade de uma linha JÁ no carrinho (− / + ou digitação direta), reusando a mesma
+   * trava de estoque do `addToCart`: base consumida por outras linhas + esta ≤ estoque; o par
+   * (ADR-015) checa os dois lados; a venda por metro exige múltiplos de 0,5. Quantidade ≤ 0
+   * remove a linha (apagar o campo é um jeito natural de tirar do carrinho).
+   */
+  function changeLineQty(key: string, nextQty: number) {
+    setError(null);
+    const item = cart.find((c) => c.key === key);
+    if (!item) return;
+    if (!(nextQty > 0)) {
+      removeFromCart(key);
+      return;
+    }
+    if (isMeterLine(item) && !isValidMeterStep(nextQty)) {
+      setError('A venda por metro deve ser em múltiplos de 0,5 m (mín. 0,5 m).');
+      return;
+    }
+    if (item.pair) {
+      const mainStock = Number(products.find((p) => p.id === item.productId)?.stockQty ?? item.stockQty);
+      const partnerStock = Number(products.find((p) => p.id === item.pair!.partnerId)?.stockQty ?? 0);
+      const usedMain = baseUsedByProduct(item.productId, key);
+      const usedPartner = baseUsedByProduct(item.pair.partnerId, key);
+      if (nextQty + usedMain > mainStock || nextQty + usedPartner > partnerStock) {
+        setError(`Estoque insuficiente para o par "${item.name}".`);
+        return;
+      }
+    } else {
+      const stock = Number(products.find((p) => p.id === item.productId)?.stockQty ?? item.stockQty);
+      const otherBase = baseUsedByProduct(item.productId, key);
+      if (otherBase + nextQty * item.conversionFactor > stock) {
+        setError(`Estoque insuficiente para "${item.name}" (disponível: ${stock}).`);
+        return;
+      }
+    }
+    setCart(cart.map((c) => (c.key === key ? { ...c, quantity: nextQty } : c)));
+  }
+
   /** "Concluir venda" agora só abre a REVISÃO — nada é gravado ainda. */
   function onConcluir() {
     setError(null);
@@ -1185,6 +1226,7 @@ export default function VendaPage() {
                         <span className="block truncate font-medium">{p.name}</span>
                         <span className="block truncate text-xs text-gray-400">
                           {p.popularName ? `${p.popularName} · ` : ''}
+                          {p.manufacturer ? `${p.manufacturer} · ` : ''}
                           {p.sku}
                         </span>
                       </span>
@@ -1319,10 +1361,48 @@ export default function VendaPage() {
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-2 text-right">
-                    {i.quantity}
-                    {i.pair ? ` par${i.quantity > 1 ? 'es' : ''}` : ''}
-                    {i.saleMode === 'ALT' && !i.pair ? ` ${unitShort(i.unitType)}` : ''}
+                  <td className="px-4 py-2">
+                    {/* Edição inline da quantidade: − / + (passo 0,5 no metro, senão 1) e digitação
+                        direta. A trava de estoque vive em changeLineQty (mesma regra do addToCart). */}
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        type="button"
+                        onClick={() => changeLineQty(i.key, i.quantity - (isMeterLine(i) ? 0.5 : 1))}
+                        className="h-7 w-7 shrink-0 rounded border border-gray-300 text-gray-600 hover:bg-gray-50"
+                        aria-label={`Diminuir quantidade de ${i.name}`}
+                      >
+                        −
+                      </button>
+                      <input
+                        type="number"
+                        min="0"
+                        step={isMeterLine(i) ? '0.5' : '1'}
+                        value={i.quantity}
+                        onChange={(e) => {
+                          // Campo vazio não remove (só o botão "remover" tira a linha); ao apagar,
+                          // deixa o operador digitar o novo valor sem sumir a linha.
+                          if (e.target.value === '') return;
+                          changeLineQty(i.key, Number(e.target.value));
+                        }}
+                        className="w-14 rounded border border-gray-300 px-1 py-1 text-right"
+                        aria-label={`Quantidade de ${i.name}`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => changeLineQty(i.key, i.quantity + (isMeterLine(i) ? 0.5 : 1))}
+                        className="h-7 w-7 shrink-0 rounded border border-gray-300 text-gray-600 hover:bg-gray-50"
+                        aria-label={`Aumentar quantidade de ${i.name}`}
+                      >
+                        +
+                      </button>
+                      <span className="ml-1 w-12 shrink-0 text-left text-xs text-gray-400">
+                        {i.pair
+                          ? `par${i.quantity > 1 ? 'es' : ''}`
+                          : i.saleMode === 'ALT' && !i.pair
+                            ? unitShort(i.unitType)
+                            : ''}
+                      </span>
+                    </div>
                   </td>
                   <td className="px-4 py-2 text-right">{BRL(i.unitPrice)}</td>
                   <td className="px-4 py-2 text-right">{BRL(i.unitPrice * i.quantity)}</td>
