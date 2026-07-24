@@ -3021,3 +3021,35 @@ atual" está minimizada, a busca/ordenação some e sobra um "N produtos"; a tab
 **E2E do Owner da extensão — ✅ VALIDADO (2026-07-24):** "Já publiquei e testei, funcionou corretamente"
 (minimizar/expandir as três seções com persistência independente de cada uma). Commit `15a3559`.
 **Fatia UI.Estoque.UX CONCLUÍDA.**
+
+---
+
+## UI.Produtos.UX — rótulos acima dos campos + preço da unidade fechada + listagem mais larga (2026-07-24)
+
+Três pedidos do Owner na tela de **Produtos** (`apps/web/app/(app)/products/page.tsx`), todos **100% de UI —
+sem migration e sem tocar na API**:
+
+1. **Rótulo acima de cada campo do cadastro.** Com o nome só no `placeholder`, ele sumia ao preencher e a
+   pessoa se perdia de qual campo estava editando. Novo helper `Field` (rótulo em `<label>`/`<span>` acima do
+   controle) aplicado a Nome, Nome popular, Fabricante, SKU, Custo, Preço, Unidade, Peso, Estoque mínimo,
+   Estoque inicial e Descrição. Campos compostos (SKU + botão de escanear, Peso + kg/g) usam `div`/`span` para
+   não aninhar botão dentro de `<label>`. Os três blocos pontilhados (Rolo/Barra, Vendido em par, Acréscimo por
+   pagamento) **mantidos como estavam** (decisão do Owner) — já têm legenda e texto explicativo próprios.
+2. **Preço da unidade fechada com o nome certo.** O rótulo de Custo/Preço agora reflete a unidade escolhida com
+   o artigo correto (`unitArticle`): **Rolo** → "Custo do rolo" / "Preço do rolo"; **Barra** → "Custo da barra" /
+   "Preço da barra". Antes mostrava "Preço da Barra" fixo mesmo com Rolo selecionado.
+3. **Listagem usava pouca largura.** Container `max-w-4xl` → `max-w-6xl`: a tabela de 9 colunas (incl. os botões
+   Copiar / Ver-editar) respira sem precisar arrastar para o lado no desktop. `overflow-x-auto` mantido como
+   rede de segurança para telas estreitas.
+
+| Gate | Resultado |
+|---|---|
+| Typecheck web (`tsc --noEmit`) | ✅ exit 0 |
+| Build web (`next build`) | ✅ 18 rotas, `/products` 10.3 kB (191 kB First Load) |
+| Migration | ✅ nenhuma |
+| Deploy de API | ✅ não necessário (nenhuma rota nova/alterada) |
+| Deploy web | ✅ `npm run deploy` — Version `55660117` |
+| Smoke `/login` | ✅ 200 |
+
+**E2E do Owner — ⏭️ pendente** (login → Produtos: conferir rótulos acima dos campos, "Preço do rolo" ao
+selecionar Rolo, e a listagem mais larga sem corte lateral).

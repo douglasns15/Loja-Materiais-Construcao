@@ -26,6 +26,30 @@ const BRL = (v: string | number) =>
 const QTY = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 4 });
 
+/**
+ * Campo do formulário com o **rótulo acima** do controle (não dentro, como placeholder).
+ * Pedido do Owner: com o nome só no placeholder, ele sumia ao preencher e a pessoa se
+ * perdia de qual campo estava. O `<label>` envolve o controle — clicar no texto foca o
+ * campo (acessível, sem precisar de `id`). Para campos compostos (SKU + botão de escanear,
+ * peso + kg/g) usamos um `<div>` com `<span>` no lugar, para não aninhar botão dentro de label.
+ */
+function Field({
+  label,
+  className,
+  children,
+}: {
+  label: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className={`flex flex-col gap-1 ${className ?? ''}`}>
+      <span className="text-xs font-medium text-gray-600">{label}</span>
+      {children}
+    </label>
+  );
+}
+
 export default function ProductsPage() {
   const online = useOnline();
   const [products, setProducts] = useState<Product[]>([]);
@@ -124,6 +148,8 @@ export default function ProductsPage() {
   // ADR-017: unidade fechada (barra/rolo) como principal — muda a apresentação do cadastro
   // (tamanho + preço da barra + preço por metro opcional) e a conversão da entrada em barras.
   const isClosedUnit = form.unit === 'BARRA' || form.unit === 'ROLL';
+  // Artigo correto por unidade fechada (evita "Preço da Rolo"): rolo é masculino, barra feminino.
+  const unitArticle = form.unit === 'ROLL' ? 'do rolo' : 'da barra';
 
   async function onCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -311,7 +337,7 @@ export default function ProductsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="mx-auto max-w-6xl">
       <h1 className="mb-6 text-2xl font-bold">Produtos</h1>
 
       {/* Tela online-only (ADR-012 (c)): offline mostra o aviso de rede, não o erro cru. */}
@@ -338,125 +364,143 @@ export default function ProductsPage() {
             </button>
           </div>
         )}
-        <input
-          ref={nameRef}
-          placeholder="Nome"
-          value={form.name}
-          onChange={(e) => setForm({ ...form, name: e.target.value })}
-          className="rounded-lg border border-gray-300 px-3 py-2 sm:col-span-2"
-        />
-        <input
-          placeholder="Nome popular (opcional)"
-          value={form.popularName}
-          onChange={(e) => setForm({ ...form, popularName: e.target.value })}
-          title="Nome popular/regional pelo qual o produto também é buscado no PDV. Ex.: 'Ferro 8' para 'Vergalhão CA-50 8mm'."
-          className="rounded-lg border border-gray-300 px-3 py-2 sm:col-span-2"
-        />
-        <input
-          placeholder="Fabricante (opcional)"
-          value={form.manufacturer}
-          onChange={(e) => setForm({ ...form, manufacturer: e.target.value })}
-          maxLength={120}
-          title="Fabricante/marca do produto (ex.: Votorantim, Tigre). Também é usado na busca."
-          className="rounded-lg border border-gray-300 px-3 py-2 sm:col-span-2"
-        />
-        <div className="flex gap-2 sm:col-span-2">
+        <Field label="Nome" className="sm:col-span-2">
           <input
-            placeholder="SKU / código de barras"
-            value={form.sku}
-            onChange={(e) => setForm({ ...form, sku: e.target.value })}
+            ref={nameRef}
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
             className="w-full rounded-lg border border-gray-300 px-3 py-2"
           />
-          <BarcodeScanButton
-            onScan={(code) => setForm((f) => ({ ...f, sku: code.trim() }))}
-            label="Escanear código de barras para o SKU"
-          />
-        </div>
-        <input
-          placeholder={isClosedUnit ? 'Custo da barra' : 'Custo'}
-          type="number"
-          step="0.01"
-          value={form.costPrice}
-          onChange={(e) => setForm({ ...form, costPrice: e.target.value })}
-          className="rounded-lg border border-gray-300 px-3 py-2"
-        />
-        <input
-          placeholder={isClosedUnit ? 'Preço da barra' : 'Venda'}
-          type="number"
-          step="0.01"
-          value={form.salePrice}
-          onChange={(e) => setForm({ ...form, salePrice: e.target.value })}
-          className="rounded-lg border border-gray-300 px-3 py-2"
-        />
-        {/* Unidade de venda (UnitType) — como o produto é vendido/medido. */}
-        <select
-          value={form.unit}
-          onChange={(e) => setForm({ ...form, unit: e.target.value as UnitType })}
-          title="Unidade de venda do produto (ex.: saco de cimento, milheiro de tijolo, metro de fio)."
-          className="rounded-lg border border-gray-300 bg-white px-3 py-2 sm:col-span-2"
-          aria-label="Unidade de venda"
-        >
-          {(Object.keys(unitTypeLabels) as UnitType[]).map((u) => (
-            <option key={u} value={u}>
-              {unitTypeLabels[u]}
-            </option>
-          ))}
-        </select>
-        {/* Peso: digita em kg ou g; guardamos canônico em kg (banco). Opcional. */}
-        <div className="flex gap-2 sm:col-span-2">
+        </Field>
+        <Field label="Nome popular (opcional)" className="sm:col-span-2">
           <input
-            placeholder="Peso (opcional)"
+            value={form.popularName}
+            onChange={(e) => setForm({ ...form, popularName: e.target.value })}
+            title="Nome popular/regional pelo qual o produto também é buscado no PDV. Ex.: 'Ferro 8' para 'Vergalhão CA-50 8mm'."
+            className="w-full rounded-lg border border-gray-300 px-3 py-2"
+          />
+        </Field>
+        <Field label="Fabricante (opcional)" className="sm:col-span-2">
+          <input
+            value={form.manufacturer}
+            onChange={(e) => setForm({ ...form, manufacturer: e.target.value })}
+            maxLength={120}
+            title="Fabricante/marca do produto (ex.: Votorantim, Tigre). Também é usado na busca."
+            className="w-full rounded-lg border border-gray-300 px-3 py-2"
+          />
+        </Field>
+        {/* Composto (input + botão de escanear): usa div/span p/ não aninhar botão em <label>. */}
+        <div className="flex flex-col gap-1 sm:col-span-2">
+          <span className="text-xs font-medium text-gray-600">SKU / código de barras</span>
+          <div className="flex gap-2">
+            <input
+              value={form.sku}
+              onChange={(e) => setForm({ ...form, sku: e.target.value })}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2"
+            />
+            <BarcodeScanButton
+              onScan={(code) => setForm((f) => ({ ...f, sku: code.trim() }))}
+              label="Escanear código de barras para o SKU"
+            />
+          </div>
+        </div>
+        <Field label={isClosedUnit ? `Custo ${unitArticle}` : 'Custo'}>
+          <input
+            type="number"
+            step="0.01"
+            value={form.costPrice}
+            onChange={(e) => setForm({ ...form, costPrice: e.target.value })}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2"
+          />
+        </Field>
+        <Field label={isClosedUnit ? `Preço ${unitArticle}` : 'Preço de venda'}>
+          <input
+            type="number"
+            step="0.01"
+            value={form.salePrice}
+            onChange={(e) => setForm({ ...form, salePrice: e.target.value })}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2"
+          />
+        </Field>
+        {/* Unidade de venda (UnitType) — como o produto é vendido/medido. */}
+        <Field label="Unidade de venda" className="sm:col-span-2">
+          <select
+            value={form.unit}
+            onChange={(e) => setForm({ ...form, unit: e.target.value as UnitType })}
+            title="Unidade de venda do produto (ex.: saco de cimento, milheiro de tijolo, metro de fio)."
+            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+            aria-label="Unidade de venda"
+          >
+            {(Object.keys(unitTypeLabels) as UnitType[]).map((u) => (
+              <option key={u} value={u}>
+                {unitTypeLabels[u]}
+              </option>
+            ))}
+          </select>
+        </Field>
+        {/* Peso: digita em kg ou g; guardamos canônico em kg (banco). Opcional. */}
+        <div className="flex flex-col gap-1 sm:col-span-2">
+          <span className="text-xs font-medium text-gray-600">Peso (opcional)</span>
+          <div className="flex gap-2">
+            <input
+              type="number"
+              step="any"
+              min="0"
+              value={form.weight}
+              onChange={(e) => setForm({ ...form, weight: e.target.value })}
+              title="Peso do produto por unidade de venda. Escolha kg ou g ao lado; guardamos em kg."
+              className="w-full rounded-lg border border-gray-300 px-3 py-2"
+            />
+            <select
+              value={form.weightUnit}
+              onChange={(e) => setForm({ ...form, weightUnit: e.target.value as 'kg' | 'g' })}
+              className="rounded-lg border border-gray-300 bg-white px-2 py-2"
+              aria-label="Unidade do peso"
+            >
+              <option value="kg">kg</option>
+              <option value="g">g</option>
+            </select>
+          </div>
+        </div>
+        <Field label="Estoque mínimo">
+          <input
+            type="number"
+            step="1"
+            min="0"
+            value={form.minStockQty}
+            onChange={(e) => setForm({ ...form, minStockQty: e.target.value })}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2"
+          />
+        </Field>
+        <Field
+          label={isClosedUnit ? 'Estoque inicial (barras)' : 'Estoque inicial (opcional)'}
+          className="sm:col-span-2"
+        >
+          <input
             type="number"
             step="any"
             min="0"
-            value={form.weight}
-            onChange={(e) => setForm({ ...form, weight: e.target.value })}
-            title="Peso do produto por unidade de venda. Escolha kg ou g ao lado; guardamos em kg."
+            value={form.initialStock}
+            onChange={(e) => setForm({ ...form, initialStock: e.target.value })}
+            title={
+              isClosedUnit
+                ? 'Quantas barras/rolos inteiros entram no cadastro. Convertido para metros pelo tamanho (ex.: 10 barras × 6 m = 60 m).'
+                : "Se preenchido, gera uma Entrada de estoque no cadastro (aparece no Estoque como 'Estoque inicial'). Deixe vazio para o produto nascer com 0."
+            }
             className="w-full rounded-lg border border-gray-300 px-3 py-2"
           />
-          <select
-            value={form.weightUnit}
-            onChange={(e) => setForm({ ...form, weightUnit: e.target.value as 'kg' | 'g' })}
-            className="rounded-lg border border-gray-300 bg-white px-2 py-2"
-            aria-label="Unidade do peso"
-          >
-            <option value="kg">kg</option>
-            <option value="g">g</option>
-          </select>
-        </div>
-        <input
-          placeholder="Estoque mín."
-          type="number"
-          step="1"
-          min="0"
-          value={form.minStockQty}
-          onChange={(e) => setForm({ ...form, minStockQty: e.target.value })}
-          className="rounded-lg border border-gray-300 px-3 py-2"
-        />
-        <input
-          placeholder={isClosedUnit ? 'Estoque inicial (barras)' : 'Estoque inicial (opcional)'}
-          type="number"
-          step="any"
-          min="0"
-          value={form.initialStock}
-          onChange={(e) => setForm({ ...form, initialStock: e.target.value })}
-          title={
-            isClosedUnit
-              ? 'Quantas barras/rolos inteiros entram no cadastro. Convertido para metros pelo tamanho (ex.: 10 barras × 6 m = 60 m).'
-              : "Se preenchido, gera uma Entrada de estoque no cadastro (aparece no Estoque como 'Estoque inicial'). Deixe vazio para o produto nascer com 0."
-          }
-          className="rounded-lg border border-gray-300 px-3 py-2 sm:col-span-2"
-        />
+        </Field>
         {/* Descrição/observação (opcional, até 500 caracteres). */}
-        <textarea
-          placeholder="Descrição / observação (opcional)"
-          value={form.description}
-          onChange={(e) => setForm({ ...form, description: e.target.value })}
-          maxLength={500}
-          rows={2}
-          title="Detalhes ou observações do produto (opcional). Ex.: marca, especificação técnica, cor."
-          className="resize-y rounded-lg border border-gray-300 px-3 py-2 sm:col-span-4"
-        />
+        <Field label="Descrição / observação (opcional)" className="sm:col-span-4">
+          <textarea
+            value={form.description}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+            maxLength={500}
+            rows={2}
+            title="Detalhes ou observações do produto (opcional). Ex.: marca, especificação técnica, cor."
+            className="w-full resize-y rounded-lg border border-gray-300 px-3 py-2"
+          />
+        </Field>
         {/* ADR-017: barra/rolo como principal — tamanho da barra + preço por metro (opcional). */}
         {isClosedUnit && (
           <fieldset className="rounded-xl border border-dashed border-indigo-300 bg-indigo-50/40 p-3 sm:col-span-6">

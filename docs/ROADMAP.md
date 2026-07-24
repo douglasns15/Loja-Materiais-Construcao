@@ -3,7 +3,21 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-24 — **UX da tela de Estoque (seções colapsáveis + busca/ordenação +
+> **Última atualização:** 2026-07-24 — **UX da tela de Produtos (rótulos acima dos campos + preço da
+> unidade fechada + listagem mais larga) — NO AR, aguardando E2E do Owner.** Três pedidos do Owner no
+> cadastro de Produtos, todos **100% de UI (sem migration, sem tocar na API)**: (1) o nome de cada campo
+> ficava só no **placeholder** e sumia ao preencher → novo helper `Field` põe o **rótulo acima** do controle
+> (Nome, Nome popular, Fabricante, SKU, Custo, Preço, Unidade, Peso, Estoque mín., Estoque inicial,
+> Descrição; os três blocos pontilhados ficaram como estavam, a pedido, pois já têm legenda própria);
+> (2) ao escolher **Rolo** o preço mostrava "Preço da **Barra**" → agora reflete a unidade com o artigo
+> certo (`unitArticle`): "Preço do rolo" / "Preço da barra"; (3) a **listagem** usava pouca largura e os
+> botões finais ficavam cortados → container `max-w-4xl` → `max-w-6xl` (a tabela de 9 colunas respira sem
+> arrastar; `overflow-x-auto` mantido p/ telas estreitas). Gates: typecheck web ✅, build web (18 rotas,
+> `/products` 10.3 kB) ✅. **NO AR:** web `55660117`; smoke `/login` 200 ✅. **Falta:** E2E do Owner. Ver
+> "UI.Produtos.UX" no registro. **Próximo passo:** direções abertas — go-live (Supabase Pro/CORS/SMTP, ver
+> `docs/plano-producao.md`), nova funcionalidade, ou endurecimento.
+>
+> **Antes:** 2026-07-24 — **UX da tela de Estoque (seções colapsáveis + busca/ordenação +
 > detalhe do produto) — NO AR e VALIDADO pelo Owner.** Pedido do Owner, três pontos: (1) o painel
 > **"Reposição de estoque"** cresce e atrapalha → agora é **colapsável** (cabeçalho vira botão com seta;
 > estado lembrado em `localStorage`, badge de contagem visível mesmo minimizado); (2) achar produto na
