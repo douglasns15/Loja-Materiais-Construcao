@@ -10,6 +10,8 @@ import {
 import {
   isClosedPrimary,
   isLowStock,
+  normalizeSearchText,
+  productMatchesQuery,
   replenishmentShortfall,
   splitWholeAndRemainder,
 } from '@nexoloja/core';
@@ -18,17 +20,15 @@ import { useOnline } from '@/lib/useOnline';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { useMe } from '@/lib/useMe';
 import { StoreDisabledNotice } from '@/components/StoreDisabledNotice';
+import { StockDetail, type StockProduct } from '@/components/StockDetail';
 
-type Product = {
-  id: string;
-  name: string;
-  sku: string;
-  unit: string;
-  stockQty: string;
-  minStockQty: string;
-  // ADR-017: tamanho da barra/rolo em metros (unidade fechada). Nulo ⇒ produto comum.
-  conversionFactor: string | null;
-};
+// `GET /products` devolve a linha completa do produto; o detalhe de estoque (StockDetail)
+// usa esses campos extras (custo/venda, peso, descrição…), então o tipo espelha o StockProduct.
+type Product = StockProduct;
+
+/** Colunas ordenáveis da tabela "Estoque atual". */
+type SortKey = 'name' | 'sku' | 'stock' | 'min' | 'income' | 'expense' | 'balance';
+type SortState = { key: SortKey; dir: 'asc' | 'desc' };
 
 /**
  * Saldo legível (ADR-017). Para unidade fechada (barra/rolo), o `stockQty` é em metros: mostra
@@ -84,6 +84,30 @@ export default function EstoquePage() {
   // Filtros das movimentações. `productId` é resolvido no servidor (?productId=);
   // os demais são aplicados no cliente sobre a lista carregada.
   const [filters, setFilters] = useState(EMPTY_FILTERS);
+
+  // Painel de reposição colapsável — pode incomodar quando cresce, então é minimizável e
+  // o estado é lembrado entre sessões (localStorage). Começa aberto; lê a preferência salva
+  // após montar (evita divergência de hidratação com o SSR).
+  const [replenishOpen, setReplenishOpen] = useState(true);
+  useEffect(() => {
+    if (localStorage.getItem('estoque:replenishOpen') === '0') setReplenishOpen(false);
+  }, []);
+  function toggleReplenish() {
+    setReplenishOpen((v) => {
+      const next = !v;
+      localStorage.setItem('estoque:replenishOpen', next ? '1' : '0');
+      return next;
+    });
+  }
+
+  // "Estoque atual": busca (nome/apelido/fabricante/SKU), filtro "só baixo" e ordenação por
+  // qualquer coluna — para achar o produto sem rolar a página inteira.
+  const [stockSearch, setStockSearch] = useState('');
+  const [lowOnly, setLowOnly] = useState(false);
+  const [sort, setSort] = useState<SortState>({ key: 'name', dir: 'asc' });
+
+  // Produto aberto no painel de detalhe (características + histórico de movimentações).
+  const [detailProduct, setDetailProduct] = useState<Product | null>(null);
 
   // Formulário de entrada de estoque (compra/recebimento).
   const [entry, setEntry] = useState({
@@ -174,6 +198,51 @@ export default function EstoquePage() {
 
   const filtersActive =
     filters.productId || filters.type || filters.reason || filters.dateFrom || filters.dateTo;
+
+  // Clicar no cabeçalho ordena por aquela coluna; clicar de novo inverte a direção.
+  function sortBy(key: SortKey) {
+    setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }));
+  }
+  const sortArrow = (key: SortKey) => (sort.key === key ? (sort.dir === 'asc' ? ' ↑' : ' ↓') : '');
+
+  // Tabela "Estoque atual": busca + "só baixo" + ordenação. Aplicado no cliente sobre a lista.
+  const visibleStock = useMemo(() => {
+    const val = (p: Product): number | string => {
+      const s = summary[p.id] ?? { income: 0, expense: 0 };
+      switch (sort.key) {
+        case 'name':
+          return normalizeSearchText(p.name);
+        case 'sku':
+          return normalizeSearchText(p.sku);
+        case 'stock':
+          return Number(p.stockQty);
+        case 'min':
+          return Number(p.minStockQty);
+        case 'income':
+          return s.income;
+        case 'expense':
+          return s.expense;
+        case 'balance':
+          return Number((s.income - s.expense).toFixed(4));
+      }
+    };
+    const list = products.filter((p) => {
+      if (!productMatchesQuery(p, stockSearch)) return false;
+      if (lowOnly && !isLowStock({ stockQty: Number(p.stockQty), minStockQty: Number(p.minStockQty) }))
+        return false;
+      return true;
+    });
+    list.sort((a, b) => {
+      const va = val(a);
+      const vb = val(b);
+      const cmp =
+        typeof va === 'number' && typeof vb === 'number'
+          ? va - vb
+          : String(va).localeCompare(String(vb), 'pt-BR');
+      return sort.dir === 'asc' ? cmp : -cmp;
+    });
+    return list;
+  }, [products, summary, stockSearch, lowOnly, sort]);
 
   const adjustProduct = products.find((p) => p.id === adjust.productId);
 
@@ -267,13 +336,25 @@ export default function EstoquePage() {
       {/* Painel de reposição (EF-2): tudo que está no ponto de reposição num lugar só, com a
           sugestão de compra (quanto falta para voltar ao mínimo). Só aparece quando há itens. */}
       {replenish.length > 0 && (
-        <div className="mb-6 overflow-x-auto rounded-2xl border border-amber-200 bg-amber-50 shadow-sm">
-          <div className="flex items-center justify-between px-4 py-3">
-            <h2 className="font-semibold text-amber-900">Reposição de estoque</h2>
+        <div className="mb-6 overflow-hidden rounded-2xl border border-amber-200 bg-amber-50 shadow-sm">
+          <button
+            type="button"
+            onClick={toggleReplenish}
+            aria-expanded={replenishOpen}
+            className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-amber-100/50"
+          >
+            <h2 className="flex items-center gap-2 font-semibold text-amber-900">
+              <span className={`text-amber-700 transition-transform ${replenishOpen ? 'rotate-90' : ''}`}>
+                ▸
+              </span>
+              Reposição de estoque
+            </h2>
             <span className="rounded-full bg-amber-200 px-3 py-1 text-xs font-medium text-amber-900">
               {replenish.length} {replenish.length === 1 ? 'item para repor' : 'itens para repor'}
             </span>
-          </div>
+          </button>
+          {replenishOpen && (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-amber-100/70 text-left text-amber-900">
               <tr>
@@ -315,6 +396,8 @@ export default function EstoquePage() {
             “Comprar” é o quanto falta para o saldo voltar ao mínimo. Defina o mínimo de cada produto
             na tela de Produtos.
           </p>
+          </div>
+          )}
         </div>
       )}
 
@@ -440,24 +523,57 @@ export default function EstoquePage() {
 
       {/* Estoque atual por produto */}
       <div className="mt-6 overflow-x-auto rounded-2xl bg-white shadow-sm">
-        <div className="flex items-center justify-between px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
           <h2 className="font-semibold">Estoque atual</h2>
-          {replenish.length > 0 && (
-            <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800">
-              {replenish.length} com estoque baixo
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              value={stockSearch}
+              onChange={(e) => setStockSearch(e.target.value)}
+              placeholder="Buscar produto ou SKU…"
+              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-900"
+            />
+            <label className="flex items-center gap-1.5 text-sm text-gray-600">
+              <input
+                type="checkbox"
+                checked={lowOnly}
+                onChange={(e) => setLowOnly(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300"
+              />
+              Só baixo
+            </label>
+            <span className="text-xs text-gray-400">
+              {visibleStock.length} de {products.length}
             </span>
-          )}
+          </div>
         </div>
         <table className="w-full text-sm">
           <thead className="bg-gray-100 text-left text-gray-600">
             <tr>
-              <th className="px-4 py-2">Produto</th>
-              <th className="px-4 py-2">SKU</th>
-              <th className="px-4 py-2 text-right">Em estoque</th>
-              <th className="px-4 py-2 text-right">Mínimo</th>
-              <th className="px-4 py-2 text-right">Entradas</th>
-              <th className="px-4 py-2 text-right">Saídas</th>
-              <th className="px-4 py-2 text-right">Saldo (hist.)</th>
+              {(
+                [
+                  ['name', 'Produto', 'left'],
+                  ['sku', 'SKU', 'left'],
+                  ['stock', 'Em estoque', 'right'],
+                  ['min', 'Mínimo', 'right'],
+                  ['income', 'Entradas', 'right'],
+                  ['expense', 'Saídas', 'right'],
+                  ['balance', 'Saldo (hist.)', 'right'],
+                ] as [SortKey, string, 'left' | 'right'][]
+              ).map(([key, label, align]) => (
+                <th key={key} className={`px-4 py-2 ${align === 'right' ? 'text-right' : ''}`}>
+                  <button
+                    type="button"
+                    onClick={() => sortBy(key)}
+                    title={`Ordenar por ${label}`}
+                    className={`font-medium hover:text-gray-900 ${
+                      sort.key === key ? 'text-gray-900' : ''
+                    }`}
+                  >
+                    {label}
+                    {sortArrow(key)}
+                  </button>
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -467,8 +583,14 @@ export default function EstoquePage() {
                   Nenhum produto cadastrado.
                 </td>
               </tr>
+            ) : visibleStock.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-4 py-6 text-center text-gray-400">
+                  Nenhum produto para a busca/filtro.
+                </td>
+              </tr>
             ) : (
-              products.map((p) => {
+              visibleStock.map((p) => {
                 const low = isLowStock({
                   stockQty: Number(p.stockQty),
                   minStockQty: Number(p.minStockQty),
@@ -484,8 +606,8 @@ export default function EstoquePage() {
                     <td className="px-4 py-2">
                       <button
                         type="button"
-                        onClick={() => setFilters({ ...EMPTY_FILTERS, productId: p.id })}
-                        title="Ver as movimentações deste produto"
+                        onClick={() => setDetailProduct(p)}
+                        title="Ver características e movimentações deste produto"
                         className="text-left font-medium text-gray-900 hover:text-gray-600 hover:underline"
                       >
                         {p.name}
@@ -523,8 +645,9 @@ export default function EstoquePage() {
           </tbody>
         </table>
         <p className="px-4 py-2 text-xs text-gray-400">
-          Entradas/Saídas são os totais do histórico; “Saldo (hist.)” é Σ entradas − Σ saídas (deve
-          bater com o saldo atual — ADR-001). Clique no produto para ver suas movimentações abaixo.
+          Clique no produto para ver suas características e movimentações. “Saldo (hist.)” é Σ
+          entradas − Σ saídas (deve bater com o saldo atual — ADR-001). Clique num cabeçalho para
+          ordenar.
         </p>
       </div>
 
@@ -652,6 +775,16 @@ export default function EstoquePage() {
           </tbody>
         </table>
       </div>
+
+      {/* Detalhe do produto (características + histórico de movimentações) — abre ao clicar
+          no produto na tabela "Estoque atual". */}
+      {detailProduct && (
+        <StockDetail
+          product={detailProduct}
+          summary={summary[detailProduct.id] ?? { income: 0, expense: 0 }}
+          onClose={() => setDetailProduct(null)}
+        />
+      )}
     </div>
   );
 }

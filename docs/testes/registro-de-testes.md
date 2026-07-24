@@ -2969,3 +2969,32 @@ dispositivo → **vê o caixa aberto** (não mais "fechado"); (3) Amanda vende �
 (4) Douglas vê a venda da Amanda no Histórico do caixa; (5) Amanda **fecha** o caixa → soma as vendas dos
 dois; (6) tentar abrir um segundo caixa com a loja já aberta → 409 "A loja já tem um caixa aberto".
 Commit `cbccb3f`. **Fatia ADR-018 CONCLUÍDA — bug de produção fechado.**
+
+---
+
+## UI.Estoque.UX — Painel colapsável + busca/ordenação + detalhe do produto (2026-07-24)
+
+Pedido do Owner (três pontos de UX na tela de Estoque). **Mudança 100% de front — sem migration e sem
+tocar na API:** `GET /products` já devolve a linha completa do produto (custo/venda, peso, descrição,
+fabricante…) e `GET /stock/movements?productId=` já traz as justificativas por movimentação; só faltava
+superfície na UI.
+
+**O que mudou (`apps/web/app/(app)/estoque/page.tsx` + novo `apps/web/components/StockDetail.tsx`)**
+
+| Ponto | Antes | Agora |
+|---|---|---|
+| Painel "Reposição de estoque" | cresce e empurra a tela | **colapsável** (cabeçalho = botão com seta ▸/▾); estado lembrado em `localStorage` (`estoque:replenishOpen`); badge "N itens para repor" visível mesmo minimizado |
+| Achar produto em "Estoque atual" | rolar a página | **busca** (nome/apelido/fabricante/SKU via `productMatchesQuery`), checkbox **"Só baixo"**, **ordenação por qualquer coluna** (clique no cabeçalho, inverte no 2º clique, seta ↑/↓), contador "X de Y" |
+| Ver características + histórico + justificativas | clicava e filtrava a tabela global lá embaixo; justificativa não aparecia | clicar no produto abre **modal de detalhe** com características (unidade, custo/venda, margem, peso, fabricante, descrição, saldo/mínimo, Σ entradas/saídas) + **histórico do produto** com filtros próprios (Tipo/Motivo/período), **custo unitário e motivo por linha**, e paginação "Mostrar mais" (evita tela corrida) |
+
+**Gates**
+
+| Gate | Resultado |
+|---|---|
+| Typecheck web (`tsc --noEmit`) | ✅ exit 0 |
+| Build web (`next build`) | ✅ 18 rotas, `/estoque` 7.13 kB (188 kB First Load) |
+| Migration | ✅ nenhuma |
+| Deploy de API | ✅ não necessário (nenhuma rota nova/alterada) |
+
+**Falta:** E2E do Owner (colapsar/expandir e conferir persistência; buscar/ordenar; clicar num produto e
+ver a justificativa de uma Entrada/Ajuste no histórico do modal).
