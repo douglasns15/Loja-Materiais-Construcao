@@ -3088,7 +3088,8 @@ e o valor é inteiro.
 - **Produtos** (cadastro): Custo, Preço, Preço por metro, Preço da embalagem, Preço do par, Acréscimo débito, Acréscimo crédito.
 - **ProductDetail** (ver/editar): os mesmos 6 campos. Bônus: o rótulo fixo "Custo/Preço da barra" da edição
   também passou a respeitar a unidade (`unitArticle`: "do rolo" / "da barra").
-- **Nova Venda** (PDV): Desconto.
+- **Nova Venda** (PDV): Desconto e **Valor recebido** (este último convertido em seguida, 2026-07-24 —
+  passara despercebido no 1º lote; deploy web `1547a2cc`).
 - **Caixa**: Valor de abertura + Valor contado (fechamento).
 - **Estoque**: Custo unitário / por barra da entrada.
 

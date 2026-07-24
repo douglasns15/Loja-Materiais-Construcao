@@ -1363,11 +1363,9 @@ export default function VendaPage() {
           {method === 'CASH' && (
             <div>
               <label className="block text-sm font-medium">Valor recebido</label>
-              <input
-                type="number"
-                step="0.01"
+              <MoneyInput
                 value={received}
-                onChange={(e) => setReceived(e.target.value)}
+                onChange={setReceived}
                 placeholder={BRL(totals.total)}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2"
               />
