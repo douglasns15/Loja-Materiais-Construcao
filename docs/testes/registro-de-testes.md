@@ -3246,3 +3246,36 @@ cartão é um **extrato** claro:
 **E2E do Owner — ⏭️ pendente** (após deploy API+web): com uma **devolução** no caixa de hoje, abrir
 `/caixa` e conferir a linha vermelha "− Devoluções / saídas" e o "Esperado" batendo com abertura + vendas −
 saídas.
+
+---
+
+### CX.Fix — Correções pós-teste do Owner (2026-07-25, web `c795968e`)
+
+Owner testou o contador/DRE no Demo e reportou 3 pontos. Correções (só web, sem API/core):
+
+1. **Contador perdia o foco no 1º dígito** (bug). Causa: `CashCounter` definia o componente `Row`
+   **dentro** do render → a cada tecla o pai re-renderizava, `Row` virava função nova e o React
+   **remontava o `<input>`**, derrubando o foco. Correção: `Row` extraído para componente de **módulo**
+   (`CounterRow`, identidade estável) → o input persiste entre teclas. Digitar número de vários dígitos
+   agora funciona.
+2. **Troco não aparece como saída no Caixa** — investigado, **não é bug**. O `payments[].amount` gravado é
+   o **total da venda** (`venda/page.tsx` envia `amount: totals.total`; `orders.ts` grava esse valor), **não**
+   o valor recebido. O "Valor recebido"/troco são só de tela e **não são persistidos**. Logo o caixa já
+   conta o **líquido** (venda R$58,30 = R$60 recebidos − R$1,70 troco); mostrar o troco como saída
+   descontaria duas vezes. Melhoria cosmética possível (persistir o recebido e exibir "Recebido/Troco")
+   fica como opção futura, a critério do Owner.
+3. **Fechou o caixa mas o visual continuou "aberto"** (não reproduzível depois). Hipótese: o `load()` após
+   o `POST /close` refazia `GET /current` e podia ler a sessão **ainda aberta de cache** (read-after-write),
+   deixando o visual "aberto" apesar da msg "fechado". Blindagem: no sucesso do fechamento a tela **limpa a
+   sessão localmente (otimista)** — `setSession(null)` + limpa o cache offline — em vez de depender da
+   releitura. O estado passa a refletir "fechado" na hora, deterministicamente.
+
+| Gate | Resultado |
+|---|---|
+| Typecheck web (`tsc --noEmit`) | ✅ exit 0 |
+| Build web (`next build`) | ✅ 18 rotas, `/caixa` 4.45 kB |
+| Deploy web | ✅ `npm run deploy` — Version `c795968e` (smoke `/login` 200) |
+| Deploy de API | ✅ não necessário (só web) |
+
+**Re-teste do Owner — ⏭️ pendente:** digitar quantidade de vários dígitos no contador sem perder o foco;
+fechar o caixa e ver o visual virar "fechado" na hora.

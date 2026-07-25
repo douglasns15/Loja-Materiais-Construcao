@@ -22,8 +22,13 @@
 > degrada com segurança sem ela: mostra abertura + vendas + esperado e omite as linhas novas). Gates: core
 > **164/164** Vitest (+8: 5 do contador, 3 da DRE) ✅, typecheck API ✅, typecheck web ✅, build web (18
 > rotas, `/caixa` 4.42 kB) ✅. **NO AR:** commit `6508ab4`; API `9063ed0e` + web `c71d1af9`; smoke ✅
-> (health 200, `/cash-sessions/current` sem token 401, `/login` 200). **Falta:** E2E do Owner. Ver
-> "CX.Contador" e "CX.DRE" no registro. **Próximo passo (par natural futuro):** botão de **Sangria /
+> (health 200, `/cash-sessions/current` sem token 401, `/login` 200). **Correções pós-teste do Owner
+> (CX.Fix, web `c795968e`):** (1) contador **perdia o foco** no 1º dígito → `CounterRow` extraído p/
+> componente de módulo (o input não remonta mais); (3) **fechou mas o visual seguia "aberto"** → fechamento
+> limpa a sessão localmente (otimista), sem depender do `GET /current` que podia vir de cache. (2) troco
+> não é bug — o caixa grava o **total da venda** (líquido), o "recebido"/troco não são persistidos. **Falta:**
+> re-teste do Owner. Ver "CX.Contador", "CX.DRE" e "CX.Fix" no registro. **Próximo passo (par natural
+> futuro):** botão de **Sangria /
 > Suprimento** (retirar/repor dinheiro no meio do dia) — a DRE já tem as linhas prontas para ele.
 > **Direções abertas:** go-live (Supabase Pro/CORS/SMTP, ver `docs/plano-producao.md`), nova
 > funcionalidade, ou endurecimento.
