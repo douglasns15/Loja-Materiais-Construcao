@@ -44,6 +44,7 @@ http://localhost:3000/
 
 <> Em relatórios, no botão Hoje ter nele algo assim "< Hoje >" se clicar na seta "<" pra esquerda volta pros dias anteriores e a seta para direita ">" a partir do momento que vc volta para o dia anterior, ele libera pra ser clicada e voltar até no máximo o dia de Hoje.
 
+<> Paginação das telas que já abrem com várias infos carregadas, isso pode tornar a tela mais lenta, principalmente com o passar do tempo, conforme a base aumenta de tamanho;
 
 ## Subir servidor
 
