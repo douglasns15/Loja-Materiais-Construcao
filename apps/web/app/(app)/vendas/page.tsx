@@ -41,8 +41,29 @@ type Order = {
 /** Ação em curso no modal: cancelamento (caixa aberto) ou devolução (caixa fechado). */
 type ActionMode = 'cancel' | 'return';
 
+/** Página do Histórico (paginação keyset no servidor): linhas + cursor da próxima página. */
+type OrdersPage = { rows: Order[]; nextCursor: string | null };
+/** Período aplicado à lista (AAAA-MM-DD; vazio = sem borda). */
+type Range = { from: string; to: string };
+
+/** Quantas vendas por página / clique em "Mostrar mais". */
+const PAGE_SIZE = 20;
+
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+/** Data local no formato AAAA-MM-DD (para os atalhos de período). */
+function ymd(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+/** Monta a query de `GET /orders?scope=all` com cursor e período. */
+function ordersQuery(cursor: string | null, r: Range): string {
+  const p = new URLSearchParams({ scope: 'all', limit: String(PAGE_SIZE) });
+  if (cursor) p.set('cursor', cursor);
+  if (r.from) p.set('from', r.from);
+  if (r.to) p.set('to', r.to);
+  return `/orders?${p.toString()}`;
+}
 
 /** Rótulo da forma de pagamento (cai no código bruto se vier algo fora do enum). */
 function methodLabel(m: string): string {
@@ -54,6 +75,12 @@ export default function VendasPage() {
   const [ready, setReady] = useState(false);
   const [openSessionId, setOpenSessionId] = useState<string | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  // Período aplicado à lista + campos do formulário (só entram em vigor no "Aplicar").
+  const [range, setRange] = useState<Range>({ from: '', to: '' });
+  const [fromInput, setFromInput] = useState('');
+  const [toInput, setToInput] = useState('');
   const [error, setError] = useState<string | null>(null);
   // Modal de ação: qual venda e se é cancelamento ou devolução.
   const [action, setAction] = useState<{ id: string; mode: ActionMode } | null>(null);
@@ -64,10 +91,44 @@ export default function VendasPage() {
   // Job de reimpressão: novo objeto a cada clique força o efeito a disparar de novo.
   const [printJob, setPrintJob] = useState<{ order: Order; key: number } | null>(null);
 
-  async function loadOrders() {
-    // scope=all: histórico completo (inclui vendas de caixas já fechados), para
-    // permitir a devolução de vendas fora do caixa aberto.
-    setOrders(await apiGet<Order[]>('/orders?scope=all'));
+  // scope=all: histórico completo (inclui vendas de caixas já fechados), para
+  // permitir a devolução de vendas fora do caixa aberto. Paginado por cursor: a 1ª
+  // página substitui a lista; "Mostrar mais" anexa as seguintes.
+  async function loadOrders(r: Range = range) {
+    const page = await apiGet<OrdersPage>(ordersQuery(null, r));
+    setOrders(page.rows);
+    setNextCursor(page.nextCursor);
+  }
+
+  async function loadMore() {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    setError(null);
+    try {
+      const page = await apiGet<OrdersPage>(ordersQuery(nextCursor, range));
+      setOrders((prev) => [...prev, ...page.rows]);
+      setNextCursor(page.nextCursor);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  /** Aplica o período dos campos (recarrega do início). */
+  function aplicarPeriodo(r: Range) {
+    setRange(r);
+    setFromInput(r.from);
+    setToInput(r.to);
+    setError(null);
+    loadOrders(r).catch((e) => setError((e as Error).message));
+  }
+  /** Atalho de período: últimos `days` dias (0 = hoje) até hoje. */
+  function atalho(days: number) {
+    const to = new Date();
+    const from = new Date();
+    from.setDate(from.getDate() - days);
+    aplicarPeriodo({ from: ymd(from), to: ymd(to) });
   }
 
   useEffect(() => {
@@ -180,6 +241,70 @@ export default function VendasPage() {
       {/* Tela online-only (ADR-012 (c)): offline mostra o aviso de rede, não o erro cru. */}
       <OfflineNotice />
 
+      {/* Filtro de período — bordas no fuso da loja (UTC-3), igual ao relatório. */}
+      <div className="mb-4 rounded-2xl bg-white p-3 shadow-sm">
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="flex gap-1">
+            <button
+              onClick={() => atalho(0)}
+              className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"
+            >
+              Hoje
+            </button>
+            <button
+              onClick={() => atalho(6)}
+              className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"
+            >
+              7 dias
+            </button>
+            <button
+              onClick={() => atalho(29)}
+              className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"
+            >
+              30 dias
+            </button>
+          </div>
+          <label className="flex flex-col text-xs text-gray-500">
+            De
+            <input
+              type="date"
+              value={fromInput}
+              onChange={(e) => setFromInput(e.target.value)}
+              className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
+            />
+          </label>
+          <label className="flex flex-col text-xs text-gray-500">
+            Até
+            <input
+              type="date"
+              value={toInput}
+              onChange={(e) => setToInput(e.target.value)}
+              className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
+            />
+          </label>
+          <button
+            onClick={() => aplicarPeriodo({ from: fromInput, to: toInput })}
+            className="rounded-lg bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800"
+          >
+            Aplicar
+          </button>
+          {(range.from || range.to) && (
+            <button
+              onClick={() => aplicarPeriodo({ from: '', to: '' })}
+              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
+            >
+              Limpar
+            </button>
+          )}
+        </div>
+        {(range.from || range.to) && (
+          <p className="mt-2 text-xs text-gray-500">
+            Mostrando {range.from ? `de ${range.from}` : 'desde o início'}{' '}
+            {range.to ? `até ${range.to}` : 'até hoje'}.
+          </p>
+        )}
+      </div>
+
       {!caixaOpen && online && (
         <div className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800 ring-1 ring-amber-200">
           Caixa fechado — você pode consultar e reimprimir. Para cancelar ou devolver,{' '}
@@ -196,7 +321,9 @@ export default function VendasPage() {
       <div className="space-y-3">
         {orders.length === 0 ? (
           <div className="rounded-2xl bg-white p-6 text-center text-gray-400 shadow-sm">
-            Nenhuma venda registrada ainda.
+            {range.from || range.to
+              ? 'Nenhuma venda no período selecionado.'
+              : 'Nenhuma venda registrada ainda.'}
           </div>
         ) : (
           orders.map((o) => {
@@ -343,6 +470,19 @@ export default function VendasPage() {
           })
         )}
       </div>
+
+      {/* Paginação keyset: só aparece quando o servidor sinaliza mais páginas. */}
+      {nextCursor && (
+        <div className="mt-4 flex justify-center">
+          <button
+            onClick={loadMore}
+            disabled={loadingMore}
+            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-60"
+          >
+            {loadingMore ? 'Carregando…' : 'Mostrar mais'}
+          </button>
+        </div>
+      )}
 
       {/* Documento de reimpressão: oculto na tela, aparece só na impressão. */}
       {printJob && (

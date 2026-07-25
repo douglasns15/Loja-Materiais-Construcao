@@ -3379,3 +3379,43 @@ estoque só baixa ao confirmar a venda).
 
 > Validado pelo Owner (2026-07-25): "tudo certo, testado e aprovado". Fatia **UI.PDV.Layout
 > CONCLUÍDA**. Commits `0dff33a` + `4c2d2ca`.
+
+---
+
+### UI.Vendas.Paginacao — Histórico paginado (cursor) + filtro de período (2026-07-25)
+
+Ponto levantado pelo Owner: telas que abrem com muita informação carregada tendem a ficar lentas
+conforme a base cresce — o **Histórico de Vendas** já pesava. Diagnóstico: `GET /orders?scope=all`
+trazia as **100 vendas mais recentes com todos os itens e pagamentos de uma vez** e a tela montava
+todas juntas; além disso, passando de 100 as mais antigas **sumiam sem aviso** (mesma classe do
+`take:100`). **Sem migration, sem tocar no schema.**
+
+**API (`GET /orders?scope=all`).** Passou a **paginar por cursor keyset** (não `OFFSET`, que degrada
+com a base) em `createdAt desc, id desc`. Aceita `limit` (default 20, teto 50), `cursor` (opaco,
+`<ISO>|<id>`) e `from`/`to` (AAAA-MM-DD, bordas no fuso da loja UTC-3 — mesmo critério do relatório).
+Responde `{ rows, nextCursor }` (`nextCursor: null` na última página); `take: limit + 1` detecta se há
+próxima página. O **scope padrão** (vendas do caixa aberto) segue devolvendo array cru (contrato
+antigo preservado; único consumidor web é o `scope=all`).
+
+**Web (`/vendas`).** Filtro de período (atalhos **Hoje / 7 dias / 30 dias** + **De/Até** + Aplicar/
+Limpar) e botão **"Mostrar mais"** que anexa a próxima página (some quando `nextCursor` é `null`).
+Após cancelar/devolver, recarrega da 1ª página com o período em vigor. Mensagem de lista vazia
+adapta ao filtro.
+
+| Teste | Resultado |
+|---|---|
+| Typecheck API (`tsc --noEmit`) | ✅ |
+| Typecheck web (`tsc --noEmit`) | ✅ |
+| Build web (`next build`) | ✅ 18 rotas (`/vendas` 3.34 → 4.5 kB) |
+| Deploy API (⚠️ obrigatório: mudou o formato de `scope=all` p/ `{rows,nextCursor}`) | ✅ `609bd385` |
+| Deploy web | ✅ `d23c8e7f` (subiu o chunk novo de `/vendas`) |
+| Smoke — API health / `scope=all` sem token / web `/login` | ✅ 200 / 401 / 200 |
+| E2E Owner — 20 por página + "Mostrar mais" anexa; some no fim | ⏭️ pendente |
+| E2E Owner — filtro Hoje/7d/30d e De/Até | ⏭️ pendente |
+| E2E Owner — cancelar/devolver recarrega a lista | ⏭️ pendente |
+
+> **NO AR, aguardando E2E do Owner.** ⚠️ O deploy da API foi **obrigatório** mesmo sem migration: o
+> formato de `scope=all` mudou (array → `{ rows, nextCursor }`), então o web novo só funciona contra a
+> API nova — por isso os dois subiram juntos (API `609bd385` + web `d23c8e7f`). Próximo passo natural
+> (mesmo padrão): busca no servidor para os cadastros grandes (Produtos/Clientes) e revisar tetos dos
+> Relatórios.

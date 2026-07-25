@@ -3,7 +3,26 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-25 — **PDV redesenhado em duas colunas + botão "Limpar carrinho"
+> **Última atualização:** 2026-07-25 — **Histórico de Vendas paginado (cursor keyset) + filtro de
+> período — NO AR, aguardando E2E do Owner.** Ponto do Owner: telas que abrem
+> com muita informação carregada ficam lentas conforme a base cresce — o **Histórico de Vendas** já
+> pesava. Diagnóstico: `GET /orders?scope=all` trazia as **100 vendas mais recentes com todos os itens
+> e pagamentos de uma vez** e a tela montava tudo junto; passando de 100, as antigas **sumiam sem
+> aviso** (mesma classe do `take:100`). **Sem migration, sem tocar no schema.** **API:** `scope=all`
+> agora **pagina por cursor keyset** (não `OFFSET`, que degrada com a base) em `createdAt desc, id
+> desc` — aceita `limit` (default 20, teto 50), `cursor` opaco e `from`/`to` (AAAA-MM-DD, fuso da loja
+> UTC-3, mesmo critério do relatório) e responde `{ rows, nextCursor }`; `take: limit+1` sinaliza a
+> próxima página. O scope padrão (caixa aberto) segue array cru (contrato antigo preservado). **Web
+> (`/vendas`):** filtro de período (atalhos **Hoje / 7d / 30d** + **De/Até** + Aplicar/Limpar) e botão
+> **"Mostrar mais"** que anexa a próxima página (some no fim); cancelar/devolver recarrega da 1ª
+> página. Gates: typecheck API ✅, typecheck web ✅, build web (18 rotas, `/vendas` 3.34 → 4.5 kB) ✅.
+> ⚠️ **Deploy da API foi obrigatório** mesmo sem migration (o formato de `scope=all` mudou: array →
+> `{ rows, nextCursor }`), então API e web subiram juntos. **NO AR:** API `609bd385` + web `d23c8e7f`;
+> smoke ✅ (health 200, `scope=all` sem token 401, `/login` 200). **Falta:** E2E do Owner. Ver
+> "UI.Vendas.Paginacao" no registro. **Próximo passo natural (mesmo padrão):** busca no servidor para
+> os cadastros grandes (Produtos/Clientes) e revisar os tetos dos Relatórios.
+>
+> **Antes:** 2026-07-25 — **PDV redesenhado em duas colunas + botão "Limpar carrinho"
 > — NO AR e VALIDADO pelo Owner.** Duas fatias de UX do Owner no PDV, **100% de apresentação (sem
 > migration, sem API, sem core; nenhuma lógica de venda tocada)**. **(1) Layout em duas colunas:** a
 > tela saiu da coluna única estreita (`max-w-3xl` → `max-w-6xl`) para um PDV de duas colunas no

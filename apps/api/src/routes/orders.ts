@@ -16,13 +16,49 @@ import { requireActiveTenant, requireAuth } from '../middleware/auth';
 const orders = new Hono<Env>();
 orders.use('*', requireAuth);
 
+/** Tamanho de página do Histórico: default 20, teto 50 (evita respostas gigantes). */
+const ORDERS_PAGE_DEFAULT = 20;
+const ORDERS_PAGE_MAX = 50;
+
+/**
+ * Converte o intervalo AAAA-MM-DD (opcional) em filtro Prisma de data, nas bordas do
+ * fuso da loja (Brasil, UTC-3): `from` às 00:00 e `to` às 23:59:59.999 do dia. Mesmo
+ * critério do relatório de vendas (coerência entre as duas telas).
+ */
+function buildDateFilter(from?: string, to?: string): { gte?: Date; lte?: Date } | undefined {
+  const filter: { gte?: Date; lte?: Date } = {};
+  if (from && /^\d{4}-\d{2}-\d{2}$/.test(from)) filter.gte = new Date(`${from}T00:00:00.000-03:00`);
+  if (to && /^\d{4}-\d{2}-\d{2}$/.test(to)) filter.lte = new Date(`${to}T23:59:59.999-03:00`);
+  return filter.gte || filter.lte ? filter : undefined;
+}
+
+/**
+ * Cursor de paginação keyset (não OFFSET, que degrada conforme a base cresce): a
+ * posição é o par `createdAt|id` da última linha entregue. Opaco para o cliente, que
+ * só o devolve na próxima página. Formato texto simples: `<ISO>|<id>`.
+ */
+function encodeCursor(o: { createdAt: Date; id: string }): string {
+  return `${o.createdAt.toISOString()}|${o.id}`;
+}
+function decodeCursor(cursor: string): { createdAt: Date; id: string } | null {
+  const sep = cursor.indexOf('|');
+  if (sep <= 0) return null;
+  const createdAt = new Date(cursor.slice(0, sep));
+  const id = cursor.slice(sep + 1);
+  if (Number.isNaN(createdAt.getTime()) || !id) return null;
+  return { createdAt, id };
+}
+
 /**
  * Lista as vendas com itens, pagamentos e status (mais recentes primeiro).
- *  - `?scope=all`: últimas vendas do tenant em qualquer sessão (base do Histórico
- *    de Vendas; inclui o estado do caixa de cada venda para decidir entre cancelar
- *    e devolver). Sem exigir caixa aberto.
+ *  - `?scope=all`: Histórico de Vendas — **paginado por cursor** (keyset em
+ *    `createdAt desc, id desc`). Aceita `limit`, `cursor` (opaco) e `from`/`to`
+ *    (AAAA-MM-DD, fuso da loja) e responde `{ rows, nextCursor }` (`nextCursor: null`
+ *    na última página). Inclui o estado do caixa de cada venda para decidir entre
+ *    cancelar e devolver. Sem exigir caixa aberto.
  *  - padrão: vendas do caixa atualmente aberto do operador (base do cancelamento,
- *    restrito ao caixa aberto). Sem caixa aberto, retorna lista vazia.
+ *    restrito ao caixa aberto). Sem caixa aberto, retorna lista vazia (array cru,
+ *    contrato antigo preservado).
  */
 orders.get('/', async (c) => {
   const tenantId = getTenantId(c);
@@ -37,17 +73,45 @@ orders.get('/', async (c) => {
     const prisma = createPrismaClient(connectionString);
 
     if (scope === 'all') {
+      // Página: `limit` saneado (1..MAX) e cursor keyset opcional.
+      const limitRaw = Number(c.req.query('limit'));
+      const limit =
+        Number.isFinite(limitRaw) && limitRaw > 0
+          ? Math.min(Math.floor(limitRaw), ORDERS_PAGE_MAX)
+          : ORDERS_PAGE_DEFAULT;
+
+      const dateFilter = buildDateFilter(c.req.query('from'), c.req.query('to'));
+      const cursorParam = c.req.query('cursor');
+      const cursor = cursorParam ? decodeCursor(cursorParam) : null;
+
+      // Keyset: só linhas ANTES do cursor em (createdAt desc, id desc). O filtro de
+      // período (createdAt gte/lte) e o cursor coexistem por AND.
+      const keyset = cursor
+        ? {
+            OR: [
+              { createdAt: { lt: cursor.createdAt } },
+              { createdAt: cursor.createdAt, id: { lt: cursor.id } },
+            ],
+          }
+        : {};
+
+      // `take: limit + 1`: a linha extra só serve para saber se há próxima página.
       const list = await prisma.order.findMany({
-        where: { tenantId },
-        orderBy: { createdAt: 'desc' },
-        take: 100,
+        where: { tenantId, ...(dateFilter ? { createdAt: dateFilter } : {}), ...keyset },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: limit + 1,
         include: {
           items: true,
           payments: true,
           cashSession: { select: { id: true, closedAt: true } },
         },
       });
-      return c.json({ ok: true, data: list });
+
+      const hasMore = list.length > limit;
+      const rows = hasMore ? list.slice(0, limit) : list;
+      const last = rows[rows.length - 1];
+      const nextCursor = hasMore && last ? encodeCursor(last) : null;
+      return c.json({ ok: true, data: { rows, nextCursor } });
     }
 
     // ADR-018: caixa por loja — lista as vendas do caixa aberto da loja (sem filtro por `userId`).
