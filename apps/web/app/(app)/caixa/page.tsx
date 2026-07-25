@@ -9,14 +9,17 @@ import { useOnline } from '@/lib/useOnline';
 import { StoreDisabledNotice } from '@/components/StoreDisabledNotice';
 import { OfflineSalesNotice } from '@/components/OfflineSalesNotice';
 import { MoneyInput } from '@/components/MoneyInput';
+import { CashCounter } from '@/components/CashCounter';
 
 type CashSession = {
   id: string;
   openedAt: string;
   openingAmount: string;
   openedByName: string | null;
-  cashInflow: number;
-  cashMovementsNet: number; // entradas − saídas de caixa (devolução, sangria, suprimento)
+  cashInflow: number; // vendas em dinheiro (entrada)
+  cashMovementsIn: number; // suprimentos (entrada), bruto ≥ 0
+  cashMovementsOut: number; // devoluções/sangrias/despesas (saída), bruto ≥ 0
+  cashMovementsNet: number; // entradas − saídas de caixa (mantido p/ compatibilidade)
   expectedAmount: number;
 };
 
@@ -37,6 +40,8 @@ export default function CaixaPage() {
   const [closing, setClosing] = useState('');
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
+  // Contador de cédulas/moedas aberto para qual campo (null = fechado).
+  const [counter, setCounter] = useState<'open' | 'close' | null>(null);
 
   async function load() {
     try {
@@ -143,23 +148,46 @@ export default function CaixaPage() {
                   <dd className="text-right">{session.openedByName}</dd>
                 </>
               )}
+
+              {/* Mini-DRE do caixa: abertura, o que ENTROU e o que SAIU até o esperado. */}
               <dt className="text-gray-500">Valor de abertura</dt>
               <dd className="text-right">{BRL(session.openingAmount)}</dd>
-              <dt className="text-gray-500">Entradas em dinheiro</dt>
-              <dd className="text-right">{BRL(session.cashInflow)}</dd>
-              {session.cashMovementsNet !== 0 && (
+
+              <dt className="text-gray-500">+ Vendas em dinheiro</dt>
+              <dd className="text-right text-green-700">{BRL(session.cashInflow)}</dd>
+
+              {session.cashMovementsIn > 0 && (
                 <>
-                  <dt className="text-gray-500">Devoluções / saídas</dt>
-                  <dd className="text-right text-red-600">{BRL(session.cashMovementsNet)}</dd>
+                  <dt className="text-gray-500">+ Suprimentos</dt>
+                  <dd className="text-right text-green-700">{BRL(session.cashMovementsIn)}</dd>
                 </>
               )}
-              <dt className="font-medium">Esperado no caixa</dt>
-              <dd className="text-right font-medium">{BRL(session.expectedAmount)}</dd>
+
+              {session.cashMovementsOut > 0 && (
+                <>
+                  <dt className="text-gray-500">− Devoluções / saídas</dt>
+                  <dd className="text-right text-red-600">− {BRL(session.cashMovementsOut)}</dd>
+                </>
+              )}
+
+              <dt className="mt-1 border-t border-gray-100 pt-2 font-medium">Esperado no caixa</dt>
+              <dd className="mt-1 border-t border-gray-100 pt-2 text-right font-medium">
+                {BRL(session.expectedAmount)}
+              </dd>
             </dl>
           </div>
 
           <form onSubmit={onClose} className="space-y-3 rounded-2xl bg-white p-5 shadow-sm">
-            <h2 className="font-medium">Fechar caixa</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="font-medium">Fechar caixa</h2>
+              <button
+                type="button"
+                onClick={() => setCounter('close')}
+                className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                🪙 Usar contador
+              </button>
+            </div>
             <MoneyInput
               placeholder="Valor contado (R$)"
               value={closing}
@@ -219,7 +247,17 @@ export default function CaixaPage() {
             <div className="mb-1 inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1 text-sm font-medium text-gray-600">
               <span className="h-2 w-2 rounded-full bg-gray-400" /> Caixa fechado
             </div>
-            <h2 className="font-medium">Abrir caixa</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="font-medium">Abrir caixa</h2>
+              <button
+                type="button"
+                onClick={() => setCounter('open')}
+                disabled={!online}
+                className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+              >
+                🪙 Usar contador
+              </button>
+            </div>
             <MoneyInput
               placeholder="Valor de abertura (R$)"
               value={opening}
@@ -236,6 +274,17 @@ export default function CaixaPage() {
             </button>
           </form>
         </>
+      )}
+
+      {counter && (
+        <CashCounter
+          title={counter === 'open' ? 'Contar abertura' : 'Contar a gaveta'}
+          onConfirm={(total) => {
+            if (counter === 'open') setOpening(String(total));
+            else setClosing(String(total));
+          }}
+          onClose={() => setCounter(null)}
+        />
       )}
     </div>
   );

@@ -16,6 +16,10 @@ import {
   calcAverageTicket,
   withPaymentShare,
   netCashMovements,
+  grossCashMovements,
+  sumCashCount,
+  BRL_COIN_VALUES,
+  BRL_BILL_VALUES,
   classifyHttpOutcome,
   classifyNetworkError,
   shouldRetry,
@@ -285,6 +289,69 @@ describe('netCashMovements', () => {
     const net = netCashMovements([{ type: 'EXPENSE', amount: 74 }]);
     // abertura 100 + vendas 74 + devolução -74 = 100
     expect(calcExpectedCash(100, [74, net])).toBe(100);
+  });
+});
+
+describe('grossCashMovements', () => {
+  it('separa Σ INCOME (suprimentos) de Σ EXPENSE (devoluções/sangrias)', () => {
+    expect(
+      grossCashMovements([
+        { type: 'INCOME', amount: 50 }, // suprimento
+        { type: 'EXPENSE', amount: 30 }, // sangria
+        { type: 'EXPENSE', amount: 74 }, // devolução
+      ]),
+    ).toEqual({ income: 50, expense: 104 });
+  });
+
+  it('sem movimentações → tudo zero', () => {
+    expect(grossCashMovements([])).toEqual({ income: 0, expense: 0 });
+  });
+
+  it('income − expense reconstrói netCashMovements', () => {
+    const ms = [
+      { type: 'INCOME' as const, amount: 50 },
+      { type: 'EXPENSE' as const, amount: 74 },
+    ];
+    const { income, expense } = grossCashMovements(ms);
+    expect(Number((income - expense).toFixed(2))).toBe(netCashMovements(ms));
+  });
+});
+
+describe('sumCashCount', () => {
+  it('soma moedas e cédulas: Σ (valor × quantidade)', () => {
+    // 3×0,05 + 2×0,10 + 1×0,25 + 4×1,00 + 2×50 + 1×100 = 0,15+0,20+0,25+4+100+100
+    expect(
+      sumCashCount({ 0.05: 3, 0.1: 2, 0.25: 1, 1: 4, 50: 2, 100: 1 }),
+    ).toBe(204.6);
+  });
+
+  it('soma em centavos — sem erro de ponto flutuante em 0,05 × 3', () => {
+    expect(sumCashCount({ 0.05: 3 })).toBe(0.15);
+    // 0.1 + 0.2 = 0.30000000000000004 em ponto flutuante ingênuo
+    expect(sumCashCount({ 0.1: 1, 0.2: 1 })).toBe(0.3);
+  });
+
+  it('contagem vazia ou toda zerada → 0', () => {
+    expect(sumCashCount({})).toBe(0);
+    expect(sumCashCount({ 1: 0, 100: 0 })).toBe(0);
+  });
+
+  it('quantidade inválida (negativa, fracionária, não finita) conta como 0', () => {
+    expect(sumCashCount({ 100: -3 })).toBe(0);
+    expect(sumCashCount({ 100: NaN })).toBe(0);
+    // fracionária é truncada (não existe meia peça): 2,5 → 2 cédulas de 10 = 20
+    expect(sumCashCount({ 10: 2.5 })).toBe(20);
+  });
+
+  it('valores das denominações do Real batem com as constantes', () => {
+    expect([...BRL_COIN_VALUES]).toEqual([0.05, 0.1, 0.25, 0.5, 1]);
+    expect([...BRL_BILL_VALUES]).toEqual([2, 5, 10, 20, 50, 100, 200]);
+    // gaveta cheia: 1 de cada denominação
+    const oneOfEach = Object.fromEntries(
+      [...BRL_COIN_VALUES, ...BRL_BILL_VALUES].map((v) => [v, 1]),
+    );
+    // 0,05+0,10+0,25+0,50+1 + 2+5+10+20+50+100+200 = 1,90 + 387 = 388,90
+    expect(sumCashCount(oneOfEach)).toBe(388.9);
   });
 });
 

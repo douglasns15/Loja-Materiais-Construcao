@@ -106,6 +106,53 @@ export function netCashMovements(movements: CashMovementLike[]): number {
   return Number(total.toFixed(2));
 }
 
+/**
+ * Totais **brutos** das movimentações de caixa, cada um ≥ 0: `income` = Σ INCOME
+ * (suprimentos) e `expense` = Σ EXPENSE (devoluções, sangrias, despesas).
+ *
+ * Complementa `netCashMovements` (= income − expense) para exibir **entradas e
+ * saídas separadas** no cartão do caixa (a "mini-DRE"), em vez de só o líquido —
+ * assim o operador enxerga o que entrou e o que saiu, não apenas o saldo.
+ */
+export function grossCashMovements(
+  movements: CashMovementLike[],
+): { income: number; expense: number } {
+  let income = 0;
+  let expense = 0;
+  for (const m of movements) {
+    if (m.type === 'INCOME') income += m.amount;
+    else expense += m.amount;
+  }
+  return { income: Number(income.toFixed(2)), expense: Number(expense.toFixed(2)) };
+}
+
+/** Valores (em reais) das moedas do Real em circulação, para o contador de gaveta. */
+export const BRL_COIN_VALUES = [0.05, 0.1, 0.25, 0.5, 1] as const;
+/** Valores (em reais) das cédulas do Real em circulação, para o contador de gaveta. */
+export const BRL_BILL_VALUES = [2, 5, 10, 20, 50, 100, 200] as const;
+
+/**
+ * Soma o total de uma contagem física da gaveta (contador de cédulas e moedas):
+ * Σ (valor da peça × quantidade). `counts` mapeia o valor da peça em reais
+ * (ex.: `0.5`, `100`) para a quantidade contada.
+ *
+ * Só peças inteiras contam: quantidade ausente, negativa, fracionária ou não
+ * finita vira 0 (não existe meia moeda). A soma é feita em **centavos** para
+ * evitar o erro clássico de ponto flutuante (ex.: `0,05 × 3 = 0,15000000002`).
+ * Retorna reais com 2 casas.
+ */
+export function sumCashCount(counts: Record<number, number>): number {
+  let cents = 0;
+  for (const [value, qty] of Object.entries(counts)) {
+    const denom = Number(value);
+    if (!Number.isFinite(denom) || denom <= 0) continue;
+    if (!Number.isFinite(qty) || qty <= 0) continue;
+    const n = Math.floor(qty);
+    cents += Math.round(denom * 100) * n;
+  }
+  return Number((cents / 100).toFixed(2));
+}
+
 // =============================================================================
 // VENDA (Sale / PDV)
 // =============================================================================

@@ -3,7 +3,31 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-24 — **UX da Nova Venda (marca na busca + edição de quantidade no
+> **Última atualização:** 2026-07-25 — **Caixa mais claro: contador de cédulas/moedas +
+> mini-DRE entradas × saídas (CX.Contador + CX.DRE) — CÓDIGO PRONTO, aguardando deploy + E2E do
+> Owner.** Duas ideias do Owner para o Caixa, na mesma sessão. **(1) Contador de cédulas e moedas:** botão
+> **"Usar contador"** abre um painel para digitar as **quantidades** de cada moeda (0,05 · 0,10 · 0,25 ·
+> 0,50 · 1,00) e cédula (2 · 5 · 10 · 20 · 50 · 100 · 200) do Real, soma ao vivo e joga o **total no
+> campo** — na **abertura** e no **fechamento** (contar a gaveta). **100% de UI, sem migration, sem API.**
+> Função pura `sumCashCount` (regra 2): soma **em centavos** (sem erro de ponto flutuante — `0,05 × 3 =
+> 0,15`); quantidade inválida conta 0; constantes `BRL_COIN_VALUES`/`BRL_BILL_VALUES` como fonte única.
+> Componente `apps/web/components/CashCounter.tsx` (modal, Esc/clique-fora fecham, subtotal por linha,
+> "Limpar"/"Usar total") plugado nos dois campos via `MoneyInput`. **(2) Mini-DRE do caixa:** o cartão do
+> caixa aberto mostrava só o que ENTROU (as saídas ficavam numa linha líquida, escondida quando zero).
+> Agora vira um **extrato**: `Valor de abertura` · `+ Vendas em dinheiro` · `+ Suprimentos` (se houver) ·
+> `− Devoluções / saídas` (se houver) · `= Esperado no caixa`, com entradas em verde e saídas em vermelho.
+> Nova função pura `grossCashMovements` (Σ INCOME e Σ EXPENSE brutos, ≥ 0) ao lado de `netCashMovements`
+> (o líquido segue mandando na conta do esperado); `/cash-sessions/current` passa a devolver
+> `cashMovementsIn`/`cashMovementsOut`. **Sem migration.** ⚠️ **A DRE exige deploy da API** (o front
+> degrada com segurança sem ela: mostra abertura + vendas + esperado e omite as linhas novas). Gates: core
+> **164/164** Vitest (+8: 5 do contador, 3 da DRE) ✅, typecheck API ✅, typecheck web ✅, build web (18
+> rotas, `/caixa` 4.42 kB) ✅. **Falta:** deploy (API **obrigatório** p/ a DRE + web) + E2E do Owner. Ver
+> "CX.Contador" e "CX.DRE" no registro. **Próximo passo (par natural futuro):** botão de **Sangria /
+> Suprimento** (retirar/repor dinheiro no meio do dia) — a DRE já tem as linhas prontas para ele.
+> **Direções abertas:** go-live (Supabase Pro/CORS/SMTP, ver `docs/plano-producao.md`), nova
+> funcionalidade, ou endurecimento.
+>
+> **Antes:** 2026-07-24 — **UX da Nova Venda (marca na busca + edição de quantidade no
 > carrinho) — NO AR e VALIDADO pelo Owner.** Duas melhorias do Owner no PDV, **100% de UI (sem migration,
 > sem tocar na API)**: (1) a linha de busca do produto mostra `popular · marca · SKU` — as ramificações de
 > rolo/barra e embalagem/par já traziam as três partes; só a **comum** (unidade única) estava sem a **marca**,

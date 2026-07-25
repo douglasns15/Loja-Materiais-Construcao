@@ -3140,3 +3140,108 @@ migration e sem tocar na API**:
 **E2E do Owner — ✅ VALIDADO (2026-07-24):** "está tudo certo" (marca na busca; ajuste de Qtd no carrinho
 com − / + e digitação; trava de estoque respeitada). Publicado no git pelo Owner. **Fatia UI.PDV.UX
 CONCLUÍDA.**
+
+---
+
+### CX.Contador — Contador de cédulas e moedas no Caixa (2026-07-25)
+
+Ideia do Owner: um botão **"Usar contador"** no Caixa que abre um painel para digitar as **quantidades**
+de cada moeda e cédula do Real; o painel soma tudo ao vivo e joga o **total no campo de valor**.
+Disponível **na abertura** (Valor de abertura) **e no fechamento** (Valor contado — contar a gaveta, onde é
+mais útil). **100% de UI: sem migration, sem tocar na API** — o total é calculado no cliente e o
+`@nexoloja/core` é bundlado no build do web.
+
+- **Denominações (fonte única no core):** moedas `BRL_COIN_VALUES = [0,05 · 0,10 · 0,25 · 0,50 · 1,00]`;
+  cédulas `BRL_BILL_VALUES = [2 · 5 · 10 · 20 · 50 · 100 · 200]`. (Correção do pedido original: "0,5" do
+  Owner era a moeda de **5 centavos**, `0,05`.)
+- **Cálculo puro `sumCashCount` (regra 2 do CLAUDE.md):** soma **em centavos** para não ter erro de ponto
+  flutuante (`0,05 × 3 = 0,15`, e `0,10 + 0,20 = 0,30`, não `0,30000…`). Quantidade ausente/negativa/
+  fracionária/não finita conta como **0** (não existe meia peça; fracionária é truncada). Retorna reais com
+  2 casas.
+- **Componente reutilizável `apps/web/components/CashCounter.tsx`:** modal (Esc fecha, clique fora fecha),
+  linha por denominação com **subtotal ao vivo**, **total** no rodapé, botões **Limpar** e **Usar total**.
+  Quantidade aceita só dígitos (inteiro ≥ 0).
+- **Integração `caixa/page.tsx`:** botão 🪙 **Usar contador** ao lado de "Abrir caixa" e de "Fechar caixa";
+  o total confirmado vai para o `MoneyInput` correspondente (valor canônico), que segue formatando em BRL.
+  O botão da abertura respeita o estado offline (desabilitado sem conexão, como o campo).
+
+**Core — Vitest (`sumCashCount`, +5 casos)**
+
+| Caso | Esperado | Resultado |
+|---|---|---|
+| Soma moedas + cédulas (3×0,05 + 2×0,10 + 1×0,25 + 4×1 + 2×50 + 1×100) | R$ 204,60 | ✅ |
+| Sem erro de ponto flutuante (`0,05×3`; `0,10+0,20`) | 0,15 / 0,30 | ✅ |
+| Contagem vazia / toda zerada | 0 | ✅ |
+| Quantidade inválida (negativa, NaN, fracionária truncada `10×2,5`) | 0 / 0 / 20 | ✅ |
+| Constantes batem + gaveta com 1 de cada denominação | R$ 388,90 | ✅ |
+| **Total do core** | **161/161** (era 156) | ✅ |
+
+**Gates**
+
+| Gate | Resultado |
+|---|---|
+| Core (`vitest run`) | ✅ 161/161 (3 arquivos) |
+| Typecheck web (`tsc --noEmit`) | ✅ exit 0 |
+| Build web (`next build`) | ✅ 18 rotas, `/caixa` 4.37 kB (185 kB First Load) |
+| Migration | ✅ nenhuma |
+| Deploy de API | ✅ não necessário (mudança só de cliente) |
+| Deploy web | ⏭️ pendente (`npm run deploy` do web) |
+
+**E2E do Owner — ⏭️ pendente** (tela protegida por login): abrir `/caixa` → **Usar contador** na abertura →
+digitar quantidades → conferir o total no painel e no campo → mesmo fluxo no fechamento. Deploy do web
+também pendente de aprovação.
+
+---
+
+### CX.DRE — Mini-DRE do caixa: entradas × saídas (2026-07-25)
+
+Ideia do Owner: o cartão do caixa aberto mostrava só **o que entrou** (vendas em dinheiro); as saídas
+ficavam numa única linha **líquida** ("Devoluções / saídas"), e ainda **escondida quando zero**. Agora o
+cartão é um **extrato** claro:
+
+```
+  Valor de abertura ..........  R$ 100,00
++ Vendas em dinheiro .........  R$ 370,00   (verde)
++ Suprimentos ................  R$  --      (verde, só se houver)
+− Devoluções / saídas ........  R$  38,20   (vermelho, só se houver)
+─────────────────────────────────────────
+= Esperado no caixa ..........  R$ 431,80
+```
+
+- **Core (`grossCashMovements`):** totais **brutos** das movimentações — `income` (Σ INCOME, suprimentos)
+  e `expense` (Σ EXPENSE, devoluções/sangrias/despesas), cada um ≥ 0. Fica **ao lado** de `netCashMovements`
+  (o líquido continua mandando na conta do **esperado** — nada muda no cálculo financeiro nem no
+  fechamento). Reconstrução testada: `income − expense === netCashMovements`.
+- **API (`GET /cash-sessions/current`):** helper `cashMovementsNet` virou `cashMovementsSummary` (uma
+  leitura só devolve `{ net, income, expense }`); a rota passa a expor `cashMovementsIn` e
+  `cashMovementsOut` além do `cashMovementsNet` (mantido). `/close` usa `.net` — **fechamento inalterado**.
+  **Sem migration** (opera sobre `CashMovement`/ADR-006 existentes).
+- **Web (`caixa/page.tsx`):** cartão reescrito como extrato (entradas verdes, saídas vermelhas, linha do
+  esperado destacada). ⚠️ **Degrada com segurança sem o deploy da API**: se `cashMovementsIn/Out` vierem
+  `undefined` (API antiga), as linhas de suprimento/saída só não aparecem — mostra abertura + vendas +
+  esperado, sem quebrar.
+
+**Core — Vitest (`grossCashMovements`, +3 casos)**
+
+| Caso | Esperado | Resultado |
+|---|---|---|
+| Separa Σ INCOME de Σ EXPENSE (50 supr. / 30 sangria + 74 devol.) | `{income:50, expense:104}` | ✅ |
+| Sem movimentações | `{income:0, expense:0}` | ✅ |
+| `income − expense` reconstrói `netCashMovements` | igual | ✅ |
+| **Total do core** | **164/164** (era 161) | ✅ |
+
+**Gates**
+
+| Gate | Resultado |
+|---|---|
+| Core (`vitest run`) | ✅ 164/164 |
+| Typecheck API (`tsc --noEmit`) | ✅ |
+| Typecheck web (`tsc --noEmit`) | ✅ exit 0 |
+| Build web (`next build`) | ✅ 18 rotas, `/caixa` 4.42 kB |
+| Migration | ✅ nenhuma |
+| Deploy de API | ⏭️ **obrigatório** p/ a DRE aparecer (front degrada sem ela) |
+| Deploy web | ⏭️ pendente |
+
+**E2E do Owner — ⏭️ pendente** (após deploy API+web): com uma **devolução** no caixa de hoje, abrir
+`/caixa` e conferir a linha vermelha "− Devoluções / saídas" e o "Esperado" batendo com abertura + vendas −
+saídas.
