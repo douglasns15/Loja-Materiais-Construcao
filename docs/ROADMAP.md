@@ -4,7 +4,7 @@
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
 > **Última atualização:** 2026-07-25 — **PDV: pagamento dividido (mais de uma forma na mesma
-> venda) — CÓDIGO PRONTO, gates verdes, aguardando deploy do web + E2E do Owner.** Pedido do Owner:
+> venda) — NO AR e VALIDADO pelo Owner (E2E 7/7).** Pedido do Owner:
 > uma venda pode ter **mais de uma forma de pagamento** (parte cartão, parte dinheiro…). **Achado que
 > barateou a entrega:** o backend **já era multi-parcela** desde a Fase 2 — `Payment` é tabela
 > 1-para-muitos com `Order`, `createSaleSchema.payments` já é `z.array(...).min(1)` e `POST /orders` já
@@ -19,10 +19,13 @@
 > centavos). UI: lista de parcelas (adicionar/remover, valor com `MoneyInput`, placeholder = "resto"),
 > painel **Falta / Troco / Pago** ao vivo, **Concluir** só com `pago ≥ total`; comprovante imprime
 > **uma linha por forma** + troco; reimpressão passa **todas** as formas (antes só a 1ª). Gates: core
-> **173/173** (+9) ✅, typecheck web+API ✅, build web (18 rotas, `/venda` 13.4 kB) ✅. **Falta:** deploy
-> do web + smoke + E2E do Owner. Ver "UI.PDV.SplitPayment" no registro. **Próximo passo:** direções
-> abertas — go-live (Supabase Pro/CORS/SMTP, ver `docs/plano-producao.md`), nova funcionalidade, ou
-> endurecimento.
+> **173/173** (+9) ✅, typecheck web+API ✅, build web (18 rotas, `/venda` 13.4 kB) ✅. **NO AR:** commit
+> `4c0cd19`; web `7e2e2873`; smoke `/login` 200 ✅. **E2E do Owner VALIDADO 7/7 (2026-07-25):** venda
+> normal (1 forma) intacta, dividido cartão+dinheiro, troco no dividido, caixa bate (troco fora do
+> caixa), trava de cartão/PIX acima do total, acréscimo pela 1ª forma, reimpressão com todas as formas.
+> **Fatia UI.PDV.SplitPayment CONCLUÍDA.** Ver "UI.PDV.SplitPayment" no registro. **Próximo passo:**
+> direções abertas — go-live (Supabase Pro/CORS/SMTP, ver `docs/plano-producao.md`), nova
+> funcionalidade, ou endurecimento.
 >
 > **Antes:** 2026-07-25 — **Caixa mais claro: contador de cédulas/moedas +
 > mini-DRE entradas × saídas (CX.Contador + CX.DRE) — CÓDIGO PRONTO, aguardando deploy + E2E do

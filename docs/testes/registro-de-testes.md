@@ -3331,5 +3331,18 @@ só habilita com `pago ≥ total` (e trava se cartão/PIX passar do total). Comp
 imprime **uma linha por forma** + troco. Reimpressão no Histórico passa **todas** as formas (antes só
 a 1ª). Histórico já concatenava as formas.
 
-> **Falta:** deploy do **web** + smoke + **E2E do Owner** (login com senha do Owner). Sem deploy de
-> API (a API já aceitava `payments[]`).
+**Deploy + E2E do Owner (2026-07-25)**
+
+| Passo | Resultado |
+|---|---|
+| Commit `4c0cd19` + deploy web (`npm run deploy`) → Version `7e2e2873` | ✅ |
+| Smoke `/login` | ✅ 200 |
+| E2E 1 — venda normal (1 forma) segue idêntica; troco no dinheiro | ✅ |
+| E2E 2 — dividido cartão + dinheiro (2ª forma assume o resto; Falta/Pago) | ✅ |
+| E2E 3 — troco no dividido (dinheiro acima do resto) + comprovante por forma | ✅ |
+| E2E 4 — caixa fecha batendo (troco fora do caixa, só o dinheiro líquido) | ✅ |
+| E2E 5 — trava: cartão/PIX acima do total bloqueia Concluir | ✅ |
+| E2E 6 — acréscimo (ADR-016) precificado pela 1ª forma (principal) | ✅ |
+| E2E 7 — reimpressão no Histórico com todas as formas | ✅ |
+
+> Fatia **UI.PDV.SplitPayment CONCLUÍDA** — sem deploy de API (a API já aceitava `payments[]`).
