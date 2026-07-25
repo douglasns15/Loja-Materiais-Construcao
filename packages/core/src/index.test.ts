@@ -18,6 +18,7 @@ import {
   netCashMovements,
   grossCashMovements,
   sumCashCount,
+  paymentStatus,
   BRL_COIN_VALUES,
   BRL_BILL_VALUES,
   classifyHttpOutcome,
@@ -352,6 +353,85 @@ describe('sumCashCount', () => {
     );
     // 0,05+0,10+0,25+0,50+1 + 2+5+10+20+50+100+200 = 1,90 + 387 = 388,90
     expect(sumCashCount(oneOfEach)).toBe(388.9);
+  });
+});
+
+describe('paymentStatus (pagamento dividido)', () => {
+  it('uma forma que cobre o total: pago = total, nada falta, sem troco', () => {
+    const s = paymentStatus(100, [{ method: 'PIX', amount: 100 }]);
+    expect(s).toEqual({ paid: 100, remaining: 0, change: 0, sufficient: true });
+  });
+
+  it('soma várias formas até cobrir o total', () => {
+    const s = paymentStatus(100, [
+      { method: 'CREDIT_CARD', amount: 40 },
+      { method: 'PIX', amount: 35 },
+      { method: 'CASH', amount: 25 },
+    ]);
+    expect(s.paid).toBe(100);
+    expect(s.remaining).toBe(0);
+    expect(s.change).toBe(0);
+    expect(s.sufficient).toBe(true);
+  });
+
+  it('pagamento parcial: falta o restante e ainda não é suficiente', () => {
+    const s = paymentStatus(100, [{ method: 'DEBIT_CARD', amount: 60 }]);
+    expect(s.paid).toBe(60);
+    expect(s.remaining).toBe(40);
+    expect(s.sufficient).toBe(false);
+    expect(s.change).toBe(0);
+  });
+
+  it('troco só sai do DINHEIRO: R$50 crédito + R$60 dinheiro num total de R$100 → troco R$10', () => {
+    const s = paymentStatus(100, [
+      { method: 'CREDIT_CARD', amount: 50 },
+      { method: 'CASH', amount: 60 },
+    ]);
+    expect(s.paid).toBe(110);
+    expect(s.remaining).toBe(0);
+    expect(s.change).toBe(10);
+    expect(s.sufficient).toBe(true);
+  });
+
+  it('excesso sem dinheiro não vira troco (cartão/PIX não devolvem)', () => {
+    const s = paymentStatus(100, [{ method: 'CREDIT_CARD', amount: 110 }]);
+    expect(s.change).toBe(0);
+    expect(s.sufficient).toBe(true);
+  });
+
+  it('troco nunca passa do dinheiro recebido', () => {
+    // total 100: 90 crédito + 15 dinheiro ⇒ excedente 5, dinheiro 15 ⇒ troco 5 (não 15)
+    const s = paymentStatus(100, [
+      { method: 'CREDIT_CARD', amount: 90 },
+      { method: 'CASH', amount: 15 },
+    ]);
+    expect(s.change).toBe(5);
+  });
+
+  it('conta em centavos — sem erro de ponto flutuante', () => {
+    const s = paymentStatus(0.3, [
+      { method: 'CASH', amount: 0.1 },
+      { method: 'CASH', amount: 0.2 },
+    ]);
+    expect(s.paid).toBe(0.3);
+    expect(s.remaining).toBe(0);
+    expect(s.sufficient).toBe(true);
+  });
+
+  it('parcelas inválidas ou ≤ 0 contam como 0', () => {
+    const s = paymentStatus(50, [
+      { method: 'CASH', amount: 50 },
+      { method: 'PIX', amount: -10 },
+      { method: 'CASH', amount: Number.NaN },
+    ]);
+    expect(s.paid).toBe(50);
+    expect(s.sufficient).toBe(true);
+    expect(s.change).toBe(0);
+  });
+
+  it('sem parcelas: nada pago, falta o total inteiro', () => {
+    const s = paymentStatus(80, []);
+    expect(s).toEqual({ paid: 0, remaining: 80, change: 0, sufficient: false });
   });
 });
 

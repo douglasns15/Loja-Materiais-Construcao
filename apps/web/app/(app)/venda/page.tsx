@@ -20,6 +20,7 @@ import {
   isClosedPrimary,
   isValidMeterStep,
   pairAvailableQty,
+  paymentStatus,
   productMatchesQuery,
   resolveClosedSale,
   resolveSaleUnit,
@@ -131,6 +132,11 @@ type CartItem = {
 
 /** Rótulo curto de uma unidade (sem o parêntese): "Metro (m)" → "Metro"; "Rolo" → "Rolo". */
 const unitShort = (u: UnitType) => unitTypeLabels[u].replace(/\s*\(.*\)$/, '');
+/** Uma parcela de pagamento na tela: a forma + o valor digitado (string do MoneyInput). */
+type PayLine = { method: PaymentMethod; amount: string };
+/** Parcela já resolvida/persistida: forma + valor numérico (as parcelas somam o total). */
+type PaidPart = { method: PaymentMethod; amount: number };
+
 type View =
   | { kind: 'review' }
   | {
@@ -138,13 +144,35 @@ type View =
       total: number;
       discount: number;
       change: number;
-      method: PaymentMethod;
+      /** Parcelas efetivamente cobradas (somam o total) — venda pode ter mais de uma forma. */
+      payments: PaidPart[];
       items: CartItem[];
       date: string;
       /** `true` quando a venda foi salva na fila offline (pendente de sincronização), ADR-011. */
       pending?: boolean;
     }
   | { kind: 'quote'; total: number; discount: number; items: CartItem[]; date: string };
+
+/**
+ * Resolve as parcelas digitadas em valores numéricos, na ordem da tela. Uma parcela com valor
+ * **vazio** assume automaticamente o que **falta** para fechar o total (o "resto") — é o que deixa
+ * o caso comum (uma forma só) sem digitação: a única linha vazia vira o total inteiro. Havendo mais
+ * de uma linha vazia, só a primeira recebe o resto; as demais ficam em 0 (o operador as preenche).
+ * O valor do DINHEIRO aqui é o **recebido** (pode passar do que falta → gera troco); a conta do
+ * troco e do "pago/falta" fica com `paymentStatus` (core), e a persistência ajusta o dinheiro para
+ * as parcelas somarem exatamente o total (o troco nunca vai para o caixa).
+ */
+function resolvePaymentLines(lines: PayLine[], total: number): PaidPart[] {
+  const typed = lines.map((l) => (l.amount.trim() === '' ? null : Math.max(0, Number(l.amount) || 0)));
+  const typedSum = typed.reduce<number>((acc, v) => acc + (v ?? 0), 0);
+  let remaining = Math.max(0, Number((total - typedSum).toFixed(2)));
+  return lines.map((l, i) => {
+    if (typed[i] != null) return { method: l.method, amount: typed[i] as number };
+    const give = remaining;
+    remaining = 0;
+    return { method: l.method, amount: Number(give.toFixed(2)) };
+  });
+}
 
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -193,6 +221,28 @@ function Summary({ items, total, discount }: { items: CartItem[]; total: number;
   );
 }
 
+/** Formas de pagamento de uma venda (uma linha por forma) + troco, reusado na revisão e na conclusão. */
+function PaymentsLines({ payments, change }: { payments: PaidPart[]; change: number }) {
+  return (
+    <>
+      {payments.map((p, i) => (
+        <div key={`${p.method}-${i}`} className="flex justify-between text-sm text-gray-500">
+          <span>{payments.length > 1 ? `Pagamento · ${PAYMENT_METHOD_LABELS[p.method]}` : 'Pagamento'}</span>
+          <span>
+            {payments.length > 1 ? BRL(p.amount) : PAYMENT_METHOD_LABELS[p.method]}
+          </span>
+        </div>
+      ))}
+      {change > 0 && (
+        <div className="flex justify-between text-sm">
+          <span>Troco</span>
+          <span>{BRL(change)}</span>
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function VendaPage() {
   const { me, offlineSales } = useMe();
   const online = useOnline();
@@ -209,8 +259,10 @@ export default function VendaPage() {
   const [selected, setSelected] = useState('');
   const [productSearch, setProductSearch] = useState('');
   const [qty, setQty] = useState('1');
-  const [method, setMethod] = useState<PaymentMethod>('CASH');
-  const [received, setReceived] = useState('');
+  // Pagamento dividido: uma ou mais parcelas (forma + valor). A 1ª forma é a "principal" que
+  // precifica o carrinho (ADR-016). O valor vazio numa linha assume o "resto" (ver resolvePaymentLines),
+  // então o caso comum — uma forma só — não exige digitar nada.
+  const [payments, setPayments] = useState<PayLine[]>([{ method: 'CASH', amount: '' }]);
   const [discount, setDiscount] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -294,39 +346,44 @@ export default function VendaPage() {
 
   const discountValue = Math.max(0, Number(discount) || 0);
 
+  // Forma PRINCIPAL (ADR-016): a 1ª parcela precifica o carrinho. Numa venda dividida, é ela que
+  // define se os produtos com acréscimo saem no preço de débito/crédito (decisão do Owner, opção 1).
+  const primaryMethod: PaymentMethod = payments[0]?.method ?? 'CASH';
+
   /**
-   * Carrinho **reprecificado pela forma de pagamento** (ADR-016) — o preço do cartão só existe
-   * aqui, derivado, nunca congelado na linha. Trocar o método reprecifica tudo de uma vez:
+   * Carrinho **reprecificado pela forma principal** (ADR-016) — o preço do cartão só existe aqui,
+   * derivado, nunca congelado na linha. Trocar a forma principal reprecifica tudo de uma vez:
    * carrinho, totais, comprovante e o payload da venda saem todos deste mesmo array, então não
    * existe caminho em que a tela mostre um preço e o servidor cobre outro.
    */
   const pricedCart = useMemo(
     () =>
       cart.map((c) => {
-        const extra = method === 'DEBIT_CARD' ? c.surchargeDebit : method === 'CREDIT_CARD' ? c.surchargeCredit : 0;
+        const extra =
+          primaryMethod === 'DEBIT_CARD' ? c.surchargeDebit : primaryMethod === 'CREDIT_CARD' ? c.surchargeCredit : 0;
         return extra > 0
           ? { ...c, unitPrice: Number((c.unitPrice + extra).toFixed(4)) }
           : c;
       }),
-    [cart, method],
+    [cart, primaryMethod],
   );
-  /** Quanto o carrinho inteiro subiu por causa da forma de pagamento (0 = nenhum acréscimo). */
+  /** Quanto o carrinho inteiro subiu por causa da forma principal (0 = nenhum acréscimo). */
   const surchargeTotal = useMemo(
     () =>
       Number(
         cart
           .reduce((acc, c) => {
             const extra =
-              method === 'DEBIT_CARD'
+              primaryMethod === 'DEBIT_CARD'
                 ? c.surchargeDebit
-                : method === 'CREDIT_CARD'
+                : primaryMethod === 'CREDIT_CARD'
                   ? c.surchargeCredit
                   : 0;
             return acc + extra * c.quantity;
           }, 0)
           .toFixed(2),
       ),
-    [cart, method],
+    [cart, primaryMethod],
   );
   /**
    * Total do carrinho calculado sobre **exatamente os itens que serão enviados** (pares já
@@ -341,13 +398,60 @@ export default function VendaPage() {
         cartToSaleItems().map((i) => ({ quantity: i.quantity, unitPrice: i.unitPrice })),
         { discountAmount: discountValue },
       ),
-    // `method` entra nas deps porque o acréscimo por forma de pagamento (ADR-016) reprecifica
+    // `primaryMethod` entra nas deps porque o acréscimo por forma de pagamento (ADR-016) reprecifica
     // o carrinho — sem isso, trocar Dinheiro → Crédito mostraria o total antigo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [cart, discountValue, method],
+    [cart, discountValue, primaryMethod],
   );
   const discountTooHigh = discountValue > totals.subtotal;
-  const change = method === 'CASH' && received ? Number(received) - totals.total : 0;
+
+  // --- Recebimento (pagamento dividido) ---
+  // Parcelas resolvidas (vazio = resto) e a situação do recebimento (pago/falta/troco), pela mesma
+  // função pura do servidor. O DINHEIRO nas parcelas é o RECEBIDO (pode passar do total → troco).
+  const resolvedPayments = useMemo(() => resolvePaymentLines(payments, totals.total), [payments, totals.total]);
+  const payStatus = useMemo(
+    () => paymentStatus(totals.total, resolvedPayments),
+    [totals.total, resolvedPayments],
+  );
+  // Soma do que NÃO é dinheiro (cartão/PIX não dão troco): se passar do total, é erro do operador —
+  // só o dinheiro pode exceder (vira troco). Trava a conclusão até ajustar.
+  const nonCashSum = useMemo(
+    () =>
+      Number(
+        resolvedPayments.reduce((acc, p) => acc + (p.method === 'CASH' ? 0 : p.amount), 0).toFixed(2),
+      ),
+    [resolvedPayments],
+  );
+  const nonCashOverpaid = nonCashSum > totals.total + 0.005;
+  const change = payStatus.change;
+  const hasCashLine = payments.some((p) => p.method === 'CASH');
+
+  /**
+   * Parcelas a PERSISTIR (somam exatamente o total): cartão/PIX como digitado e o dinheiro fecha
+   * o resto (`total − Σ não-dinheiro`). Assim o troco nunca entra no caixa — o Caixa soma
+   * `Payment.amount` de CASH e precisa do dinheiro LÍQUIDO da venda (invariante de sempre).
+   */
+  function buildPersistedPayments(): PaidPart[] {
+    const nonCash = resolvedPayments
+      .filter((p) => p.method !== 'CASH' && p.amount > 0)
+      .map((p) => ({ method: p.method, amount: Number(p.amount.toFixed(2)) }));
+    const nonCashTotal = Number(nonCash.reduce((acc, p) => acc + p.amount, 0).toFixed(2));
+    const cashApplied = Number((totals.total - nonCashTotal).toFixed(2));
+    return cashApplied > 0 ? [...nonCash, { method: 'CASH' as PaymentMethod, amount: cashApplied }] : nonCash;
+  }
+
+  function setLine(index: number, patch: Partial<PayLine>) {
+    setPayments((prev) => prev.map((l, i) => (i === index ? { ...l, ...patch } : l)));
+  }
+  function addLine() {
+    // Sugere uma forma ainda não usada (senão repete a última) e deixa o valor vazio = "resto".
+    const used = new Set(payments.map((p) => p.method));
+    const next = (Object.keys(PAYMENT_METHOD_LABELS) as PaymentMethod[]).find((m) => !used.has(m));
+    setPayments((prev) => [...prev, { method: next ?? prev[prev.length - 1]?.method ?? 'CASH', amount: '' }]);
+  }
+  function removeLine(index: number) {
+    setPayments((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)));
+  }
 
   // Busca do PDV: filtra por nome, nome popular, fabricante ou SKU (função pura de packages/core).
   const filteredProducts = useMemo(
@@ -468,7 +572,7 @@ export default function VendaPage() {
   function itemTooltip(i: CartItem): string {
     // Taxa da forma de pagamento escolhida (ADR-016): a margem mostrada é a REAL, já
     // descontada a maquininha. Sem taxa cadastrada, é a margem de sempre.
-    const fee = cardFeePercentFor(cardFees ?? {}, method);
+    const fee = cardFeePercentFor(cardFees ?? {}, primaryMethod);
     const feeNote = fee > 0 ? ` (líq. da taxa de ${fee}%)` : '';
     // Par (ADR-015): preço e custo da linha já são a soma dos dois lados, então a margem
     // do par sai direto (é a margem do conjunto, que é o que interessa ao operador).
@@ -769,6 +873,14 @@ export default function VendaPage() {
       setError('O desconto não pode ser maior que o subtotal.');
       return;
     }
+    if (nonCashOverpaid) {
+      setError('O valor em cartão/PIX passou do total. Só o dinheiro gera troco.');
+      return;
+    }
+    if (!payStatus.sufficient) {
+      setError(`Pagamento insuficiente: falta ${BRL(payStatus.remaining)}.`);
+      return;
+    }
     setView({ kind: 'review' });
   }
 
@@ -777,12 +889,14 @@ export default function VendaPage() {
    *  quando a rede voltar. Offline sem o recurso → orienta nota manual (não enfileira). */
   async function onConfirmar() {
     setError(null);
-    const localChange = method === 'CASH' && received ? Math.max(0, Number(received) - totals.total) : 0;
+    // Parcelas que somam o total (troco já fora); o troco (`change`) é o excedente do dinheiro
+    // recebido, calculado no core, e é só exibição — a API devolveria 0 porque o enviado fecha o total.
+    const persistedPayments = buildPersistedPayments();
     const doneBase = {
       kind: 'done' as const,
       total: totals.total,
       discount: discountValue,
-      method,
+      payments: persistedPayments,
       // Snapshot já reprecificado (ADR-016) — o comprovante imprime o que foi cobrado.
       items: pricedCart,
       date: new Date().toLocaleString('pt-BR'),
@@ -804,7 +918,7 @@ export default function VendaPage() {
         cashSessionId: sessionId,
         // Pares viram dois itens com preço rateado + `pairGroup` (ADR-015).
         items: cartToSaleItems(),
-        payments: [{ method, amount: totals.total }],
+        payments: persistedPayments,
         ...(discountValue > 0 ? { discountAmount: discountValue } : {}),
       };
       const parsed = createSaleSchema.safeParse(sale);
@@ -828,7 +942,7 @@ export default function VendaPage() {
         // Persiste a baixa no cache do catálogo (ADR-012 CS-2): ao remontar offline, o estoque
         // exibido já reflete as vendas offline anteriores (último conhecido − baixas otimistas).
         void cacheProducts(next);
-        setView({ ...doneBase, change: localChange, pending: true });
+        setView({ ...doneBase, change, pending: true });
         // O indicador "X pendentes" atualiza sozinho: `enqueueMutation` notifica o pub/sub da
         // `outbox`, e o contexto de sync reatualiza os contadores (aqui e no chip do topo).
       } catch (e) {
@@ -843,7 +957,7 @@ export default function VendaPage() {
     const payload = {
       // Pares viram dois itens com preço rateado + `pairGroup` (ADR-015).
       items: cartToSaleItems(),
-      payments: [{ method, amount: totals.total }],
+      payments: persistedPayments,
       ...(discountValue > 0 ? { discountAmount: discountValue } : {}),
     };
     const parsed = createSaleSchema.safeParse(payload);
@@ -853,8 +967,10 @@ export default function VendaPage() {
     }
     setBusy(true);
     try {
-      const res = await apiPost<{ change: number }>('/orders', parsed.data);
-      setView({ ...doneBase, change: res.change });
+      // A API devolve `change` = pago − total = 0 (as parcelas fecham o total); o troco de exibição
+      // é o `change` local, do dinheiro recebido a mais.
+      await apiPost<{ change: number }>('/orders', parsed.data);
+      setView({ ...doneBase, change });
       await loadProducts();
     } catch (e) {
       setError((e as Error).message);
@@ -895,7 +1011,7 @@ export default function VendaPage() {
     setView(null);
     setError(null);
     setCart([]);
-    setReceived('');
+    setPayments([{ method: 'CASH', amount: '' }]);
     setDiscount('');
   }
 
@@ -937,16 +1053,7 @@ export default function VendaPage() {
             Confira antes de confirmar
           </p>
           <Summary items={pricedCart} total={totals.total} discount={discountValue} />
-          <div className="flex justify-between text-sm text-gray-500">
-            <span>Pagamento</span>
-            <span>{PAYMENT_METHOD_LABELS[method]}</span>
-          </div>
-          {method === 'CASH' && received !== '' && (
-            <div className="flex justify-between text-sm">
-              <span>Troco</span>
-              <span>{BRL(Math.max(0, change))}</span>
-            </div>
-          )}
+          <PaymentsLines payments={buildPersistedPayments()} change={change} />
           <p className="text-xs text-gray-400">
             O estoque só é baixado ao confirmar. Você pode voltar e editar sem afetar nada.
           </p>
@@ -995,20 +1102,7 @@ export default function VendaPage() {
             </p>
           )}
           <Summary items={view.items} total={view.total} discount={view.discount} />
-          {view.kind === 'done' && (
-            <>
-              <div className="flex justify-between text-sm text-gray-500">
-                <span>Pagamento</span>
-                <span>{PAYMENT_METHOD_LABELS[view.method]}</span>
-              </div>
-              {view.change > 0 && (
-                <div className="flex justify-between text-sm">
-                  <span>Troco</span>
-                  <span>{BRL(view.change)}</span>
-                </div>
-              )}
-            </>
-          )}
+          {view.kind === 'done' && <PaymentsLines payments={view.payments} change={view.change} />}
 
           <div className="flex items-center gap-2 border-t border-gray-200 pt-3">
             <span className="text-sm text-gray-500">Imprimir:</span>
@@ -1065,7 +1159,7 @@ export default function VendaPage() {
           total={view.total}
           discount={view.discount}
           date={view.date}
-          method={view.kind === 'done' ? view.method : undefined}
+          payments={view.kind === 'done' ? view.payments : undefined}
           change={view.kind === 'done' ? view.change : undefined}
         />
       </div>
@@ -1354,10 +1448,10 @@ export default function VendaPage() {
                     )}
                     {/* Acréscimo por forma de pagamento (ADR-016): sempre visível na linha —
                         o operador precisa saber por que o preço não é o de tabela. */}
-                    {(method === 'DEBIT_CARD' ? i.surchargeDebit : method === 'CREDIT_CARD' ? i.surchargeCredit : 0) > 0 && (
+                    {(primaryMethod === 'DEBIT_CARD' ? i.surchargeDebit : primaryMethod === 'CREDIT_CARD' ? i.surchargeCredit : 0) > 0 && (
                       <span className="block text-xs text-amber-600">
-                        +{BRL(method === 'DEBIT_CARD' ? i.surchargeDebit : i.surchargeCredit)}/un no{' '}
-                        {method === 'DEBIT_CARD' ? 'débito' : 'crédito'}
+                        +{BRL(primaryMethod === 'DEBIT_CARD' ? i.surchargeDebit : i.surchargeCredit)}/un no{' '}
+                        {primaryMethod === 'DEBIT_CARD' ? 'débito' : 'crédito'}
                       </span>
                     )}
                   </td>
@@ -1420,42 +1514,99 @@ export default function VendaPage() {
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-3 rounded-2xl bg-white p-4 shadow-sm">
-          <label className="block text-sm font-medium">Forma de pagamento</label>
-          {/* Trocar a forma de pagamento reprecifica o carrinho na hora (ADR-016). O aviso
-              explica a diferença antes de o cliente perguntar. */}
+          <div className="flex items-center justify-between">
+            <label className="block text-sm font-medium">Formas de pagamento</label>
+            <button
+              type="button"
+              onClick={addLine}
+              className="text-sm font-medium text-blue-600 hover:text-blue-700"
+            >
+              + Adicionar forma
+            </button>
+          </div>
+
+          {/* A 1ª forma (principal) reprecifica o carrinho (ADR-016). O aviso explica a diferença
+              de preço antes de o cliente perguntar; numa venda dividida, deixa claro quem manda no preço. */}
           {surchargeTotal > 0 && (
             <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
               Acréscimo de <strong>{BRL(surchargeTotal)}</strong> no{' '}
-              {method === 'DEBIT_CARD' ? 'débito' : 'crédito'} — já incluído nos preços acima.
+              {primaryMethod === 'DEBIT_CARD' ? 'débito' : 'crédito'} — já incluído nos preços acima.
+              {payments.length > 1 && ' A 1ª forma define o preço.'}
             </p>
           )}
-          <select
-            value={method}
-            onChange={(e) => setMethod(e.target.value as PaymentMethod)}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2"
-          >
-            {(Object.keys(PAYMENT_METHOD_LABELS) as PaymentMethod[]).map((m) => (
-              <option key={m} value={m}>
-                {PAYMENT_METHOD_LABELS[m]}
-              </option>
+
+          {/* Uma linha por forma. O valor vazio assume o "resto" (placeholder mostra quanto) — então
+              uma forma só não exige digitar nada. No dinheiro, o valor é o RECEBIDO (gera troco). */}
+          <div className="space-y-2">
+            {payments.map((line, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <select
+                  value={line.method}
+                  onChange={(e) => setLine(i, { method: e.target.value as PaymentMethod })}
+                  className="min-w-0 flex-1 rounded-lg border border-gray-300 px-2 py-2"
+                >
+                  {(Object.keys(PAYMENT_METHOD_LABELS) as PaymentMethod[]).map((m) => (
+                    <option key={m} value={m}>
+                      {PAYMENT_METHOD_LABELS[m]}
+                      {payments.length > 1 && i === 0 ? ' (principal)' : ''}
+                    </option>
+                  ))}
+                </select>
+                <MoneyInput
+                  value={line.amount}
+                  onChange={(v) => setLine(i, { amount: v })}
+                  placeholder={BRL(resolvedPayments[i]?.amount ?? 0)}
+                  className="w-28 rounded-lg border border-gray-300 px-2 py-2 text-right"
+                />
+                {payments.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => removeLine(i)}
+                    className="shrink-0 rounded-lg px-2 py-2 text-lg leading-none text-gray-400 hover:text-red-600"
+                    aria-label="Remover forma"
+                    title="Remover forma"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
             ))}
-          </select>
-          {method === 'CASH' && (
-            <div>
-              <label className="block text-sm font-medium">Valor recebido</label>
-              <MoneyInput
-                value={received}
-                onChange={setReceived}
-                placeholder={BRL(totals.total)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2"
-              />
-              {received !== '' && (
-                <div className="mt-2 flex items-center justify-between rounded-lg bg-green-50 px-3 py-2 ring-1 ring-green-200">
-                  <span className="text-sm font-medium text-green-800">Troco</span>
-                  <span className="text-2xl font-bold text-green-700">{BRL(Math.max(0, change))}</span>
-                </div>
-              )}
-            </div>
+          </div>
+          {hasCashLine && (
+            <p className="text-xs text-gray-400">
+              No dinheiro, informe o valor recebido — o troco é calculado automaticamente.
+            </p>
+          )}
+
+          {/* Situação do recebimento: falta, troco ou pago exato. */}
+          <div className="rounded-lg bg-gray-50 px-3 py-2 ring-1 ring-gray-200">
+            {payStatus.remaining > 0 ? (
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-700">Falta receber</span>
+                <span className="text-lg font-bold text-gray-900">{BRL(payStatus.remaining)}</span>
+              </div>
+            ) : change > 0 ? (
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-green-800">Troco</span>
+                <span className="text-2xl font-bold text-green-700">{BRL(change)}</span>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-700">Pago</span>
+                <span className="text-lg font-bold text-gray-900">{BRL(payStatus.paid)}</span>
+              </div>
+            )}
+            {payments.length > 1 && (
+              <div className="mt-1 flex items-center justify-between text-xs text-gray-400">
+                <span>Total da venda</span>
+                <span>{BRL(totals.total)}</span>
+              </div>
+            )}
+          </div>
+          {nonCashOverpaid && (
+            <p className="text-xs text-red-600">
+              O valor em cartão/PIX passou do total. Ajuste as parcelas — só o dinheiro gera troco.
+            </p>
           )}
         </div>
 
@@ -1490,7 +1641,7 @@ export default function VendaPage() {
           <div className="mt-4 grid grid-cols-2 gap-2">
             <button
               onClick={onConcluir}
-              disabled={cart.length === 0 || discountTooHigh}
+              disabled={cart.length === 0 || discountTooHigh || !payStatus.sufficient || nonCashOverpaid}
               className="rounded-lg bg-gray-900 py-2 font-medium text-white hover:bg-gray-800 disabled:opacity-50"
             >
               Concluir venda

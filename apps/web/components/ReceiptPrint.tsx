@@ -16,6 +16,8 @@ export type Store = {
 
 export type ReceiptItem = { name: string; quantity: number; unitPrice: number };
 
+export type ReceiptPayment = { method: PaymentMethod; amount: number };
+
 type Props = {
   kind: 'sale' | 'quote';
   store: Store | null;
@@ -23,6 +25,9 @@ type Props = {
   total: number;
   date: string;
   discount?: number;
+  /** Formas de pagamento da venda (uma ou mais). Preferir sobre `method`. */
+  payments?: ReceiptPayment[];
+  /** Compat: uma forma só (usado antes do pagamento dividido). */
   method?: PaymentMethod;
   change?: number;
 };
@@ -35,10 +40,14 @@ const BRL = (v: number) =>
  * e só aparece na impressão (ver regras @media print em globals.css). O modelo
  * (80mm / A4) é controlado pelo atributo data-model, definido antes de imprimir.
  */
-export function ReceiptPrint({ kind, store, items, total, date, discount, method, change }: Props) {
+export function ReceiptPrint({ kind, store, items, total, date, discount, payments, method, change }: Props) {
   const isQuote = kind === 'quote';
   const subtotal = items.reduce((acc, i) => acc + i.unitPrice * i.quantity, 0);
   const hasDiscount = (discount ?? 0) > 0;
+  // Normaliza as formas de pagamento: usa `payments` (pagamento dividido) ou cai no `method` único.
+  const pays: ReceiptPayment[] =
+    payments && payments.length > 0 ? payments : method ? [{ method, amount: total }] : [];
+  const multiPay = pays.length > 1;
   return (
     <div id="print-area" data-model="80mm">
       <header className="rc-head">
@@ -95,12 +104,15 @@ export function ReceiptPrint({ kind, store, items, total, date, discount, method
         <span>{BRL(total)}</span>
       </div>
 
-      {!isQuote && method ? (
+      {!isQuote && pays.length > 0 ? (
         <div className="rc-pay">
-          <div>
-            <span>Pagamento</span>
-            <span>{PAYMENT_METHOD_LABELS[method]}</span>
-          </div>
+          {pays.map((p, idx) => (
+            <div key={idx}>
+              {/* Uma forma só: "Pagamento — Dinheiro". Dividido: uma linha por forma, com o valor. */}
+              <span>{multiPay ? PAYMENT_METHOD_LABELS[p.method] : 'Pagamento'}</span>
+              <span>{multiPay ? BRL(p.amount) : PAYMENT_METHOD_LABELS[p.method]}</span>
+            </div>
+          ))}
           {change && change > 0 ? (
             <div>
               <span>Troco</span>

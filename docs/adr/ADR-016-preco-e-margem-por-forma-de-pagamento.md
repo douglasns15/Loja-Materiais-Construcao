@@ -251,3 +251,26 @@ antes de o acréscimo ser decidido.
    margem, espelho offline do catálogo (`lib/catalog.ts`).
 5. Gates: typecheck API+web, build web, core verde.
 6. Deploy **API + web** (a API é obrigatória, ver acima), smoke, E2E do Owner.
+
+---
+
+## Adenda (2026-07-25) — Interação com o pagamento dividido
+
+Quando o PDV passou a aceitar **mais de uma forma de pagamento na mesma venda** (pagamento
+dividido), surgiu a pergunta: qual forma dispara o acréscimo por produto, já que o acréscimo é
+**por produto** mas o gatilho (débito/crédito) é um só?
+
+**Decisão do Owner (opção 1, "condição de pagamento"):** a **1ª forma** da lista é a **forma
+principal** e precifica **todo** o carrinho — cada produto ganha o acréscimo daquela forma, se
+tiver. As demais parcelas apenas **quitam** o total já fixado; não reprecificam nada. Isto **não
+muda o motor de preço** desta ADR: `pricedCart`/`totals` continuam derivando de uma única forma
+(agora `primaryMethod = payments[0].method` em vez de um `method` único). Descartado o modelo
+"item → forma de pagamento" (alocar cada item a uma parcela): não existe em POS profissional e é
+operacionalmente confuso para o balcão.
+
+**Invariante preservada:** as parcelas **persistidas somam exatamente o total** — cartão/PIX como
+digitado e o **dinheiro fecha o resto** (`total − Σ não-dinheiro`). O troco continua **fora do
+caixa** (o Caixa soma `Payment.amount` de `CASH` e precisa do dinheiro líquido da venda). A conta
+de "pago/falta/troco" é a função pura `paymentStatus` em `packages/core` (troco só do dinheiro,
+limitado ao recebido). **Sem migration, sem mudança de API** (o schema `createSaleSchema.payments`
+e o `POST /orders` já eram multi-parcela desde a Fase 2).

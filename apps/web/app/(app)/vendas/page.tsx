@@ -360,7 +360,11 @@ export default function VendasPage() {
           total={Number(printJob.order.total)}
           discount={Number(printJob.order.discountAmount)}
           date={new Date(printJob.order.createdAt).toLocaleString('pt-BR')}
-          method={printJob.order.payments[0]?.method as PaymentMethod | undefined}
+          // Pagamento dividido: reimprime TODAS as formas da venda (não só a primeira).
+          payments={printJob.order.payments.map((p) => ({
+            method: p.method as PaymentMethod,
+            amount: Number(p.amount),
+          }))}
         />
       )}
     </div>

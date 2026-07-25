@@ -3279,3 +3279,57 @@ Owner testou o contador/DRE no Demo e reportou 3 pontos. Correções (só web, s
 
 **Re-teste do Owner — ⏭️ pendente:** digitar quantidade de vários dígitos no contador sem perder o foco;
 fechar o caixa e ver o visual virar "fechado" na hora.
+
+---
+
+### UI.PDV.SplitPayment — Pagamento dividido (mais de uma forma na mesma venda) (2026-07-25)
+
+Pedido do Owner: uma venda pode ter **mais de uma forma de pagamento** (ex.: parte no cartão,
+parte no dinheiro). **Achado que barateou a entrega:** o backend **já era multi-parcela** desde a
+Fase 2 — `Payment` é tabela 1-para-muitos com `Order`, `createSaleSchema.payments` já é
+`z.array(...).min(1)` e `POST /orders` já cria N pagamentos, soma tudo, valida `pago ≥ total` e
+isola a parcela em dinheiro (CS-4). **Fatia 100% de UI + 1 função pura. Sem migration, sem deploy
+de API, sem tocar no schema compartilhado.**
+
+**Decisão de produto (ADR-016, adenda):** com acréscimo por forma de pagamento no carrinho, a **1ª
+forma** é a **principal** e precifica tudo (opção 1, "condição de pagamento" — validada com o Owner
+após comparar com POS profissionais). Modelo "item → forma" descartado.
+
+**Desenho da persistência (preserva a invariante do Caixa):** as parcelas gravadas **somam
+exatamente o total** — cartão/PIX como digitado e o **dinheiro fecha o resto**. O troco continua
+**fora do caixa** (o Caixa soma `Payment.amount` de `CASH` e precisa do dinheiro líquido). No PDV,
+o valor do dinheiro é o **recebido** (pode passar do total → troco); o valor **vazio** numa linha
+assume o "resto" (o caso comum de uma forma só não exige digitar nada).
+
+**Core (Vitest) — nova função pura `paymentStatus(total, payments)`**
+
+| O que foi testado | Resultado |
+|---|---|
+| Uma forma cobre o total (pago=total, falta=0, sem troco) | ✅ |
+| Soma de várias formas até cobrir o total | ✅ |
+| Pagamento parcial (falta o restante, não é suficiente) | ✅ |
+| Troco só do DINHEIRO (R$50 crédito + R$60 dinheiro, total R$100 → troco R$10) | ✅ |
+| Excesso sem dinheiro não vira troco (cartão/PIX não devolvem) | ✅ |
+| Troco nunca passa do dinheiro recebido | ✅ |
+| Conta em centavos (0,10 + 0,20 = 0,30 sem erro de float) | ✅ |
+| Parcelas inválidas ou ≤ 0 contam 0 | ✅ |
+| Sem parcelas (nada pago, falta o total) | ✅ |
+| **Total do core** | ✅ **173/173** (+9) |
+
+**Gates**
+
+| Teste | Resultado |
+|---|---|
+| Core Vitest | ✅ 173/173 |
+| Typecheck web (`tsc --noEmit`) | ✅ |
+| Typecheck API (`tsc --noEmit`) | ✅ |
+| Build web (`next build`) | ✅ 18 rotas (`/venda` 12.5 → 13.4 kB) |
+
+**Mudanças de UI:** PDV (`venda/page.tsx`) — lista de parcelas (adicionar/remover forma, valor com
+`MoneyInput`, placeholder mostra o "resto"), painel **"Falta / Troco / Pago"** ao vivo, **Concluir**
+só habilita com `pago ≥ total` (e trava se cartão/PIX passar do total). Comprovante (`ReceiptPrint`)
+imprime **uma linha por forma** + troco. Reimpressão no Histórico passa **todas** as formas (antes só
+a 1ª). Histórico já concatenava as formas.
+
+> **Falta:** deploy do **web** + smoke + **E2E do Owner** (login com senha do Owner). Sem deploy de
+> API (a API já aceitava `payments[]`).

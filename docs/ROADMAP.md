@@ -3,7 +3,28 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-25 — **Caixa mais claro: contador de cédulas/moedas +
+> **Última atualização:** 2026-07-25 — **PDV: pagamento dividido (mais de uma forma na mesma
+> venda) — CÓDIGO PRONTO, gates verdes, aguardando deploy do web + E2E do Owner.** Pedido do Owner:
+> uma venda pode ter **mais de uma forma de pagamento** (parte cartão, parte dinheiro…). **Achado que
+> barateou a entrega:** o backend **já era multi-parcela** desde a Fase 2 — `Payment` é tabela
+> 1-para-muitos com `Order`, `createSaleSchema.payments` já é `z.array(...).min(1)` e `POST /orders` já
+> cria N pagamentos, soma tudo e valida `pago ≥ total`. Fatia **100% de UI + 1 função pura: sem
+> migration, sem deploy de API, sem tocar no schema compartilhado.** **Decisão de produto (opção 1,
+> validada com o Owner após comparar com POS profissionais; adenda no ADR-016):** com acréscimo por
+> forma de pagamento no carrinho, a **1ª forma** é a **principal** e precifica tudo ("condição de
+> pagamento"); modelo "item → forma" descartado. **Persistência preserva a invariante do Caixa:** as
+> parcelas gravadas **somam exatamente o total** (cartão/PIX como digitado, o **dinheiro fecha o
+> resto**); o troco continua **fora do caixa** (o Caixa soma `Payment.amount` de `CASH` e precisa do
+> dinheiro líquido). Nova função pura `paymentStatus` (troco só do dinheiro, limitado ao recebido; em
+> centavos). UI: lista de parcelas (adicionar/remover, valor com `MoneyInput`, placeholder = "resto"),
+> painel **Falta / Troco / Pago** ao vivo, **Concluir** só com `pago ≥ total`; comprovante imprime
+> **uma linha por forma** + troco; reimpressão passa **todas** as formas (antes só a 1ª). Gates: core
+> **173/173** (+9) ✅, typecheck web+API ✅, build web (18 rotas, `/venda` 13.4 kB) ✅. **Falta:** deploy
+> do web + smoke + E2E do Owner. Ver "UI.PDV.SplitPayment" no registro. **Próximo passo:** direções
+> abertas — go-live (Supabase Pro/CORS/SMTP, ver `docs/plano-producao.md`), nova funcionalidade, ou
+> endurecimento.
+>
+> **Antes:** 2026-07-25 — **Caixa mais claro: contador de cédulas/moedas +
 > mini-DRE entradas × saídas (CX.Contador + CX.DRE) — CÓDIGO PRONTO, aguardando deploy + E2E do
 > Owner.** Duas ideias do Owner para o Caixa, na mesma sessão. **(1) Contador de cédulas e moedas:** botão
 > **"Usar contador"** abre um painel para digitar as **quantidades** de cada moeda (0,05 · 0,10 · 0,25 ·

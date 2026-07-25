@@ -153,6 +153,57 @@ export function sumCashCount(counts: Record<number, number>): number {
   return Number((cents / 100).toFixed(2));
 }
 
+/** Uma parcela de pagamento de uma venda: a forma e o valor recebido nela. */
+export interface SalePaymentLike {
+  method: PaymentMethodCode;
+  amount: number;
+}
+
+/** Situação do recebimento: quanto foi pago, quanto falta, troco e se já cobre o total. */
+export interface PaymentStatus {
+  /** Σ das parcelas (só valores positivos contam). */
+  paid: number;
+  /** Quanto ainda falta receber (0 quando o pago já cobre o total). */
+  remaining: number;
+  /** Troco a devolver — só sai do dinheiro (ver regra abaixo). */
+  change: number;
+  /** `true` quando o pago cobre o total (habilita concluir a venda). */
+  sufficient: boolean;
+}
+
+/**
+ * Situação do recebimento de uma venda paga em UMA OU MAIS formas (pagamento
+ * dividido — ver ADR-016 sobre a forma principal que precifica o carrinho). A API
+ * (`POST /orders`) já valida `pago ≥ total`; esta função é a mesma conta na tela e
+ * no comprovante, para o front nunca discordar do servidor.
+ *
+ * Regra do TROCO: só o DINHEIRO devolve troco (cartão/PIX não dão troco) e o troco
+ * nunca passa do dinheiro efetivamente recebido — é o excedente do pago sobre o
+ * total, limitado à soma das parcelas em dinheiro. Ex.: total R$100, R$50 no crédito
+ * + R$60 em dinheiro ⇒ pago R$110, troco R$10 (sai da gaveta). Contas em CENTAVOS
+ * para evitar o erro de ponto flutuante; parcelas inválidas ou ≤ 0 contam 0.
+ */
+export function paymentStatus(total: number, payments: SalePaymentLike[]): PaymentStatus {
+  const totalCents = Math.max(0, Math.round((Number.isFinite(total) ? total : 0) * 100));
+  let paidCents = 0;
+  let cashCents = 0;
+  for (const p of payments) {
+    if (!Number.isFinite(p.amount) || p.amount <= 0) continue;
+    const cents = Math.round(p.amount * 100);
+    paidCents += cents;
+    if (p.method === 'CASH') cashCents += cents;
+  }
+  const overpayCents = Math.max(0, paidCents - totalCents);
+  const changeCents = Math.min(overpayCents, cashCents);
+  const remainingCents = Math.max(0, totalCents - paidCents);
+  return {
+    paid: Number((paidCents / 100).toFixed(2)),
+    remaining: Number((remainingCents / 100).toFixed(2)),
+    change: Number((changeCents / 100).toFixed(2)),
+    sufficient: paidCents >= totalCents,
+  };
+}
+
 // =============================================================================
 // VENDA (Sale / PDV)
 // =============================================================================
