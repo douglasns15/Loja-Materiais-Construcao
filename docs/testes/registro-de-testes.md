@@ -3185,7 +3185,8 @@ mais útil). **100% de UI: sem migration, sem tocar na API** — o total é calc
 | Build web (`next build`) | ✅ 18 rotas, `/caixa` 4.37 kB (185 kB First Load) |
 | Migration | ✅ nenhuma |
 | Deploy de API | ✅ não necessário (mudança só de cliente) |
-| Deploy web | ⏭️ pendente (`npm run deploy` do web) |
+| Deploy web | ✅ `npm run deploy` — Version `c71d1af9` (junto com a CX.DRE) |
+| Smoke `/login` | ✅ 200 |
 
 **E2E do Owner — ⏭️ pendente** (tela protegida por login): abrir `/caixa` → **Usar contador** na abertura →
 digitar quantidades → conferir o total no painel e no campo → mesmo fluxo no fechamento. Deploy do web
@@ -3239,8 +3240,8 @@ cartão é um **extrato** claro:
 | Typecheck web (`tsc --noEmit`) | ✅ exit 0 |
 | Build web (`next build`) | ✅ 18 rotas, `/caixa` 4.42 kB |
 | Migration | ✅ nenhuma |
-| Deploy de API | ⏭️ **obrigatório** p/ a DRE aparecer (front degrada sem ela) |
-| Deploy web | ⏭️ pendente |
+| Deploy de API | ✅ `wrangler deploy` — Version `9063ed0e` (smoke: health 200, `/cash-sessions/current` s/ token 401) |
+| Deploy web | ✅ `npm run deploy` — Version `c71d1af9` |
 
 **E2E do Owner — ⏭️ pendente** (após deploy API+web): com uma **devolução** no caixa de hoje, abrir
 `/caixa` e conferir a linha vermelha "− Devoluções / saídas" e o "Esperado" batendo com abertura + vendas −

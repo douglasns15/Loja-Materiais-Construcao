@@ -21,7 +21,8 @@
 > `cashMovementsIn`/`cashMovementsOut`. **Sem migration.** ⚠️ **A DRE exige deploy da API** (o front
 > degrada com segurança sem ela: mostra abertura + vendas + esperado e omite as linhas novas). Gates: core
 > **164/164** Vitest (+8: 5 do contador, 3 da DRE) ✅, typecheck API ✅, typecheck web ✅, build web (18
-> rotas, `/caixa` 4.42 kB) ✅. **Falta:** deploy (API **obrigatório** p/ a DRE + web) + E2E do Owner. Ver
+> rotas, `/caixa` 4.42 kB) ✅. **NO AR:** commit `6508ab4`; API `9063ed0e` + web `c71d1af9`; smoke ✅
+> (health 200, `/cash-sessions/current` sem token 401, `/login` 200). **Falta:** E2E do Owner. Ver
 > "CX.Contador" e "CX.DRE" no registro. **Próximo passo (par natural futuro):** botão de **Sangria /
 > Suprimento** (retirar/repor dinheiro no meio do dia) — a DRE já tem as linhas prontas para ele.
 > **Direções abertas:** go-live (Supabase Pro/CORS/SMTP, ver `docs/plano-producao.md`), nova
