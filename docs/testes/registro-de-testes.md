@@ -3346,3 +3346,36 @@ a 1ª). Histórico já concatenava as formas.
 | E2E 7 — reimpressão no Histórico com todas as formas | ✅ |
 
 > Fatia **UI.PDV.SplitPayment CONCLUÍDA** — sem deploy de API (a API já aceitava `payments[]`).
+
+---
+
+### UI.PDV.Layout — PDV em duas colunas + "Limpar carrinho" (2026-07-25)
+
+Duas fatias de UX do Owner no PDV, **100% de apresentação (sem migration, sem API, sem core; nenhuma
+lógica de venda tocada)**.
+
+**(1) Layout em duas colunas.** `max-w-3xl` → `max-w-6xl`; no desktop, **carrinho protagonista à
+esquerda** (carrinho → pagamento → total/ações) e **busca à direita** (`sticky`, resultados só ao
+digitar; sem busca, área limpa com dica — decisão "área limpa + dica"). Posicionamento explícito de
+grid (`col-start`/`row-start`) reposiciona os blocos **sem reordenar o DOM** — nenhuma lógica
+reescrita. Celular/tablet volta a empilhar (busca, carrinho, pagamento, total).
+
+**(2) Limpar carrinho.** Cabeçalho no cartão do carrinho com botão **"Limpar carrinho"** (só com
+itens) + **confirmação inline** ("Limpar tudo? Sim / Cancelar"); só limpa a tela (nada gravado — o
+estoque só baixa ao confirmar a venda).
+
+| Teste | Resultado |
+|---|---|
+| Typecheck web (`tsc --noEmit`) | ✅ |
+| Build web (`next build`) | ✅ 18 rotas (`/venda` 13.4 → 13.7 kB) |
+| Deploy web | ✅ `2ec4202c` (layout) → `3d834200` (limpar) |
+| Smoke `/login` | ✅ 200 |
+| E2E Owner — duas colunas no desktop (carrinho esq., busca dir.) | ✅ |
+| E2E Owner — busca dinâmica (área limpa sem termo; resultados ao digitar) | ✅ |
+| E2E Owner — busca fixa ao rolar (`sticky`) | ✅ |
+| E2E Owner — fluxos intactos (scan, − / +, pagamento dividido, concluir) | ✅ |
+| E2E Owner — celular/tablet empilha sem quebrar | ✅ |
+| E2E Owner — "Limpar carrinho" com confirmação inline esvazia tudo | ✅ |
+
+> Validado pelo Owner (2026-07-25): "tudo certo, testado e aprovado". Fatia **UI.PDV.Layout
+> CONCLUÍDA**. Commits `0dff33a` + `4c2d2ca`.

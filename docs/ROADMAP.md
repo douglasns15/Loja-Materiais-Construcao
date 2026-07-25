@@ -3,7 +3,26 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-25 — **PDV: pagamento dividido (mais de uma forma na mesma
+> **Última atualização:** 2026-07-25 — **PDV redesenhado em duas colunas + botão "Limpar carrinho"
+> — NO AR e VALIDADO pelo Owner.** Duas fatias de UX do Owner no PDV, **100% de apresentação (sem
+> migration, sem API, sem core; nenhuma lógica de venda tocada)**. **(1) Layout em duas colunas:** a
+> tela saiu da coluna única estreita (`max-w-3xl` → `max-w-6xl`) para um PDV de duas colunas no
+> desktop — **carrinho protagonista à esquerda** (carrinho → pagamento → total/desconto/ações) e
+> **busca à direita**, fixa ao rolar (`sticky`), com os **resultados aparecendo só ao digitar** (sem
+> busca a área fica limpa com uma dica; decisão do Owner: "área limpa + dica"). Posicionamento
+> explícito de grid (`col-start`/`row-start`) reposiciona os blocos **sem reordenar o DOM** — nenhuma
+> lógica de item/carrinho/pagamento reescrita; no celular/tablet volta a empilhar (busca, carrinho,
+> pagamento, total). **(2) Limpar carrinho:** cabeçalho no cartão do carrinho com botão **"Limpar
+> carrinho"** (só com itens) + **confirmação inline** ("Limpar tudo? Sim / Cancelar") para não apagar
+> um carrinho grande por engano; só limpa a tela (nada gravado). Gates: typecheck web ✅, build web (18
+> rotas, `/venda` 13.7 kB) ✅. **NO AR:** commits `0dff33a` (layout) + `4c2d2ca` (limpar); web
+> `2ec4202c` → `3d834200`; smoke `/login` 200 ✅. **E2E do Owner VALIDADO (2026-07-25)** nas duas
+> fatias ("tudo certo, testado e aprovado"). **Fatia UI.PDV.Layout CONCLUÍDA.** Ver "UI.PDV.Layout" no
+> registro. **Próximo passo:** direções abertas — go-live (Supabase Pro/CORS/SMTP, ver
+> `docs/plano-producao.md`), nova funcionalidade (par natural: botão de **Sangria/Suprimento** no
+> caixa), ou endurecimento.
+>
+> **Antes:** 2026-07-25 — **PDV: pagamento dividido (mais de uma forma na mesma
 > venda) — NO AR e VALIDADO pelo Owner (E2E 7/7).** Pedido do Owner:
 > uma venda pode ter **mais de uma forma de pagamento** (parte cartão, parte dinheiro…). **Achado que
 > barateou a entrega:** o backend **já era multi-parcela** desde a Fase 2 — `Payment` é tabela
