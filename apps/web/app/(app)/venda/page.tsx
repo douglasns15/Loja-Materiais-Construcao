@@ -263,6 +263,8 @@ export default function VendaPage() {
   // precifica o carrinho (ADR-016). O valor vazio numa linha assume o "resto" (ver resolvePaymentLines),
   // então o caso comum — uma forma só — não exige digitar nada.
   const [payments, setPayments] = useState<PayLine[]>([{ method: 'CASH', amount: '' }]);
+  // Confirmação inline do "Limpar carrinho" (evita apagar um carrinho grande por um clique).
+  const [confirmClear, setConfirmClear] = useState(false);
   const [discount, setDiscount] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -821,6 +823,13 @@ export default function VendaPage() {
     setCart(cart.filter((c) => c.key !== key));
   }
 
+  /** Esvazia o carrinho de uma vez (após a confirmação inline). Nada foi gravado — só limpa a tela. */
+  function limparCarrinho() {
+    setCart([]);
+    setConfirmClear(false);
+    setError(null);
+  }
+
   /** Linha vendida por metro (ADR-017): quantidade em múltiplos de 0,5 m. */
   const isMeterLine = (c: CartItem) => c.saleMode === 'ALT' && c.baseUnitType === 'METER';
 
@@ -1011,6 +1020,7 @@ export default function VendaPage() {
     setView(null);
     setError(null);
     setCart([]);
+    setConfirmClear(false);
     setPayments([{ method: 'CASH', amount: '' }]);
     setDiscount('');
   }
@@ -1422,7 +1432,43 @@ export default function VendaPage() {
       </div>
 
       {/* Coluna esquerda (protagonista): carrinho no topo. */}
-      <div className="overflow-x-auto rounded-2xl bg-white shadow-sm lg:col-start-1 lg:row-start-1">
+      <div className="rounded-2xl bg-white shadow-sm lg:col-start-1 lg:row-start-1">
+        {/* Cabeçalho do carrinho: título + botão "Limpar carrinho" (só com itens). */}
+        <div className="flex items-center justify-between gap-2 border-b border-gray-100 px-4 py-2">
+          <span className="text-sm font-medium text-gray-700">
+            Carrinho
+            {cart.length > 0 && <span className="ml-1 text-gray-400">· {cart.length}</span>}
+          </span>
+          {cart.length > 0 &&
+            (confirmClear ? (
+              <span className="flex items-center gap-2 text-xs">
+                <span className="text-gray-500">Limpar tudo?</span>
+                <button
+                  type="button"
+                  onClick={limparCarrinho}
+                  className="rounded-lg bg-red-600 px-2 py-1 font-medium text-white hover:bg-red-700"
+                >
+                  Sim, limpar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmClear(false)}
+                  className="rounded-lg border border-gray-300 px-2 py-1 font-medium text-gray-600 hover:bg-gray-100"
+                >
+                  Cancelar
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmClear(true)}
+                className="text-sm font-medium text-red-600 hover:text-red-700"
+              >
+                Limpar carrinho
+              </button>
+            ))}
+        </div>
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-100 text-left text-gray-600">
             <tr>
@@ -1522,6 +1568,7 @@ export default function VendaPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Coluna esquerda: pagamento (linha 2). */}
