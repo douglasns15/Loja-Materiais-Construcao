@@ -1168,7 +1168,7 @@ export default function VendaPage() {
 
   // --- PDV (carrinho) ---
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="mx-auto max-w-6xl">
       <h1 className="mb-6 text-2xl font-bold">Venda</h1>
 
       {/* Aviso de conexão (ADR-011 §9): só aparece offline; texto depende do flag OFFLINE_SALES. */}
@@ -1205,7 +1205,12 @@ export default function VendaPage() {
           offline sem o recurso, esconde o ruído de rede — o aviso acima já orienta a nota manual. */}
       {error && (online || offlineSales) && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
-      <div className="mb-4 rounded-2xl bg-white p-4 shadow-sm">
+      {/* PDV em duas colunas (desktop): carrinho + pagamento + total à ESQUERDA (protagonistas),
+          busca à DIREITA (fixa ao rolar, resultados só ao digitar). No celular/tablet volta a
+          empilhar na ordem do DOM (busca, carrinho, pagamento, total). Posicionamento explícito de
+          grid evita reordenar o DOM — cada bloco escolhe sua coluna/linha. */}
+      <div className="grid items-start gap-4 lg:[grid-template-columns:1.4fr_1fr]">
+      <div className="rounded-2xl bg-white p-4 shadow-sm lg:sticky lg:top-4 lg:col-start-2 lg:row-start-1">
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex basis-full gap-2">
             <input
@@ -1233,11 +1238,12 @@ export default function VendaPage() {
           </label>
         </div>
 
-        {/* Lista de resultados (autocomplete do PDV): aparece conforme se digita/escaneia e mostra
-            os produtos que casam com a busca (nome, popular, fabricante ou SKU). Clicar adiciona ao carrinho
-            com a quantidade informada — sem precisar abrir dropdown. Sem termo, lista o catálogo todo
-            (rolável) para navegar. Estoque zerado fica desabilitado. */}
-        <ul className="mt-3 max-h-64 divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-200">
+        {/* Lista de resultados (autocomplete do PDV): aparece SÓ ao digitar/escanear e mostra
+            os produtos que casam com a busca (nome, popular, fabricante ou SKU). Clicar adiciona ao
+            carrinho com a quantidade informada. Sem busca, a área fica limpa com uma dica — o foco é
+            o carrinho. Estoque zerado fica desabilitado. */}
+        {productSearch.trim() ? (
+        <ul className="mt-3 max-h-[28rem] divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-200">
           {filteredProducts.length === 0 ? (
             <li className="px-3 py-6 text-center text-sm text-gray-400">
               {productSearch ? 'Nenhum produto encontrado.' : 'Nenhum produto cadastrado.'}
@@ -1408,9 +1414,15 @@ export default function VendaPage() {
             })
           )}
         </ul>
+        ) : (
+          <p className="mt-3 rounded-lg border border-dashed border-gray-200 px-3 py-10 text-center text-sm text-gray-400">
+            Digite para buscar produtos por nome, apelido, fabricante ou código.
+          </p>
+        )}
       </div>
 
-      <div className="mb-4 overflow-x-auto rounded-2xl bg-white shadow-sm">
+      {/* Coluna esquerda (protagonista): carrinho no topo. */}
+      <div className="overflow-x-auto rounded-2xl bg-white shadow-sm lg:col-start-1 lg:row-start-1">
         <table className="w-full text-sm">
           <thead className="bg-gray-100 text-left text-gray-600">
             <tr>
@@ -1512,8 +1524,8 @@ export default function VendaPage() {
         </table>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-3 rounded-2xl bg-white p-4 shadow-sm">
+      {/* Coluna esquerda: pagamento (linha 2). */}
+      <div className="space-y-3 rounded-2xl bg-white p-4 shadow-sm lg:col-start-1 lg:row-start-2">
           <div className="flex items-center justify-between">
             <label className="block text-sm font-medium">Formas de pagamento</label>
             <button
@@ -1610,7 +1622,8 @@ export default function VendaPage() {
           )}
         </div>
 
-        <div className="flex flex-col justify-between rounded-2xl bg-white p-4 shadow-sm">
+        {/* Coluna esquerda: total + desconto + ações (linha 3). */}
+        <div className="flex flex-col justify-between rounded-2xl bg-white p-4 shadow-sm lg:col-start-1 lg:row-start-3">
           <div>
             <div className="space-y-1 text-sm">
               <div className="flex justify-between text-gray-500">
