@@ -3410,12 +3410,20 @@ adapta ao filtro.
 | Deploy API (⚠️ obrigatório: mudou o formato de `scope=all` p/ `{rows,nextCursor}`) | ✅ `609bd385` |
 | Deploy web | ✅ `d23c8e7f` (subiu o chunk novo de `/vendas`) |
 | Smoke — API health / `scope=all` sem token / web `/login` | ✅ 200 / 401 / 200 |
-| E2E Owner — 20 por página + "Mostrar mais" anexa; some no fim | ⏭️ pendente |
-| E2E Owner — filtro Hoje/7d/30d e De/Até | ⏭️ pendente |
-| E2E Owner — cancelar/devolver recarrega a lista | ⏭️ pendente |
+| E2E Owner — 20 por página + "Mostrar mais" anexa; some no fim | ✅ |
+| E2E Owner — filtro Hoje/7d/30d e De/Até | ✅ |
+| E2E Owner — cancelar/devolver recarrega a lista | ✅ |
 
-> **NO AR, aguardando E2E do Owner.** ⚠️ O deploy da API foi **obrigatório** mesmo sem migration: o
-> formato de `scope=all` mudou (array → `{ rows, nextCursor }`), então o web novo só funciona contra a
-> API nova — por isso os dois subiram juntos (API `609bd385` + web `d23c8e7f`). Próximo passo natural
-> (mesmo padrão): busca no servidor para os cadastros grandes (Produtos/Clientes) e revisar tetos dos
-> Relatórios.
+**Ajuste de UX (mesmo dia, feedback do Owner).** O atalho clicado (Hoje/7d/30d) não sinalizava que
+estava ativo. O botão selecionado passou a ficar **preto** (`bg-gray-900`) e volta a branco no
+**Limpar** ou ao editar as datas manualmente (De/Até vira intervalo personalizado e **desmarca** o
+atalho). O **Aplicar** segue servindo ao caminho manual do De/Até (não refaz a busca a cada tecla).
+Só front (estado visual). Gates: typecheck web ✅, build web (18 rotas) ✅. **NO AR:** web `7451757d`.
+
+> **NO AR e VALIDADO pelo Owner (2026-07-25):** "tudo validado com sucesso" — paginação por cursor
+> ("Mostrar mais"), filtro de período (atalhos + De/Até) e o destaque do atalho selecionado. ⚠️ O
+> deploy da API foi **obrigatório** mesmo sem migration: o formato de `scope=all` mudou (array →
+> `{ rows, nextCursor }`), então API e web subiram juntos (API `609bd385` + web `d23c8e7f` → `7451757d`).
+> Commits `d1cc98f` (paginação) + `03d9479` (destaque). **Fatia UI.Vendas.Paginacao CONCLUÍDA.**
+> Próximo passo natural (mesmo padrão): busca no servidor para os cadastros grandes (Produtos/Clientes)
+> e revisar tetos dos Relatórios.

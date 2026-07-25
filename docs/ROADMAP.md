@@ -4,7 +4,7 @@
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
 > **Última atualização:** 2026-07-25 — **Histórico de Vendas paginado (cursor keyset) + filtro de
-> período — NO AR, aguardando E2E do Owner.** Ponto do Owner: telas que abrem
+> período — NO AR e VALIDADO pelo Owner ("tudo validado com sucesso").** Ponto do Owner: telas que abrem
 > com muita informação carregada ficam lentas conforme a base cresce — o **Histórico de Vendas** já
 > pesava. Diagnóstico: `GET /orders?scope=all` trazia as **100 vendas mais recentes com todos os itens
 > e pagamentos de uma vez** e a tela montava tudo junto; passando de 100, as antigas **sumiam sem
@@ -17,10 +17,14 @@
 > **"Mostrar mais"** que anexa a próxima página (some no fim); cancelar/devolver recarrega da 1ª
 > página. Gates: typecheck API ✅, typecheck web ✅, build web (18 rotas, `/vendas` 3.34 → 4.5 kB) ✅.
 > ⚠️ **Deploy da API foi obrigatório** mesmo sem migration (o formato de `scope=all` mudou: array →
-> `{ rows, nextCursor }`), então API e web subiram juntos. **NO AR:** API `609bd385` + web `d23c8e7f`;
-> smoke ✅ (health 200, `scope=all` sem token 401, `/login` 200). **Falta:** E2E do Owner. Ver
-> "UI.Vendas.Paginacao" no registro. **Próximo passo natural (mesmo padrão):** busca no servidor para
-> os cadastros grandes (Produtos/Clientes) e revisar os tetos dos Relatórios.
+> `{ rows, nextCursor }`), então API e web subiram juntos. **Ajuste de UX no mesmo dia** (feedback do
+> Owner): o atalho de período selecionado (Hoje/7d/30d) agora fica **preto** e volta a branco no Limpar
+> ou ao editar as datas manualmente. **NO AR:** API `609bd385` + web `d23c8e7f` → `7451757d`; smoke ✅
+> (health 200, `scope=all` sem token 401, `/login` 200). **E2E do Owner VALIDADO (2026-07-25):** "tudo
+> validado com sucesso". Commits `d1cc98f` (paginação) + `03d9479` (destaque). **Fatia
+> UI.Vendas.Paginacao CONCLUÍDA.** Ver "UI.Vendas.Paginacao" no registro. **Próximo passo natural
+> (mesmo padrão):** busca no servidor para os cadastros grandes (Produtos/Clientes) e revisar os tetos
+> dos Relatórios.
 >
 > **Antes:** 2026-07-25 — **PDV redesenhado em duas colunas + botão "Limpar carrinho"
 > — NO AR e VALIDADO pelo Owner.** Duas fatias de UX do Owner no PDV, **100% de apresentação (sem
