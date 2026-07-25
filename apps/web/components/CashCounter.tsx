@@ -29,6 +29,41 @@ function toQty(raw: string): string {
   return raw.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
 }
 
+/**
+ * Uma linha do contador (uma denominação). **Precisa ser um componente estável de
+ * módulo** (não definido dentro do `CashCounter`): se fosse recriado a cada render, o
+ * React remontaria o `<input>` a cada tecla e o campo **perderia o foco** no 1º dígito.
+ */
+function CounterRow({
+  value,
+  qty,
+  onQty,
+}: {
+  value: number;
+  qty: string;
+  onQty: (raw: string) => void;
+}) {
+  const subtotal = sumCashCount({ [value]: Number(qty || 0) });
+  return (
+    <div className="flex items-center gap-3">
+      <span className="w-14 shrink-0 text-sm font-medium text-gray-700">{pieceLabel(value)}</span>
+      <span className="w-4 shrink-0 text-center text-gray-400">×</span>
+      <input
+        type="text"
+        inputMode="numeric"
+        aria-label={`Quantidade de ${pieceLabel(value)}`}
+        value={qty}
+        onChange={(e) => onQty(e.target.value)}
+        placeholder="0"
+        className="w-20 rounded-lg border border-gray-300 px-2 py-1.5 text-right"
+      />
+      <span className="ml-auto w-24 shrink-0 text-right text-sm tabular-nums text-gray-600">
+        {subtotal > 0 ? BRL(subtotal) : <span className="text-gray-300">—</span>}
+      </span>
+    </div>
+  );
+}
+
 export function CashCounter({
   title,
   onConfirm,
@@ -68,29 +103,6 @@ export function CashCounter({
     setCounts({});
   }
 
-  const Row = ({ value }: { value: number }) => {
-    const qty = Number(counts[value] || 0);
-    const subtotal = sumCashCount({ [value]: qty });
-    return (
-      <div className="flex items-center gap-3">
-        <span className="w-14 shrink-0 text-sm font-medium text-gray-700">{pieceLabel(value)}</span>
-        <span className="w-4 shrink-0 text-center text-gray-400">×</span>
-        <input
-          type="text"
-          inputMode="numeric"
-          aria-label={`Quantidade de ${pieceLabel(value)}`}
-          value={counts[value] ?? ''}
-          onChange={(e) => setQty(value, e.target.value)}
-          placeholder="0"
-          className="w-20 rounded-lg border border-gray-300 px-2 py-1.5 text-right"
-        />
-        <span className="ml-auto w-24 shrink-0 text-right text-sm tabular-nums text-gray-600">
-          {subtotal > 0 ? BRL(subtotal) : <span className="text-gray-300">—</span>}
-        </span>
-      </div>
-    );
-  };
-
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-0 sm:items-center sm:p-4"
@@ -119,7 +131,7 @@ export function CashCounter({
             <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-400">Moedas</p>
             <div className="space-y-2">
               {BRL_COIN_VALUES.map((v) => (
-                <Row key={v} value={v} />
+                <CounterRow key={v} value={v} qty={counts[v] ?? ''} onQty={(raw) => setQty(v, raw)} />
               ))}
             </div>
           </div>
@@ -127,7 +139,7 @@ export function CashCounter({
             <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-400">Cédulas</p>
             <div className="space-y-2">
               {BRL_BILL_VALUES.map((v) => (
-                <Row key={v} value={v} />
+                <CounterRow key={v} value={v} qty={counts[v] ?? ''} onQty={(raw) => setQty(v, raw)} />
               ))}
             </div>
           </div>

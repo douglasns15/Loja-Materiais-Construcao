@@ -114,7 +114,12 @@ export default function CaixaPage() {
           ? 'Caixa fechado: valor bateu certinho. ✅'
           : `Caixa fechado com divergência de ${BRL(d)} (${d > 0 ? 'sobra' : 'falta'}).`,
       );
-      await load();
+      // O fechamento deu certo → o caixa está fechado. Reflete na hora, sem depender de um
+      // novo GET /current (que poderia vir de cache ainda mostrando a sessão como aberta e
+      // deixar o visual "aberto" apesar da mensagem de fechado). Limpa também o cache offline.
+      setSession(null);
+      setCachedSession(null);
+      cacheCashSession(null);
     } catch (e) {
       setError((e as Error).message);
     } finally {
