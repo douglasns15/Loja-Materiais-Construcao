@@ -45,6 +45,8 @@ type ActionMode = 'cancel' | 'return';
 type OrdersPage = { rows: Order[]; nextCursor: string | null };
 /** Período aplicado à lista (AAAA-MM-DD; vazio = sem borda). */
 type Range = { from: string; to: string };
+/** Atalho de período atualmente selecionado (destaca o botão). */
+type Preset = 'today' | '7d' | '30d';
 
 /** Quantas vendas por página / clique em "Mostrar mais". */
 const PAGE_SIZE = 20;
@@ -81,6 +83,8 @@ export default function VendasPage() {
   const [range, setRange] = useState<Range>({ from: '', to: '' });
   const [fromInput, setFromInput] = useState('');
   const [toInput, setToInput] = useState('');
+  // Atalho ativo (Hoje/7d/30d): destaca o botão em preto. `null` = período manual ou sem filtro.
+  const [activePreset, setActivePreset] = useState<Preset | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Modal de ação: qual venda e se é cancelamento ou devolução.
   const [action, setAction] = useState<{ id: string; mode: ActionMode } | null>(null);
@@ -115,20 +119,32 @@ export default function VendasPage() {
     }
   }
 
-  /** Aplica o período dos campos (recarrega do início). */
-  function aplicarPeriodo(r: Range) {
+  /**
+   * Aplica um período e recarrega do início. `preset` marca o atalho selecionado
+   * (destaque em preto); `null` = intervalo manual (De/Até) ou "Limpar".
+   */
+  function aplicarPeriodo(r: Range, preset: Preset | null = null) {
     setRange(r);
     setFromInput(r.from);
     setToInput(r.to);
+    setActivePreset(preset);
     setError(null);
     loadOrders(r).catch((e) => setError((e as Error).message));
   }
   /** Atalho de período: últimos `days` dias (0 = hoje) até hoje. */
-  function atalho(days: number) {
+  function atalho(days: number, preset: Preset) {
     const to = new Date();
     const from = new Date();
     from.setDate(from.getDate() - days);
-    aplicarPeriodo({ from: ymd(from), to: ymd(to) });
+    aplicarPeriodo({ from: ymd(from), to: ymd(to) }, preset);
+  }
+  /** Classe do botão de atalho — preto quando selecionado, branco caso contrário. */
+  function presetCls(p: Preset): string {
+    return `rounded-lg px-2.5 py-1.5 text-xs font-medium ${
+      activePreset === p
+        ? 'bg-gray-900 text-white'
+        : 'border border-gray-300 text-gray-700 hover:bg-gray-100'
+    }`;
   }
 
   useEffect(() => {
@@ -245,22 +261,13 @@ export default function VendasPage() {
       <div className="mb-4 rounded-2xl bg-white p-3 shadow-sm">
         <div className="flex flex-wrap items-end gap-2">
           <div className="flex gap-1">
-            <button
-              onClick={() => atalho(0)}
-              className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"
-            >
+            <button onClick={() => atalho(0, 'today')} className={presetCls('today')}>
               Hoje
             </button>
-            <button
-              onClick={() => atalho(6)}
-              className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"
-            >
+            <button onClick={() => atalho(6, '7d')} className={presetCls('7d')}>
               7 dias
             </button>
-            <button
-              onClick={() => atalho(29)}
-              className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"
-            >
+            <button onClick={() => atalho(29, '30d')} className={presetCls('30d')}>
               30 dias
             </button>
           </div>
@@ -269,7 +276,11 @@ export default function VendasPage() {
             <input
               type="date"
               value={fromInput}
-              onChange={(e) => setFromInput(e.target.value)}
+              // Editar manualmente sai do atalho: desmarca o botão em destaque.
+              onChange={(e) => {
+                setFromInput(e.target.value);
+                setActivePreset(null);
+              }}
               className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
             />
           </label>
@@ -278,7 +289,10 @@ export default function VendasPage() {
             <input
               type="date"
               value={toInput}
-              onChange={(e) => setToInput(e.target.value)}
+              onChange={(e) => {
+                setToInput(e.target.value);
+                setActivePreset(null);
+              }}
               className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
             />
           </label>
