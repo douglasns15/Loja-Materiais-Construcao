@@ -3473,8 +3473,8 @@ keyset) usam índice. Os sorts por **`total`** (`highest`/`lowest`) fazem sort s
 aceitável no volume atual de uma loja; se um dia pesar, o caminho é um `@@index([tenantId, total])`
 (migration aditiva, aprovação antes — regra 1), não antecipar agora.
 
-**NO AR (2026-07-27):** API `ea214bbd` + web `6c6b553e`; smoke ✅.
+**NO AR (2026-07-27):** API `ea214bbd` + web `6c6b553e`; smoke ✅. Commit `04c0895`.
 
-**E2E do Owner — ⏭️ pendente** (API+web já no ar): ordenar por maior/menor venda e por data ↑/↓
-(conferir que o topo reflete o **período inteiro**, não só a 1ª página, paginando com "Mostrar mais");
-botão "Voltar ao topo" aparece ao rolar e volta ao topo.
+**E2E do Owner — ✅ VALIDADO (2026-07-27):** "validado com sucesso" — ordenação por maior/menor venda e
+por data ↑/↓ (topo refletindo o período inteiro via "Mostrar mais") + botão "Voltar ao topo". Fatia
+**UI.Vendas.Ordenacao CONCLUÍDA**.

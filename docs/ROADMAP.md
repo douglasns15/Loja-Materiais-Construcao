@@ -4,7 +4,7 @@
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
 > **Última atualização:** 2026-07-27 — **Histórico de Vendas: ordenação (maior/menor venda, data
-> ↑/↓) + botão "Voltar ao topo" — NO AR, aguardando E2E do Owner.**
+> ↑/↓) + botão "Voltar ao topo" — NO AR e VALIDADO pelo Owner.**
 > Pedido do Owner. **Ponto da fatia:** o Histórico já pagina por **cursor keyset** — então ordenar por
 > maior/menor venda **no cliente** ordenaria só as páginas já baixadas ("a maior entre as 20
 > carregadas"), não a maior do período (a mesma **visão parcial enganosa** do `take:100`). Por isso a
@@ -18,7 +18,10 @@
 > Gates: typecheck API ✅, typecheck web ✅, build web (18 rotas, `/vendas` 4.5 → 5.12 kB) ✅. ⚠️ **Deploy
 > de API obrigatório** para o `sort` valer (a API antiga só ignorava o parâmetro); **web** também.
 > **NO AR:** API `ea214bbd` + web `6c6b553e`; smoke ✅ (health 200, `sort=highest` sem token 401,
-> `/login` 200). **Falta:** E2E do Owner. Ver "UI.Vendas.Ordenacao" no registro.
+> `/login` 200). **E2E do Owner VALIDADO (2026-07-27):** "validado com sucesso". Commit `04c0895`.
+> **Fatia UI.Vendas.Ordenacao CONCLUÍDA.** Ver "UI.Vendas.Ordenacao" no registro. **Próximo passo
+> natural (mesmo padrão):** busca no servidor para os cadastros grandes (Produtos/Clientes) e revisar
+> os tetos dos Relatórios.
 >
 > **Antes:** 2026-07-25 — **Histórico de Vendas paginado (cursor keyset) + filtro de
 > período — NO AR e VALIDADO pelo Owner ("tudo validado com sucesso").** Ponto do Owner: telas que abrem
