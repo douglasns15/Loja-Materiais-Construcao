@@ -17,6 +17,7 @@ import {
   withPaymentShare,
   netCashMovements,
   grossCashMovements,
+  manualCashMovementType,
   sumCashCount,
   paymentStatus,
   BRL_COIN_VALUES,
@@ -315,6 +316,24 @@ describe('grossCashMovements', () => {
     ];
     const { income, expense } = grossCashMovements(ms);
     expect(Number((income - expense).toFixed(2))).toBe(netCashMovements(ms));
+  });
+});
+
+describe('manualCashMovementType', () => {
+  it('Suprimento entra (INCOME)', () => {
+    expect(manualCashMovementType('SUPPLY')).toBe('INCOME');
+  });
+
+  it('Sangria sai (EXPENSE)', () => {
+    expect(manualCashMovementType('WITHDRAWAL')).toBe('EXPENSE');
+  });
+
+  it('o sinal alimenta netCashMovements coerentemente (suprimento soma, sangria subtrai)', () => {
+    const ms = [
+      { type: manualCashMovementType('SUPPLY'), amount: 100 },
+      { type: manualCashMovementType('WITHDRAWAL'), amount: 40 },
+    ];
+    expect(netCashMovements(ms)).toBe(60);
   });
 });
 

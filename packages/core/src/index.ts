@@ -126,6 +126,26 @@ export function grossCashMovements(
   return { income: Number(income.toFixed(2)), expense: Number(expense.toFixed(2)) };
 }
 
+/**
+ * Movimentações de caixa que o operador lança **manualmente** (Movimentação de Caixa):
+ *  - `SUPPLY` (Suprimento): dinheiro que ENTRA fora de venda — reforço de troco, aporte,
+ *    pagamento atrasado recebido em espécie.
+ *  - `WITHDRAWAL` (Sangria): dinheiro que SAI do caixa — retirada, despesa paga pela gaveta.
+ *
+ * Não inclui `RETURN` (devolução) nem o recebimento de conta a receber: esses nascem de
+ * fluxos próprios (devolução de venda / venda a prazo), não do lançamento manual.
+ */
+export type ManualCashMovementKind = 'SUPPLY' | 'WITHDRAWAL';
+
+/**
+ * Direção contábil de uma movimentação manual: Suprimento entra (`INCOME`), Sangria sai
+ * (`EXPENSE`). Fonte ÚNICA do sinal do lançamento para a API e a UI nunca divergirem —
+ * quem grava o `CashMovement` e quem exibe a prévia usam a mesma regra.
+ */
+export function manualCashMovementType(kind: ManualCashMovementKind): 'INCOME' | 'EXPENSE' {
+  return kind === 'SUPPLY' ? 'INCOME' : 'EXPENSE';
+}
+
 /** Valores (em reais) das moedas do Real em circulação, para o contador de gaveta. */
 export const BRL_COIN_VALUES = [0.05, 0.1, 0.25, 0.5, 1] as const;
 /** Valores (em reais) das cédulas do Real em circulação, para o contador de gaveta. */

@@ -1,7 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { openCashSessionSchema, closeCashSessionSchema } from '@nexoloja/shared';
+import {
+  openCashSessionSchema,
+  closeCashSessionSchema,
+  type CashMovementInput,
+} from '@nexoloja/shared';
 import { apiGet, apiPost } from '@/lib/api';
 import { cacheCashSession, readCachedCashSession, type CachedCashSession } from '@/lib/cashSessionCache';
 import { useMe } from '@/lib/useMe';
@@ -10,6 +14,7 @@ import { StoreDisabledNotice } from '@/components/StoreDisabledNotice';
 import { OfflineSalesNotice } from '@/components/OfflineSalesNotice';
 import { MoneyInput } from '@/components/MoneyInput';
 import { CashCounter } from '@/components/CashCounter';
+import { CashMovementModal } from '@/components/CashMovementModal';
 
 type CashSession = {
   id: string;
@@ -42,6 +47,8 @@ export default function CaixaPage() {
   const [busy, setBusy] = useState(false);
   // Contador de cédulas/moedas aberto para qual campo (null = fechado).
   const [counter, setCounter] = useState<'open' | 'close' | null>(null);
+  // Modal de Movimentação de Caixa (Suprimento/Sangria) aberto?
+  const [moving, setMoving] = useState(false);
 
   async function load() {
     try {
@@ -127,6 +134,18 @@ export default function CaixaPage() {
     }
   }
 
+  // Lança uma Movimentação de Caixa (Suprimento/Sangria) e recarrega o caixa para a
+  // mini-DRE (+ Suprimentos / − saídas) e o Esperado refletirem na hora.
+  async function onMovement(input: CashMovementInput) {
+    await apiPost('/cash-sessions/movement', input);
+    setInfo(
+      input.kind === 'SUPPLY'
+        ? `Suprimento de ${BRL(input.amount)} registrado. ✅`
+        : `Sangria de ${BRL(input.amount)} registrada. ✅`,
+    );
+    await load();
+  }
+
   return (
     <div className="mx-auto max-w-xl">
       <h1 className="mb-6 text-2xl font-bold">Caixa</h1>
@@ -180,6 +199,14 @@ export default function CaixaPage() {
                 {BRL(session.expectedAmount)}
               </dd>
             </dl>
+
+            <button
+              type="button"
+              onClick={() => setMoving(true)}
+              className="mt-4 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              💵 Movimentar caixa (suprimento / sangria)
+            </button>
           </div>
 
           <form onSubmit={onClose} className="space-y-3 rounded-2xl bg-white p-5 shadow-sm">
@@ -291,6 +318,8 @@ export default function CaixaPage() {
           onClose={() => setCounter(null)}
         />
       )}
+
+      {moving && <CashMovementModal onSubmit={onMovement} onClose={() => setMoving(false)} />}
     </div>
   );
 }

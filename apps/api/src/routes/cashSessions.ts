@@ -4,9 +4,14 @@ import {
   calcCashDivergence,
   calcExpectedCash,
   grossCashMovements,
+  manualCashMovementType,
   netCashMovements,
 } from '@nexoloja/core';
-import { closeCashSessionSchema, openCashSessionSchema } from '@nexoloja/shared';
+import {
+  cashMovementSchema,
+  closeCashSessionSchema,
+  openCashSessionSchema,
+} from '@nexoloja/shared';
 import { type Env, getConnectionString, getTenantId } from '../lib/request';
 import { requireActiveTenant, requireAuth } from '../middleware/auth';
 
@@ -196,6 +201,54 @@ cashSessions.post('/close', async (c) => {
   } catch (err) {
     console.error('POST /cash-sessions/close falhou:', err);
     return c.json({ ok: false, error: 'Falha ao fechar o caixa.' }, 500);
+  }
+});
+
+/** Lança uma Movimentação de Caixa manual — Suprimento (entrada) ou Sangria (saída) — no
+ * caixa aberto DA LOJA (ADR-018). Reusa `CashMovement` (ADR-006): o mesmo mecanismo da
+ * devolução, mas SEM `relatedOrderId` (não nasce de uma venda). O sinal contábil vem do
+ * `manualCashMovementType` (core, fonte única). Bloqueado sem caixa aberto. */
+cashSessions.post('/movement', async (c) => {
+  const tenantId = getTenantId(c);
+  const userId = c.get('userId');
+  const connectionString = getConnectionString(c.env);
+  if (!tenantId || !connectionString) {
+    return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
+  }
+
+  const parsed = cashMovementSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) {
+    return c.json({ ok: false, error: 'Dados da movimentação inválidos.' }, 400);
+  }
+
+  try {
+    const prisma = createPrismaClient(connectionString);
+    // ADR-018: caixa por loja — movimenta o caixa aberto da loja (independe de quem abriu).
+    const session = await prisma.cashSession.findFirst({
+      where: { tenantId, closedAt: null },
+      select: { id: true },
+    });
+    if (!session) {
+      return c.json({ ok: false, error: 'Não há caixa aberto.' }, 404);
+    }
+
+    const created = await prisma.cashMovement.create({
+      data: {
+        tenantId,
+        cashSessionId: session.id,
+        userId,
+        type: manualCashMovementType(parsed.data.kind), // Suprimento → INCOME, Sangria → EXPENSE
+        kind: parsed.data.kind,
+        amount: parsed.data.amount,
+        reason: parsed.data.reason,
+        syncStatus: 'SYNCED',
+        registeredByName: c.get('userName'), // autoria (ADR-010)
+      },
+    });
+    return c.json({ ok: true, data: created }, 201);
+  } catch (err) {
+    console.error('POST /cash-sessions/movement falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao lançar a movimentação.' }, 500);
   }
 });
 
