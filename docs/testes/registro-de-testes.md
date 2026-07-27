@@ -3566,4 +3566,41 @@ mini-DRE e o Esperado refletirem na hora.
 
 **E2E do Owner — ✅ VALIDADO (2026-07-27):** "testado e aprovado com sucesso" — Suprimento e Sangria
 lançados, mini-DRE (+ Suprimentos / − saídas) e Esperado refletindo na hora, fechamento batendo com as
-movimentações. Commit `a35a288`. Fatia **CX.Movimentacao CONCLUÍDA**.
+movimentações. Commit `a35a288`.
+
+#### Extensão 1 — Extrato do caixa aberto (2026-07-27)
+
+Antes só existiam os TOTAIS agregados na mini-DRE; os lançamentos individuais eram gravados mas não
+apareciam. `GET /cash-sessions/movements` (caixa aberto da loja, ADR-018; mais recentes primeiro) +
+seção colapsável **"Movimentações do caixa"** na tela do Caixa (badge de contagem; ↑/↓ + rótulo, motivo,
+autor, hora, valor colorido). Busca no `load()` com try/catch próprio (falha degrada p/ lista vazia, não
+derruba a tela). Sem migration.
+
+| Gate | Resultado |
+|---|---|
+| Typecheck API / web | ✅ |
+| Build web (`/caixa` 5.15 → 5.57 kB) | ✅ 18 rotas |
+| Deploy API `59c2b538` + web `97c6fd96` | ✅ |
+| Smoke — health / `movements` sem token / `/login` | ✅ 200 / 401 / 200 |
+
+**E2E do Owner — ✅ VALIDADO (2026-07-27).** Commit `f9cff3a`.
+
+#### Extensão 2 — Histórico de movimentações por fechamento (2026-07-27)
+
+O extrato do Caixa é só do turno ABERTO (some ao fechar/reabrir — correto). Para auditar caixas já
+fechados, `GET /cash-sessions/movements` passou a aceitar **`?sessionId=`** (checando o `tenantId`;
+UUID malformado → lista vazia, não erro do Prisma) e cada fechamento em **Relatórios** ganhou um **"▸
+movimentações"** que expande o extrato daquele turno (lazy + cacheado por sessão). DRY: `CashMovementRow`
++ `CASH_MOVEMENT_KIND_LABELS` movidos p/ `@nexoloja/shared` e componente `CashMovementsList` reusado no
+Caixa e em Relatórios. Sem migration.
+
+| Gate | Resultado |
+|---|---|
+| Typecheck API / web | ✅ |
+| Build web (`/relatorios` 3.45 → 3.99 kB) | ✅ 18 rotas |
+| Deploy API `61636021` + web `e522f97a` | ✅ |
+| Smoke — health / `movements?sessionId=<inválido>` sem token / `/login` | ✅ 200 / 401 (não 500) / 200 |
+
+**E2E do Owner — ✅ VALIDADO (2026-07-27):** "validado com sucesso" — extrato de caixas fechados
+reaparecendo em Relatórios. Commit `86bda6a`. Fatia **CX.Movimentacao CONCLUÍDA** (lançamento + extrato
+do caixa aberto + histórico por fechamento).

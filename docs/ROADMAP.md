@@ -17,12 +17,23 @@
 > aberto da LOJA (ADR-018), autoria (ADR-010), bloqueia sem caixa aberto (404). **Web (`/caixa`):**
 > botão **"Movimentar caixa"** + modal `CashMovementModal` (Suprimento verde / Sangria vermelho, valor
 > com `MoneyInput`, motivo obrigatório); ao lançar, recarrega o caixa → a mini-DRE e o Esperado
-> atualizam na hora. ⚠️ **Deploy de API obrigatório** (endpoint novo); web também. Gates: core
-> **176/176** ✅, typecheck API/web ✅, build web (18 rotas, `/caixa` 4.42 → 5.15 kB) ✅. **NO AR:** API
-> `a0c8a7a5` + web `2c23b403`; smoke ✅ (health 200, `movement` sem token 401, `/login` 200). **E2E do
-> Owner VALIDADO (2026-07-27):** "testado e aprovado com sucesso". Commit `a35a288`. **Fatia
-> CX.Movimentacao CONCLUÍDA.** Ver "CX.Movimentacao" no registro. **Próximo passo:** Fatia 2 — escrever
-> o **ADR-019 (Venda a prazo / Contas a Receber)** e aprovar a migration ANTES de codar (regra 1 e 4).
+> atualizam na hora. **+2 extensões no mesmo dia (que fecham a fatia):** (1) **Extrato do caixa
+> aberto** — `GET /cash-sessions/movements` + seção colapsável "Movimentações do caixa" na tela do
+> Caixa, listando cada lançamento (Suprimento/Sangria/Devolução/Despesa) com valor, motivo, autor e
+> hora — detalha a linha agregada "saídas" da mini-DRE (antes só havia os TOTAIS). (2) **Histórico por
+> fechamento** — o endpoint ganhou `?sessionId=` (checando o `tenantId`) e cada fechamento em
+> **Relatórios** ganhou um "▸ movimentações" que expande o extrato daquele turno (lazy + cache), para
+> auditar caixas já fechados (o extrato do Caixa é só do turno aberto, some ao fechar — correto).
+> **DRY:** `CashMovementRow` + `CASH_MOVEMENT_KIND_LABELS` movidos p/ o `shared` e componente
+> `CashMovementsList` reusado nas duas telas. ⚠️ **Deploy de API obrigatório** (endpoints novos); web
+> também. Gates: core **176/176** ✅, typecheck API/web ✅, build web (18 rotas) ✅. **NO AR (3 deploys no
+> dia):** lançamento API `a0c8a7a5` + web `2c23b403`; extrato API `59c2b538` + web `97c6fd96`; histórico
+> API `61636021` + web `e522f97a`; smokes ✅ (health 200, `movement`/`movements` sem token 401, `/login`
+> 200). **E2E do Owner VALIDADO (2026-07-27):** os três — "testado e aprovado" / "validado com sucesso".
+> Commits `a35a288` (lançamento) + `f9cff3a` (extrato) + `86bda6a` (histórico). **Fatia CX.Movimentacao
+> CONCLUÍDA** (lançamento + extrato do caixa aberto + histórico por fechamento). Ver "CX.Movimentacao" no
+> registro. **Próximo passo:** Fatia 2 — escrever o **ADR-019 (Venda a prazo / Contas a Receber)** e
+> aprovar a migration ANTES de codar (regra 1 e 4).
 >
 > **Antes:** 2026-07-27 — **Busca no servidor (Clientes/Produtos) + revisão dos tetos
 > de Relatórios — NO AR e VALIDADO pelo Owner.** Continuação do combate às "telas que abrem com
