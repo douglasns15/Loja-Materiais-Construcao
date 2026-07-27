@@ -38,6 +38,10 @@ http://localhost:3000/
 
 <> Paginação das telas que já abrem com várias infos carregadas, isso pode tornar a tela mais lenta, principalmente com o passar do tempo, conforme a base aumenta de tamanho;
 
+<> Filtro por motivo e data em Estoque não estão funcionando
+
+<> Os filtros devem desconsiderar acentos
+
 ## Subir servidor
 
 cd C:\Users\Douglas\Documents\GitHub\Loja-Materiais-Construcao
