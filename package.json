@@ -8,6 +8,7 @@
   ],
   "packageManager": "npm@10.9.2",
   "scripts": {
+    "postinstall": "npm run db:generate",
     "dev": "turbo run dev --filter=@nexoloja/web",
     "dev:api": "turbo run dev --filter=@nexoloja/api",
     "dev:all": "turbo run dev",
