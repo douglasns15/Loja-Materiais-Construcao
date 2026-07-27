@@ -6,6 +6,8 @@ Este diretório registra as decisões de arquitetura do projeto **NexoLoja**. Ca
 
 Um *Architecture Decision Record* é um documento curto e versionado que captura **uma** decisão técnica e o **porquê** dela. Serve para que decisões já tomadas não sejam rediscutidas e para que novas pessoas no projeto entendam o raciocínio por trás da arquitetura.
 
+> **O que NÃO é um ADR:** ideia de funcionalidade ainda não priorizada. Intenção de produto vive em [`../PRODUCT-ROADMAP.md`](../PRODUCT-ROADMAP.md); quando um item de lá é priorizado e exige uma escolha técnica com trade-offs, **aí** nasce o ADR.
+
 ## Status possíveis
 
 - **Proposto** — em discussão, ainda não aplicado ao código.

@@ -4,7 +4,8 @@ Sistema de gestão comercial (ERP/PDV) para pequenas e médias empresas, com mó
 
 - **Arquitetura:** multi-tenant, modular, edge-first — ver [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - **Decisões técnicas:** [`docs/adr/`](docs/adr/)
-- **Progresso:** [`docs/ROADMAP.md`](docs/ROADMAP.md)
+- **Progresso (execução):** [`docs/ROADMAP.md`](docs/ROADMAP.md)
+- **Visão de produto:** [`docs/PRODUCT-ROADMAP.md`](docs/PRODUCT-ROADMAP.md)
 
 | Ambiente | URL |
 |---|---|
