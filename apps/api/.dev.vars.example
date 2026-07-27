@@ -1,0 +1,19 @@
+# =============================================================================
+# NexoLoja — API (apps/api): secrets do Worker em dev. Copie para `.dev.vars`.
+# =============================================================================
+# O `.dev.vars` alimenta os bindings do Worker durante `wrangler dev`.
+# Em produção os equivalentes são provisionados com `wrangler secret put`.
+#
+# Nota: a conexão local do Hyperdrive NÃO fica aqui — veja `.env.example`.
+# =============================================================================
+
+# Fallback de conexão quando não há binding de Hyperdrive (ver lib/request.ts).
+DATABASE_URL="postgresql://postgres.<ref>:<SENHA>@aws-1-<região>.pooler.supabase.com:5432/postgres"
+
+# ⚠️ SEGREDO — ignora o RLS. Necessário para o convite de usuário por e-mail
+# (ADR-008). Em produção: `npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY`.
+# SUPABASE_SERVICE_ROLE_KEY="<service-role-key>"
+
+# ⚠️ SEGREDO — assina o token da sessão de suporte (ADR-009, Fatia E).
+# Sem ele, iniciar suporte responde 503. Gere um valor aleatório longo.
+# SUPPORT_TOKEN_SECRET="<segredo-aleatorio>"
