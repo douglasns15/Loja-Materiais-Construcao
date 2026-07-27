@@ -204,6 +204,48 @@ cashSessions.post('/close', async (c) => {
   }
 });
 
+/** Extrato das movimentações de caixa (ADR-006) do caixa aberto DA LOJA (ADR-018): suprimentos,
+ * sangrias, devoluções e despesas — mais recentes primeiro. Detalha a linha agregada "saídas" da
+ * mini-DRE (mostra o que é sangria, o que é devolução, etc.), com valor, motivo, autor e hora. */
+cashSessions.get('/movements', async (c) => {
+  const tenantId = getTenantId(c);
+  const connectionString = getConnectionString(c.env);
+  if (!tenantId || !connectionString) {
+    return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
+  }
+
+  try {
+    const prisma = createPrismaClient(connectionString);
+    // ADR-018: caixa por loja — extrato do caixa aberto da loja (independe de quem abriu).
+    const session = await prisma.cashSession.findFirst({
+      where: { tenantId, closedAt: null },
+      select: { id: true },
+    });
+    if (!session) {
+      // Sem caixa aberto: extrato vazio (não é erro — a tela só não mostra nada).
+      return c.json({ ok: true, data: [] });
+    }
+    const rows = await prisma.cashMovement.findMany({
+      where: { tenantId, cashSessionId: session.id },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        type: true,
+        kind: true,
+        amount: true,
+        reason: true,
+        relatedOrderId: true,
+        registeredByName: true,
+        createdAt: true,
+      },
+    });
+    return c.json({ ok: true, data: rows });
+  } catch (err) {
+    console.error('GET /cash-sessions/movements falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao buscar as movimentações.' }, 500);
+  }
+});
+
 /** Lança uma Movimentação de Caixa manual — Suprimento (entrada) ou Sangria (saída) — no
  * caixa aberto DA LOJA (ADR-018). Reusa `CashMovement` (ADR-006): o mesmo mecanismo da
  * devolução, mas SEM `relatedOrderId` (não nasce de uma venda). O sinal contábil vem do

@@ -28,6 +28,26 @@ type CashSession = {
   expectedAmount: number;
 };
 
+// Uma linha do extrato de movimentações do caixa (ADR-006).
+type CashMovementRow = {
+  id: string;
+  type: 'INCOME' | 'EXPENSE';
+  kind: 'RETURN' | 'WITHDRAWAL' | 'SUPPLY' | 'EXPENSE';
+  amount: string;
+  reason: string | null;
+  relatedOrderId: string | null;
+  registeredByName: string | null;
+  createdAt: string;
+};
+
+// Rótulo amigável por natureza da movimentação — detalha a linha agregada "saídas" da mini-DRE.
+const MOVEMENT_LABELS: Record<CashMovementRow['kind'], string> = {
+  SUPPLY: 'Suprimento',
+  WITHDRAWAL: 'Sangria',
+  RETURN: 'Devolução',
+  EXPENSE: 'Despesa',
+};
+
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -49,6 +69,9 @@ export default function CaixaPage() {
   const [counter, setCounter] = useState<'open' | 'close' | null>(null);
   // Modal de Movimentação de Caixa (Suprimento/Sangria) aberto?
   const [moving, setMoving] = useState(false);
+  // Extrato das movimentações do caixa aberto + estado colapsável da seção.
+  const [movements, setMovements] = useState<CashMovementRow[]>([]);
+  const [movementsOpen, setMovementsOpen] = useState(false);
 
   async function load() {
     try {
@@ -58,6 +81,17 @@ export default function CaixaPage() {
       cacheCashSession(current);
       setCachedSession(null);
       setError(null);
+      // Extrato das movimentações (só faz sentido com caixa aberto). Uma falha aqui não pode
+      // derrubar a tela do caixa — por isso o try/catch próprio (degrada para lista vazia).
+      if (current) {
+        try {
+          setMovements(await apiGet<CashMovementRow[]>('/cash-sessions/movements'));
+        } catch {
+          setMovements([]);
+        }
+      } else {
+        setMovements([]);
+      }
     } catch (e) {
       // Offline (cold-start): recupera o último caixa aberto conhecido para não oferecer "abrir
       // caixa" indevidamente (achado 3.E.2 / ADR-012 CS-1). Fechar caixa segue online-only.
@@ -207,6 +241,61 @@ export default function CaixaPage() {
             >
               💵 Movimentar caixa (suprimento / sangria)
             </button>
+          </div>
+
+          {/* Extrato: detalha o que compõe as linhas da mini-DRE (suprimentos, sangrias,
+              devoluções, despesas) com valor, motivo, autor e hora. Colapsável para não
+              poluir o cartão do caixa. */}
+          <div className="rounded-2xl bg-white p-5 shadow-sm">
+            <button
+              type="button"
+              onClick={() => setMovementsOpen((v) => !v)}
+              className="flex w-full items-center justify-between"
+              aria-expanded={movementsOpen}
+            >
+              <span className="font-medium">Movimentações do caixa</span>
+              <span className="flex items-center gap-2 text-sm text-gray-500">
+                {movements.length > 0 && (
+                  <span className="rounded-full bg-gray-100 px-2 py-0.5 tabular-nums">
+                    {movements.length}
+                  </span>
+                )}
+                <span>{movementsOpen ? '▲' : '▼'}</span>
+              </span>
+            </button>
+
+            {movementsOpen && (
+              <div className="mt-4">
+                {movements.length === 0 ? (
+                  <p className="text-sm text-gray-500">Nenhuma movimentação neste caixa ainda.</p>
+                ) : (
+                  <ul className="divide-y divide-gray-100">
+                    {movements.map((m) => {
+                      const income = m.type === 'INCOME';
+                      return (
+                        <li key={m.id} className="flex items-start justify-between gap-3 py-2">
+                          <div className="min-w-0">
+                            <p className={`text-sm font-medium ${income ? 'text-green-700' : 'text-red-600'}`}>
+                              {income ? '↑' : '↓'} {MOVEMENT_LABELS[m.kind]}
+                            </p>
+                            {m.reason && <p className="text-sm text-gray-600">{m.reason}</p>}
+                            <p className="text-xs text-gray-400">
+                              {new Date(m.createdAt).toLocaleString('pt-BR')}
+                              {m.registeredByName ? ` · ${m.registeredByName}` : ''}
+                            </p>
+                          </div>
+                          <span
+                            className={`shrink-0 text-sm font-medium tabular-nums ${income ? 'text-green-700' : 'text-red-600'}`}
+                          >
+                            {income ? '+' : '−'} {BRL(m.amount)}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
 
           <form onSubmit={onClose} className="space-y-3 rounded-2xl bg-white p-5 shadow-sm">
