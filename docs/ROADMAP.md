@@ -3,7 +3,24 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-25 — **Histórico de Vendas paginado (cursor keyset) + filtro de
+> **Última atualização:** 2026-07-27 — **Histórico de Vendas: ordenação (maior/menor venda, data
+> ↑/↓) + botão "Voltar ao topo" — NO AR, aguardando E2E do Owner.**
+> Pedido do Owner. **Ponto da fatia:** o Histórico já pagina por **cursor keyset** — então ordenar por
+> maior/menor venda **no cliente** ordenaria só as páginas já baixadas ("a maior entre as 20
+> carregadas"), não a maior do período (a mesma **visão parcial enganosa** do `take:100`). Por isso a
+> ordenação foi feita **no servidor**, estendendo o keyset: `GET /orders?scope=all` ganhou `sort`
+> (`recent` default / `oldest` / `highest` / `lowest`), o cursor passou a codificar o **valor do campo
+> ordenado** (`<ISO|total>|<id>`) e o `orderBy` segue o par (campo, direção) com `id` desempatando na
+> mesma direção. **Sem migration.** A resposta `{ rows, nextCursor }` **não mudou** (a API antiga só
+> **ignora** `sort` — aditivo), mas o recurso **só funciona após o deploy da API**. **Web (`/vendas`):**
+> seletor "Ordenar por" (troca recarrega da 1ª página, mantém o período) + botão flutuante **"Voltar ao
+> topo"** que rola o `<main>` do shell (`overflow-y-auto`, não a window) e aparece após rolar um pouco.
+> Gates: typecheck API ✅, typecheck web ✅, build web (18 rotas, `/vendas` 4.5 → 5.12 kB) ✅. ⚠️ **Deploy
+> de API obrigatório** para o `sort` valer (a API antiga só ignorava o parâmetro); **web** também.
+> **NO AR:** API `ea214bbd` + web `6c6b553e`; smoke ✅ (health 200, `sort=highest` sem token 401,
+> `/login` 200). **Falta:** E2E do Owner. Ver "UI.Vendas.Ordenacao" no registro.
+>
+> **Antes:** 2026-07-25 — **Histórico de Vendas paginado (cursor keyset) + filtro de
 > período — NO AR e VALIDADO pelo Owner ("tudo validado com sucesso").** Ponto do Owner: telas que abrem
 > com muita informação carregada ficam lentas conforme a base cresce — o **Histórico de Vendas** já
 > pesava. Diagnóstico: `GET /orders?scope=all` trazia as **100 vendas mais recentes com todos os itens

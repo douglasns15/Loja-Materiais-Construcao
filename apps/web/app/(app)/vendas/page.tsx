@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   PAYMENT_METHOD_LABELS,
@@ -47,6 +47,17 @@ type OrdersPage = { rows: Order[]; nextCursor: string | null };
 type Range = { from: string; to: string };
 /** Atalho de período atualmente selecionado (destaca o botão). */
 type Preset = 'today' | '7d' | '30d';
+/**
+ * Ordenação do Histórico (aplicada no SERVIDOR pelo keyset — não só nas páginas já
+ * carregadas). Trocar recarrega da 1ª página.
+ */
+type Sort = 'recent' | 'oldest' | 'highest' | 'lowest';
+const SORT_LABELS: Record<Sort, string> = {
+  recent: 'Data (mais recentes)',
+  oldest: 'Data (mais antigas)',
+  highest: 'Maior venda',
+  lowest: 'Menor venda',
+};
 
 /** Quantas vendas por página / clique em "Mostrar mais". */
 const PAGE_SIZE = 20;
@@ -58,12 +69,13 @@ const BRL = (v: string | number) =>
 function ymd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
-/** Monta a query de `GET /orders?scope=all` com cursor e período. */
-function ordersQuery(cursor: string | null, r: Range): string {
+/** Monta a query de `GET /orders?scope=all` com cursor, período e ordenação. */
+function ordersQuery(cursor: string | null, r: Range, sort: Sort): string {
   const p = new URLSearchParams({ scope: 'all', limit: String(PAGE_SIZE) });
   if (cursor) p.set('cursor', cursor);
   if (r.from) p.set('from', r.from);
   if (r.to) p.set('to', r.to);
+  if (sort !== 'recent') p.set('sort', sort); // `recent` é o default do servidor.
   return `/orders?${p.toString()}`;
 }
 
@@ -85,6 +97,8 @@ export default function VendasPage() {
   const [toInput, setToInput] = useState('');
   // Atalho ativo (Hoje/7d/30d): destaca o botão em preto. `null` = período manual ou sem filtro.
   const [activePreset, setActivePreset] = useState<Preset | null>(null);
+  // Ordenação aplicada no servidor (default = mais recentes primeiro).
+  const [sort, setSort] = useState<Sort>('recent');
   const [error, setError] = useState<string | null>(null);
   // Modal de ação: qual venda e se é cancelamento ou devolução.
   const [action, setAction] = useState<{ id: string; mode: ActionMode } | null>(null);
@@ -94,12 +108,30 @@ export default function VendasPage() {
   const [printModel, setPrintModel] = useState<'80mm' | 'A4'>('80mm');
   // Job de reimpressão: novo objeto a cada clique força o efeito a disparar de novo.
   const [printJob, setPrintJob] = useState<{ order: Order; key: number } | null>(null);
+  // "Voltar ao topo": o scroll é do <main> do shell (overflow-y-auto), não da window.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [showTop, setShowTop] = useState(false);
+
+  // Observa a rolagem do container de scroll (o <main> ancestral) e mostra o botão de
+  // voltar ao topo depois de descer um pouco. O histórico pode ficar longo com "Mostrar mais".
+  useEffect(() => {
+    const scroller = rootRef.current?.closest('main');
+    if (!scroller) return;
+    const onScroll = () => setShowTop(scroller.scrollTop > 400);
+    scroller.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+    return () => scroller.removeEventListener('scroll', onScroll);
+  }, [ready]);
+
+  function voltarAoTopo() {
+    rootRef.current?.closest('main')?.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 
   // scope=all: histórico completo (inclui vendas de caixas já fechados), para
   // permitir a devolução de vendas fora do caixa aberto. Paginado por cursor: a 1ª
   // página substitui a lista; "Mostrar mais" anexa as seguintes.
-  async function loadOrders(r: Range = range) {
-    const page = await apiGet<OrdersPage>(ordersQuery(null, r));
+  async function loadOrders(r: Range = range, s: Sort = sort) {
+    const page = await apiGet<OrdersPage>(ordersQuery(null, r, s));
     setOrders(page.rows);
     setNextCursor(page.nextCursor);
   }
@@ -109,7 +141,7 @@ export default function VendasPage() {
     setLoadingMore(true);
     setError(null);
     try {
-      const page = await apiGet<OrdersPage>(ordersQuery(nextCursor, range));
+      const page = await apiGet<OrdersPage>(ordersQuery(nextCursor, range, sort));
       setOrders((prev) => [...prev, ...page.rows]);
       setNextCursor(page.nextCursor);
     } catch (e) {
@@ -117,6 +149,17 @@ export default function VendasPage() {
     } finally {
       setLoadingMore(false);
     }
+  }
+
+  /**
+   * Troca a ordenação e recarrega da 1ª página (o cursor keyset é atrelado ao `sort`, então
+   * a lista precisa reiniciar). Mantém o período em vigor.
+   */
+  function mudarOrdenacao(s: Sort) {
+    if (s === sort) return;
+    setSort(s);
+    setError(null);
+    loadOrders(range, s).catch((e) => setError((e as Error).message));
   }
 
   /**
@@ -233,7 +276,7 @@ export default function VendasPage() {
   const caixaOpen = !!openSessionId;
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div ref={rootRef} className="mx-auto max-w-3xl">
       <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Histórico de Vendas</h1>
         <div className="flex items-center gap-2">
@@ -310,6 +353,21 @@ export default function VendasPage() {
               Limpar
             </button>
           )}
+          {/* Ordenação — aplicada no servidor (não só nas páginas carregadas). */}
+          <label className="flex flex-col text-xs text-gray-500 sm:ml-auto">
+            Ordenar por
+            <select
+              value={sort}
+              onChange={(e) => mudarOrdenacao(e.target.value as Sort)}
+              className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
+            >
+              {(Object.keys(SORT_LABELS) as Sort[]).map((s) => (
+                <option key={s} value={s}>
+                  {SORT_LABELS[s]}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
         {(range.from || range.to) && (
           <p className="mt-2 text-xs text-gray-500">
@@ -520,6 +578,30 @@ export default function VendasPage() {
             amount: Number(p.amount),
           }))}
         />
+      )}
+
+      {/* Voltar ao topo: flutua sobre a lista (fixo na viewport) depois de rolar um pouco. */}
+      {showTop && (
+        <button
+          onClick={voltarAoTopo}
+          aria-label="Voltar ao topo"
+          title="Voltar ao topo"
+          className="fixed bottom-6 right-6 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-gray-900 text-white shadow-lg transition hover:bg-gray-800"
+        >
+          <svg
+            className="h-5 w-5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M12 19V5" />
+            <path d="m5 12 7-7 7 7" />
+          </svg>
+        </button>
       )}
     </div>
   );

@@ -3427,3 +3427,54 @@ Só front (estado visual). Gates: typecheck web ✅, build web (18 rotas) ✅. *
 > Commits `d1cc98f` (paginação) + `03d9479` (destaque). **Fatia UI.Vendas.Paginacao CONCLUÍDA.**
 > Próximo passo natural (mesmo padrão): busca no servidor para os cadastros grandes (Produtos/Clientes)
 > e revisar tetos dos Relatórios.
+
+---
+
+### UI.Vendas.Ordenacao — Ordenação (maior/menor venda, data ↑/↓) + "Voltar ao topo" (2026-07-27)
+
+Pedido do Owner no Histórico de Vendas: **botão de voltar ao topo** e **ordenar** por maior venda,
+menor venda, data crescente e data decrescente.
+
+**Decisão de arquitetura (o ponto da fatia): ordenação no SERVIDOR, não só nas páginas carregadas.**
+O Histórico já pagina por **cursor keyset** (fatia UI.Vendas.Paginacao). Ordenar por total apenas no
+cliente ordenaria só as linhas **já baixadas** ("a maior venda entre as 20 carregadas"), não a maior
+do período — a mesma classe de **visão parcial enganosa** do `take:100` e o motivo de a paginação ter
+sido feita no servidor. Então a ordenação estende o keyset: cada modo é um par (campo, direção) e o
+cursor passa a codificar o **valor do campo ordenado** (`<ISO|total>|<id>`), com o `id` desempatando na
+mesma direção (ordem total estável). **Sem migration, sem tocar no schema.**
+
+**API (`GET /orders?scope=all`).** Novo parâmetro `sort`: `recent` (default, data ↓ — contrato antigo
+byte-idêntico), `oldest` (data ↑), `highest` (maior venda, `total` ↓), `lowest` (menor venda, `total`
+↑). `sortConfig` mapeia `sort` → `{ field, dir }`; `keysetWhere` monta a cláusula genérica (`<` em
+`desc`, `>` em `asc`, `id` no mesmo sentido; cursor de data inválido cai na 1ª página em vez de
+duplicar). `orderBy: [{ [field]: dir }, { id: dir }]`. Resposta `{ rows, nextCursor }` **inalterada** —
+a API antiga apenas **ignora** `sort` (aditivo, não quebra), mas o recurso só funciona **após o deploy**.
+
+**Web (`/vendas`).** Seletor **"Ordenar por"** no card de filtro (4 opções); trocar **recarrega da 1ª
+página** (o cursor é atrelado ao `sort`) mantendo o período em vigor; `ordersQuery` só envia `sort`
+quando ≠ `recent` (preserva o default). Botão flutuante **"Voltar ao topo"** (100% cliente): observa o
+scroll do `<main>` do shell (`overflow-y-auto`, **não** a window — resolvido via `closest('main')`),
+aparece após rolar ~400 px e rola suave ao topo.
+
+**Gates**
+
+| Gate | Resultado |
+|---|---|
+| Typecheck API (`tsc --noEmit`) | ✅ |
+| Typecheck web (`tsc --noEmit`) | ✅ |
+| Build web (`next build`) | ✅ 18 rotas (`/vendas` 4.5 → 5.12 kB) |
+| Migration | ✅ nenhuma |
+| Deploy de API (⚠️ obrigatório p/ o `sort`) | ✅ `wrangler deploy` — Version `ea214bbd` |
+| Deploy web | ✅ `npm run deploy` — Version `6c6b553e` |
+| Smoke — health / `scope=all&sort=highest` sem token / `/login` | ✅ 200 / 401 / 200 |
+
+**Nota de índice (cost-zero).** Há `@@index([tenantId, createdAt])`, então os sorts por **data** (e o
+keyset) usam índice. Os sorts por **`total`** (`highest`/`lowest`) fazem sort sem índice dedicado —
+aceitável no volume atual de uma loja; se um dia pesar, o caminho é um `@@index([tenantId, total])`
+(migration aditiva, aprovação antes — regra 1), não antecipar agora.
+
+**NO AR (2026-07-27):** API `ea214bbd` + web `6c6b553e`; smoke ✅.
+
+**E2E do Owner — ⏭️ pendente** (API+web já no ar): ordenar por maior/menor venda e por data ↑/↓
+(conferir que o topo reflete o **período inteiro**, não só a 1ª página, paginando com "Mostrar mais");
+botão "Voltar ao topo" aparece ao rolar e volta ao topo.

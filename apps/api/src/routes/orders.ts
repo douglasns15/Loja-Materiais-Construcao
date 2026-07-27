@@ -33,29 +33,84 @@ function buildDateFilter(from?: string, to?: string): { gte?: Date; lte?: Date }
 }
 
 /**
- * Cursor de paginação keyset (não OFFSET, que degrada conforme a base cresce): a
- * posição é o par `createdAt|id` da última linha entregue. Opaco para o cliente, que
- * só o devolve na próxima página. Formato texto simples: `<ISO>|<id>`.
+ * Ordenação do Histórico (`scope=all`). O keyset pagina sobre o campo escolhido, então
+ * cada modo é um par (campo do banco, direção); o `id` é sempre o desempate na MESMA
+ * direção, garantindo ordem total estável para o cursor.
+ *  - `recent` (default): mais recentes primeiro (data ↓) — contrato antigo preservado.
+ *  - `oldest`: mais antigas primeiro (data ↑).
+ *  - `highest` / `lowest`: maior / menor venda (por `total`).
  */
-function encodeCursor(o: { createdAt: Date; id: string }): string {
-  return `${o.createdAt.toISOString()}|${o.id}`;
+type SortField = 'createdAt' | 'total';
+type SortDir = 'asc' | 'desc';
+function sortConfig(sort?: string): { field: SortField; dir: SortDir } {
+  switch (sort) {
+    case 'oldest':
+      return { field: 'createdAt', dir: 'asc' };
+    case 'highest':
+      return { field: 'total', dir: 'desc' };
+    case 'lowest':
+      return { field: 'total', dir: 'asc' };
+    case 'recent':
+    default:
+      return { field: 'createdAt', dir: 'desc' };
+  }
 }
-function decodeCursor(cursor: string): { createdAt: Date; id: string } | null {
+
+/**
+ * Cursor de paginação keyset (não OFFSET, que degrada conforme a base cresce): a
+ * posição é o par `<valor do campo ordenado>|<id>` da última linha entregue. Opaco para
+ * o cliente, que só o devolve na próxima página (e sempre com o mesmo `sort`). O valor é
+ * a data ISO (ordenação por `createdAt`) ou o total como string (ordenação por `total`).
+ */
+function encodeCursor(o: { createdAt: Date; total: unknown; id: string }, field: SortField): string {
+  const value = field === 'createdAt' ? o.createdAt.toISOString() : String(o.total);
+  return `${value}|${o.id}`;
+}
+function decodeCursor(cursor: string): { value: string; id: string } | null {
   const sep = cursor.indexOf('|');
   if (sep <= 0) return null;
-  const createdAt = new Date(cursor.slice(0, sep));
+  const value = cursor.slice(0, sep);
   const id = cursor.slice(sep + 1);
-  if (Number.isNaN(createdAt.getTime()) || !id) return null;
-  return { createdAt, id };
+  if (!value || !id) return null;
+  return { value, id };
+}
+
+/**
+ * Cláusula keyset genérica: só as linhas ESTRITAMENTE após o cursor na ordem
+ * (`field dir`, `id dir`). Em `desc` avança com `<`; em `asc`, com `>`. Retorna `{}`
+ * (sem restrição = 1ª página) se o cursor for inválido para o campo — evita duplicar
+ * linhas partindo de uma posição corrompida.
+ */
+function keysetWhere(
+  field: SortField,
+  dir: SortDir,
+  cursor: { value: string; id: string },
+): object {
+  const cmp = dir === 'desc' ? 'lt' : 'gt';
+  let fieldValue: Date | string;
+  if (field === 'createdAt') {
+    const d = new Date(cursor.value);
+    if (Number.isNaN(d.getTime())) return {};
+    fieldValue = d;
+  } else {
+    fieldValue = cursor.value;
+  }
+  return {
+    OR: [
+      { [field]: { [cmp]: fieldValue } },
+      { [field]: fieldValue, id: { [cmp]: cursor.id } },
+    ],
+  };
 }
 
 /**
  * Lista as vendas com itens, pagamentos e status (mais recentes primeiro).
- *  - `?scope=all`: Histórico de Vendas — **paginado por cursor** (keyset em
- *    `createdAt desc, id desc`). Aceita `limit`, `cursor` (opaco) e `from`/`to`
- *    (AAAA-MM-DD, fuso da loja) e responde `{ rows, nextCursor }` (`nextCursor: null`
- *    na última página). Inclui o estado do caixa de cada venda para decidir entre
- *    cancelar e devolver. Sem exigir caixa aberto.
+ *  - `?scope=all`: Histórico de Vendas — **paginado por cursor** (keyset). Aceita
+ *    `limit`, `cursor` (opaco), `from`/`to` (AAAA-MM-DD, fuso da loja) e `sort`
+ *    (`recent` default / `oldest` / `highest` / `lowest`) e responde
+ *    `{ rows, nextCursor }` (`nextCursor: null` na última página). O keyset ordena pelo
+ *    campo do `sort` (data ou total). Inclui o estado do caixa de cada venda para
+ *    decidir entre cancelar e devolver. Sem exigir caixa aberto.
  *  - padrão: vendas do caixa atualmente aberto do operador (base do cancelamento,
  *    restrito ao caixa aberto). Sem caixa aberto, retorna lista vazia (array cru,
  *    contrato antigo preservado).
@@ -81,24 +136,18 @@ orders.get('/', async (c) => {
           : ORDERS_PAGE_DEFAULT;
 
       const dateFilter = buildDateFilter(c.req.query('from'), c.req.query('to'));
+      const { field, dir } = sortConfig(c.req.query('sort'));
       const cursorParam = c.req.query('cursor');
       const cursor = cursorParam ? decodeCursor(cursorParam) : null;
 
-      // Keyset: só linhas ANTES do cursor em (createdAt desc, id desc). O filtro de
-      // período (createdAt gte/lte) e o cursor coexistem por AND.
-      const keyset = cursor
-        ? {
-            OR: [
-              { createdAt: { lt: cursor.createdAt } },
-              { createdAt: cursor.createdAt, id: { lt: cursor.id } },
-            ],
-          }
-        : {};
+      // Keyset: só as linhas após o cursor na ordem escolhida (`field dir`, `id dir`). O
+      // filtro de período (createdAt gte/lte) e o cursor coexistem por AND.
+      const keyset = cursor ? keysetWhere(field, dir, cursor) : {};
 
       // `take: limit + 1`: a linha extra só serve para saber se há próxima página.
       const list = await prisma.order.findMany({
         where: { tenantId, ...(dateFilter ? { createdAt: dateFilter } : {}), ...keyset },
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        orderBy: [{ [field]: dir }, { id: dir }],
         take: limit + 1,
         include: {
           items: true,
@@ -110,7 +159,7 @@ orders.get('/', async (c) => {
       const hasMore = list.length > limit;
       const rows = hasMore ? list.slice(0, limit) : list;
       const last = rows[rows.length - 1];
-      const nextCursor = hasMore && last ? encodeCursor(last) : null;
+      const nextCursor = hasMore && last ? encodeCursor(last, field) : null;
       return c.json({ ok: true, data: { rows, nextCursor } });
     }
 
