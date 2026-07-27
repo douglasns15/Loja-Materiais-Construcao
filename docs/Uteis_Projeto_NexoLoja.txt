@@ -38,8 +38,6 @@ http://localhost:3000/
 
 <> Paginação das telas que já abrem com várias infos carregadas, isso pode tornar a tela mais lenta, principalmente com o passar do tempo, conforme a base aumenta de tamanho;
 
-<> Tela histórico de vendas, botão voltar ao topo, filtro por maior venda, menor venda, data crescente, decrescente.
-
 ## Subir servidor
 
 cd C:\Users\Douglas\Documents\GitHub\Loja-Materiais-Construcao
