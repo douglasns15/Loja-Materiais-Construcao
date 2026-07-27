@@ -1,8 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   PAYMENT_METHOD_LABELS,
+  type CashMovementRow,
   type CashSessionReport,
   type PaymentMethod,
   type SalesReport,
@@ -10,6 +11,7 @@ import {
 import { apiGet } from '@/lib/api';
 import { useOnline } from '@/lib/useOnline';
 import { OfflineNotice } from '@/components/OfflineNotice';
+import { CashMovementsList } from '@/components/CashMovementsList';
 
 const BRL = (v: number) =>
   v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -194,6 +196,34 @@ export default function RelatoriosPage() {
   const [sessions, setSessions] = useState<CashSessionReport[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Drill-down do extrato por fechamento: lazy (busca só ao expandir) e cacheado por sessão,
+  // para reabrir sem novo request. Um fechamento expandido por vez (toggle).
+  const [expandedSession, setExpandedSession] = useState<string | null>(null);
+  const [movementsBySession, setMovementsBySession] = useState<Record<string, CashMovementRow[]>>({});
+  const [loadingMovements, setLoadingMovements] = useState<string | null>(null);
+
+  const toggleMovements = useCallback(
+    async (sessionId: string) => {
+      if (expandedSession === sessionId) {
+        setExpandedSession(null);
+        return;
+      }
+      setExpandedSession(sessionId);
+      if (movementsBySession[sessionId]) return; // já em cache — não refaz o request
+      setLoadingMovements(sessionId);
+      try {
+        const rows = await apiGet<CashMovementRow[]>(
+          `/cash-sessions/movements?sessionId=${sessionId}`,
+        );
+        setMovementsBySession((prev) => ({ ...prev, [sessionId]: rows }));
+      } catch {
+        setMovementsBySession((prev) => ({ ...prev, [sessionId]: [] }));
+      } finally {
+        setLoadingMovements(null);
+      }
+    },
+    [expandedSession, movementsBySession],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -375,7 +405,8 @@ export default function RelatoriosPage() {
               </tr>
             ) : (
               sessions.map((s) => (
-                <tr key={s.id} className="border-t border-gray-100">
+                <Fragment key={s.id}>
+                <tr className="border-t border-gray-100">
                   <td className="px-4 py-2 text-gray-500">
                     {/* Popover do turno (ADR-010): abertura/fechamento + quem abriu/fechou.
                         Hover no desktop, toque no celular/PWA; não duplica as colunas financeiras. */}
@@ -389,6 +420,15 @@ export default function RelatoriosPage() {
                         {s.lateSalesCount} após fechamento · {BRL(s.lateSalesTotal)}
                       </span>
                     )}
+                    {/* Drill-down do extrato daquele turno (suprimentos/sangrias/devoluções/despesas). */}
+                    <button
+                      type="button"
+                      onClick={() => toggleMovements(s.id)}
+                      aria-expanded={expandedSession === s.id}
+                      className="mt-1 block text-xs font-medium text-gray-500 hover:text-gray-900"
+                    >
+                      {expandedSession === s.id ? '▾' : '▸'} movimentações
+                    </button>
                   </td>
                   <td className="px-4 py-2 text-right text-gray-500">{BRL(s.openingAmount)}</td>
                   <td className="px-4 py-2 text-right text-gray-500">
@@ -433,6 +473,21 @@ export default function RelatoriosPage() {
                     )}
                   </td>
                 </tr>
+                {expandedSession === s.id && (
+                  <tr className="border-t border-gray-100 bg-gray-50">
+                    <td colSpan={5} className="px-4 py-3">
+                      {loadingMovements === s.id ? (
+                        <p className="text-sm text-gray-400">Carregando…</p>
+                      ) : (
+                        <CashMovementsList
+                          movements={movementsBySession[s.id] ?? []}
+                          emptyLabel="Nenhuma movimentação neste caixa."
+                        />
+                      )}
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))
             )}
           </tbody>
