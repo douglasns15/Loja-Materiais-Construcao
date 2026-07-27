@@ -19,17 +19,26 @@
 
 ## Horizonte 1 — Agora (loja única, uso diário)
 
-Foco: **tornar o dia a dia do balcão impecável**. Origem: pedidos do Owner registrados em `Uteis_Projeto_NexoLoja.txt` (conferir no `ROADMAP.md` quais já saíram).
+Foco: **tornar o dia a dia do balcão impecável**. Origem: pedidos do Owner em `Uteis_Projeto_NexoLoja.txt`.
+
+> Verificado contra o código em 2026-07-27. Os itens já entregues foram removidos desta lista — o histórico deles está no [`ROADMAP.md`](ROADMAP.md).
 
 | Tema | Valor para o lojista |
 |---|---|
 | **Modernização visual** | Percepção de produto profissional; legibilidade no balcão |
-| **Histórico de vendas completo** | Ver *tudo* da venda (dinheiro recebido, troco, formas); agrupar, filtrar por coluna, ordenar, buscar por nota |
-| **Numeração de nota** | Número visível no comprovante impresso e no histórico — referência ao conversar com o cliente |
-| **Navegação por período nos relatórios** | Percorrer dias com `< Hoje >` sem digitar datas |
-| **Gestão de senha pelo Super Usuário** | Destravar lojista que esqueceu a senha, sem depender de e-mail |
-| **Correção do logo** | Logo sumindo do comprovante ao ser trocado — quebra a identidade da loja |
+| **Numeração de nota** | Número da venda no comprovante e no histórico — referência ao falar com o cliente. *Não existe hoje: pedidos são identificados por UUID.* |
+| **Busca e filtro no histórico de vendas** | Localizar uma venda específica (por nota, cliente, valor) e filtrar por coluna. *Hoje há período e ordenação, mas não busca textual.* |
+| **Detalhe do pagamento no histórico** | A tela lista as formas usadas; falta mostrar **valor recebido e troco** (que o comprovante já imprime) |
+| **Navegação dia a dia nos relatórios** | Percorrer dias com `< Hoje >` sem digitar datas. *Hoje só há os atalhos Hoje/7d/30d e intervalo manual.* |
+| **Gestão de senha pelo Super Usuário** | Destravar lojista que esqueceu a senha, sem depender de e-mail. *Não implementado no painel de plataforma.* |
+| **Ver usuários de cada loja no painel** | Clicar no número de usuários e listar quem são |
+| **Correção do logo** | Logo some do comprovante ao ser trocado — quebra a identidade da loja (**bug**) |
+| **Crédito parcelado** | Parcelamento sobre o total, com campo para valor extra |
 | **Documentação de origem dos dados** | Cada número em tela deve ter explicado de onde vem e como é calculado |
+
+### Entregues recentemente (não repetir aqui)
+
+Pagamento dividido · paginação por cursor + filtro de período no histórico · ordenação (maior/menor valor, data) · botão "voltar ao topo" · sangria/suprimento e extrato do caixa · contador de cédulas e mini-DRE · troco e formas no comprovante · busca no servidor em Clientes/Produtos.
 
 ---
 
