@@ -3,7 +3,25 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-27 — **Histórico de Vendas: ordenação (maior/menor venda, data
+> **Última atualização:** 2026-07-27 — **Busca no servidor (Clientes/Produtos) + revisão dos tetos
+> de Relatórios — NO AR, aguardando E2E do Owner.** Continuação do combate às "telas que abrem com
+> muita info": onde a base cresce e a pessoa **procura** em vez de rolar, o remédio é **busca no
+> servidor (`?q=`) + paginação** em vez de baixar tudo. As três telas numa fatia só. **Sem migration.**
+> **Clientes:** `GET /customers` trocou "lista tudo" por `?q=` (nome/e-mail; CPF/CNPJ e telefone por
+> dígitos) + keyset (`{rows,nextCursor}`); tela com busca (debounce) + "Mostrar mais" (era o único
+> consumidor). **Produtos:** `GET /products` (array cru) **intocado** (PDV/Estoque/offline dependem dele);
+> nova rota `GET /products/search` (keyset, `q` = nome/popular/fabricante/SKU) alimenta a **tabela**. O
+> catálogo completo (scan + dropdown de par ADR-015 + par reverso do `ProductDetail`) virou **lazy**
+> (`ensureCatalog`, uma vez sob demanda) — a tela **abre leve** e o scan decide sobre o **catálogo
+> inteiro**, não a página visível. **Relatórios:** `/sales` é agregação (sem teto); `/cash-sessions`
+> tinha `take:200`+`1000` mas é sempre period-bound (default 30d, ~1 fechamento/dia) — elevados p/
+> `2000`/`5000` como margem (paginar seria overkill). Gates: typecheck API/web ✅, build web (18 rotas,
+> `/customers` 2.09 kB, `/products` 11 kB) ✅, build API dry-run ✅. ⚠️ **Deploy de API obrigatório**
+> (formato de `/customers` mudou array → `{rows}`), API+web subiram juntos. **NO AR:** API `13ab6452` +
+> web `cd12db31`; smoke ✅ (health 200, `/products/search` e `/customers` sem token 401, `/login` 200).
+> **Falta:** E2E do Owner. Ver "UI.Busca.Servidor" no registro.
+>
+> **Antes:** 2026-07-27 — **Histórico de Vendas: ordenação (maior/menor venda, data
 > ↑/↓) + botão "Voltar ao topo" — NO AR e VALIDADO pelo Owner.**
 > Pedido do Owner. **Ponto da fatia:** o Histórico já pagina por **cursor keyset** — então ordenar por
 > maior/menor venda **no cliente** ordenaria só as páginas já baixadas ("a maior entre as 20

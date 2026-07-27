@@ -9,7 +9,37 @@ const customers = new Hono<Env>();
 // Todas as rotas de clientes exigem autenticação (JWT do Supabase).
 customers.use('*', requireAuth);
 
-/** Lista clientes ativos (não deletados) do tenant. */
+/** Página do cadastro: default 20, teto 50 (evita respostas gigantes conforme a base cresce). */
+const CUSTOMERS_PAGE_DEFAULT = 20;
+const CUSTOMERS_PAGE_MAX = 50;
+
+/**
+ * Cursor keyset (não OFFSET, que degrada com a base): a posição é o par `nome|id` da última
+ * linha, ordenado por `name asc, id asc`. O nome é `encodeURIComponent`-ado porque pode conter
+ * o separador `|`; o `id` (UUID) nunca contém. Opaco para o cliente.
+ */
+function encodeCursor(o: { name: string; id: string }): string {
+  return `${encodeURIComponent(o.name)}|${o.id}`;
+}
+function decodeCursor(cursor: string): { name: string; id: string } | null {
+  const sep = cursor.indexOf('|');
+  if (sep < 0) return null;
+  const id = cursor.slice(sep + 1);
+  if (!id) return null;
+  try {
+    return { name: decodeURIComponent(cursor.slice(0, sep)), id };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Lista clientes ativos (não deletados) do tenant — **busca no servidor + paginação keyset**.
+ * Aceita `q` (nome/e-mail case-insensitive; CPF/CNPJ e telefone por dígitos), `limit` e `cursor`
+ * (opaco) e responde `{ rows, nextCursor }` (`nextCursor: null` na última página). Substitui o
+ * "lista tudo" anterior: a tela de Clientes procura em vez de rolar, então nunca baixa a base
+ * inteira de uma vez.
+ */
 customers.get('/', async (c) => {
   const tenantId = getTenantId(c);
   if (!tenantId) {
@@ -22,14 +52,51 @@ customers.get('/', async (c) => {
 
   try {
     const prisma = createPrismaClient(connectionString);
-    // SEM teto: o `take: 100` truncava silenciosamente em ordem alfabética — passando de 100
-    // clientes, os de nome "tardio" sumiam da lista mesmo existindo no banco (mesma classe do
-    // bug de Produtos). Escopo já é o do tenant (RLS); catálogo grande → busca no servidor.
-    const items = await prisma.customer.findMany({
-      where: { tenantId, deletedAt: null },
-      orderBy: { name: 'asc' },
+
+    const limitRaw = Number(c.req.query('limit'));
+    const limit =
+      Number.isFinite(limitRaw) && limitRaw > 0
+        ? Math.min(Math.floor(limitRaw), CUSTOMERS_PAGE_MAX)
+        : CUSTOMERS_PAGE_DEFAULT;
+
+    const q = c.req.query('q')?.trim();
+    const digits = q ? q.replace(/\D+/g, '') : '';
+    const insensitive = Prisma.QueryMode.insensitive;
+    const search = q
+      ? {
+          OR: [
+            { name: { contains: q, mode: insensitive } },
+            { email: { contains: q, mode: insensitive } },
+            // CPF/CNPJ e telefone são guardados só com dígitos (forma canônica) — compara por dígitos.
+            ...(digits ? [{ cpfCnpj: { contains: digits } }, { phone: { contains: digits } }] : []),
+          ],
+        }
+      : {};
+
+    const cursorParam = c.req.query('cursor');
+    const cursor = cursorParam ? decodeCursor(cursorParam) : null;
+    // Keyset: só as linhas APÓS o cursor em (name asc, id asc).
+    const keyset = cursor
+      ? {
+          OR: [
+            { name: { gt: cursor.name } },
+            { name: cursor.name, id: { gt: cursor.id } },
+          ],
+        }
+      : {};
+
+    // `take: limit + 1`: a linha extra só sinaliza se há próxima página.
+    const list = await prisma.customer.findMany({
+      where: { tenantId, deletedAt: null, ...search, ...keyset },
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
+      take: limit + 1,
     });
-    return c.json({ ok: true, data: items });
+
+    const hasMore = list.length > limit;
+    const rows = hasMore ? list.slice(0, limit) : list;
+    const last = rows[rows.length - 1];
+    const nextCursor = hasMore && last ? encodeCursor(last) : null;
+    return c.json({ ok: true, data: { rows, nextCursor } });
   } catch (err) {
     console.error('GET /customers falhou:', err);
     return c.json({ ok: false, error: 'Falha ao listar clientes.' }, 500);

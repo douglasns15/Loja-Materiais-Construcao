@@ -16,29 +16,66 @@ type Customer = {
   updatedAt: string;
 };
 
+/** Página do cadastro (busca no servidor + paginação keyset): linhas + cursor da próxima página. */
+type CustomersPage = { rows: Customer[]; nextCursor: string | null };
+
+/** Quantos clientes por página / clique em "Mostrar mais". */
+const PAGE_SIZE = 20;
+
 /** Autoria (ADR-010): "por <nome> · <data>", ou "—" quando não há registro (dados antigos). */
 const byLine = (name: string | null, iso?: string) =>
   name ? `${name}${iso ? ` · ${new Date(iso).toLocaleDateString('pt-BR')}` : ''}` : '—';
 
+/** Monta a query de `GET /customers` com busca e cursor. */
+function customersQuery(cursor: string | null, q: string): string {
+  const p = new URLSearchParams({ limit: String(PAGE_SIZE) });
+  if (q.trim()) p.set('q', q.trim());
+  if (cursor) p.set('cursor', cursor);
+  return `/customers?${p.toString()}`;
+}
+
 export default function CustomersPage() {
   const online = useOnline();
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({ name: '', cpfCnpj: '', phone: '', email: '' });
   const [saving, setSaving] = useState(false);
+  // Busca no servidor: `search` é o que está no campo; a query dispara com debounce.
+  const [search, setSearch] = useState('');
 
-  async function load() {
+  // Carrega a 1ª página para um termo (substitui a lista). O termo default vem do estado.
+  async function load(q: string = search) {
+    const page = await apiGet<CustomersPage>(customersQuery(null, q));
+    setCustomers(page.rows);
+    setNextCursor(page.nextCursor);
+  }
+
+  async function loadMore() {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    setError(null);
     try {
-      setCustomers(await apiGet<Customer[]>('/customers'));
-      setError(null);
+      const page = await apiGet<CustomersPage>(customersQuery(nextCursor, search));
+      setCustomers((prev) => [...prev, ...page.rows]);
+      setNextCursor(page.nextCursor);
     } catch (e) {
       setError((e as Error).message);
+    } finally {
+      setLoadingMore(false);
     }
   }
 
+  // Busca no servidor com debounce (300 ms): recarrega a 1ª página a cada termo, sem baixar a
+  // base inteira. Roda também na montagem (termo vazio = primeiros PAGE_SIZE em ordem alfabética).
   useEffect(() => {
-    load();
-  }, []);
+    const t = setTimeout(() => {
+      load(search).catch((e) => setError((e as Error).message));
+    }, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
 
   async function onCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -113,6 +150,18 @@ export default function CustomersPage() {
         </button>
       </form>
 
+      {/* Busca no servidor: procura por nome, CPF/CNPJ, telefone ou e-mail (não baixa tudo). */}
+      <div className="mb-3 sm:max-w-md">
+        <input
+          type="search"
+          placeholder="Buscar cliente (nome, CPF/CNPJ, telefone ou e-mail)…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full rounded-lg border border-gray-300 px-3 py-2"
+          aria-label="Buscar cliente"
+        />
+      </div>
+
       {error && online && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
       <div className="overflow-x-auto rounded-2xl bg-white shadow-sm">
@@ -130,7 +179,9 @@ export default function CustomersPage() {
             {customers.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-6 text-center text-gray-400">
-                  Nenhum cliente cadastrado.
+                  {search.trim()
+                    ? 'Nenhum cliente encontrado para a busca.'
+                    : 'Nenhum cliente cadastrado.'}
                 </td>
               </tr>
             ) : (
@@ -149,6 +200,19 @@ export default function CustomersPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Paginação keyset: só aparece quando o servidor sinaliza mais páginas. */}
+      {nextCursor && (
+        <div className="mt-4 flex justify-center">
+          <button
+            onClick={loadMore}
+            disabled={loadingMore}
+            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-60"
+          >
+            {loadingMore ? 'Carregando…' : 'Mostrar mais'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

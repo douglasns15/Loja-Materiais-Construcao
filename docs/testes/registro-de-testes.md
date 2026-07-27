@@ -3478,3 +3478,57 @@ aceitável no volume atual de uma loja; se um dia pesar, o caminho é um `@@inde
 **E2E do Owner — ✅ VALIDADO (2026-07-27):** "validado com sucesso" — ordenação por maior/menor venda e
 por data ↑/↓ (topo refletindo o período inteiro via "Mostrar mais") + botão "Voltar ao topo". Fatia
 **UI.Vendas.Ordenacao CONCLUÍDA**.
+
+---
+
+### UI.Busca.Servidor — Busca no servidor (Clientes/Produtos) + revisão dos tetos de Relatórios (2026-07-27)
+
+Continuação do combate às "telas que abrem com muita info": onde a base é grande e a pessoa
+**procura** em vez de rolar (Clientes/Produtos), o remédio é **busca no servidor** (`?q=`) +
+paginação — em vez de baixar a base inteira. **Sem migration** (RLS por tenant intacta). As três
+telas numa fatia só (escolha do Owner).
+
+**Clientes** (`GET /customers` + `customers/page.tsx`). A rota **substituiu** o "lista tudo" por
+`?q=` (nome/e-mail case-insensitive; CPF/CNPJ e telefone **por dígitos**, forma canônica) + paginação
+**keyset** (`name asc, id asc`; cursor `nome|id` com `encodeURIComponent` no nome, pois pode conter
+`|`) → `{ rows, nextCursor }` (default 20, teto 50). Tela: campo de busca com **debounce 300 ms** +
+**"Mostrar mais"**. Era o **único consumidor** da rota, então mudar o formato foi seguro.
+
+**Produtos** (`GET /products/search` NOVO + `products/page.tsx`). O `GET /products` (array cru) ficou
+**intocado** — PDV, Estoque e o **cache offline** dependem dele inteiro. A **tabela** passou a usar a
+rota nova `GET /products/search` (`q` = nome/popular/fabricante/SKU case-insensitive; keyset por nome;
+`includeInactive`; `{ rows, nextCursor }`, default 30). ⚠️ Registrada **antes** de `/:id` (senão o Hono
+casaria "search" como id). **Acoplamento preservado sem regressão:** o catálogo **completo** (que o
+scan, o dropdown de **par** (ADR-015) e o **par reverso** do `ProductDetail` exigem) virou **lazy** —
+`ensureCatalog()` carrega **uma vez, sob demanda** (foco no dropdown de par, abrir o detalhe, ou
+escanear), dedupado por `useRef<Promise>` e atualizado após criar/editar. Assim a tela **abre leve**; o
+scan decide "achou/código novo" sobre o **catálogo inteiro** (não a página visível), então não
+classifica errado um produto que só não está na página. Efeito de scroll re-dispara quando a linha
+destacada entra na listagem (o scan agora recarrega a tabela pelo servidor, assíncrono).
+
+**Relatórios** (`reports.ts`). `GET /reports/sales` é **agregação** (`aggregate`/`groupBy`) — **sem
+teto de linhas**, nada a fazer. `GET /reports/cash-sessions` tinha `take: 200` (fechamentos) + `take:
+1000` (eventos `SALE_ON_CLOSED_CASH`); como a tela **sempre manda período** (default 30 dias) e o caixa
+cresce ~1 fechamento/dia, os tetos **não mordem** na prática — elevados para **2000 / 5000** como
+margem de segurança (paginação seria overkill numa tabela que cresce 1 linha/dia).
+
+**Gates**
+
+| Gate | Resultado |
+|---|---|
+| Typecheck API (`tsc --noEmit`) | ✅ |
+| Typecheck web (`tsc --noEmit`) | ✅ |
+| Build web (`next build`) | ✅ 18 rotas (`/customers` 1.69 → 2.09 kB, `/products` 10.6 → 11 kB) |
+| Build API (`--dry-run`) | ✅ empacota |
+| Migration | ✅ nenhuma |
+| Deploy de API (⚠️ obrigatório: formato de `/customers` mudou array → `{rows}`) | ✅ Version `13ab6452` |
+| Deploy web | ✅ Version `cd12db31` |
+| Smoke — health / `/products/search` sem token / `/customers` sem token / `/login` | ✅ 200 / 401 / 401 / 200 |
+
+**Nota (acento).** A busca client-side dobrava acento (`normalizeSearchText`); o Postgres só dobra com
+a extensão `unaccent`. A busca no servidor é **case-insensitive** mas **não** acento-insensível — refino
+futuro (habilitar `unaccent`) se fizer falta.
+
+**E2E do Owner — ⏭️ pendente** (API+web no ar): em Clientes e Produtos, buscar por nome/parte e ver o
+servidor filtrar + "Mostrar mais"; em Produtos, confirmar que **scan** acha produto fora da página, o
+**par** ainda lista o catálogo e o **detalhe** abre com o par correto; Relatórios seguem normais.

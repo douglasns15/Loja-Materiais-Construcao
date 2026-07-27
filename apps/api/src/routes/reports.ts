@@ -128,10 +128,13 @@ reports.get('/cash-sessions', async (c) => {
 
   try {
     const prisma = createPrismaClient(connectionString);
+    // Teto de segurança (não paginação): a tela sempre manda período (default 30 dias) e o caixa
+    // cresce ~1 fechamento/dia, então 2000 cobre ~5 anos de um período escolhido — folgado. Fica só
+    // para evitar uma resposta gigante num "tudo o histórico" extremo, sem truncar o uso real.
     const sessions = await prisma.cashSession.findMany({
       where: { tenantId, closedAt: { not: null, ...(closedAt ?? {}) } },
       orderBy: { closedAt: 'desc' },
-      take: 200,
+      take: 2000,
     });
 
     // CS-4 (ADR-012 §b): vendas offline anexadas a um caixa JÁ FECHADO deixam uma marca de
@@ -146,7 +149,9 @@ reports.get('/cash-sessions', async (c) => {
         where: { tenantId, action: 'SALE_ON_CLOSED_CASH' },
         select: { meta: true },
         orderBy: { createdAt: 'desc' },
-        take: 1000,
+        // Teto de segurança amplo: só existe marca aqui quando uma venda OFFLINE cai num caixa já
+        // fechado (raro). 5000 cobre qualquer loja real sem truncar a reconciliação.
+        take: 5000,
       });
       for (const ev of events) {
         const m = ev.meta as {

@@ -17,6 +17,24 @@ import { ProductDetail, type CardFees, type ProductFull } from '@/components/Pro
  */
 type Product = ProductFull;
 
+/** Página da busca (server search + keyset): linhas + cursor da próxima página. */
+type ProductsPage = { rows: Product[]; nextCursor: string | null };
+
+/** Quantos produtos por página / clique em "Mostrar mais". */
+const PAGE_SIZE = 30;
+
+/**
+ * Monta a query da **tabela** (`GET /products/search`, busca no servidor + paginação). A tela de
+ * gestão sempre inclui inativos (acinzentados). O catálogo do PDV segue em `GET /products` (array
+ * cru), que NÃO usamos aqui para a listagem — só sob demanda para scan/par (ver `ensureCatalog`).
+ */
+function productsQuery(cursor: string | null, q: string): string {
+  const p = new URLSearchParams({ includeInactive: 'true', limit: String(PAGE_SIZE) });
+  if (q.trim()) p.set('q', q.trim());
+  if (cursor) p.set('cursor', cursor);
+  return `/products/search?${p.toString()}`;
+}
+
 /** Autoria (ADR-010): "por <nome> · <data>", ou "—" quando não há registro (dados antigos). */
 const byLine = (name: string | null, iso?: string) =>
   name ? `${name}${iso ? ` · ${new Date(iso).toLocaleDateString('pt-BR')}` : ''}` : '—';
@@ -84,9 +102,15 @@ export default function ProductsPage() {
   // Nome do produto usado como base pelo botão "Copiar" (mostra um aviso sobre o form).
   const [copiedFromName, setCopiedFromName] = useState<string | null>(null);
 
-  // Busca local: nome, nome popular, fabricante ou SKU (função pura de packages/core).
+  // Busca NO SERVIDOR (nome/popular/fabricante/SKU): `search` é o campo; a query dispara com debounce.
   const [search, setSearch] = useState('');
-  const filtered = products.filter((p) => productMatchesQuery(p, search));
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  // Catálogo COMPLETO — carregado sob demanda (lazy) só quando scan/par/detalhe precisa varrer tudo
+  // (o par reverso do ADR-015 exige o catálogo inteiro). A tela abre sem baixá-lo. `null` = ainda não
+  // carregado. `catalogPromise` dedup as chamadas concorrentes de `ensureCatalog`.
+  const [catalog, setCatalog] = useState<Product[] | null>(null);
+  const catalogPromise = useRef<Promise<Product[]> | null>(null);
 
   // Taxas da maquininha da loja (ADR-016) — só para o painel exibir a margem REAL por
   // modalidade. Nunca alteram preço; falha silenciosa (a margem simplesmente não desconta taxa).
@@ -106,19 +130,80 @@ export default function ProductsPage() {
   const [minEdits, setMinEdits] = useState<Record<string, string>>({});
   const [savingMinId, setSavingMinId] = useState<string | null>(null);
 
-  async function load() {
+  /** Carrega a 1ª página da tabela para um termo (busca no servidor; substitui a lista). */
+  async function loadListing(q: string = search) {
+    const page = await apiGet<ProductsPage>(productsQuery(null, q));
+    setProducts(page.rows);
+    setNextCursor(page.nextCursor);
+  }
+
+  async function loadMore() {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    setError(null);
     try {
-      // `includeInactive`: a tela de gestão mostra também os desativados (acinzentados, com
-      // Reativar no painel). O PDV/Estoque seguem chamando `/products` sem o parâmetro (só ativos).
-      setProducts(await apiGet<Product[]>('/products?includeInactive=true'));
-      setError(null);
+      const page = await apiGet<ProductsPage>(productsQuery(nextCursor, search));
+      setProducts((prev) => [...prev, ...page.rows]);
+      setNextCursor(page.nextCursor);
     } catch (e) {
       setError((e as Error).message);
+    } finally {
+      setLoadingMore(false);
     }
   }
 
+  /**
+   * Garante o catálogo completo em memória (lazy). Usa o `GET /products?includeInactive=true`
+   * existente (array cru). Dedup por `catalogPromise` para focos/cliques concorrentes não
+   * dispararem várias buscas. Em falha, limpa a promise para permitir nova tentativa.
+   */
+  async function ensureCatalog(): Promise<Product[]> {
+    if (catalog) return catalog;
+    if (!catalogPromise.current) {
+      catalogPromise.current = apiGet<Product[]>('/products?includeInactive=true')
+        .then((all) => {
+          setCatalog(all);
+          return all;
+        })
+        .catch((e) => {
+          catalogPromise.current = null;
+          throw e;
+        });
+    }
+    return catalogPromise.current;
+  }
+
+  /** Após criar/editar: recarrega a listagem e, se o catálogo já foi carregado, atualiza-o também. */
+  async function reloadAll() {
+    await loadListing();
+    if (catalog || catalogPromise.current) {
+      try {
+        const all = await apiGet<Product[]>('/products?includeInactive=true');
+        setCatalog(all);
+        catalogPromise.current = Promise.resolve(all);
+      } catch {
+        /* mantém o catálogo anterior se a atualização falhar */
+      }
+    }
+  }
+
+  /** Abre o painel Ver/editar e garante o catálogo (o par reverso do ADR-015 varre todos os produtos). */
+  function openDetail(id: string) {
+    setDetailId(id);
+    void ensureCatalog().catch(() => {});
+  }
+
+  // Busca no servidor com debounce (300 ms): recarrega a 1ª página a cada termo, sem baixar a base
+  // inteira. Roda também na montagem (termo vazio = primeiros PAGE_SIZE em ordem alfabética).
   useEffect(() => {
-    load();
+    const t = setTimeout(() => {
+      loadListing(search).catch((e) => setError((e as Error).message));
+    }, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
+
+  useEffect(() => {
     // As taxas da maquininha (ADR-016) vêm do Prisma como `Decimal` → JSON as **string**
     // (ex.: "3.50"), igual a costPrice/salePrice. O core (`cardFeePercentFor`) faz `.toFixed`,
     // que só existe em `number` — então convertemos aqui, exatamente como a tela de Nova Venda
@@ -145,6 +230,14 @@ export default function ProductsPage() {
     const t = setTimeout(() => setHighlightId(null), 2500);
     return () => clearTimeout(t);
   }, [highlightId]);
+
+  // Rola até a linha destacada QUANDO ela aparece na listagem. Como o scan agora recarrega a
+  // tabela pelo servidor (assíncrono), a linha não existe no DOM na hora do scan — este efeito
+  // dispara de novo a cada atualização de `products` e rola assim que a linha entra.
+  useEffect(() => {
+    if (!highlightId) return;
+    document.getElementById(`prod-row-${highlightId}`)?.scrollIntoView({ block: 'center' });
+  }, [highlightId, products]);
 
   // ADR-017: unidade fechada (barra/rolo) como principal — muda a apresentação do cadastro
   // (tamanho + preço da barra + preço por metro opcional) e a conversão da entrada em barras.
@@ -233,7 +326,7 @@ export default function ProductsPage() {
         surchargeCredit: '',
       });
       setCopiedFromName(null);
-      await load();
+      await reloadAll();
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -242,24 +335,29 @@ export default function ProductsPage() {
   }
 
   /**
-   * Processa um código lido (Enter do leitor físico OU câmera). O SKU é o código de barras:
-   * - achou 1 produto → rola até a linha e a destaca (o produto já existe; ajuste ali mesmo);
-   * - não achou nada → é um código novo: joga no campo SKU do cadastro e foca em Nome, para
-   *   registrar o produto lido na hora;
+   * Processa um código lido (Enter do leitor físico OU câmera). O SKU é o código de barras.
+   * Como a listagem agora é paginada no servidor, a decisão (achou/não achou) é feita sobre o
+   * **catálogo completo** (lazy) — não sobre a página visível — para não classificar como "código
+   * novo" um produto que só não está na página atual:
+   * - achou 1 → põe o código na busca (o servidor traz a linha) e a destaca (o efeito de scroll rola até ela);
+   * - não achou nada → é um código novo: joga no campo SKU do cadastro e foca em Nome;
    * - vários → só filtra a lista pelo código, para o operador escolher.
    */
-  function handleScannedCode(raw: string) {
+  async function handleScannedCode(raw: string) {
     const code = raw.trim();
     if (!code) return;
-    const matches = products.filter((p) => productMatchesQuery(p, code));
+    let all: Product[];
+    try {
+      all = await ensureCatalog();
+    } catch (e) {
+      setError((e as Error).message);
+      return;
+    }
+    const matches = all.filter((p) => productMatchesQuery(p, code));
     const found = matches.length === 1 ? matches[0] : undefined;
     if (found) {
-      setSearch(code); // garante que a linha está visível
+      setSearch(code); // servidor traz a linha; o efeito de highlight rola até ela quando aparecer
       setHighlightId(found.id);
-      // Rola após o re-render (a linha só existe no DOM depois do commit da busca).
-      requestAnimationFrame(() =>
-        document.getElementById(`prod-row-${found.id}`)?.scrollIntoView({ block: 'center' }),
-      );
     } else if (matches.length === 0) {
       // Código não cadastrado → começa o cadastro já com o SKU preenchido.
       setForm((f) => ({ ...f, sku: code }));
@@ -329,7 +427,7 @@ export default function ProductsPage() {
         delete next[p.id];
         return next;
       });
-      await load();
+      await reloadAll();
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -583,12 +681,16 @@ export default function ProductsPage() {
             <select
               value={form.pairedProductId}
               onChange={(e) => setForm({ ...form, pairedProductId: e.target.value })}
+              // Catálogo completo é lazy: carrega ao focar (o par é recurso pontual, não custa na abertura).
+              onFocus={() => void ensureCatalog().catch(() => {})}
               title="O outro produto do par. Cada um segue com seu preço e estoque próprios."
               className="rounded-lg border border-gray-300 bg-white px-3 py-2"
               aria-label="Produto agregado"
             >
-              <option value="">— sem produto agregado —</option>
-              {products
+              <option value="">
+                {catalog === null ? '— carregando catálogo… —' : '— sem produto agregado —'}
+              </option>
+              {(catalog ?? [])
                 .filter((p) => p.isActive)
                 .map((p) => (
                   <option key={p.id} value={p.id}>
@@ -689,16 +791,16 @@ export default function ProductsPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 ? (
+            {products.length === 0 ? (
               <tr>
                 <td colSpan={9} className="px-4 py-6 text-center text-gray-400">
-                  {search
+                  {search.trim()
                     ? 'Nenhum produto encontrado para a busca.'
                     : 'Nenhum produto cadastrado.'}
                 </td>
               </tr>
             ) : (
-              filtered.map((p) => {
+              products.map((p) => {
                 const current = minEdits[p.id] ?? p.minStockQty;
                 const changed =
                   minEdits[p.id] !== undefined &&
@@ -715,7 +817,7 @@ export default function ProductsPage() {
                       {/* Nome clicável: abre o cadastro completo (visualizar/editar). */}
                       <button
                         type="button"
-                        onClick={() => setDetailId(p.id)}
+                        onClick={() => openDetail(p.id)}
                         className={`text-left font-medium hover:text-blue-700 hover:underline ${
                           p.isActive ? 'text-gray-900' : 'text-gray-400'
                         }`}
@@ -775,7 +877,7 @@ export default function ProductsPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setDetailId(p.id)}
+                          onClick={() => openDetail(p.id)}
                           className="rounded border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
                         >
                           Ver / editar
@@ -789,20 +891,34 @@ export default function ProductsPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Paginação keyset: só aparece quando o servidor sinaliza mais páginas. */}
+      {nextCursor && (
+        <div className="mt-4 flex justify-center">
+          <button
+            onClick={loadMore}
+            disabled={loadingMore}
+            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-60"
+          >
+            {loadingMore ? 'Carregando…' : 'Mostrar mais'}
+          </button>
+        </div>
+      )}
+
       <p className="mt-3 text-xs text-gray-400">
         Clique no nome do produto para ver o cadastro completo e editar. Estoque mínimo é o
         ponto de reposição — quando o saldo fica igual ou abaixo dele (e maior que zero), o
         produto aparece como “baixo” na tela de Estoque.
       </p>
 
-      {/* Painel de visualizar/editar o cadastro (fatia EP). */}
+      {/* Painel de visualizar/editar o cadastro (fatia EP). `allProducts` = catálogo lazy (par ADR-015). */}
       {detail && (
         <ProductDetail
           product={detail}
-          allProducts={products}
+          allProducts={catalog ?? []}
           cardFees={cardFees}
           onClose={() => setDetailId(null)}
-          onSaved={load}
+          onSaved={reloadAll}
         />
       )}
     </div>

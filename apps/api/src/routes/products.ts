@@ -47,6 +47,29 @@ const products = new Hono<Env>();
 // Todas as rotas de produtos exigem autenticação (JWT do Supabase).
 products.use('*', requireAuth);
 
+/** Página da busca de produtos (tela de gestão): default 30, teto 50. */
+const PRODUCTS_PAGE_DEFAULT = 30;
+const PRODUCTS_PAGE_MAX = 50;
+
+/**
+ * Cursor keyset da busca (`name asc, id asc`): par `nome|id` da última linha. O nome é
+ * `encodeURIComponent`-ado (pode conter `|`); o `id` (UUID) nunca contém. Opaco para o cliente.
+ */
+function encodeCursor(o: { name: string; id: string }): string {
+  return `${encodeURIComponent(o.name)}|${o.id}`;
+}
+function decodeCursor(cursor: string): { name: string; id: string } | null {
+  const sep = cursor.indexOf('|');
+  if (sep < 0) return null;
+  const id = cursor.slice(sep + 1);
+  if (!id) return null;
+  try {
+    return { name: decodeURIComponent(cursor.slice(0, sep)), id };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Lista produtos do tenant (nunca os soft-deletados).
  *
@@ -82,6 +105,86 @@ products.get('/', async (c) => {
   } catch (err) {
     console.error('GET /products falhou:', err);
     return c.json({ ok: false, error: 'Falha ao listar produtos.' }, 500);
+  }
+});
+
+/**
+ * Busca paginada de produtos para a **tela de gestão** (não é o catálogo do PDV — este segue
+ * em `GET /` como array cru, intocado, porque PDV/Estoque/offline dependem dele inteiro).
+ *
+ * Aceita `q` (nome/nome popular/fabricante/SKU, case-insensitive), `limit`, `cursor` (keyset
+ * opaco) e `includeInactive`. Responde `{ rows, nextCursor }` (`nextCursor: null` na última
+ * página) com a margem calculada. Ordena por `name asc, id asc`. Assim a tela abre leve e
+ * procura no servidor em vez de baixar a base inteira e rolar.
+ *
+ * ⚠️ Registrada ANTES de `/:id` para o Hono não casar "search" como um id.
+ */
+products.get('/search', async (c) => {
+  const tenantId = getTenantId(c);
+  if (!tenantId) {
+    return c.json({ ok: false, error: 'Header x-tenant-id ausente ou inválido.' }, 400);
+  }
+  const connectionString = getConnectionString(c.env);
+  if (!connectionString) {
+    return c.json({ ok: false, error: 'Sem conexão com o banco.' }, 500);
+  }
+
+  try {
+    const prisma = createPrismaClient(connectionString);
+    const includeInactive = c.req.query('includeInactive') === 'true';
+
+    const limitRaw = Number(c.req.query('limit'));
+    const limit =
+      Number.isFinite(limitRaw) && limitRaw > 0
+        ? Math.min(Math.floor(limitRaw), PRODUCTS_PAGE_MAX)
+        : PRODUCTS_PAGE_DEFAULT;
+
+    const q = c.req.query('q')?.trim();
+    const insensitive = Prisma.QueryMode.insensitive;
+    // Case-insensitive no servidor. (A busca client-side também dobrava acento; o Postgres só
+    // dobra acento com a extensão `unaccent` — fica como refino futuro se fizer falta.)
+    const search = q
+      ? {
+          OR: [
+            { name: { contains: q, mode: insensitive } },
+            { popularName: { contains: q, mode: insensitive } },
+            { manufacturer: { contains: q, mode: insensitive } },
+            { sku: { contains: q, mode: insensitive } },
+          ],
+        }
+      : {};
+
+    const cursorParam = c.req.query('cursor');
+    const cursor = cursorParam ? decodeCursor(cursorParam) : null;
+    const keyset = cursor
+      ? {
+          OR: [
+            { name: { gt: cursor.name } },
+            { name: cursor.name, id: { gt: cursor.id } },
+          ],
+        }
+      : {};
+
+    const list = await prisma.product.findMany({
+      where: {
+        tenantId,
+        deletedAt: null,
+        ...(includeInactive ? {} : { isActive: true }),
+        ...search,
+        ...keyset,
+      },
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
+      take: limit + 1,
+    });
+
+    const hasMore = list.length > limit;
+    const rows = hasMore ? list.slice(0, limit) : list;
+    const last = rows[rows.length - 1];
+    const nextCursor = hasMore && last ? encodeCursor(last) : null;
+    return c.json({ ok: true, data: { rows: rows.map(withMargin), nextCursor } });
+  } catch (err) {
+    console.error('GET /products/search falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao buscar produtos.' }, 500);
   }
 });
 
