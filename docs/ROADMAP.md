@@ -4,7 +4,7 @@
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
 > **Última atualização:** 2026-07-27 — **Busca no servidor (Clientes/Produtos) + revisão dos tetos
-> de Relatórios — NO AR, aguardando E2E do Owner.** Continuação do combate às "telas que abrem com
+> de Relatórios — NO AR e VALIDADO pelo Owner.** Continuação do combate às "telas que abrem com
 > muita info": onde a base cresce e a pessoa **procura** em vez de rolar, o remédio é **busca no
 > servidor (`?q=`) + paginação** em vez de baixar tudo. As três telas numa fatia só. **Sem migration.**
 > **Clientes:** `GET /customers` trocou "lista tudo" por `?q=` (nome/e-mail; CPF/CNPJ e telefone por
@@ -19,7 +19,8 @@
 > `/customers` 2.09 kB, `/products` 11 kB) ✅, build API dry-run ✅. ⚠️ **Deploy de API obrigatório**
 > (formato de `/customers` mudou array → `{rows}`), API+web subiram juntos. **NO AR:** API `13ab6452` +
 > web `cd12db31`; smoke ✅ (health 200, `/products/search` e `/customers` sem token 401, `/login` 200).
-> **Falta:** E2E do Owner. Ver "UI.Busca.Servidor" no registro.
+> **E2E do Owner VALIDADO (2026-07-27):** "tudo certo, validado". Commit `8d9cbd8`. **Fatia
+> UI.Busca.Servidor CONCLUÍDA.** Ver "UI.Busca.Servidor" no registro.
 >
 > **Antes:** 2026-07-27 — **Histórico de Vendas: ordenação (maior/menor venda, data
 > ↑/↓) + botão "Voltar ao topo" — NO AR e VALIDADO pelo Owner.**

@@ -3529,6 +3529,6 @@ margem de segurança (paginação seria overkill numa tabela que cresce 1 linha/
 a extensão `unaccent`. A busca no servidor é **case-insensitive** mas **não** acento-insensível — refino
 futuro (habilitar `unaccent`) se fizer falta.
 
-**E2E do Owner — ⏭️ pendente** (API+web no ar): em Clientes e Produtos, buscar por nome/parte e ver o
-servidor filtrar + "Mostrar mais"; em Produtos, confirmar que **scan** acha produto fora da página, o
-**par** ainda lista o catálogo e o **detalhe** abre com o par correto; Relatórios seguem normais.
+**E2E do Owner — ✅ VALIDADO (2026-07-27):** "tudo certo, validado" — busca no servidor em Clientes e
+Produtos (+ "Mostrar mais"); em Produtos, scan achando produto fora da página, dropdown de par listando
+o catálogo e detalhe abrindo com o par correto; Relatórios normais. Fatia **UI.Busca.Servidor CONCLUÍDA**.
