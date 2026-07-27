@@ -16,8 +16,6 @@ http://localhost:3000/
 
 ## Leia docs/ROADMAP.md e docs/testes/registro-de-testes.md e vamos continuar
 
-<> Registrar saída manual de valor do caixa
-
 <> Ah, e na coluna de usuários, no painel do super usuário, ter como clicar no número de usuários e ver quais são, inclusive, ter alguma opção de gerar nova senha, tanto para o super usuário quanto para o admin de cada loja, para aqueles casos em que um usuário, por ventura esqueça sua senha
 
 <> ah.4, no histórico de vendas, caso tenha sido pago em dinheiro, mostrar tmbm o valor recebido e o troco!
@@ -29,8 +27,6 @@ http://localhost:3000/
 ***<> Ao remover um logo e subir um novo, as impressões estão sendo feitas sem o logo, parece estar se perdendo.
 
 <> crédito parcelado no valor total da compra, liberar campo para adicionar valor extra
-
-<> mais de uma forma de pagamento
 
 <> filtrar por campo, em cada cabeçalho ter opção de filtrar 
 
