@@ -3532,3 +3532,38 @@ futuro (habilitar `unaccent`) se fizer falta.
 **E2E do Owner — ✅ VALIDADO (2026-07-27):** "tudo certo, validado" — busca no servidor em Clientes e
 Produtos (+ "Mostrar mais"); em Produtos, scan achando produto fora da página, dropdown de par listando
 o catálogo e detalhe abrindo com o par correto; Relatórios normais. Fatia **UI.Busca.Servidor CONCLUÍDA**.
+
+---
+
+### CX.Movimentacao — Movimentação de Caixa (Suprimento/Sangria) (2026-07-27)
+
+Fatia 1 de 2 do pedido do Owner (a 2ª é o fiado → **Venda a prazo / Contas a Receber**, com ADR-019 +
+migration). **Entrada e saída manual de dinheiro no caixa fora de uma venda:** pagamento atrasado
+recebido, reforço de troco (Suprimento) · retirada, despesa paga pela gaveta (Sangria). **Reúso máximo,
+SEM migration:** a tabela `CashMovement` e os tipos `SUPPLY`/`WITHDRAWAL` já existiam (ADR-006) e a
+mini-DRE do caixa já tinha as linhas "+ Suprimentos" / "− saídas" prontas. Caixa, esperado e fechamento
+não mudaram de lógica (sangria/suprimento já entravam no `netCashMovements`).
+
+Nova função pura `manualCashMovementType(kind)` (core) — fonte ÚNICA do sinal contábil
+(`SUPPLY`→INCOME, `WITHDRAWAL`→EXPENSE), reusada pela API e pela UI. `cashMovementSchema` (shared):
+kind + valor > 0 + motivo obrigatório. `POST /cash-sessions/movement` (API): lança no caixa aberto da
+LOJA (ADR-018), autoria (ADR-010), bloqueia sem caixa aberto. Web (`/caixa`): botão **"Movimentar
+caixa"** + `CashMovementModal` (Suprimento/Sangria, `MoneyInput`, motivo); recarrega o caixa para a
+mini-DRE e o Esperado refletirem na hora.
+
+**Gates**
+
+| Gate | Resultado |
+|---|---|
+| Core (Vitest) — `manualCashMovementType` (+3) | ✅ 176/176 |
+| Typecheck API (`tsc --noEmit`) | ✅ |
+| Typecheck web (`tsc --noEmit`) | ✅ |
+| Build web (`next build`) | ✅ 18 rotas (`/caixa` 4.42 → 5.15 kB) |
+| Migration | ✅ nenhuma |
+| Deploy de API (⚠️ obrigatório: endpoint novo) | ✅ Version `a0c8a7a5` |
+| Deploy web | ✅ Version `2c23b403` |
+| Smoke — health / `movement` sem token / `/login` | ✅ 200 / 401 / 200 |
+
+**E2E do Owner — ✅ VALIDADO (2026-07-27):** "testado e aprovado com sucesso" — Suprimento e Sangria
+lançados, mini-DRE (+ Suprimentos / − saídas) e Esperado refletindo na hora, fechamento batendo com as
+movimentações. Commit `a35a288`. Fatia **CX.Movimentacao CONCLUÍDA**.

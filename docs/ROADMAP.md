@@ -3,7 +3,28 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-27 — **Busca no servidor (Clientes/Produtos) + revisão dos tetos
+> **Última atualização:** 2026-07-27 — **Movimentação de Caixa (Suprimento/Sangria) — entrada/saída
+> manual de dinheiro no caixa — NO AR e VALIDADO pelo Owner.** Pedido do Owner: lançar dinheiro que
+> entra/sai do caixa **fora de uma venda** (pagamento atrasado recebido, reforço de troco, retirada,
+> despesa paga pela gaveta). **Fatia 1 de 2** — a 2ª é o "fiado", que virá como **Venda a prazo /
+> Contas a Receber** (ADR-019 + migration, ainda por escrever/aprovar). **Reúso máximo, SEM
+> migration:** a tabela `CashMovement` e os tipos `SUPPLY`/`WITHDRAWAL` **já existiam** (ADR-006), e a
+> mini-DRE do caixa já tinha as linhas "+ Suprimentos" / "− saídas" **prontas** — foi só dar superfície
+> ao que estava dormente; caixa, esperado e fechamento **não mudaram de lógica** (sangria/suprimento já
+> entravam no `netCashMovements`). **Core:** `manualCashMovementType(kind)` — fonte ÚNICA do sinal
+> (`SUPPLY`→INCOME, `WITHDRAWAL`→EXPENSE), +3 testes → **176/176**. **Shared:** `cashMovementSchema`
+> (kind + valor > 0 + motivo obrigatório). **API:** `POST /cash-sessions/movement` — lança no caixa
+> aberto da LOJA (ADR-018), autoria (ADR-010), bloqueia sem caixa aberto (404). **Web (`/caixa`):**
+> botão **"Movimentar caixa"** + modal `CashMovementModal` (Suprimento verde / Sangria vermelho, valor
+> com `MoneyInput`, motivo obrigatório); ao lançar, recarrega o caixa → a mini-DRE e o Esperado
+> atualizam na hora. ⚠️ **Deploy de API obrigatório** (endpoint novo); web também. Gates: core
+> **176/176** ✅, typecheck API/web ✅, build web (18 rotas, `/caixa` 4.42 → 5.15 kB) ✅. **NO AR:** API
+> `a0c8a7a5` + web `2c23b403`; smoke ✅ (health 200, `movement` sem token 401, `/login` 200). **E2E do
+> Owner VALIDADO (2026-07-27):** "testado e aprovado com sucesso". Commit `a35a288`. **Fatia
+> CX.Movimentacao CONCLUÍDA.** Ver "CX.Movimentacao" no registro. **Próximo passo:** Fatia 2 — escrever
+> o **ADR-019 (Venda a prazo / Contas a Receber)** e aprovar a migration ANTES de codar (regra 1 e 4).
+>
+> **Antes:** 2026-07-27 — **Busca no servidor (Clientes/Produtos) + revisão dos tetos
 > de Relatórios — NO AR e VALIDADO pelo Owner.** Continuação do combate às "telas que abrem com
 > muita info": onde a base cresce e a pessoa **procura** em vez de rolar, o remédio é **busca no
 > servidor (`?q=`) + paginação** em vez de baixar tudo. As três telas numa fatia só. **Sem migration.**
