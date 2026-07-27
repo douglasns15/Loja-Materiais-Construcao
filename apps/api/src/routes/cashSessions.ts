@@ -204,9 +204,15 @@ cashSessions.post('/close', async (c) => {
   }
 });
 
-/** Extrato das movimentações de caixa (ADR-006) do caixa aberto DA LOJA (ADR-018): suprimentos,
- * sangrias, devoluções e despesas — mais recentes primeiro. Detalha a linha agregada "saídas" da
- * mini-DRE (mostra o que é sangria, o que é devolução, etc.), com valor, motivo, autor e hora. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Extrato das movimentações de caixa (ADR-006): suprimentos, sangrias, devoluções e despesas —
+ * mais recentes primeiro, com valor, motivo, autor e hora. Detalha a linha agregada "saídas" da
+ * mini-DRE (mostra o que é sangria, o que é devolução, etc.).
+ *
+ * Sem parâmetro → caixa ABERTO da loja (ADR-018), para a tela do Caixa. Com `?sessionId=` →
+ * as movimentações daquele caixa (fechado), para auditar um fechamento em Relatórios — sempre
+ * checando que a sessão é da própria loja (`tenantId`), sem vazar dados de outra. */
 cashSessions.get('/movements', async (c) => {
   const tenantId = getTenantId(c);
   const connectionString = getConnectionString(c.env);
@@ -214,15 +220,26 @@ cashSessions.get('/movements', async (c) => {
     return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
   }
 
+  const sessionIdParam = c.req.query('sessionId');
+  // `sessionId` malformado não vira erro do Prisma (coluna UUID): trata como "não encontrado".
+  if (sessionIdParam !== undefined && !UUID_RE.test(sessionIdParam)) {
+    return c.json({ ok: true, data: [] });
+  }
+
   try {
     const prisma = createPrismaClient(connectionString);
-    // ADR-018: caixa por loja — extrato do caixa aberto da loja (independe de quem abriu).
-    const session = await prisma.cashSession.findFirst({
-      where: { tenantId, closedAt: null },
-      select: { id: true },
-    });
+    // Com `sessionId`: um caixa específico da loja. Sem: o caixa aberto da loja (ADR-018).
+    const session = sessionIdParam
+      ? await prisma.cashSession.findFirst({
+          where: { id: sessionIdParam, tenantId },
+          select: { id: true },
+        })
+      : await prisma.cashSession.findFirst({
+          where: { tenantId, closedAt: null },
+          select: { id: true },
+        });
     if (!session) {
-      // Sem caixa aberto: extrato vazio (não é erro — a tela só não mostra nada).
+      // Sem caixa aberto (ou a sessão pedida não é da loja): extrato vazio, não é erro.
       return c.json({ ok: true, data: [] });
     }
     const rows = await prisma.cashMovement.findMany({

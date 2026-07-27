@@ -26,3 +26,28 @@ export const cashMovementSchema = z.object({
   reason: z.string().trim().min(1).max(300),
 });
 export type CashMovementInput = z.infer<typeof cashMovementSchema>;
+
+/** Natureza de uma movimentação de caixa (ADR-006), inclusive as que não são lançamento manual
+ * (RETURN = devolução de venda). Espelha o enum `CashMovementKind` do Prisma. */
+export type CashMovementKind = 'RETURN' | 'WITHDRAWAL' | 'SUPPLY' | 'EXPENSE';
+
+/** Rótulos amigáveis por natureza — usados no extrato do Caixa e no histórico em Relatórios. */
+export const CASH_MOVEMENT_KIND_LABELS: Record<CashMovementKind, string> = {
+  SUPPLY: 'Suprimento',
+  WITHDRAWAL: 'Sangria',
+  RETURN: 'Devolução',
+  EXPENSE: 'Despesa',
+};
+
+/** Uma linha do extrato de movimentações do caixa, como retornada por `GET /cash-sessions/movements`
+ * (`amount` é Decimal serializado em string). Compartilhado entre a tela do Caixa e a de Relatórios. */
+export type CashMovementRow = {
+  id: string;
+  type: 'INCOME' | 'EXPENSE';
+  kind: CashMovementKind;
+  amount: string;
+  reason: string | null;
+  relatedOrderId: string | null;
+  registeredByName: string | null;
+  createdAt: string;
+};

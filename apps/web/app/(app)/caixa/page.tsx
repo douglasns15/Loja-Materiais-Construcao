@@ -5,6 +5,7 @@ import {
   openCashSessionSchema,
   closeCashSessionSchema,
   type CashMovementInput,
+  type CashMovementRow,
 } from '@nexoloja/shared';
 import { apiGet, apiPost } from '@/lib/api';
 import { cacheCashSession, readCachedCashSession, type CachedCashSession } from '@/lib/cashSessionCache';
@@ -15,6 +16,7 @@ import { OfflineSalesNotice } from '@/components/OfflineSalesNotice';
 import { MoneyInput } from '@/components/MoneyInput';
 import { CashCounter } from '@/components/CashCounter';
 import { CashMovementModal } from '@/components/CashMovementModal';
+import { CashMovementsList } from '@/components/CashMovementsList';
 
 type CashSession = {
   id: string;
@@ -26,26 +28,6 @@ type CashSession = {
   cashMovementsOut: number; // devoluções/sangrias/despesas (saída), bruto ≥ 0
   cashMovementsNet: number; // entradas − saídas de caixa (mantido p/ compatibilidade)
   expectedAmount: number;
-};
-
-// Uma linha do extrato de movimentações do caixa (ADR-006).
-type CashMovementRow = {
-  id: string;
-  type: 'INCOME' | 'EXPENSE';
-  kind: 'RETURN' | 'WITHDRAWAL' | 'SUPPLY' | 'EXPENSE';
-  amount: string;
-  reason: string | null;
-  relatedOrderId: string | null;
-  registeredByName: string | null;
-  createdAt: string;
-};
-
-// Rótulo amigável por natureza da movimentação — detalha a linha agregada "saídas" da mini-DRE.
-const MOVEMENT_LABELS: Record<CashMovementRow['kind'], string> = {
-  SUPPLY: 'Suprimento',
-  WITHDRAWAL: 'Sangria',
-  RETURN: 'Devolução',
-  EXPENSE: 'Despesa',
 };
 
 const BRL = (v: string | number) =>
@@ -266,34 +248,10 @@ export default function CaixaPage() {
 
             {movementsOpen && (
               <div className="mt-4">
-                {movements.length === 0 ? (
-                  <p className="text-sm text-gray-500">Nenhuma movimentação neste caixa ainda.</p>
-                ) : (
-                  <ul className="divide-y divide-gray-100">
-                    {movements.map((m) => {
-                      const income = m.type === 'INCOME';
-                      return (
-                        <li key={m.id} className="flex items-start justify-between gap-3 py-2">
-                          <div className="min-w-0">
-                            <p className={`text-sm font-medium ${income ? 'text-green-700' : 'text-red-600'}`}>
-                              {income ? '↑' : '↓'} {MOVEMENT_LABELS[m.kind]}
-                            </p>
-                            {m.reason && <p className="text-sm text-gray-600">{m.reason}</p>}
-                            <p className="text-xs text-gray-400">
-                              {new Date(m.createdAt).toLocaleString('pt-BR')}
-                              {m.registeredByName ? ` · ${m.registeredByName}` : ''}
-                            </p>
-                          </div>
-                          <span
-                            className={`shrink-0 text-sm font-medium tabular-nums ${income ? 'text-green-700' : 'text-red-600'}`}
-                          >
-                            {income ? '+' : '−'} {BRL(m.amount)}
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
+                <CashMovementsList
+                  movements={movements}
+                  emptyLabel="Nenhuma movimentação neste caixa ainda."
+                />
               </div>
             )}
           </div>
