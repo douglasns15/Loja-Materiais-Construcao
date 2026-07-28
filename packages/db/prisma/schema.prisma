@@ -474,6 +474,7 @@ model Receivable {
   settledAmount  Decimal          @default(0) @db.Decimal(12, 2) // Quanto já foi recebido (corrente)
   status         ReceivableStatus @default(OPEN)
   dueDate        DateTime?                          // Vencimento opcional (destaca vencidos)
+  notes          String?          @db.VarChar(500)  // Observação livre da dívida (ex.: "prometeu pagar dia 10")
   createdAt      DateTime         @default(now())
   // Autoria (ADR-010): quem registrou a venda a prazo. Referência solta (sem FK); snapshot do nome.
   createdById    String?          @db.Uuid

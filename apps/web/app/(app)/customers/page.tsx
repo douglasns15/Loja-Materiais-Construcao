@@ -5,6 +5,7 @@ import { createCustomerSchema } from '@nexoloja/shared';
 import { apiGet, apiPost } from '@/lib/api';
 import { useOnline } from '@/lib/useOnline';
 import { OfflineNotice } from '@/components/OfflineNotice';
+import { CustomerProfile } from '@/components/CustomerProfile';
 
 type Customer = {
   id: string;
@@ -40,10 +41,12 @@ export default function CustomersPage() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: '', cpfCnpj: '', phone: '', email: '' });
+  const [form, setForm] = useState({ name: '', cpfCnpj: '', phone: '', email: '', notes: '' });
   const [saving, setSaving] = useState(false);
   // Busca no servidor: `search` é o que está no campo; a query dispara com debounce.
   const [search, setSearch] = useState('');
+  // Perfil do cliente aberto (clicar no nome) — dados + observações + histórico.
+  const [profileId, setProfileId] = useState<string | null>(null);
 
   // Carrega a 1ª página para um termo (substitui a lista). O termo default vem do estado.
   async function load(q: string = search) {
@@ -86,6 +89,7 @@ export default function CustomersPage() {
     if (form.cpfCnpj) payload.cpfCnpj = form.cpfCnpj;
     if (form.phone) payload.phone = form.phone;
     if (form.email) payload.email = form.email;
+    if (form.notes) payload.notes = form.notes;
 
     const parsed = createCustomerSchema.safeParse(payload);
     if (!parsed.success) {
@@ -96,7 +100,7 @@ export default function CustomersPage() {
     setSaving(true);
     try {
       await apiPost<Customer>('/customers', parsed.data);
-      setForm({ name: '', cpfCnpj: '', phone: '', email: '' });
+      setForm({ name: '', cpfCnpj: '', phone: '', email: '', notes: '' });
       await load();
     } catch (e) {
       setError((e as Error).message);
@@ -140,6 +144,14 @@ export default function CustomersPage() {
           value={form.email}
           onChange={(e) => setForm({ ...form, email: e.target.value })}
           className="rounded-lg border border-gray-300 px-3 py-2 sm:col-span-2"
+        />
+        <textarea
+          placeholder="Observações (opcional)"
+          value={form.notes}
+          onChange={(e) => setForm({ ...form, notes: e.target.value })}
+          rows={2}
+          maxLength={500}
+          className="rounded-lg border border-gray-300 px-3 py-2 sm:col-span-4"
         />
         <button
           type="submit"
@@ -187,7 +199,16 @@ export default function CustomersPage() {
             ) : (
               customers.map((c) => (
                 <tr key={c.id} className="border-t border-gray-100">
-                  <td className="px-4 py-2">{c.name}</td>
+                  <td className="px-4 py-2">
+                    {/* Clicar no nome abre o perfil (dados + observações + histórico). */}
+                    <button
+                      type="button"
+                      onClick={() => setProfileId(c.id)}
+                      className="font-medium text-blue-700 hover:underline"
+                    >
+                      {c.name}
+                    </button>
+                  </td>
                   <td className="px-4 py-2 text-gray-500">{c.cpfCnpj ?? '—'}</td>
                   <td className="px-4 py-2 text-gray-500">{c.phone ?? '—'}</td>
                   <td className="px-4 py-2 text-gray-500">{c.email ?? '—'}</td>
@@ -212,6 +233,15 @@ export default function CustomersPage() {
             {loadingMore ? 'Carregando…' : 'Mostrar mais'}
           </button>
         </div>
+      )}
+
+      {/* Perfil do cliente (dados + observações + histórico). Recarrega a lista ao salvar. */}
+      {profileId && (
+        <CustomerProfile
+          customerId={profileId}
+          onClose={() => setProfileId(null)}
+          onSaved={() => load().catch(() => {})}
+        />
       )}
     </div>
   );

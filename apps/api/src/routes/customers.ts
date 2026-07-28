@@ -1,8 +1,11 @@
 import { Hono } from 'hono';
 import { createPrismaClient, Prisma } from '@nexoloja/db';
+import { receivableBalance } from '@nexoloja/core';
 import { createCustomerSchema, updateCustomerSchema } from '@nexoloja/shared';
 import { type Env, getConnectionString, getTenantId } from '../lib/request';
 import { requireAuth } from '../middleware/auth';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const customers = new Hono<Env>();
 
@@ -126,6 +129,79 @@ customers.get('/:id', async (c) => {
   } catch (err) {
     console.error('GET /customers/:id falhou:', err);
     return c.json({ ok: false, error: 'Falha ao buscar o cliente.' }, 500);
+  }
+});
+
+/** Histórico do cliente (perfil): tudo que está vinculado a ele — suas **vendas** (mais recentes)
+ * e suas **contas a receber** (ADR-019), com a ativa destacável. Alimenta a tela de perfil do
+ * cliente aberta ao clicar no nome na tela de Clientes. Limita as vendas para não pesar. */
+customers.get('/:id/history', async (c) => {
+  const tenantId = getTenantId(c);
+  const connectionString = getConnectionString(c.env);
+  if (!tenantId || !connectionString) {
+    return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
+  }
+  const id = c.req.param('id');
+  if (!UUID_RE.test(id)) {
+    return c.json({ ok: false, error: 'Cliente não encontrado.' }, 404);
+  }
+
+  try {
+    const prisma = createPrismaClient(connectionString);
+    const [orders, receivables] = await Promise.all([
+      // Vendas do cliente (mais recentes; teto de 50 — é um resumo, não o Histórico completo).
+      prisma.order.findMany({
+        where: { tenantId, customerId: id },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+        select: {
+          id: true,
+          total: true,
+          status: true,
+          createdAt: true,
+          receivable: { select: { id: true, status: true } },
+        },
+      }),
+      // Contas a receber do cliente (todas as situações), da mais recente para a mais antiga.
+      prisma.receivable.findMany({
+        where: { tenantId, customerId: id },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          originalAmount: true,
+          settledAmount: true,
+          status: true,
+          dueDate: true,
+          createdAt: true,
+        },
+      }),
+    ]);
+
+    return c.json({
+      ok: true,
+      data: {
+        orders: orders.map((o) => ({
+          id: o.id,
+          total: o.total,
+          status: o.status,
+          createdAt: o.createdAt,
+          receivableId: o.receivable?.id ?? null,
+          receivableStatus: o.receivable?.status ?? null,
+        })),
+        receivables: receivables.map((r) => ({
+          id: r.id,
+          originalAmount: r.originalAmount,
+          settledAmount: r.settledAmount,
+          balance: receivableBalance(Number(r.originalAmount), Number(r.settledAmount)),
+          status: r.status,
+          dueDate: r.dueDate,
+          createdAt: r.createdAt,
+        })),
+      },
+    });
+  } catch (err) {
+    console.error('GET /customers/:id/history falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao buscar o histórico do cliente.' }, 500);
   }
 });
 

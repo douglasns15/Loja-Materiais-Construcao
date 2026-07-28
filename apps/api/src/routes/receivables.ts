@@ -6,7 +6,7 @@ import {
   manualCashMovementType,
   receivableBalance,
 } from '@nexoloja/core';
-import { receiveReceivableSchema } from '@nexoloja/shared';
+import { receiveReceivableSchema, updateReceivableSchema } from '@nexoloja/shared';
 import { type Env, getConnectionString, getTenantId } from '../lib/request';
 import { requireActiveTenant, requireAuth } from '../middleware/auth';
 
@@ -139,6 +139,7 @@ receivables.get('/:id', async (c) => {
         settledAmount: true,
         status: true,
         dueDate: true,
+        notes: true,
         createdAt: true,
         createdByName: true,
         customer: { select: { name: true } },
@@ -188,6 +189,7 @@ receivables.get('/:id', async (c) => {
         balance: receivableBalance(Number(r.originalAmount), Number(r.settledAmount)),
         status: r.status,
         dueDate: r.dueDate,
+        notes: r.notes,
         createdAt: r.createdAt,
         createdByName: r.createdByName,
         orderTotal: r.order?.total ?? null,
@@ -200,6 +202,38 @@ receivables.get('/:id', async (c) => {
   } catch (err) {
     console.error('GET /receivables/:id falhou:', err);
     return c.json({ ok: false, error: 'Falha ao buscar a conta.' }, 500);
+  }
+});
+
+/** Atualiza a observação livre de uma dívida (ADR-019). Qualquer operador (é anotação de balcão). */
+receivables.patch('/:id', async (c) => {
+  const tenantId = getTenantId(c);
+  const connectionString = getConnectionString(c.env);
+  if (!tenantId || !connectionString) {
+    return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
+  }
+  const id = c.req.param('id');
+  if (!UUID_RE.test(id)) {
+    return c.json({ ok: false, error: 'Conta não encontrada.' }, 404);
+  }
+  const parsed = updateReceivableSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) {
+    return c.json({ ok: false, error: 'Dados inválidos.' }, 400);
+  }
+  const notes = parsed.data.notes?.trim() ? parsed.data.notes.trim() : null;
+
+  try {
+    const prisma = createPrismaClient(connectionString);
+    // Garante que a conta é da loja antes de atualizar (RLS reforçado no código).
+    const found = await prisma.receivable.findFirst({ where: { id, tenantId }, select: { id: true } });
+    if (!found) {
+      return c.json({ ok: false, error: 'Conta não encontrada.' }, 404);
+    }
+    await prisma.receivable.update({ where: { id }, data: { notes } });
+    return c.json({ ok: true, data: { id, notes } });
+  } catch (err) {
+    console.error('PATCH /receivables/:id falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao salvar a observação.' }, 500);
   }
 });
 

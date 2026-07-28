@@ -17,3 +17,31 @@ export type CreateCustomerInput = z.infer<typeof createCustomerSchema>;
 /// Payload para atualizar — todos os campos opcionais.
 export const updateCustomerSchema = createCustomerSchema.partial();
 export type UpdateCustomerInput = z.infer<typeof updateCustomerSchema>;
+
+/** Uma venda do cliente no seu histórico (perfil do cliente). `receivableId` presente = venda a
+ * prazo (ADR-019); `receivableStatus` diz se a dívida está aberta/quitada/cancelada. */
+export type CustomerHistoryOrder = {
+  id: string;
+  total: string;
+  status: string;
+  createdAt: string;
+  receivableId: string | null;
+  receivableStatus: 'OPEN' | 'PAID' | 'CANCELLED' | null;
+};
+
+/** Uma conta a receber do cliente no seu histórico (perfil do cliente). */
+export type CustomerHistoryReceivable = {
+  id: string;
+  originalAmount: string;
+  settledAmount: string;
+  balance: number;
+  status: 'OPEN' | 'PAID' | 'CANCELLED';
+  dueDate: string | null;
+  createdAt: string;
+};
+
+/** Histórico do cliente (`GET /customers/:id/history`): vendas + contas a receber vinculadas. */
+export type CustomerHistory = {
+  orders: CustomerHistoryOrder[];
+  receivables: CustomerHistoryReceivable[];
+};

@@ -29,6 +29,12 @@ export const receiveReceivableSchema = z.object({
 });
 export type ReceiveReceivableInput = z.infer<typeof receiveReceivableSchema>;
 
+/** Atualização da observação de uma dívida (ADR-019). `null`/vazio limpa a observação. */
+export const updateReceivableSchema = z.object({
+  notes: z.string().max(500).nullable(),
+});
+export type UpdateReceivableInput = z.infer<typeof updateReceivableSchema>;
+
 /** Um recebimento de uma conta a receber, como retornado pela API (`amount` serializado). */
 export type ReceivablePaymentRow = {
   id: string;
@@ -74,6 +80,7 @@ export type ReceivableItem = {
 /** Detalhe de uma conta a receber (`GET /receivables/:id`): a conta + os itens da venda de
  * origem + o histórico de recebimentos (com data/hora). Base da tela de detalhe do cliente. */
 export type ReceivableDetail = ReceivableRow & {
+  notes: string | null;
   orderTotal: string | null;
   orderCreatedAt: string | null;
   items: ReceivableItem[];
