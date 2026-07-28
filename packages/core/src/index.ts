@@ -161,6 +161,60 @@ export function reversalKindFor(kind: ManualCashMovementKind): ManualCashMovemen
   return kind === 'SUPPLY' ? 'WITHDRAWAL' : 'SUPPLY';
 }
 
+// ---------------------------------------------------------------------------
+// Venda a prazo / Contas a Receber — o "fiado" (ADR-019)
+// ---------------------------------------------------------------------------
+
+/** Converte um valor em reais para centavos inteiros — evita erro de ponto flutuante ao
+ * comparar dinheiro (ex.: `0.1 + 0.2 !== 0.3`). Uso interno das funções de fiado. */
+function toCents(value: number): number {
+  return Math.round(value * 100);
+}
+
+/**
+ * Saldo devedor de uma conta a receber (ADR-019): quanto **ainda falta receber** de uma venda
+ * a prazo = `originalAmount − settledAmount`, nunca negativo (recebeu tudo ⇒ 0). Fonte única
+ * para API e UI mostrarem o mesmo "falta R$…".
+ */
+export function receivableBalance(originalAmount: number, settledAmount: number): number {
+  return Number(Math.max(0, originalAmount - settledAmount).toFixed(2));
+}
+
+/**
+ * Um recebimento (total ou parcial) é válido se for **positivo** e **não exceder o saldo
+ * devedor** — ninguém recebe mais do que o cliente deve. Comparação em centavos para não
+ * tropeçar em arredondamento. Espelhada no servidor e na UI.
+ */
+export function isValidReceipt(amount: number, balance: number): boolean {
+  const cents = toCents(amount);
+  return cents > 0 && cents <= toCents(balance);
+}
+
+/**
+ * Aplica um recebimento a uma conta a receber e devolve o novo total recebido e a situação
+ * resultante: quita (`PAID`) quando o recebido alcança o valor original, senão segue `OPEN`.
+ * Não valida o valor (ver `isValidReceipt`) — assume um recebimento já aceito. Fonte única da
+ * transição de status para o servidor não divergir do que a tela mostra.
+ */
+export function applyReceivablePayment(
+  originalAmount: number,
+  settledAmount: number,
+  amount: number,
+): { settledAmount: number; status: 'OPEN' | 'PAID'; fullyPaid: boolean } {
+  const newSettled = Number((settledAmount + amount).toFixed(2));
+  const fullyPaid = toCents(newSettled) >= toCents(originalAmount); // ≥ tolera arredondamento
+  return { settledAmount: newSettled, status: fullyPaid ? 'PAID' : 'OPEN', fullyPaid };
+}
+
+/**
+ * Numa venda a prazo, o que foi **pago agora** (entrada) mais o valor deixado **a prazo** deve
+ * fechar exatamente o total da venda (ADR-019) — sem sobra nem falta. Tolera 1 centavo de
+ * arredondamento. `creditAmount = total` é o fiado 100%; `= 0` é a venda à vista comum.
+ */
+export function creditSaleBalances(total: number, paidNow: number, creditAmount: number): boolean {
+  return Math.abs(toCents(paidNow) + toCents(creditAmount) - toCents(total)) <= 1;
+}
+
 /** Valores (em reais) das moedas do Real em circulação, para o contador de gaveta. */
 export const BRL_COIN_VALUES = [0.05, 0.1, 0.25, 0.5, 1] as const;
 /** Valores (em reais) das cédulas do Real em circulação, para o contador de gaveta. */

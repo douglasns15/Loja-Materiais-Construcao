@@ -29,15 +29,24 @@ export interface PaymentMethodReport {
 export interface SalesReport {
   from: string | null;
   to: string | null;
-  /** Faturamento das vendas CONFIRMED no período. */
+  /**
+   * **Recebido no período** — regime de caixa (ADR-019): dinheiro que efetivamente entrou =
+   * pagamentos à vista das vendas do período + recebimentos de fiado do período (pela data do
+   * recebimento). A parte a prazo de uma venda só conta quando é recebida.
+   */
   totalRevenue: number;
-  /** Nº de vendas CONFIRMED no período. */
+  /** Nº de vendas CONFIRMED no período (pela data da venda). */
   salesCount: number;
-  /** Faturamento ÷ nº de vendas (0 se não houver vendas). */
+  /** Recebido ÷ nº de vendas (0 se não houver vendas). */
   averageTicket: number;
-  /** Nº de vendas canceladas no período (fora do faturamento). */
+  /** Nº de vendas canceladas no período (fora do recebido). */
   cancelledCount: number;
-  /** Total por forma de pagamento (só vendas não canceladas). */
+  /**
+   * Informativo (ADR-019): total de vendas **a prazo geradas** no período (crédito concedido no
+   * fiado). NÃO entra no recebido — é o que ficou a receber; conta como recebido conforme entra.
+   */
+  creditSalesGenerated: number;
+  /** Total por forma de pagamento (à vista + recebimentos de fiado). Σ formas = recebido. */
   byPaymentMethod: PaymentMethodReport[];
 }
 

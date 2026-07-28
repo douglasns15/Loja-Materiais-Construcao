@@ -62,10 +62,22 @@ export const createSaleSchema = z.object({
   cashSessionId: z.string().uuid().optional(),
   customerId: z.string().uuid().optional(),
   items: z.array(saleItemSchema).min(1),
-  payments: z.array(salePaymentSchema).min(1),
+  // Pode ser VAZIO numa venda 100% a prazo (fiado — ADR-019): nada é pago na hora. A
+  // cobertura da venda (pagamento agora OU valor a prazo) é validada no servidor, que também
+  // exige cliente quando há `creditAmount`. O schema offline (outbox) re-exige `.min(1)`, pois
+  // fiado é online-only nesta fatia.
+  payments: z.array(salePaymentSchema),
   discountAmount: z.number().nonnegative().optional(),
   freightAmount: z.number().nonnegative().optional(),
   notes: z.string().max(500).optional(),
+  /**
+   * Venda a prazo (fiado — ADR-019): valor deixado **a prazo** (o que o cliente pagará depois).
+   * `creditAmount > 0` exige `customerId` e gera uma conta a receber; ausente/0 = venda à vista
+   * comum. `Σ pagamentos agora + creditAmount` deve fechar o total (validado no servidor).
+   */
+  creditAmount: z.number().nonnegative().optional(),
+  /** Vencimento opcional do fiado (data `YYYY-MM-DD`). Só usado quando há `creditAmount`. */
+  dueDate: z.string().optional(),
 });
 export type CreateSaleInput = z.infer<typeof createSaleSchema>;
 

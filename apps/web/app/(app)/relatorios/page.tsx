@@ -316,7 +316,11 @@ export default function RelatoriosPage() {
       {/* Cards de resumo de vendas */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <div className="rounded-2xl bg-white p-4 shadow-sm">
-          <p className="text-xs text-gray-500">Faturamento</p>
+          {/* Regime de caixa (ADR-019): dinheiro que entrou no período — inclui recebimentos de
+              fiado no dia em que foram recebidos, não a parte a prazo ainda não paga. */}
+          <p className="text-xs text-gray-500" title="Dinheiro recebido no período (inclui recebimentos de fiado no dia do recebimento).">
+            Recebido no período
+          </p>
           <p className="mt-1 text-2xl font-bold">{BRL(sales?.totalRevenue ?? 0)}</p>
         </div>
         <div className="rounded-2xl bg-white p-4 shadow-sm">
@@ -332,6 +336,16 @@ export default function RelatoriosPage() {
           <p className="mt-1 text-2xl font-bold">{sales?.cancelledCount ?? 0}</p>
         </div>
       </div>
+
+      {/* Informativo (ADR-019): crédito concedido no período (fiado). NÃO está no "Recebido" —
+          conta como recebido conforme o cliente paga. Só aparece quando houve venda a prazo. */}
+      {sales && sales.creditSalesGenerated > 0 && (
+        <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 ring-1 ring-amber-200">
+          Vendas a prazo geradas no período (fiado):{' '}
+          <strong>{BRL(sales.creditSalesGenerated)}</strong> — ainda a receber; entra no
+          &ldquo;Recebido&rdquo; conforme for pago.
+        </p>
+      )}
 
       {/* Totais por forma de pagamento */}
       <div className="mt-6 overflow-x-auto rounded-2xl bg-white shadow-sm">

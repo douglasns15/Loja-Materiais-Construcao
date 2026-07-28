@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { createSaleSchema, type CreateSaleInput } from './sale';
+import { createSaleSchema, salePaymentSchema, type CreateSaleInput } from './sale';
 
 /**
  * Envelope de mutação da fila offline (Outbox) — ADR-011 §1 e AI 5.
@@ -39,6 +39,9 @@ export type MutationKind = (typeof MUTATION_KINDS)[number];
 export const saleMutationPayloadSchema = createSaleSchema.extend({
   id: z.string().uuid(),
   cashSessionId: z.string().uuid(),
+  // Venda offline sempre tem pagamento na hora (fiado é online-only nesta fatia — ADR-019):
+  // re-exige ≥1 pagamento, que o schema base relaxou para permitir a venda 100% a prazo online.
+  payments: z.array(salePaymentSchema).min(1),
 });
 export type SaleMutationPayload = z.infer<typeof saleMutationPayloadSchema>;
 

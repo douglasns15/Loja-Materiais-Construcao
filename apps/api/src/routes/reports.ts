@@ -54,18 +54,23 @@ reports.get('/sales', async (c) => {
   try {
     const prisma = createPrismaClient(connectionString);
 
-    const [salesAgg, cancelledCount, grouped] = await Promise.all([
-      // Faturamento e nº de vendas confirmadas (ignora canceladas).
+    // Regime de CAIXA (ADR-019): o "recebido no período" é o dinheiro que efetivamente entrou —
+    // pagamentos à vista das vendas do período MAIS os recebimentos de fiado do período (por
+    // `paidAt`), contando o fiado no dia em que é recebido, não no dia da venda. A parte a prazo de
+    // uma venda NÃO conta enquanto não é recebida (não vira `Payment`). Assim cada real é contado
+    // uma vez só, no dia em que entra — coerente com o caixa.
+    const paidAt = createdAt; // mesmo intervalo {gte,lte}, aplicado ao campo `paidAt`
+    const [salesAgg, cancelledCount, grouped, creditReceipts, creditGenerated] = await Promise.all([
+      // Nº de vendas confirmadas no período (por data da venda) — canceladas à parte.
       prisma.order.aggregate({
-        _sum: { total: true },
         _count: { _all: true },
         where: { tenantId, status: { not: 'CANCELLED' }, ...(createdAt ? { createdAt } : {}) },
       }),
-      // Canceladas contadas à parte (fora do faturamento).
+      // Canceladas contadas à parte (fora do recebido).
       prisma.order.count({
         where: { tenantId, status: 'CANCELLED', ...(createdAt ? { createdAt } : {}) },
       }),
-      // Total por forma de pagamento (só de vendas não canceladas).
+      // Pagamentos à vista por forma (só de vendas não canceladas, pela data da venda).
       prisma.payment.groupBy({
         by: ['method'],
         _sum: { amount: true },
@@ -75,17 +80,36 @@ reports.get('/sales', async (c) => {
           order: { status: { not: 'CANCELLED' }, ...(createdAt ? { createdAt } : {}) },
         },
       }),
+      // Recebimentos de fiado por forma (pela data do recebimento — regime de caixa).
+      prisma.receivablePayment.groupBy({
+        by: ['method'],
+        _sum: { amount: true },
+        _count: { _all: true },
+        where: { tenantId, ...(paidAt ? { paidAt } : {}) },
+      }),
+      // Informativo: vendas a prazo GERADAS no período (crédito concedido) — não entra no recebido.
+      prisma.receivable.aggregate({
+        _sum: { originalAmount: true },
+        where: { tenantId, status: { not: 'CANCELLED' }, ...(createdAt ? { createdAt } : {}) },
+      }),
     ]);
 
-    const totalRevenue = Number(salesAgg._sum.total ?? 0);
-    const salesCount = salesAgg._count._all;
+    // Junta pagamentos à vista + recebimentos de fiado por forma de pagamento, para o "recebido"
+    // e a quebra por forma baterem (Σ formas = recebido).
+    const byMethod = new Map<string, { total: number; count: number }>();
+    for (const g of [...grouped, ...creditReceipts]) {
+      const cur = byMethod.get(g.method) ?? { total: 0, count: 0 };
+      cur.total = Number((cur.total + Number(g._sum.amount ?? 0)).toFixed(2));
+      cur.count += g._count._all;
+      byMethod.set(g.method, cur);
+    }
     const byPaymentMethod = withPaymentShare(
-      grouped.map((g) => ({
-        method: g.method,
-        total: Number(g._sum.amount ?? 0),
-        count: g._count._all,
-      })),
+      [...byMethod.entries()].map(([method, v]) => ({ method, total: v.total, count: v.count })),
     );
+    const totalRevenue = Number(
+      byPaymentMethod.reduce((acc, m) => acc + m.total, 0).toFixed(2),
+    );
+    const salesCount = salesAgg._count._all;
 
     return c.json({
       ok: true,
@@ -96,6 +120,7 @@ reports.get('/sales', async (c) => {
         salesCount,
         averageTicket: calcAverageTicket(totalRevenue, salesCount),
         cancelledCount,
+        creditSalesGenerated: Number(creditGenerated._sum.originalAmount ?? 0),
         byPaymentMethod,
       },
     });

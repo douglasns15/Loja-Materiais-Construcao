@@ -4,6 +4,7 @@ import {
   calcSaleItemTotal,
   calcSaleTotals,
   closedStockMeters,
+  creditSaleBalances,
   hasAltUnit,
   isClosedPrimary,
   isValidMeterStep,
@@ -344,7 +345,33 @@ orders.post('/', requireActiveTenant, async (c) => {
       freightAmount: sale.freightAmount,
     });
     const paid = Number(sale.payments.reduce((acc, pmt) => acc + pmt.amount, 0).toFixed(2));
-    if (paid + 1e-9 < total) {
+    // Venda a prazo (fiado — ADR-019): parte (ou tudo) fica a receber. `creditAmount` > 0 exige
+    // cliente, é online-only nesta fatia, e a entrada paga agora + o valor a prazo devem fechar o
+    // total exatamente (sem troco no fiado). Sem `creditAmount`, é a venda à vista de sempre.
+    const credit = Number((sale.creditAmount ?? 0).toFixed(2));
+    if (credit > 0) {
+      if (isOffline) {
+        return c.json(
+          { ok: false, error: 'Venda a prazo (fiado) não está disponível offline.' },
+          400,
+        );
+      }
+      if (!sale.customerId) {
+        return c.json(
+          { ok: false, error: 'Selecione o cliente para uma venda a prazo.' },
+          400,
+        );
+      }
+      if (!creditSaleBalances(total, paid, credit)) {
+        return c.json(
+          {
+            ok: false,
+            error: `Valores não fecham: total ${total.toFixed(2)}, pago agora ${paid.toFixed(2)} + a prazo ${credit.toFixed(2)}.`,
+          },
+          400,
+        );
+      }
+    } else if (paid + 1e-9 < total) {
       return c.json(
         { ok: false, error: `Pagamento insuficiente: total ${total.toFixed(2)}, pago ${paid.toFixed(2)}.` },
         400,
@@ -417,6 +444,23 @@ orders.post('/', requireActiveTenant, async (c) => {
         });
       }
 
+      // Venda a prazo (fiado — ADR-019): registra a conta a receber. A mercadoria JÁ saiu acima
+      // (o fiado adia o pagamento, não a entrega — o estoque não muda); só o dinheiro fica
+      // pendente. `customerId` garantido não-nulo pela validação de `credit > 0`.
+      if (credit > 0) {
+        await tx.receivable.create({
+          data: {
+            tenantId,
+            orderId: created.id,
+            customerId: sale.customerId!,
+            originalAmount: credit,
+            dueDate: sale.dueDate ? new Date(sale.dueDate) : null,
+            createdById: userId, // autoria (ADR-010)
+            createdByName: c.get('userName'),
+          },
+        });
+      }
+
       // CS-4 (ADR-004/012 §b): marca de reconciliação quando a venda offline foi anexada a um caixa
       // JÁ FECHADO. Evento crítico auditável (não bloqueia a venda) — surge no relatório de fechamento.
       if (cashClosedAt) {
@@ -455,7 +499,9 @@ orders.post('/', requireActiveTenant, async (c) => {
         ok: true,
         data: {
           ...order,
-          change: Number((paid - total).toFixed(2)),
+          // Fiado não tem troco (a entrada + o valor a prazo fecham o total exatamente).
+          change: credit > 0 ? 0 : Number((paid - total).toFixed(2)),
+          ...(credit > 0 ? { creditAmount: credit } : {}),
           // CS-4: sinaliza ao cliente que a venda foi anexada a um caixa já fechado (reconciliação).
           ...(cashClosedAt ? { syncedToClosedCash: true } : {}),
         },

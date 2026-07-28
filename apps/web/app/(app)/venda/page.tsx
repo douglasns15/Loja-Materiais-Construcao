@@ -150,6 +150,9 @@ type View =
       date: string;
       /** `true` quando a venda foi salva na fila offline (pendente de sincronização), ADR-011. */
       pending?: boolean;
+      /** Venda a prazo (fiado — ADR-019): valor deixado a prazo + cliente devedor. */
+      credit?: number;
+      customerName?: string | null;
     }
   | { kind: 'quote'; total: number; discount: number; items: CartItem[]; date: string };
 
@@ -276,6 +279,14 @@ export default function VendaPage() {
     cardFeeCreditPercent: number | null;
   } | null>(null);
   const [printModel, setPrintModel] = useState<'80mm' | 'A4'>('80mm');
+  // Venda a prazo (fiado — ADR-019): valor deixado a prazo, cliente devedor e vencimento opcional.
+  // `creditInput` vazio/0 = venda à vista comum (nenhuma regressão). Online-only nesta fatia.
+  const [creditInput, setCreditInput] = useState('');
+  const [customerId, setCustomerId] = useState('');
+  const [customerName, setCustomerName] = useState('');
+  const [customerQuery, setCustomerQuery] = useState('');
+  const [customerOptions, setCustomerOptions] = useState<{ id: string; name: string }[]>([]);
+  const [dueDate, setDueDate] = useState('');
 
   async function loadProducts() {
     const list = await apiGet<Product[]>('/products');
@@ -328,6 +339,31 @@ export default function VendaPage() {
       }
     })();
   }, []);
+
+  // Busca de cliente para a venda a prazo (fiado). Debounce; usa a busca no servidor (`?q=`) da
+  // fatia UI.Busca.Servidor. Só dispara com o campo aberto e ao menos 2 caracteres.
+  useEffect(() => {
+    const q = customerQuery.trim();
+    if (q.length < 2) {
+      setCustomerOptions([]);
+      return;
+    }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      try {
+        const page = await apiGet<{ rows: { id: string; name: string }[] }>(
+          `/customers?q=${encodeURIComponent(q)}`,
+        );
+        if (!cancelled) setCustomerOptions(page.rows.map((r) => ({ id: r.id, name: r.name })));
+      } catch {
+        if (!cancelled) setCustomerOptions([]);
+      }
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [customerQuery]);
 
   /** Define o modelo (80mm/A4), injeta a regra @page e abre o diálogo de impressão. */
   function imprimir() {
@@ -407,13 +443,22 @@ export default function VendaPage() {
   );
   const discountTooHigh = discountValue > totals.subtotal;
 
+  // --- Venda a prazo (fiado — ADR-019) ---
+  // Valor deixado a prazo (limitado ao total) e o "a pagar AGORA" (= total − a prazo). Toda a
+  // mecânica de parcelas passa a fechar o `payableNow` em vez do total — com `credit = 0` é
+  // idêntico ao de sempre (zero regressão); com `credit = total`, não se paga nada agora (fiado 100%).
+  const creditValue = Math.min(Math.max(0, Number(creditInput) || 0), totals.total);
+  const isCredit = creditValue > 0;
+  const payableNow = Number((totals.total - creditValue).toFixed(2));
+
   // --- Recebimento (pagamento dividido) ---
   // Parcelas resolvidas (vazio = resto) e a situação do recebimento (pago/falta/troco), pela mesma
   // função pura do servidor. O DINHEIRO nas parcelas é o RECEBIDO (pode passar do total → troco).
-  const resolvedPayments = useMemo(() => resolvePaymentLines(payments, totals.total), [payments, totals.total]);
+  // O alvo é o `payableNow` (parte à vista), não o total: o que fica a prazo não é "recebido".
+  const resolvedPayments = useMemo(() => resolvePaymentLines(payments, payableNow), [payments, payableNow]);
   const payStatus = useMemo(
-    () => paymentStatus(totals.total, resolvedPayments),
-    [totals.total, resolvedPayments],
+    () => paymentStatus(payableNow, resolvedPayments),
+    [payableNow, resolvedPayments],
   );
   // Soma do que NÃO é dinheiro (cartão/PIX não dão troco): se passar do total, é erro do operador —
   // só o dinheiro pode exceder (vira troco). Trava a conclusão até ajustar.
@@ -424,7 +469,7 @@ export default function VendaPage() {
       ),
     [resolvedPayments],
   );
-  const nonCashOverpaid = nonCashSum > totals.total + 0.005;
+  const nonCashOverpaid = nonCashSum > payableNow + 0.005;
   const change = payStatus.change;
   const hasCashLine = payments.some((p) => p.method === 'CASH');
 
@@ -438,7 +483,8 @@ export default function VendaPage() {
       .filter((p) => p.method !== 'CASH' && p.amount > 0)
       .map((p) => ({ method: p.method, amount: Number(p.amount.toFixed(2)) }));
     const nonCashTotal = Number(nonCash.reduce((acc, p) => acc + p.amount, 0).toFixed(2));
-    const cashApplied = Number((totals.total - nonCashTotal).toFixed(2));
+    // Fecha o "a pagar agora" (parte à vista): o que fica a prazo NÃO vira pagamento (ADR-019).
+    const cashApplied = Number((payableNow - nonCashTotal).toFixed(2));
     return cashApplied > 0 ? [...nonCash, { method: 'CASH' as PaymentMethod, amount: cashApplied }] : nonCash;
   }
 
@@ -898,6 +944,15 @@ export default function VendaPage() {
    *  quando a rede voltar. Offline sem o recurso → orienta nota manual (não enfileira). */
   async function onConfirmar() {
     setError(null);
+    // Venda a prazo (fiado — ADR-019): exige cliente e é online-only nesta fatia.
+    if (isCredit && !customerId) {
+      setError('Selecione o cliente para a venda a prazo (fiado).');
+      return;
+    }
+    if (isCredit && !online) {
+      setError('A venda a prazo (fiado) exige conexão.');
+      return;
+    }
     // Parcelas que somam o total (troco já fora); o troco (`change`) é o excedente do dinheiro
     // recebido, calculado no core, e é só exibição — a API devolveria 0 porque o enviado fecha o total.
     const persistedPayments = buildPersistedPayments();
@@ -909,6 +964,7 @@ export default function VendaPage() {
       // Snapshot já reprecificado (ADR-016) — o comprovante imprime o que foi cobrado.
       items: pricedCart,
       date: new Date().toLocaleString('pt-BR'),
+      ...(isCredit ? { credit: creditValue, customerName } : {}),
     };
 
     // --- Offline: enfileira a venda (só com o recurso OFFLINE_SALES ligado) ---
@@ -968,6 +1024,10 @@ export default function VendaPage() {
       items: cartToSaleItems(),
       payments: persistedPayments,
       ...(discountValue > 0 ? { discountAmount: discountValue } : {}),
+      // Venda a prazo (fiado — ADR-019): cliente + valor a prazo + vencimento opcional.
+      ...(isCredit
+        ? { customerId, creditAmount: creditValue, ...(dueDate ? { dueDate } : {}) }
+        : {}),
     };
     const parsed = createSaleSchema.safeParse(payload);
     if (!parsed.success) {
@@ -1023,6 +1083,13 @@ export default function VendaPage() {
     setConfirmClear(false);
     setPayments([{ method: 'CASH', amount: '' }]);
     setDiscount('');
+    // Limpa a venda a prazo (fiado) para a próxima venda nascer à vista.
+    setCreditInput('');
+    setCustomerId('');
+    setCustomerName('');
+    setCustomerQuery('');
+    setCustomerOptions([]);
+    setDueDate('');
   }
 
   if (!ready) return <p className="text-gray-500">Carregando…</p>;
@@ -1113,6 +1180,12 @@ export default function VendaPage() {
           )}
           <Summary items={view.items} total={view.total} discount={view.discount} />
           {view.kind === 'done' && <PaymentsLines payments={view.payments} change={view.change} />}
+          {view.kind === 'done' && view.credit && view.credit > 0 ? (
+            <div className="flex items-center justify-between rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 ring-1 ring-amber-200">
+              <span>A prazo (fiado){view.customerName ? ` — ${view.customerName}` : ''}</span>
+              <span className="font-semibold tabular-nums">{BRL(view.credit)}</span>
+            </div>
+          ) : null}
 
           <div className="flex items-center gap-2 border-t border-gray-200 pt-3">
             <span className="text-sm text-gray-500">Imprimir:</span>
@@ -1171,6 +1244,8 @@ export default function VendaPage() {
           date={view.date}
           payments={view.kind === 'done' ? view.payments : undefined}
           change={view.kind === 'done' ? view.change : undefined}
+          creditAmount={view.kind === 'done' ? view.credit : undefined}
+          customerName={view.kind === 'done' ? view.customerName : undefined}
         />
       </div>
     );
@@ -1667,6 +1742,99 @@ export default function VendaPage() {
               O valor em cartão/PIX passou do total. Ajuste as parcelas — só o dinheiro gera troco.
             </p>
           )}
+
+          {/* Venda a prazo (fiado — ADR-019): deixa parte (ou tudo) a receber. Exige cliente;
+              online-only nesta fatia. `credit = 0` (campo vazio) = venda à vista de sempre. */}
+          <div className="border-t border-gray-100 pt-3">
+            <div className="flex items-center justify-between">
+              <label htmlFor="credit" className="text-sm font-medium">
+                A prazo (fiado)
+              </label>
+              <MoneyInput
+                id="credit"
+                value={creditInput}
+                onChange={setCreditInput}
+                placeholder="0,00"
+                className="w-28 rounded-lg border border-gray-300 px-2 py-1 text-right"
+              />
+            </div>
+            {isCredit && (
+              <div className="mt-2 space-y-2">
+                {payableNow > 0 && (
+                  <p className="flex items-center justify-between text-xs text-gray-500">
+                    <span>A pagar agora</span>
+                    <span className="tabular-nums">{BRL(payableNow)}</span>
+                  </p>
+                )}
+                {/* Cliente devedor (obrigatório): busca no servidor por nome. */}
+                {customerId ? (
+                  <div className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm ring-1 ring-gray-200">
+                    <span className="min-w-0 truncate">
+                      Cliente: <strong>{customerName}</strong>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomerId('');
+                        setCustomerName('');
+                        setCustomerQuery('');
+                      }}
+                      className="shrink-0 text-blue-600 hover:underline"
+                    >
+                      trocar
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <input
+                      value={customerQuery}
+                      onChange={(e) => setCustomerQuery(e.target.value)}
+                      placeholder="Buscar cliente por nome…"
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    />
+                    {customerOptions.length > 0 && (
+                      <ul className="mt-1 max-h-40 overflow-y-auto rounded-lg border border-gray-200 bg-white text-sm shadow-sm">
+                        {customerOptions.map((o) => (
+                          <li key={o.id}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCustomerId(o.id);
+                                setCustomerName(o.name);
+                                setCustomerQuery('');
+                                setCustomerOptions([]);
+                              }}
+                              className="block w-full px-3 py-2 text-left hover:bg-gray-50"
+                            >
+                              {o.name}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+                <div className="flex items-center justify-between">
+                  <label htmlFor="due" className="text-sm text-gray-600">
+                    Vencimento (opcional)
+                  </label>
+                  <input
+                    id="due"
+                    type="date"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                    className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
+                  />
+                </div>
+                {!customerId && (
+                  <p className="text-xs text-amber-600">Selecione o cliente para concluir a venda a prazo.</p>
+                )}
+                {!online && (
+                  <p className="text-xs text-red-600">A venda a prazo (fiado) exige conexão.</p>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Coluna esquerda: total + desconto + ações (linha 3). */}
@@ -1701,7 +1869,13 @@ export default function VendaPage() {
           <div className="mt-4 grid grid-cols-2 gap-2">
             <button
               onClick={onConcluir}
-              disabled={cart.length === 0 || discountTooHigh || !payStatus.sufficient || nonCashOverpaid}
+              disabled={
+                cart.length === 0 ||
+                discountTooHigh ||
+                !payStatus.sufficient ||
+                nonCashOverpaid ||
+                (isCredit && (!customerId || !online))
+              }
               className="rounded-lg bg-gray-900 py-2 font-medium text-white hover:bg-gray-800 disabled:opacity-50"
             >
               Concluir venda

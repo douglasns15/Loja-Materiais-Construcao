@@ -19,6 +19,10 @@ import {
   grossCashMovements,
   manualCashMovementType,
   reversalKindFor,
+  receivableBalance,
+  isValidReceipt,
+  applyReceivablePayment,
+  creditSaleBalances,
   sumCashCount,
   paymentStatus,
   BRL_COIN_VALUES,
@@ -363,6 +367,70 @@ describe('reversalKindFor', () => {
         { type: reversal, amount: 100 },
       ])).toBe(0);
     }
+  });
+});
+
+describe('receivableBalance / isValidReceipt / applyReceivablePayment (fiado — ADR-019)', () => {
+  it('saldo devedor = original − recebido, nunca negativo', () => {
+    expect(receivableBalance(100, 0)).toBe(100);
+    expect(receivableBalance(100, 30)).toBe(70);
+    expect(receivableBalance(100, 100)).toBe(0);
+    expect(receivableBalance(100, 120)).toBe(0); // recebeu mais que devia (guarda) → 0
+  });
+
+  it('saldo devedor sem erro de float', () => {
+    // 0,10 + 0,20 = 0,30 → deve dar 0, não 0,00000000004
+    expect(receivableBalance(0.3, 0.1 + 0.2)).toBe(0);
+  });
+
+  it('recebimento válido: positivo e ≤ saldo', () => {
+    expect(isValidReceipt(50, 100)).toBe(true);
+    expect(isValidReceipt(100, 100)).toBe(true); // quitar exato
+    expect(isValidReceipt(0, 100)).toBe(false); // zero não recebe
+    expect(isValidReceipt(-10, 100)).toBe(false); // negativo não recebe
+    expect(isValidReceipt(100.01, 100)).toBe(false); // acima do saldo
+  });
+
+  it('recebimento parcial mantém OPEN e acumula', () => {
+    const r = applyReceivablePayment(100, 0, 40);
+    expect(r.settledAmount).toBe(40);
+    expect(r.status).toBe('OPEN');
+    expect(r.fullyPaid).toBe(false);
+  });
+
+  it('recebimento que alcança o total quita (PAID)', () => {
+    const r = applyReceivablePayment(100, 60, 40);
+    expect(r.settledAmount).toBe(100);
+    expect(r.status).toBe('PAID');
+    expect(r.fullyPaid).toBe(true);
+  });
+
+  it('sequência parcial → parcial → quitação', () => {
+    let settled = 0;
+    ({ settledAmount: settled } = applyReceivablePayment(150, settled, 50)); // 50
+    expect(receivableBalance(150, settled)).toBe(100);
+    ({ settledAmount: settled } = applyReceivablePayment(150, settled, 50)); // 100
+    expect(receivableBalance(150, settled)).toBe(50);
+    const last = applyReceivablePayment(150, settled, 50); // 150
+    expect(last.status).toBe('PAID');
+    expect(receivableBalance(150, last.settledAmount)).toBe(0);
+  });
+});
+
+describe('creditSaleBalances (venda a prazo — ADR-019)', () => {
+  it('entrada + a prazo devem fechar o total', () => {
+    expect(creditSaleBalances(100, 0, 100)).toBe(true); // fiado 100%
+    expect(creditSaleBalances(100, 40, 60)).toBe(true); // entrada 40 + 60 a prazo
+    expect(creditSaleBalances(100, 100, 0)).toBe(true); // à vista comum
+  });
+
+  it('recusa quando não fecha o total', () => {
+    expect(creditSaleBalances(100, 40, 50)).toBe(false); // falta 10
+    expect(creditSaleBalances(100, 40, 70)).toBe(false); // sobra 10
+  });
+
+  it('tolera 1 centavo de arredondamento', () => {
+    expect(creditSaleBalances(100, 33.33, 66.67)).toBe(true);
   });
 });
 

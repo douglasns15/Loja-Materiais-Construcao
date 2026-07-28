@@ -30,6 +30,10 @@ type Props = {
   /** Compat: uma forma só (usado antes do pagamento dividido). */
   method?: PaymentMethod;
   change?: number;
+  /** Venda a prazo (fiado — ADR-019): valor deixado a prazo; imprime a linha "A prazo". */
+  creditAmount?: number;
+  /** Nome do cliente devedor (venda a prazo) — impresso junto da linha "A prazo". */
+  customerName?: string | null;
 };
 
 const BRL = (v: number) =>
@@ -40,7 +44,7 @@ const BRL = (v: number) =>
  * e só aparece na impressão (ver regras @media print em globals.css). O modelo
  * (80mm / A4) é controlado pelo atributo data-model, definido antes de imprimir.
  */
-export function ReceiptPrint({ kind, store, items, total, date, discount, payments, method, change }: Props) {
+export function ReceiptPrint({ kind, store, items, total, date, discount, payments, method, change, creditAmount, customerName }: Props) {
   const isQuote = kind === 'quote';
   const subtotal = items.reduce((acc, i) => acc + i.unitPrice * i.quantity, 0);
   const hasDiscount = (discount ?? 0) > 0;
@@ -117,6 +121,12 @@ export function ReceiptPrint({ kind, store, items, total, date, discount, paymen
             <div>
               <span>Troco</span>
               <span>{BRL(change)}</span>
+            </div>
+          ) : null}
+          {creditAmount && creditAmount > 0 ? (
+            <div>
+              <span>A prazo (fiado){customerName ? ` — ${customerName}` : ''}</span>
+              <span>{BRL(creditAmount)}</span>
             </div>
           ) : null}
         </div>
