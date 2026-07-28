@@ -279,8 +279,11 @@ export default function VendaPage() {
     cardFeeCreditPercent: number | null;
   } | null>(null);
   const [printModel, setPrintModel] = useState<'80mm' | 'A4'>('80mm');
-  // Venda a prazo (fiado — ADR-019): valor deixado a prazo, cliente devedor e vencimento opcional.
+  // Venda a prazo (ADR-019): valor deixado a prazo, cliente devedor e vencimento opcional.
   // `creditInput` vazio/0 = venda à vista comum (nenhuma regressão). Online-only nesta fatia.
+  // `showCredit` mantém a opção ESCONDIDA por padrão (PDV limpo) — só aparece quando o operador
+  // clica em "Venda a prazo" (padrão dos bons PDVs: opções avançadas sob demanda).
+  const [showCredit, setShowCredit] = useState(false);
   const [creditInput, setCreditInput] = useState('');
   const [customerId, setCustomerId] = useState('');
   const [customerName, setCustomerName] = useState('');
@@ -443,11 +446,13 @@ export default function VendaPage() {
   );
   const discountTooHigh = discountValue > totals.subtotal;
 
-  // --- Venda a prazo (fiado — ADR-019) ---
+  // --- Venda a prazo (ADR-019) ---
   // Valor deixado a prazo (limitado ao total) e o "a pagar AGORA" (= total − a prazo). Toda a
   // mecânica de parcelas passa a fechar o `payableNow` em vez do total — com `credit = 0` é
-  // idêntico ao de sempre (zero regressão); com `credit = total`, não se paga nada agora (fiado 100%).
-  const creditValue = Math.min(Math.max(0, Number(creditInput) || 0), totals.total);
+  // idêntico ao de sempre (zero regressão); com `credit = total`, não se paga nada agora (100% a prazo).
+  const creditValue = showCredit
+    ? Math.min(Math.max(0, Number(creditInput) || 0), totals.total)
+    : 0;
   const isCredit = creditValue > 0;
   const payableNow = Number((totals.total - creditValue).toFixed(2));
 
@@ -946,11 +951,11 @@ export default function VendaPage() {
     setError(null);
     // Venda a prazo (fiado — ADR-019): exige cliente e é online-only nesta fatia.
     if (isCredit && !customerId) {
-      setError('Selecione o cliente para a venda a prazo (fiado).');
+      setError('Selecione o cliente para a venda a prazo.');
       return;
     }
     if (isCredit && !online) {
-      setError('A venda a prazo (fiado) exige conexão.');
+      setError('A venda a prazo exige conexão.');
       return;
     }
     // Parcelas que somam o total (troco já fora); o troco (`change`) é o excedente do dinheiro
@@ -1083,7 +1088,13 @@ export default function VendaPage() {
     setConfirmClear(false);
     setPayments([{ method: 'CASH', amount: '' }]);
     setDiscount('');
-    // Limpa a venda a prazo (fiado) para a próxima venda nascer à vista.
+    // Limpa a venda a prazo para a próxima venda nascer à vista.
+    resetCredit();
+  }
+
+  /** Limpa/esconde a venda a prazo (usado ao remover a opção e ao iniciar nova venda). */
+  function resetCredit() {
+    setShowCredit(false);
     setCreditInput('');
     setCustomerId('');
     setCustomerName('');
@@ -1182,7 +1193,7 @@ export default function VendaPage() {
           {view.kind === 'done' && <PaymentsLines payments={view.payments} change={view.change} />}
           {view.kind === 'done' && view.credit && view.credit > 0 ? (
             <div className="flex items-center justify-between rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 ring-1 ring-amber-200">
-              <span>A prazo (fiado){view.customerName ? ` — ${view.customerName}` : ''}</span>
+              <span>A prazo{view.customerName ? ` — ${view.customerName}` : ''}</span>
               <span className="font-semibold tabular-nums">{BRL(view.credit)}</span>
             </div>
           ) : null}
@@ -1743,98 +1754,117 @@ export default function VendaPage() {
             </p>
           )}
 
-          {/* Venda a prazo (fiado — ADR-019): deixa parte (ou tudo) a receber. Exige cliente;
-              online-only nesta fatia. `credit = 0` (campo vazio) = venda à vista de sempre. */}
-          <div className="border-t border-gray-100 pt-3">
-            <div className="flex items-center justify-between">
-              <label htmlFor="credit" className="text-sm font-medium">
-                A prazo (fiado)
-              </label>
-              <MoneyInput
-                id="credit"
-                value={creditInput}
-                onChange={setCreditInput}
-                placeholder="0,00"
-                className="w-28 rounded-lg border border-gray-300 px-2 py-1 text-right"
-              />
-            </div>
-            {isCredit && (
-              <div className="mt-2 space-y-2">
-                {payableNow > 0 && (
-                  <p className="flex items-center justify-between text-xs text-gray-500">
-                    <span>A pagar agora</span>
-                    <span className="tabular-nums">{BRL(payableNow)}</span>
-                  </p>
-                )}
-                {/* Cliente devedor (obrigatório): busca no servidor por nome. */}
-                {customerId ? (
-                  <div className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm ring-1 ring-gray-200">
-                    <span className="min-w-0 truncate">
-                      Cliente: <strong>{customerName}</strong>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCustomerId('');
-                        setCustomerName('');
-                        setCustomerQuery('');
-                      }}
-                      className="shrink-0 text-blue-600 hover:underline"
-                    >
-                      trocar
-                    </button>
-                  </div>
-                ) : (
-                  <div>
-                    <input
-                      value={customerQuery}
-                      onChange={(e) => setCustomerQuery(e.target.value)}
-                      placeholder="Buscar cliente por nome…"
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                    />
-                    {customerOptions.length > 0 && (
-                      <ul className="mt-1 max-h-40 overflow-y-auto rounded-lg border border-gray-200 bg-white text-sm shadow-sm">
-                        {customerOptions.map((o) => (
-                          <li key={o.id}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setCustomerId(o.id);
-                                setCustomerName(o.name);
-                                setCustomerQuery('');
-                                setCustomerOptions([]);
-                              }}
-                              className="block w-full px-3 py-2 text-left hover:bg-gray-50"
-                            >
-                              {o.name}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                )}
-                <div className="flex items-center justify-between">
-                  <label htmlFor="due" className="text-sm text-gray-600">
-                    Vencimento (opcional)
-                  </label>
-                  <input
-                    id="due"
-                    type="date"
-                    value={dueDate}
-                    onChange={(e) => setDueDate(e.target.value)}
-                    className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
+          {/* Venda a prazo (ADR-019) — opt-in: escondida por padrão para o PDV ficar limpo (padrão
+              dos bons PDVs). Um clique revela o bloco; o "×" remove e volta para venda à vista. */}
+          {!showCredit ? (
+            <button
+              type="button"
+              onClick={() => setShowCredit(true)}
+              className="text-sm font-medium text-blue-600 hover:text-blue-700"
+            >
+              + Venda a prazo
+            </button>
+          ) : (
+            <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <label htmlFor="credit" className="text-sm font-semibold text-amber-900">
+                  A prazo
+                </label>
+                <div className="flex items-center gap-1">
+                  <MoneyInput
+                    id="credit"
+                    value={creditInput}
+                    onChange={setCreditInput}
+                    placeholder="0,00"
+                    className="w-28 rounded-lg border border-amber-300 bg-white px-2 py-1 text-right"
                   />
+                  <button
+                    type="button"
+                    onClick={resetCredit}
+                    className="shrink-0 rounded-lg px-2 py-1 text-lg leading-none text-gray-400 hover:text-red-600"
+                    aria-label="Remover venda a prazo"
+                    title="Remover venda a prazo"
+                  >
+                    ×
+                  </button>
                 </div>
-                {!customerId && (
-                  <p className="text-xs text-amber-600">Selecione o cliente para concluir a venda a prazo.</p>
-                )}
-                {!online && (
-                  <p className="text-xs text-red-600">A venda a prazo (fiado) exige conexão.</p>
-                )}
               </div>
-            )}
-          </div>
+              {isCredit && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between rounded-lg bg-white px-3 py-1.5 text-sm ring-1 ring-amber-200">
+                    <span className="text-gray-600">A pagar agora</span>
+                    <span className="font-semibold tabular-nums">{BRL(payableNow)}</span>
+                  </div>
+                  {/* Cliente devedor (obrigatório): busca no servidor por nome. */}
+                  {customerId ? (
+                    <div className="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-sm ring-1 ring-amber-200">
+                      <span className="min-w-0 truncate">
+                        Cliente: <strong>{customerName}</strong>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCustomerId('');
+                          setCustomerName('');
+                          setCustomerQuery('');
+                        }}
+                        className="shrink-0 text-blue-600 hover:underline"
+                      >
+                        trocar
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      <input
+                        value={customerQuery}
+                        onChange={(e) => setCustomerQuery(e.target.value)}
+                        placeholder="Buscar cliente por nome…"
+                        className="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm"
+                      />
+                      {customerOptions.length > 0 && (
+                        <ul className="mt-1 max-h-40 overflow-y-auto rounded-lg border border-gray-200 bg-white text-sm shadow-sm">
+                          {customerOptions.map((o) => (
+                            <li key={o.id}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setCustomerId(o.id);
+                                  setCustomerName(o.name);
+                                  setCustomerQuery('');
+                                  setCustomerOptions([]);
+                                }}
+                                className="block w-full px-3 py-2 text-left hover:bg-gray-50"
+                              >
+                                {o.name}
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <label htmlFor="due" className="text-sm text-gray-600">
+                      Vencimento (opcional)
+                    </label>
+                    <input
+                      id="due"
+                      type="date"
+                      value={dueDate}
+                      onChange={(e) => setDueDate(e.target.value)}
+                      className="rounded-lg border border-amber-300 bg-white px-2 py-1 text-sm"
+                    />
+                  </div>
+                  {!customerId && (
+                    <p className="text-xs text-amber-700">Selecione o cliente para concluir a venda a prazo.</p>
+                  )}
+                  {!online && (
+                    <p className="text-xs text-red-600">A venda a prazo exige conexão.</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Coluna esquerda: total + desconto + ações (linha 3). */}

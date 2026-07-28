@@ -1,11 +1,14 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   PAYMENT_METHOD_LABELS,
+  RECEIVABLE_STATUS_LABELS,
   receiveReceivableSchema,
   type PaymentMethod,
+  type ReceivableDetail,
   type ReceivableRow,
+  type ReceivablesPage,
 } from '@nexoloja/shared';
 import { apiGet, apiPost } from '@/lib/api';
 import { OfflineNotice } from '@/components/OfflineNotice';
@@ -13,6 +16,8 @@ import { MoneyInput } from '@/components/MoneyInput';
 
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+type StatusFilter = 'open' | 'paid' | 'all';
 
 /** Uma conta está VENCIDA quando tem vencimento e ele já passou (comparando só a data). */
 function isOverdue(dueDate: string | null): boolean {
@@ -23,43 +28,103 @@ function isOverdue(dueDate: string | null): boolean {
 }
 
 /**
- * Contas a Receber — venda a prazo / fiado (ADR-019). Lista as dívidas em aberto (cliente, saldo,
- * vencimento) e permite **receber** (total ou parcial). Receber em dinheiro vira um Suprimento no
- * caixa (feito no servidor). Online-only nesta fatia (como Estoque/Relatórios).
+ * Contas a Receber — venda a prazo (ADR-019). Lista paginada (cursor keyset, como as demais telas
+ * grandes) com busca por cliente e filtro de situação (em aberto / quitadas / todas). Clicar no
+ * cliente abre o **detalhe** (itens da venda + histórico de recebimentos com data/hora). Receber
+ * (total ou parcial) abate o saldo; em dinheiro vira Suprimento no caixa (feito no servidor).
+ * Online-only nesta fatia.
  */
 export default function ContasAReceberPage() {
   const [rows, setRows] = useState<ReceivableRow[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
-  // Conta selecionada para receber (abre o painel) + campos do recebimento.
+  const [status, setStatus] = useState<StatusFilter>('open');
+  const [search, setSearch] = useState('');
+
+  // Conta selecionada para receber (painel) + campos do recebimento.
   const [selected, setSelected] = useState<ReceivableRow | null>(null);
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState<PaymentMethod>('CASH');
   const [busy, setBusy] = useState(false);
 
-  async function load() {
+  // Detalhe da conta (ao clicar no cliente): itens da venda + histórico de recebimentos.
+  const [detail, setDetail] = useState<ReceivableDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  const query = useCallback(
+    (cursor: string | null) => {
+      const p = new URLSearchParams({ status });
+      if (search.trim()) p.set('q', search.trim());
+      if (cursor) p.set('cursor', cursor);
+      return `/receivables?${p.toString()}`;
+    },
+    [status, search],
+  );
+
+  const load = useCallback(async () => {
     try {
-      const data = await apiGet<ReceivableRow[]>('/receivables');
-      setRows(data);
+      const page = await apiGet<ReceivablesPage>(query(null));
+      setRows(page.rows);
+      setNextCursor(page.nextCursor);
       setError(null);
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setLoaded(true);
     }
+  }, [query]);
+
+  // Recarrega da 1ª página ao trocar filtro/busca (debounce na busca).
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      load();
+      return;
+    }
+    const t = setTimeout(load, 300);
+    return () => clearTimeout(t);
+  }, [load]);
+
+  async function loadMore() {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const page = await apiGet<ReceivablesPage>(query(nextCursor));
+      setRows((prev) => [...prev, ...page.rows]);
+      setNextCursor(page.nextCursor);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoadingMore(false);
+    }
   }
 
-  useEffect(() => {
-    load();
-  }, []);
+  const totalOwed = useMemo(
+    () => rows.reduce((acc, r) => acc + (r.status === 'OPEN' ? r.balance : 0), 0),
+    [rows],
+  );
 
-  const totalOwed = useMemo(() => rows.reduce((acc, r) => acc + r.balance, 0), [rows]);
+  async function openDetail(id: string) {
+    setDetail(null);
+    setDetailLoading(true);
+    try {
+      const d = await apiGet<ReceivableDetail>(`/receivables/${id}`);
+      setDetail(d);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setDetailLoading(false);
+    }
+  }
 
   function openReceive(r: ReceivableRow) {
     setSelected(r);
-    setAmount(String(r.balance)); // pré-preenche com o saldo (recebimento total é o caso comum)
+    setAmount(String(r.balance));
     setMethod('CASH');
     setError(null);
     setInfo(null);
@@ -92,6 +157,8 @@ export default function ContasAReceberPage() {
       setSelected(null);
       setAmount('');
       await load();
+      // Se o detalhe estava aberto para esta conta, atualiza-o também.
+      if (detail && detail.id === selected.id) await openDetail(selected.id);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -108,19 +175,49 @@ export default function ContasAReceberPage() {
       {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
       {info && <p className="mb-4 rounded-lg bg-gray-100 px-3 py-2 text-sm">{info}</p>}
 
+      {/* Busca + filtro de situação. */}
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar por cliente…"
+          className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+        />
+        <div className="flex gap-1">
+          {(['open', 'paid', 'all'] as StatusFilter[]).map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setStatus(s)}
+              className={`rounded-lg px-3 py-2 text-sm font-medium ${
+                status === s ? 'bg-gray-900 text-white' : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              {s === 'open' ? 'Em aberto' : s === 'paid' ? 'Quitadas' : 'Todas'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {status === 'open' && rows.length > 0 && (
+        <div className="mb-4 rounded-2xl bg-white p-4 shadow-sm">
+          <p className="text-xs text-gray-500">Total a receber (nesta página)</p>
+          <p className="mt-1 text-2xl font-bold">{BRL(totalOwed)}</p>
+        </div>
+      )}
+
       {!loaded ? (
         <p className="text-gray-500">Carregando…</p>
       ) : rows.length === 0 ? (
         <p className="rounded-2xl bg-white p-6 text-center text-gray-500 shadow-sm">
-          Nenhuma conta a receber em aberto. As vendas a prazo (fiado) aparecem aqui.
+          {search.trim()
+            ? 'Nenhuma conta encontrada para essa busca.'
+            : status === 'open'
+              ? 'Nenhuma conta a receber em aberto. As vendas a prazo aparecem aqui.'
+              : 'Nenhuma conta nesta situação.'}
         </p>
       ) : (
         <>
-          <div className="mb-4 rounded-2xl bg-white p-4 shadow-sm">
-            <p className="text-xs text-gray-500">Total a receber (em aberto)</p>
-            <p className="mt-1 text-2xl font-bold">{BRL(totalOwed)}</p>
-          </div>
-
           <div className="overflow-x-auto rounded-2xl bg-white shadow-sm">
             <table className="w-full text-sm">
               <thead>
@@ -135,14 +232,21 @@ export default function ContasAReceberPage() {
               </thead>
               <tbody>
                 {rows.map((r) => {
-                  const overdue = isOverdue(r.dueDate);
+                  const overdue = r.status === 'OPEN' && isOverdue(r.dueDate);
                   return (
                     <tr key={r.id} className="border-b border-gray-50">
                       <td className="px-4 py-3">
-                        <span className="font-medium">{r.customerName ?? '—'}</span>
+                        {/* Clicar no cliente abre o detalhe da conta. */}
+                        <button
+                          type="button"
+                          onClick={() => openDetail(r.id)}
+                          className="font-medium text-blue-700 hover:underline"
+                        >
+                          {r.customerName ?? '—'}
+                        </button>
                         <span className="block text-xs text-gray-400">
                           {new Date(r.createdAt).toLocaleDateString('pt-BR')}
-                          {r.createdByName ? ` · ${r.createdByName}` : ''}
+                          {r.status !== 'OPEN' ? ` · ${RECEIVABLE_STATUS_LABELS[r.status]}` : ''}
                         </span>
                       </td>
                       <td className="px-4 py-3">
@@ -163,13 +267,17 @@ export default function ContasAReceberPage() {
                         {BRL(r.balance)}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <button
-                          type="button"
-                          onClick={() => openReceive(r)}
-                          className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800"
-                        >
-                          Receber
-                        </button>
+                        {r.status === 'OPEN' ? (
+                          <button
+                            type="button"
+                            onClick={() => openReceive(r)}
+                            className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800"
+                          >
+                            Receber
+                          </button>
+                        ) : (
+                          <span className="text-xs text-gray-400">quitada</span>
+                        )}
                       </td>
                     </tr>
                   );
@@ -177,13 +285,26 @@ export default function ContasAReceberPage() {
               </tbody>
             </table>
           </div>
+
+          {nextCursor && (
+            <div className="mt-4 text-center">
+              <button
+                type="button"
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+              >
+                {loadingMore ? 'Carregando…' : 'Mostrar mais'}
+              </button>
+            </div>
+          )}
         </>
       )}
 
       {/* Painel de recebimento (total ou parcial). */}
       {selected && (
         <div
-          className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
           onClick={() => setSelected(null)}
         >
           <form
@@ -258,6 +379,152 @@ export default function ContasAReceberPage() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Detalhe da conta (itens da venda + histórico de recebimentos). */}
+      {(detail || detailLoading) && (
+        <div
+          className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/30 p-4"
+          onClick={() => setDetail(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="my-8 w-full max-w-lg space-y-4 rounded-2xl bg-white p-5 shadow-lg"
+          >
+            {detailLoading || !detail ? (
+              <p className="text-gray-500">Carregando…</p>
+            ) : (
+              <>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h2 className="text-lg font-bold">{detail.customerName ?? 'Cliente'}</h2>
+                    <p className="text-xs text-gray-500">
+                      Venda de{' '}
+                      {new Date(detail.orderCreatedAt ?? detail.createdAt).toLocaleString('pt-BR')}
+                      {detail.createdByName ? ` · ${detail.createdByName}` : ''}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setDetail(null)}
+                    className="text-gray-400 hover:text-gray-700"
+                    aria-label="Fechar"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Situação da dívida. */}
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-lg bg-gray-50 p-2">
+                    <p className="text-xs text-gray-500">Original</p>
+                    <p className="font-semibold tabular-nums">{BRL(detail.originalAmount)}</p>
+                  </div>
+                  <div className="rounded-lg bg-gray-50 p-2">
+                    <p className="text-xs text-gray-500">Recebido</p>
+                    <p className="font-semibold tabular-nums text-green-700">
+                      {BRL(detail.settledAmount)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg bg-gray-50 p-2">
+                    <p className="text-xs text-gray-500">Saldo</p>
+                    <p className="font-semibold tabular-nums">{BRL(detail.balance)}</p>
+                  </div>
+                </div>
+                <p className="text-sm">
+                  Situação:{' '}
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                      detail.status === 'PAID'
+                        ? 'bg-green-100 text-green-700'
+                        : detail.status === 'CANCELLED'
+                          ? 'bg-gray-100 text-gray-600'
+                          : 'bg-amber-100 text-amber-700'
+                    }`}
+                  >
+                    {RECEIVABLE_STATUS_LABELS[detail.status]}
+                  </span>
+                  {detail.dueDate && (
+                    <span className="ml-2 text-gray-500">
+                      Vence em {new Date(detail.dueDate).toLocaleDateString('pt-BR')}
+                    </span>
+                  )}
+                </p>
+
+                {/* Itens da venda (a "dívida" detalhada). */}
+                <div>
+                  <h3 className="mb-1 text-sm font-semibold">Itens da venda</h3>
+                  <ul className="divide-y divide-gray-100 rounded-lg border border-gray-100">
+                    {detail.items.map((it, idx) => (
+                      <li key={idx} className="flex items-center justify-between px-3 py-2 text-sm">
+                        <span className="min-w-0 truncate">
+                          {Number(it.quantity)}× {it.productName}
+                        </span>
+                        <span className="shrink-0 tabular-nums">{BRL(it.total)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-1 text-xs text-gray-400">
+                    A mercadoria foi entregue na venda (a venda a prazo adia o pagamento, não a
+                    entrega).
+                  </p>
+                </div>
+
+                {/* Histórico de recebimentos (com data e hora). */}
+                <div>
+                  <h3 className="mb-1 text-sm font-semibold">Recebimentos</h3>
+                  {detail.payments.length === 0 ? (
+                    <p className="text-sm text-gray-500">Nenhum recebimento ainda.</p>
+                  ) : (
+                    <ul className="divide-y divide-gray-100 rounded-lg border border-gray-100">
+                      {detail.payments.map((p) => (
+                        <li key={p.id} className="flex items-center justify-between px-3 py-2 text-sm">
+                          <span>
+                            <span className="text-gray-700">
+                              {PAYMENT_METHOD_LABELS[p.method as PaymentMethod] ?? p.method}
+                            </span>
+                            <span className="block text-xs text-gray-400">
+                              {new Date(p.paidAt).toLocaleString('pt-BR')}
+                              {p.receivedByName ? ` · ${p.receivedByName}` : ''}
+                            </span>
+                          </span>
+                          <span className="shrink-0 font-medium tabular-nums text-green-700">
+                            {BRL(p.amount)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                {detail.status === 'OPEN' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const r: ReceivableRow = {
+                        id: detail.id,
+                        orderId: detail.orderId,
+                        customerId: detail.customerId,
+                        customerName: detail.customerName,
+                        originalAmount: detail.originalAmount,
+                        settledAmount: detail.settledAmount,
+                        balance: detail.balance,
+                        status: detail.status,
+                        dueDate: detail.dueDate,
+                        createdAt: detail.createdAt,
+                        createdByName: detail.createdByName,
+                      };
+                      openReceive(r);
+                    }}
+                    className="w-full rounded-lg bg-gray-900 py-2 font-medium text-white hover:bg-gray-800"
+                  >
+                    Receber
+                  </button>
+                )}
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>

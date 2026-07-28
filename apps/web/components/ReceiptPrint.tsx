@@ -125,7 +125,7 @@ export function ReceiptPrint({ kind, store, items, total, date, discount, paymen
           ) : null}
           {creditAmount && creditAmount > 0 ? (
             <div>
-              <span>A prazo (fiado){customerName ? ` — ${customerName}` : ''}</span>
+              <span>A prazo{customerName ? ` — ${customerName}` : ''}</span>
               <span>{BRL(creditAmount)}</span>
             </div>
           ) : null}

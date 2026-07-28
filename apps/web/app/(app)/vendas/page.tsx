@@ -36,6 +36,8 @@ type Order = {
   cashSession: { id: string; closedAt: string | null } | null;
   items: OrderItem[];
   payments: Payment[];
+  // Venda a prazo (ADR-019): presente quando a venda gerou uma conta a receber.
+  receivable?: { originalAmount: string; settledAmount: string; status: 'OPEN' | 'PAID' | 'CANCELLED' } | null;
 };
 
 /** Ação em curso no modal: cancelamento (caixa aberto) ou devolução (caixa fechado). */
@@ -428,6 +430,13 @@ export default function VendasPage() {
                       ) : (
                         <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
                           Confirmada
+                        </span>
+                      )}
+                      {/* Venda a prazo (ADR-019): badge amarelo adicional (a venda pode estar
+                          Confirmada E ser a prazo). "quitada" quando a conta já foi paga. */}
+                      {o.receivable && !cancelled && (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                          A prazo{o.receivable.status === 'PAID' ? ' · quitada' : ''}
                         </span>
                       )}
                     </div>

@@ -57,3 +57,26 @@ export type ReceivableRow = {
   createdAt: string;
   createdByName: string | null;
 };
+
+/** Página de contas a receber (cursor keyset) — mesmo contrato das demais telas paginadas. */
+export type ReceivablesPage = { rows: ReceivableRow[]; nextCursor: string | null };
+
+/** Um item da venda que originou a dívida (para o detalhe da conta a receber). */
+export type ReceivableItem = {
+  productName: string;
+  unit: string;
+  quantity: string;
+  unitPrice: string;
+  total: string;
+  pairGroup: number | null;
+};
+
+/** Detalhe de uma conta a receber (`GET /receivables/:id`): a conta + os itens da venda de
+ * origem + o histórico de recebimentos (com data/hora). Base da tela de detalhe do cliente. */
+export type ReceivableDetail = ReceivableRow & {
+  orderTotal: string | null;
+  orderCreatedAt: string | null;
+  items: ReceivableItem[];
+  orderPayments: { method: string; amount: string }[];
+  payments: ReceivablePaymentRow[];
+};

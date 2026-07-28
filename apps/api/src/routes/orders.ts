@@ -154,6 +154,8 @@ orders.get('/', async (c) => {
           items: true,
           payments: true,
           cashSession: { select: { id: true, closedAt: true } },
+          // Venda a prazo (ADR-019): expõe a conta a receber p/ o Histórico marcar o badge "A prazo".
+          receivable: { select: { originalAmount: true, settledAmount: true, status: true } },
         },
       });
 

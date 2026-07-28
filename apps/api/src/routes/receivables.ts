@@ -15,10 +15,30 @@ receivables.use('*', requireAuth);
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Lista as contas a receber (venda a prazo / fiado — ADR-019). Sem parâmetro → só as EM ABERTO
- * (o caso de uso: quem ainda deve). `?status=all` traz também quitadas/canceladas. Cada linha já
- * traz o **saldo devedor** calculado (fonte única `receivableBalance` do core) e o nome do cliente
- * (snapshot p/ a lista), ordenadas por vencimento (nulos por último) e depois pela mais antiga. */
+const PAGE_DEFAULT = 20;
+const PAGE_MAX = 50;
+
+type Cursor = { createdAt: string; id: string };
+
+/** Cursor keyset opaco (base64 de `createdAt|id`), como no Histórico de Vendas. */
+function encodeCursor(r: { createdAt: Date; id: string }): string {
+  return Buffer.from(`${r.createdAt.toISOString()}|${r.id}`).toString('base64url');
+}
+function decodeCursor(raw: string): Cursor | null {
+  try {
+    const [createdAt, id] = Buffer.from(raw, 'base64url').toString('utf8').split('|');
+    if (!createdAt || !id || !UUID_RE.test(id)) return null;
+    return { createdAt, id };
+  } catch {
+    return null;
+  }
+}
+
+/** Lista as contas a receber (venda a prazo — ADR-019), **paginada por cursor keyset** (como as
+ * demais telas grandes) em `createdAt desc, id desc`. Filtros: `status` = `open` (default) /
+ * `paid` (quitadas) / `all` (abertas + quitadas); `q` busca por nome do cliente; `limit`/`cursor`.
+ * Responde `{ rows, nextCursor }`. Cada linha traz o **saldo devedor** (fonte única do core) e o
+ * nome do cliente. */
 receivables.get('/', async (c) => {
   const tenantId = getTenantId(c);
   const connectionString = getConnectionString(c.env);
@@ -27,13 +47,37 @@ receivables.get('/', async (c) => {
   }
 
   const statusParam = c.req.query('status');
-  const onlyOpen = statusParam !== 'all';
+  const OPEN_PAID: ('OPEN' | 'PAID')[] = ['OPEN', 'PAID'];
+  const statusWhere =
+    statusParam === 'paid'
+      ? { status: 'PAID' as const }
+      : statusParam === 'all'
+        ? { status: { in: OPEN_PAID } }
+        : { status: 'OPEN' as const };
+
+  const q = (c.req.query('q') ?? '').trim();
+  const qWhere = q ? { customer: { name: { contains: q, mode: 'insensitive' as const } } } : {};
+
+  const limitRaw = Number(c.req.query('limit'));
+  const limit =
+    Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(Math.floor(limitRaw), PAGE_MAX) : PAGE_DEFAULT;
+  const cursorParam = c.req.query('cursor');
+  const cursor = cursorParam ? decodeCursor(cursorParam) : null;
+  const keyset = cursor
+    ? {
+        OR: [
+          { createdAt: { lt: new Date(cursor.createdAt) } },
+          { createdAt: new Date(cursor.createdAt), id: { lt: cursor.id } },
+        ],
+      }
+    : {};
 
   try {
     const prisma = createPrismaClient(connectionString);
-    const rows = await prisma.receivable.findMany({
-      where: { tenantId, ...(onlyOpen ? { status: 'OPEN' } : {}) },
-      orderBy: [{ dueDate: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
+    const list = await prisma.receivable.findMany({
+      where: { tenantId, ...statusWhere, ...qWhere, ...keyset },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
       select: {
         id: true,
         orderId: true,
@@ -47,7 +91,9 @@ receivables.get('/', async (c) => {
         customer: { select: { name: true } },
       },
     });
-    const data = rows.map((r) => ({
+    const hasMore = list.length > limit;
+    const page = hasMore ? list.slice(0, limit) : list;
+    const rows = page.map((r) => ({
       id: r.id,
       orderId: r.orderId,
       customerId: r.customerId,
@@ -60,7 +106,9 @@ receivables.get('/', async (c) => {
       createdAt: r.createdAt,
       createdByName: r.createdByName,
     }));
-    return c.json({ ok: true, data });
+    const last = page[page.length - 1];
+    const nextCursor = hasMore && last ? encodeCursor(last) : null;
+    return c.json({ ok: true, data: { rows, nextCursor } });
   } catch (err) {
     console.error('GET /receivables falhou:', err);
     return c.json({ ok: false, error: 'Falha ao buscar as contas a receber.' }, 500);
@@ -94,6 +142,24 @@ receivables.get('/:id', async (c) => {
         createdAt: true,
         createdByName: true,
         customer: { select: { name: true } },
+        // Itens da venda de origem (a "dívida" detalhada) + o total da venda.
+        order: {
+          select: {
+            total: true,
+            createdAt: true,
+            items: {
+              select: {
+                productName: true,
+                unit: true,
+                quantity: true,
+                unitPrice: true,
+                total: true,
+                pairGroup: true,
+              },
+            },
+            payments: { select: { method: true, amount: true } },
+          },
+        },
         payments: {
           orderBy: { paidAt: 'desc' },
           select: {
@@ -124,6 +190,10 @@ receivables.get('/:id', async (c) => {
         dueDate: r.dueDate,
         createdAt: r.createdAt,
         createdByName: r.createdByName,
+        orderTotal: r.order?.total ?? null,
+        orderCreatedAt: r.order?.createdAt ?? null,
+        items: r.order?.items ?? [],
+        orderPayments: r.order?.payments ?? [],
         payments: r.payments,
       },
     });
@@ -217,8 +287,11 @@ receivables.post('/:id/receive', requireActiveTenant, async (c) => {
             type: manualCashMovementType('SUPPLY'), // INCOME
             kind: 'SUPPLY',
             amount,
-            reason: `Recebimento de fiado — ${receivable.customer?.name ?? 'cliente'}`,
-            relatedOrderId: receivable.orderId, // elo com a venda de origem (referência solta)
+            reason: `Recebimento a prazo — ${receivable.customer?.name ?? 'cliente'}`,
+            // NÃO setar `relatedOrderId` aqui: esse campo, num lançamento manual (SUPPLY/WITHDRAWAL),
+            // é o marcador de ESTORNO (isReversalRow) — usá-lo faria o recebimento aparecer como
+            // "Estorno de Sangria" no extrato. O elo com a venda existe pelo outro lado
+            // (ReceivablePayment.cashMovementId → receivable → order). É um Suprimento comum.
             syncStatus: 'SYNCED',
             registeredByName: c.get('userName'), // autoria (ADR-010)
           },

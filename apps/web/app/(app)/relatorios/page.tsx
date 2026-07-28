@@ -337,13 +337,14 @@ export default function RelatoriosPage() {
         </div>
       </div>
 
-      {/* Informativo (ADR-019): crédito concedido no período (fiado). NÃO está no "Recebido" —
-          conta como recebido conforme o cliente paga. Só aparece quando houve venda a prazo. */}
+      {/* Informativo (ADR-019): total VENDIDO a prazo no período. É o que foi GERADO naquele
+          período, independentemente de já ter sido pago — não muda quando um recebimento é feito
+          (o recebimento aparece em "Recebido no período"). Só aparece quando houve venda a prazo. */}
       {sales && sales.creditSalesGenerated > 0 && (
         <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 ring-1 ring-amber-200">
-          Vendas a prazo geradas no período (fiado):{' '}
-          <strong>{BRL(sales.creditSalesGenerated)}</strong> — ainda a receber; entra no
-          &ldquo;Recebido&rdquo; conforme for pago.
+          Vendas a prazo geradas no período:{' '}
+          <strong>{BRL(sales.creditSalesGenerated)}</strong> — total vendido a prazo (não muda ao
+          receber; os recebimentos entram em &ldquo;Recebido no período&rdquo;).
         </p>
       )}
 
