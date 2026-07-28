@@ -6,11 +6,13 @@ import {
   grossCashMovements,
   manualCashMovementType,
   netCashMovements,
+  reversalKindFor,
 } from '@nexoloja/core';
 import {
   cashMovementSchema,
   closeCashSessionSchema,
   openCashSessionSchema,
+  reverseCashMovementSchema,
 } from '@nexoloja/shared';
 import { type Env, getConnectionString, getTenantId } from '../lib/request';
 import { requireActiveTenant, requireAuth } from '../middleware/auth';
@@ -308,6 +310,89 @@ cashSessions.post('/movement', async (c) => {
   } catch (err) {
     console.error('POST /cash-sessions/movement falhou:', err);
     return c.json({ ok: false, error: 'Falha ao lançar a movimentação.' }, 500);
+  }
+});
+
+/** Estorna um lançamento manual (Suprimento/Sangria) feito por engano — NÃO apaga a linha:
+ * cria um **contra-lançamento** de sinal oposto (`reversalKindFor`) que zera o efeito no caixa,
+ * preservando o rastro (erro + correção), como a devolução faz com a venda. O elo com o
+ * lançamento revertido é gravado em `relatedOrderId` (referência solta, ADR-006) — daí as guardas
+ * conseguem impedir estorno em dobro e estorno de estorno SEM migration. Só no caixa ABERTO da
+ * loja (ADR-018): mexer em caixa fechado corromperia um fechamento já conciliado (ADR-004). */
+cashSessions.post('/movement/:id/reverse', async (c) => {
+  const tenantId = getTenantId(c);
+  const userId = c.get('userId');
+  const connectionString = getConnectionString(c.env);
+  if (!tenantId || !connectionString) {
+    return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
+  }
+
+  const movementId = c.req.param('id');
+  if (!UUID_RE.test(movementId)) {
+    return c.json({ ok: false, error: 'Lançamento não encontrado.' }, 404);
+  }
+
+  const parsed = reverseCashMovementSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) {
+    return c.json({ ok: false, error: 'Dados do estorno inválidos.' }, 400);
+  }
+
+  try {
+    const prisma = createPrismaClient(connectionString);
+    // ADR-018: só se pode estornar no caixa ABERTO da loja (caixa fechado é imutável).
+    const session = await prisma.cashSession.findFirst({
+      where: { tenantId, closedAt: null },
+      select: { id: true },
+    });
+    if (!session) {
+      return c.json({ ok: false, error: 'Não há caixa aberto.' }, 404);
+    }
+
+    // O lançamento precisa existir E pertencer ao caixa aberto desta loja.
+    const original = await prisma.cashMovement.findFirst({
+      where: { id: movementId, tenantId, cashSessionId: session.id },
+      select: { id: true, kind: true, amount: true, reason: true, relatedOrderId: true },
+    });
+    if (!original) {
+      return c.json({ ok: false, error: 'Lançamento não encontrado no caixa aberto.' }, 404);
+    }
+
+    // Só lançamento manual é estornável aqui: devolução tem fluxo próprio; despesa de venda idem.
+    if (original.kind !== 'SUPPLY' && original.kind !== 'WITHDRAWAL') {
+      return c.json({ ok: false, error: 'Este lançamento não pode ser estornado.' }, 400);
+    }
+    // Não estornar um estorno (um estorno manual já carrega `relatedOrderId`).
+    if (original.relatedOrderId) {
+      return c.json({ ok: false, error: 'Um estorno não pode ser estornado.' }, 400);
+    }
+    // Não estornar em dobro: se já existe um estorno apontando para ele, recusa.
+    const already = await prisma.cashMovement.findFirst({
+      where: { tenantId, cashSessionId: session.id, relatedOrderId: original.id },
+      select: { id: true },
+    });
+    if (already) {
+      return c.json({ ok: false, error: 'Este lançamento já foi estornado.' }, 409);
+    }
+
+    const reversalKind = reversalKindFor(original.kind); // inverte SUPPLY↔WITHDRAWAL
+    const created = await prisma.cashMovement.create({
+      data: {
+        tenantId,
+        cashSessionId: session.id,
+        userId,
+        type: manualCashMovementType(reversalKind), // sinal oposto → zera o efeito no caixa
+        kind: reversalKind,
+        amount: original.amount, // mesmo valor
+        reason: parsed.data.reason ?? `Estorno: ${original.reason ?? 'lançamento manual'}`,
+        relatedOrderId: original.id, // elo com o lançamento revertido (referência solta)
+        syncStatus: 'SYNCED',
+        registeredByName: c.get('userName'), // autoria (ADR-010)
+      },
+    });
+    return c.json({ ok: true, data: created }, 201);
+  } catch (err) {
+    console.error('POST /cash-sessions/movement/:id/reverse falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao estornar a movimentação.' }, 500);
   }
 });
 

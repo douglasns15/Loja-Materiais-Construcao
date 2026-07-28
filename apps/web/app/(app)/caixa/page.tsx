@@ -54,6 +54,8 @@ export default function CaixaPage() {
   // Extrato das movimentações do caixa aberto + estado colapsável da seção.
   const [movements, setMovements] = useState<CashMovementRow[]>([]);
   const [movementsOpen, setMovementsOpen] = useState(false);
+  // Lançamento em processo de estorno (desabilita o botão e mostra "Estornando…").
+  const [reversingId, setReversingId] = useState<string | null>(null);
 
   async function load() {
     try {
@@ -162,6 +164,23 @@ export default function CaixaPage() {
     await load();
   }
 
+  // Estorna um lançamento manual (Suprimento/Sangria) feito por engano: cria um contra-lançamento
+  // que zera o efeito no caixa. Recarrega para a mini-DRE e o Esperado refletirem na hora.
+  async function onReverseMovement(row: CashMovementRow) {
+    setError(null);
+    setInfo(null);
+    setReversingId(row.id);
+    try {
+      await apiPost(`/cash-sessions/movement/${row.id}/reverse`, {});
+      setInfo('Lançamento estornado. O contra-lançamento aparece no extrato. ✅');
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setReversingId(null);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-xl">
       <h1 className="mb-6 text-2xl font-bold">Caixa</h1>
@@ -251,6 +270,8 @@ export default function CaixaPage() {
                 <CashMovementsList
                   movements={movements}
                   emptyLabel="Nenhuma movimentação neste caixa ainda."
+                  onReverse={onReverseMovement}
+                  reversingId={reversingId}
                 />
               </div>
             )}

@@ -18,6 +18,7 @@ import {
   netCashMovements,
   grossCashMovements,
   manualCashMovementType,
+  reversalKindFor,
   sumCashCount,
   paymentStatus,
   BRL_COIN_VALUES,
@@ -334,6 +335,34 @@ describe('manualCashMovementType', () => {
       { type: manualCashMovementType('WITHDRAWAL'), amount: 40 },
     ];
     expect(netCashMovements(ms)).toBe(60);
+  });
+});
+
+describe('reversalKindFor', () => {
+  it('estorno de Suprimento é uma Sangria (inverte o kind)', () => {
+    expect(reversalKindFor('SUPPLY')).toBe('WITHDRAWAL');
+  });
+
+  it('estorno de Sangria é um Suprimento (inverte o kind)', () => {
+    expect(reversalKindFor('WITHDRAWAL')).toBe('SUPPLY');
+  });
+
+  it('é uma involução: estornar o estorno volta ao kind original', () => {
+    expect(reversalKindFor(reversalKindFor('SUPPLY'))).toBe('SUPPLY');
+    expect(reversalKindFor(reversalKindFor('WITHDRAWAL'))).toBe('WITHDRAWAL');
+  });
+
+  it('o estorno tem o sinal contábil OPOSTO ao original (garante que zera o caixa)', () => {
+    for (const kind of ['SUPPLY', 'WITHDRAWAL'] as const) {
+      const original = manualCashMovementType(kind);
+      const reversal = manualCashMovementType(reversalKindFor(kind));
+      expect(reversal).not.toBe(original);
+      // Original −X e estorno +X (ou vice-versa) → líquido zero no caixa.
+      expect(netCashMovements([
+        { type: original, amount: 100 },
+        { type: reversal, amount: 100 },
+      ])).toBe(0);
+    }
   });
 });
 

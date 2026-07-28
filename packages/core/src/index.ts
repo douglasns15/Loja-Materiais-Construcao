@@ -146,6 +146,21 @@ export function manualCashMovementType(kind: ManualCashMovementKind): 'INCOME' |
   return kind === 'SUPPLY' ? 'INCOME' : 'EXPENSE';
 }
 
+/**
+ * Natureza do **estorno** de um lançamento manual: para corrigir um lançamento feito por
+ * engano, gera-se um **contra-lançamento** de sinal oposto (Sangria lançada errada → estorno
+ * como Suprimento; Suprimento → estorno como Sangria). Não se apaga a linha — o par
+ * original + estorno preserva o rastro (mesma filosofia da devolução vs. apagar a venda).
+ *
+ * O estorno reusa `SUPPLY`/`WITHDRAWAL` (sem `kind` novo, sem migration): como o `type` é
+ * sempre derivado do `kind` por `manualCashMovementType`, inverter o `kind` garante que o
+ * estorno tenha o sinal oposto e **zere o efeito no caixa** (original −X, estorno +X → 0).
+ * Fonte ÚNICA dessa regra para API (grava) e UI (rotula "Estorno de …") não divergirem.
+ */
+export function reversalKindFor(kind: ManualCashMovementKind): ManualCashMovementKind {
+  return kind === 'SUPPLY' ? 'WITHDRAWAL' : 'SUPPLY';
+}
+
 /** Valores (em reais) das moedas do Real em circulação, para o contador de gaveta. */
 export const BRL_COIN_VALUES = [0.05, 0.1, 0.25, 0.5, 1] as const;
 /** Valores (em reais) das cédulas do Real em circulação, para o contador de gaveta. */

@@ -27,6 +27,17 @@ export const cashMovementSchema = z.object({
 });
 export type CashMovementInput = z.infer<typeof cashMovementSchema>;
 
+/**
+ * Estorno de um lançamento manual (corrigir um Suprimento/Sangria feito por engano). Não apaga
+ * a linha: gera um **contra-lançamento** de sinal oposto que zera o efeito no caixa, preservando
+ * o rastro (mesma filosofia da devolução vs. apagar a venda). O `id` do lançamento a estornar vem
+ * na URL; o motivo é **opcional** (a API preenche "Estorno: <motivo original>" quando ausente).
+ */
+export const reverseCashMovementSchema = z.object({
+  reason: z.string().trim().min(1).max(300).optional(),
+});
+export type ReverseCashMovementInput = z.infer<typeof reverseCashMovementSchema>;
+
 /** Natureza de uma movimentação de caixa (ADR-006), inclusive as que não são lançamento manual
  * (RETURN = devolução de venda). Espelha o enum `CashMovementKind` do Prisma. */
 export type CashMovementKind = 'RETURN' | 'WITHDRAWAL' | 'SUPPLY' | 'EXPENSE';
@@ -51,3 +62,31 @@ export type CashMovementRow = {
   registeredByName: string | null;
   createdAt: string;
 };
+
+/**
+ * Uma linha do extrato é um **estorno** de lançamento manual (Suprimento/Sangria) quando tem
+ * `relatedOrderId` preenchido e NÃO é uma devolução. Como `relatedOrderId` é uma referência solta
+ * (ADR-006), o `kind` desambigua: `RETURN` → aponta para uma venda (devolução); manual (SUPPLY/
+ * WITHDRAWAL) com `relatedOrderId` → aponta para o `CashMovement` que este estorno reverteu.
+ */
+export function isReversalRow(row: CashMovementRow): boolean {
+  return row.relatedOrderId !== null && row.kind !== 'RETURN';
+}
+
+/**
+ * O lançamento `row` já foi estornado? (alguma linha do extrato é o estorno dele). Usado para não
+ * oferecer "Estornar" duas vezes e não duplicar o efeito no caixa — espelha a guarda do servidor.
+ */
+export function hasBeenReversed(row: CashMovementRow, all: CashMovementRow[]): boolean {
+  return all.some((m) => m.relatedOrderId === row.id && m.kind !== 'RETURN');
+}
+
+/**
+ * Um lançamento é **estornável** (mostra o botão "Estornar") quando é manual (Suprimento/Sangria),
+ * não é ele mesmo um estorno e ainda não foi estornado. Devolução tem fluxo próprio; despesa/venda
+ * não entram aqui. Fonte única da regra para o servidor e a UI concordarem.
+ */
+export function isReversibleRow(row: CashMovementRow, all: CashMovementRow[]): boolean {
+  const isManual = row.kind === 'SUPPLY' || row.kind === 'WITHDRAWAL';
+  return isManual && !isReversalRow(row) && !hasBeenReversed(row, all);
+}
