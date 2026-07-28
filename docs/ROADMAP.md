@@ -3,7 +3,30 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-27 — **Movimentação de Caixa (Suprimento/Sangria) — entrada/saída
+> **Última atualização:** 2026-07-28 — **Estorno de lançamento manual (Suprimento/Sangria) — NO AR
+> e VALIDADO pelo Owner.** Pergunta do Owner: faltava como **corrigir** um lançamento manual feito por
+> engano. Decisão de produto (aprovada antes de codar): **não apagar a linha** — corrige-se com um
+> **contra-lançamento** (estorno) de sinal oposto que zera o efeito no caixa, deixando o par *erro +
+> correção* visível no extrato, **na mesma filosofia da devolução vs. apagar a venda** (o `CashMovement`
+> nunca teve `deletedAt`, é append-only como `StockMovement`). **Sem migration:** reusa `CashMovement`
+> (ADR-006) e o elo com o original vai em `relatedOrderId` (referência solta — ninguém faz join com
+> `Order`, então desambiguar pelo `kind` é seguro). **Core:** `reversalKindFor(kind)` inverte
+> SUPPLY↔WITHDRAWAL; como o sinal (`type`) é derivado do `kind`, o estorno fica com o sinal oposto e
+> zera o caixa — +4 testes, incluindo a propriedade "original −X + estorno +X = 0" → **180/180**.
+> **Shared:** `reverseCashMovementSchema` (motivo opcional) + `isReversalRow`/`hasBeenReversed`/
+> `isReversibleRow` (fonte única das guardas p/ API e UI concordarem). **API:** `POST
+> /cash-sessions/movement/:id/reverse` — guardas: só **caixa aberto** da loja (ADR-018; caixa fechado é
+> imutável, ADR-004), só lançamento **manual**, **não estorna estorno**, **não estorna em dobro** (409);
+> autoria (ADR-010). **Web (`/caixa`):** botão **"Estornar"** com confirmação inline no extrato (opt-in
+> via `onReverse` — **Relatórios segue só-leitura**) + rótulo **"Estorno de Sangria/Suprimento"**. ⚠️
+> **Deploy de API obrigatório** (rota nova); web também. Gates: core **180/180** ✅, typecheck web ✅,
+> build web (18 rotas, `/caixa` 4.42 → 5.88 kB) ✅, dry-run API ✅. **NO AR:** API `03b15e1d` + web
+> `ae955134`; smoke ✅ (health 200, `reverse` sem token 401, `/login` 200). **E2E do Owner VALIDADO
+> (2026-07-28):** "testado e validado com sucesso". Commit `1c72d0d` (push feito pelo Owner). **Fatia
+> CX.Estorno CONCLUÍDA.** Ver "CX.Estorno" no registro. **Próximo passo:** Fatia 2 — **ADR-019 (Venda a
+> prazo / Contas a Receber, o "fiado")** — escrever o ADR e aprovar a migration ANTES de codar (regras 1 e 4).
+>
+> **Antes:** 2026-07-27 — **Movimentação de Caixa (Suprimento/Sangria) — entrada/saída
 > manual de dinheiro no caixa — NO AR e VALIDADO pelo Owner.** Pedido do Owner: lançar dinheiro que
 > entra/sai do caixa **fora de uma venda** (pagamento atrasado recebido, reforço de troco, retirada,
 > despesa paga pela gaveta). **Fatia 1 de 2** — a 2ª é o "fiado", que virá como **Venda a prazo /

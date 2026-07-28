@@ -3604,3 +3604,44 @@ Caixa e em Relatórios. Sem migration.
 **E2E do Owner — ✅ VALIDADO (2026-07-27):** "validado com sucesso" — extrato de caixas fechados
 reaparecendo em Relatórios. Commit `86bda6a`. Fatia **CX.Movimentacao CONCLUÍDA** (lançamento + extrato
 do caixa aberto + histórico por fechamento).
+
+---
+
+## CX.Estorno — Estorno de lançamento manual (Suprimento/Sangria) (2026-07-28)
+
+Pergunta do Owner: faltava **corrigir** um lançamento manual feito por engano. Decisão de produto
+(aprovada antes de codar): **não apagar a linha** — corrige-se com um **contra-lançamento** (estorno)
+de sinal oposto que zera o efeito no caixa, deixando o par *erro + correção* no extrato, na mesma
+filosofia da devolução vs. apagar a venda. **Sem migration:** reusa `CashMovement` (ADR-006); o elo com
+o lançamento revertido vai em `relatedOrderId` (referência solta — ninguém faz join com `Order`, então
+o `kind` desambigua: `RETURN` = devolução aponta p/ venda; manual com `relatedOrderId` = estorno aponta
+p/ `CashMovement`).
+
+**Design.** Core `reversalKindFor(kind)` inverte SUPPLY↔WITHDRAWAL; como o `type` é derivado do `kind`
+(`manualCashMovementType`), o estorno herda o sinal oposto e **zera o caixa** (original −X + estorno +X
+= 0). Guardas (fonte única em `shared`, espelhadas no servidor): só lançamento **manual**, **não
+estornar estorno**, **não estornar em dobro**. Escopo: só o **caixa aberto** da loja (ADR-018; caixa
+fechado é imutável, ADR-004). Autoria (ADR-010) no contra-lançamento.
+
+**Build / typecheck / core**
+
+| Teste | Resultado |
+|---|---|
+| Core: `reversalKindFor` (involução + sinal oposto + net zero) | ✅ **180/180** (+4) |
+| Typecheck web (`tsc --noEmit`) | ✅ sem diagnósticos |
+| Build web (`/caixa` 4.42 → 5.88 kB; `/relatorios` inalterado) | ✅ 18 rotas |
+| Dry-run build API (`wrangler deploy --dry-run`) | ✅ |
+
+**Deploy + smoke (produção)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| `wrangler deploy` (rota `POST /cash-sessions/movement/:id/reverse`) | publicado | ✅ API `03b15e1d` |
+| Deploy web (OpenNext) | publicado | ✅ web `ae955134` |
+| `GET /health` | 200 | ✅ |
+| `POST .../:id/reverse` **sem token** | rota existe e exige auth | ✅ 401 (não 404) |
+| `GET /login` (web) | 200 | ✅ |
+
+**E2E do Owner — ✅ VALIDADO (2026-07-28):** "testado e validado com sucesso" (lançar Sangria/Suprimento
+errado → Estornar → Esperado volta ao valor de antes, extrato mostra erro + "Estorno de …"; não estorna
+em dobro; Relatórios segue só-leitura). Commit `1c72d0d` (push pelo Owner). Fatia **CX.Estorno CONCLUÍDA**.
