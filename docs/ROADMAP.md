@@ -3,7 +3,30 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-28 — **Venda a prazo / Contas a Receber (o "fiado") — ADR-019 — NO
+> **Última atualização:** 2026-07-29 — **Cesta persistente sincronizada (carrinho do PDV por
+> usuário, entre dispositivos) — ADR-021 — CÓDIGO PRONTO, aguardando deploy + E2E do Owner.**
+> Pedido do Owner (antes de ADR-020): o carrinho da Nova Venda vivia só em `useState` e **se perdia**
+> ao trocar de tela/recarregar. Agora vira **"Cesta"**: persiste, **segue o usuário entre
+> dispositivos**, avisa ao fechar com itens, mostra **ícone no topo** (estilo e-commerce) e um **"i"**
+> por linha abre as **infos do item**. **Decisão de escopo do Owner:** entre dispositivos ⇒
+> persistência no **servidor** (não só localStorage). **ADR-021 escrito e aprovado ANTES de codar**
+> (regras 1 e 4); **migration `0016_carts` aprovada ANTES de aplicar**. **Modelo (decisão central):**
+> **1 linha por usuário, itens em JSONB** (`carts`: `userId` PK, `tenantId`, `items`, `updatedAt`) —
+> a cesta é **rascunho de UI** (par/acréscimo/unidade fechada); preço/estoque são **revalidados no
+> `POST /orders`**, então o servidor só sincroniza o snapshot. **Cost-zero:** 1 upsert (debounced
+> ~1 s) por mudança. **RLS por USUÁRIO** (`auth.uid()`, não só tenant — dado pessoal). **API:**
+> `GET/POST/DELETE /cart` (POST, não PUT — CORS libera GET/POST/PATCH/DELETE). **Front:**
+> `CartProvider`+`useCart` no shell (PDV e ícone compartilham o estado), **espelho `localStorage`**
+> por usuário (hidrata na hora + offline, ADR-012), **rede vence** por `updatedAt` (last-write-wins),
+> `beforeunload` com itens, **limpa a cesta ao vender** (online+offline; comprovante usa snapshot
+> próprio). `CartChip` no header, `CartItemInfo` modal (infos cruzando linha × catálogo, margem real
+> ADR-016). **Sem mudança no motor de venda/estoque** (`POST /orders` intocado). Gates: core
+> **189/189**, typecheck api/web ✅, build web (19 rotas, `/venda` 13.5 kB) ✅, dry-run API ✅;
+> migration `0016` aplicada no Supabase, **sem drift**. ⚠️ **Deploy de API obrigatório** (rotas novas
+> + migration) + **web**. **Falta:** deploy + E2E do Owner. Ver ADR-021 e "UI.PDV.Cesta" no registro.
+> **Próximo passo (combinado):** **ADR-020 — retirada / entrega futura.**
+>
+> **Antes:** 2026-07-28 — **Venda a prazo / Contas a Receber (o "fiado") — ADR-019 — NO
 > AR e VALIDADO pelo Owner (E2E + refinos + observações/perfil).** A 2ª metade do par que começou na
 > CX.Movimentacao. **ADR-019 escrito e aprovado ANTES de codar** (regras 1 e 4). **Desenho central:** o
 > fiado é uma **condição de pagamento** no PDV (reúso do pagamento dividido) — leva agora, paga depois;

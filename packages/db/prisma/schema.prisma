@@ -130,6 +130,7 @@ model Tenant {
   auditEvents AuditEvent[]
   receivables Receivable[]
   receivablePayments ReceivablePayment[]
+  carts       Cart[]
 
   @@map("tenants")
 }
@@ -167,6 +168,7 @@ model User {
   tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   orders       Order[]
   cashSessions CashSession[]
+  cart         Cart?     // Cesta persistente do PDV (ADR-021): uma por usuário
 
   @@unique([tenantId, email])
   @@map("users")
@@ -516,6 +518,24 @@ model ReceivablePayment {
   @@index([tenantId, paidAt])
   @@index([receivableId])
   @@map("receivable_payments")
+}
+
+/// Cesta persistente do PDV (ADR-021): o carrinho-rascunho de um usuário, sincronizado entre
+/// dispositivos. **Uma linha por usuário** (PK = `userId`). Os itens ficam como JSONB — um snapshot
+/// da UI (par ADR-015, acréscimo ADR-016, unidade fechada ADR-017, `conversionFactor`), não a fonte
+/// de verdade: preço/estoque são revalidados no `POST /orders` na hora de vender. RLS isola por
+/// USUÁRIO (`auth.uid()`), não só por tenant, pois é dado pessoal (um colega não vê a cesta alheia).
+model Cart {
+  userId    String   @id @db.Uuid       // = users.id; uma cesta por usuário
+  tenantId  String   @db.Uuid           // Denormalizado para isolamento multi-tenant + RLS
+  items     Json     @default("[]")     // Snapshot do CartItem[] do cliente (rascunho)
+  updatedAt DateTime @updatedAt         // Relógio do last-write-wins entre dispositivos
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("carts")
 }
 
 /// Movimentação de dinheiro no caixa que NÃO é uma venda: devolução, sangria,

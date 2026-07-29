@@ -3711,3 +3711,58 @@ fluxos do E2E validados" (nomenclatura "A prazo", badge amarelo, Suprimento corr
 recebimentos, busca de quitadas, paginação, PDV redesenhado); "tudo validado com sucesso" (observação por
 dívida, observação do cliente, perfil com histórico + "Dívida ativa"). Commits `39122cd` + `4d586f4` +
 `4175eb3`. Fatia **ADR-019 CONCLUÍDA**. **Próximo:** ADR-020 (retirada / entrega futura).
+
+---
+
+### UI.PDV.Cesta — Cesta persistente sincronizada (ADR-021) (2026-07-29)
+
+Pedido do Owner (antes de ADR-020): o carrinho da Nova Venda vivia só em `useState` e **se perdia** ao
+trocar de tela/recarregar. Vira **"Cesta"**: persiste, **segue o usuário entre dispositivos**, avisa ao
+fechar com itens, ícone no topo (estilo e-commerce) e um **"i"** por linha com as infos do item.
+**Decisão de escopo do Owner:** entre dispositivos ⇒ persistência no **servidor** (não só localStorage).
+**ADR-021 escrito/aprovado ANTES de codar** (regras 1 e 4); **migration `0016_carts` aprovada ANTES de
+aplicar**.
+
+**Modelo (decisão central do ADR).** Tabela `carts`: **1 linha por usuário** (`userId` PK), `tenantId`,
+**`items` JSONB**, `updatedAt`. A cesta é **rascunho de UI** (par ADR-015 / acréscimo ADR-016 / unidade
+fechada ADR-017 / `conversionFactor`); preço/estoque são **revalidados no `POST /orders`** — o servidor só
+sincroniza o snapshot. Cost-zero: 1 upsert (debounced ~1 s) por mudança; JSONB (não BLOB). **RLS por
+USUÁRIO** (`auth.uid()`, não só por tenant — dado pessoal: um colega não lê a cesta alheia).
+
+**Migration / build / core**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| `prisma migrate deploy` (0016_carts) | aplicada no Supabase | ✅ |
+| `prisma migrate status` | up to date / sem drift | ✅ "Database schema is up to date!" |
+| Core (Vitest) — regressão (nada quebrou; sem cálculo novo) | 189/189 | ✅ 189/189 |
+| Typecheck `apps/api` (`tsc --noEmit`) | sem erros | ✅ |
+| Typecheck `apps/web` (`tsc --noEmit`) | sem erros | ✅ |
+| Build de produção (`next build`) | rota `/venda` gerada | ✅ 19 rotas (`/venda` 13.5 kB) |
+| Dry-run do worker (`wrangler deploy --dry-run`) | compila | ✅ |
+
+**API (rotas novas — `/cart`, padrão de `me.ts`)**
+
+| Rota | Resultado |
+|---|---|
+| `GET /cart` — cesta do usuário (linha inexistente ⇒ `{ items: [], updatedAt: null }`) | ✅ (código) |
+| `POST /cart` — upsert `{ items }` (valida `cartSnapshotSchema`), grava `tenantId`+`updatedAt`; POST (não PUT — CORS) | ✅ (código) |
+| `DELETE /cart` — limpa a cesta (idempotente, `deleteMany`) | ✅ (código) |
+
+**Front.** `CartProvider`+`useCart` montados no shell (`(app)/layout.tsx`) — o PDV e o **ícone do topo**
+(`CartChip`) compartilham o MESMO estado. Espelho `localStorage` por usuário (hidrata na hora + offline,
+filosofia ADR-012); **rede vence** por `updatedAt` (last-write-wins); `POST /cart` **debounced** (~1 s) +
+flush em `pagehide`/`visibilitychange`; `beforeunload` avisa com itens; ao voltar `online`, reconcilia.
+PDV: `useState` do carrinho trocado por `useCart` (mesma API — chamadas `setCart(...)` inalteradas);
+**limpa a cesta ao vender** (online + offline; o comprovante usa o snapshot em `doneBase.items`); botão
+**"i"** por linha abre `CartItemInfo` (infos cruzando `CartItem` × catálogo, margem real ADR-016). **Sem
+mudança no motor de venda/estoque** (`POST /orders` intocado).
+
+**Smokes (produção)** — ⚠️ **pendentes:** exigem **deploy de API** (rotas novas + migration) + **web**;
+smoke previsto: `/cart` sem token → 401, health 200, `/login` 200.
+
+**E2E do Owner — ⏭️ pendente.** Roteiro: (a) montar carrinho, navegar e voltar → itens continuam; (b) F5 →
+continuam; (c) **outro dispositivo/navegador, mesmo usuário** → cesta aparece (prova da sincronização); (d)
+fechar a aba com itens → alerta; (e) ícone no topo mostra a contagem e some ao zerar; (f) "i" abre as infos
+do item; (g) concluir venda → cesta zera em todos os aparelhos; (h) outro usuário no mesmo aparelho **não**
+vê a cesta alheia. **Falta:** deploy (API+web) + E2E. Ver ADR-021. **Próximo:** ADR-020 (retirada / entrega).

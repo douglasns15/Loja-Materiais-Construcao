@@ -9,8 +9,10 @@ import { isPlatformAdmin } from '@/lib/session';
 import { useMe } from '@/lib/useMe';
 import { clearCachedMe } from '@/lib/meCache';
 import { OutboxSyncProvider } from '@/lib/outboxSync';
+import { CartProvider } from '@/lib/cartStore';
 import { ProfileModal } from './ProfileModal';
 import { QueueChip } from './QueueChip';
+import { CartChip } from './CartChip';
 import { OfflineNav } from './OfflineNav';
 
 const NAV = [
@@ -141,6 +143,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <OutboxSyncProvider>
+    {/* Cesta persistente (ADR-021): provider único no shell — o PDV e o ícone do topo compartilham
+        o mesmo estado. `userId` vem do `me` (a cesta é por usuário). */}
+    <CartProvider userId={me?.id ?? null}>
     {/* CS-3: offline, converte a navegação entre telas em recarga (evita o fetch RSC que falha). */}
     <OfflineNav />
     <div className="flex h-dvh">
@@ -289,6 +294,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <span className="truncate font-semibold text-gray-800">{currentLabel}</span>
           {/* Status da fila offline (aparece só quando há vendas na fila) — drenagem global. */}
           <QueueChip />
+          {/* Ícone da cesta (ADR-021): mostra a contagem do carrinho de qualquer tela; leva ao PDV. */}
+          <CartChip />
         </header>
 
         {/* Aviso de loja desativada pelo Super Usuário (ADR-009): visível no topo de toda tela.
@@ -319,6 +326,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         />
       )}
     </div>
+    </CartProvider>
     </OutboxSyncProvider>
   );
 }

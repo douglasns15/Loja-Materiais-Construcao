@@ -39,7 +39,9 @@ import { enqueueMutation } from '@/lib/outbox';
 import { useOutboxSyncContext } from '@/lib/outboxSync';
 import { useMe } from '@/lib/useMe';
 import { useOnline } from '@/lib/useOnline';
+import { useCart } from '@/lib/cartStore';
 import { ReceiptPrint, type Store } from '@/components/ReceiptPrint';
+import { CartItemInfo } from '@/components/CartItemInfo';
 import { StoreDisabledNotice } from '@/components/StoreDisabledNotice';
 import { OfflineSalesNotice } from '@/components/OfflineSalesNotice';
 import { BarcodeScanButton } from '@/components/BarcodeScanButton';
@@ -258,7 +260,12 @@ export default function VendaPage() {
   // `null` = leitura fresca da rede. Alimenta o rótulo "dados de HH:MM".
   const [cachedSessionAt, setCachedSessionAt] = useState<number | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
-  const [cart, setCart] = useState<CartItem[]>([]);
+  // Cesta persistente (ADR-021): estado vem do CartProvider (servidor + espelho local, por usuário),
+  // não mais de um useState local — assim não se perde ao navegar/recarregar e sincroniza entre
+  // dispositivos. A API (`cart`/`setCart`/`clearCart`) é a mesma de antes para o resto da tela.
+  const { cart, setCart, clearCart } = useCart();
+  // Linha cujo "i" (informações do item) está aberto — chave do CartItem, ou null.
+  const [infoKey, setInfoKey] = useState<string | null>(null);
   const [selected, setSelected] = useState('');
   const [productSearch, setProductSearch] = useState('');
   const [qty, setQty] = useState('1');
@@ -874,9 +881,9 @@ export default function VendaPage() {
     setCart(cart.filter((c) => c.key !== key));
   }
 
-  /** Esvazia o carrinho de uma vez (após a confirmação inline). Nada foi gravado — só limpa a tela. */
+  /** Esvazia o carrinho de uma vez (após a confirmação inline). Limpa memória, espelho e servidor. */
   function limparCarrinho() {
-    setCart([]);
+    clearCart();
     setConfirmClear(false);
     setError(null);
   }
@@ -1013,6 +1020,9 @@ export default function VendaPage() {
         // exibido já reflete as vendas offline anteriores (último conhecido − baixas otimistas).
         void cacheProducts(next);
         setView({ ...doneBase, change, pending: true });
+        // Cesta persistente (ADR-021): a venda foi enfileirada — esvazia a cesta (o comprovante usa
+        // o snapshot em `doneBase.items`, intacto). Evita um carrinho JÁ vendido reaparecer.
+        clearCart();
         // O indicador "X pendentes" atualiza sozinho: `enqueueMutation` notifica o pub/sub da
         // `outbox`, e o contexto de sync reatualiza os contadores (aqui e no chip do topo).
       } catch (e) {
@@ -1045,6 +1055,9 @@ export default function VendaPage() {
       // é o `change` local, do dinheiro recebido a mais.
       await apiPost<{ change: number }>('/orders', parsed.data);
       setView({ ...doneBase, change });
+      // Cesta persistente (ADR-021): venda registrada — esvazia a cesta em todos os aparelhos (o
+      // comprovante usa o snapshot em `doneBase.items`). Evita reabrir um carrinho já vendido.
+      clearCart();
       await loadProducts();
     } catch (e) {
       setError((e as Error).message);
@@ -1084,7 +1097,7 @@ export default function VendaPage() {
   function novaVenda() {
     setView(null);
     setError(null);
-    setCart([]);
+    clearCart();
     setConfirmClear(false);
     setPayments([{ method: 'CASH', amount: '' }]);
     setDiscount('');
@@ -1579,6 +1592,16 @@ export default function VendaPage() {
                     <span title={itemTooltip(i)} className="cursor-help border-b border-dotted border-gray-300">
                       {i.name}
                     </span>
+                    {/* "i" em círculo: abre as informações daquele item (ADR-021). */}
+                    <button
+                      type="button"
+                      onClick={() => setInfoKey(i.key)}
+                      className="ml-1.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-gray-300 align-middle text-[10px] font-bold leading-none text-gray-400 hover:border-gray-500 hover:text-gray-700"
+                      aria-label={`Informações de ${i.name}`}
+                      title="Informações do item"
+                    >
+                      i
+                    </button>
                     {i.saleMode === 'ALT' && !i.pair && (
                       <span className="block text-xs text-gray-400">
                         embalagem fechada · ≈ {i.quantity * i.conversionFactor} {unitShort(i.baseUnitType)}
@@ -1920,6 +1943,22 @@ export default function VendaPage() {
           </div>
         </div>
       </div>
+
+      {/* Modal de informações do item (ADR-021): cruza a linha da cesta com o produto do catálogo. */}
+      {infoKey &&
+        (() => {
+          const it = pricedCart.find((c) => c.key === infoKey);
+          if (!it) return null;
+          return (
+            <CartItemInfo
+              item={it}
+              product={products.find((p) => p.id === it.productId)}
+              primaryMethod={primaryMethod}
+              cardFees={cardFees}
+              onClose={() => setInfoKey(null)}
+            />
+          );
+        })()}
     </div>
   );
 }

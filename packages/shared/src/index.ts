@@ -14,6 +14,7 @@ export * from './category';
 export * from './supplier';
 export * from './cashSession';
 export * from './sale';
+export * from './cart';
 export * from './receivable';
 export * from './stock';
 export * from './report';
