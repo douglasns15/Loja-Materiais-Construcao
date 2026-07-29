@@ -46,6 +46,10 @@ http://localhost:3000/
 
 <> Inserir cadastro de fornecedor
 
+<ADR-020> - Falta a fase 2, venda para retirar depois
+
+<> Acesso via cel, PWA, quebrando durante o uso.
+
 ## Subir servidor
 
 cd C:\Users\Douglas\Documents\GitHub\Loja-Materiais-Construcao
