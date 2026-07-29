@@ -3,6 +3,15 @@ import type { Metadata, Viewport } from 'next';
 import { RegisterSW } from './RegisterSW';
 import { InstallPrompt } from './InstallPrompt';
 
+// Renderização DINÂMICA (por requisição) em todo o app. Sem isto, o Next prerenderiza as páginas
+// como estáticas e o OpenNext as serve com `Cache-Control: s-maxage=31536000` (1 ANO) guardado no
+// cache por POP da Cloudflare — que NÃO é invalidado no deploy. Quando um deploy troca o hash do
+// CSS/JS, um POP com o HTML antigo segue apontando para assets que sumiram → página SEM ESTILO
+// (incidente 2026-07-29). Dinâmico ⇒ HTML servido fresco a cada request (sem cache de 1 ano), e o
+// deploy passa a valer na hora. O app é autenticado e client-side após o 1º load, então o custo de
+// SSR por request é irrelevante; os assets `/_next/static` seguem imutáveis por hash.
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'NexoLoja',
   description: 'ERP/POS multiramos',
