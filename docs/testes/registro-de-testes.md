@@ -3645,3 +3645,69 @@ fechado é imutável, ADR-004). Autoria (ADR-010) no contra-lançamento.
 **E2E do Owner — ✅ VALIDADO (2026-07-28):** "testado e validado com sucesso" (lançar Sangria/Suprimento
 errado → Estornar → Esperado volta ao valor de antes, extrato mostra erro + "Estorno de …"; não estorna
 em dobro; Relatórios segue só-leitura). Commit `1c72d0d` (push pelo Owner). Fatia **CX.Estorno CONCLUÍDA**.
+
+---
+
+## ADR-019 — Venda a prazo / Contas a Receber (o "fiado") (2026-07-28)
+
+A 2ª metade do par que começou na CX.Movimentacao. **ADR-019 escrito e aprovado ANTES de codar** (regras
+1 e 4). O fiado é uma **condição de pagamento** no PDV (leva agora, paga depois): a mercadoria **sai na
+venda** (o fiado adia o **pagamento**, não a entrega ⇒ o motor de estoque ADR-001 **não muda**); só o
+dinheiro fica pendente numa **conta a receber**. Entregue em 3 fatias (venda a prazo → refinos →
+observações/perfil), todas validadas pelo Owner.
+
+**Migrations (2 aditivas, aprovadas):** `0014` (enum `ReceivableStatus` + tabelas `receivables` e
+`receivable_payments` + RLS por tenant) e `0015` (`receivables.notes` VARCHAR(500)). Aplicadas via
+`migrate deploy`; `migrate diff --exit-code` → "No difference detected" (sem drift).
+
+**Core (Vitest) — +9 → 189/189**
+
+| Função | O que cobre | Resultado |
+|---|---|---|
+| `receivableBalance` | saldo devedor = original − recebido, ≥ 0, sem erro de float | ✅ |
+| `isValidReceipt` | recebimento positivo e ≤ saldo (em centavos) | ✅ |
+| `applyReceivablePayment` | parcial mantém OPEN; alcançar o total quita (PAID) | ✅ |
+| `creditSaleBalances` | entrada + a prazo = total (tolera 1 centavo) | ✅ |
+
+**Decisão de produto (regime de CAIXA no relatório).** O faturamento virou **"Recebido no período"** =
+Σ pagamentos à vista **+** Σ recebimentos de fiado (por `paidAt`) — o fiado conta **no dia do
+recebimento**, não no da venda, sem contar o mesmo real 2×. Linha informativa **"Vendas a prazo
+geradas"** (o que foi vendido a prazo; **não muda** ao receber). Confirmado com o Owner.
+
+**API (rotas)**
+
+| Rota | Resultado |
+|---|---|
+| `POST /orders` estendido: `creditAmount` (+ `customerId` obrigatório) + `dueDate`; cria `Receivable`; valida `pago + a prazo = total`; fiado **online-only** | ✅ |
+| `GET /receivables` — paginado (cursor keyset) + `?status=open/paid/all` + `?q=` (cliente) | ✅ |
+| `GET /receivables/:id` — detalhe: itens da venda + recebimentos + observação | ✅ |
+| `POST /receivables/:id/receive` — abate saldo; **CASH ⇒ `CashMovement SUPPLY`** no caixa aberto; parcial/total | ✅ |
+| `PATCH /receivables/:id` — observação da dívida | ✅ |
+| `GET /customers/:id/history` — vendas + contas a receber do cliente | ✅ |
+
+**Smokes (produção, sem token → 401; rotas existem e protegidas)**
+
+| Passo | Resultado |
+|---|---|
+| Deploys (API+web, 3 fatias) | ✅ finais API `47d0ed05` + web `a29d32e0` |
+| `/receivables`, `/receivables/:id/receive`, `/customers/:id/history`, `PATCH /receivables/:id` sem token | ✅ 401 |
+| health / `/login` | ✅ 200 / 200 |
+
+**🐞 Corrigido no refino.** O recebimento em dinheiro aparecia no caixa como **"Estorno de Sangria"**: o
+`relatedOrderId` que o recebimento setava colidia com o marcador de estorno (`isReversalRow` = manual +
+`relatedOrderId`). Removido — agora é um **Suprimento** comum ("Recebimento a prazo — <cliente>"); o elo
+com a venda já existe via `ReceivablePayment.cashMovementId`.
+
+**Web.** PDV com "A prazo" **opt-in** (link "+ Venda a prazo", escondido; `payableNow = total − a prazo`
+alimenta as parcelas; `credit = 0` = venda de sempre). Contas a Receber paginada + busca + filtro +
+**detalhe da dívida** (itens + recebimentos com data/hora + **observação**). Histórico de Vendas com badge
+amarelo **"A prazo"**. **Perfil do cliente** (clicar no nome em Clientes): dados editáveis + **observações**
++ **histórico** (contas a receber com selo **"Dívida ativa"** + vendas). `ReceivableDetailModal` reusado
+nas duas telas. `Customer.notes` surfaçado no cadastro (sem migration — já existia).
+
+**E2E do Owner — ✅ VALIDADO (2026-07-28)** nas três fatias: "validei tudo" (venda a prazo total/parcial,
+Contas a Receber, receber com Suprimento no caixa, relatório em regime de caixa); "tudo ajustado e os
+fluxos do E2E validados" (nomenclatura "A prazo", badge amarelo, Suprimento correto, detalhe com itens +
+recebimentos, busca de quitadas, paginação, PDV redesenhado); "tudo validado com sucesso" (observação por
+dívida, observação do cliente, perfil com histórico + "Dívida ativa"). Commits `39122cd` + `4d586f4` +
+`4175eb3`. Fatia **ADR-019 CONCLUÍDA**. **Próximo:** ADR-020 (retirada / entrega futura).

@@ -3,7 +3,42 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-28 — **Estorno de lançamento manual (Suprimento/Sangria) — NO AR
+> **Última atualização:** 2026-07-28 — **Venda a prazo / Contas a Receber (o "fiado") — ADR-019 — NO
+> AR e VALIDADO pelo Owner (E2E + refinos + observações/perfil).** A 2ª metade do par que começou na
+> CX.Movimentacao. **ADR-019 escrito e aprovado ANTES de codar** (regras 1 e 4). **Desenho central:** o
+> fiado é uma **condição de pagamento** no PDV (reúso do pagamento dividido) — leva agora, paga depois;
+> a mercadoria **sai na venda** (o fiado adia o **pagamento**, não a entrega ⇒ o motor de estoque
+> ADR-001 **não muda**), só o dinheiro fica pendente numa **conta a receber**. **2 migrations aditivas:**
+> `0014` (enum `ReceivableStatus` + tabelas `receivables` e `receivable_payments` + RLS) e `0015`
+> (`receivables.notes`). **Core (+9 → 189/189):** `receivableBalance` (saldo devedor), `isValidReceipt`
+> (não receber além do saldo), `applyReceivablePayment` (parcial→quitação), `creditSaleBalances`
+> (entrada + a prazo = total). **Decisão de produto do Owner (regime de CAIXA no relatório):** o
+> faturamento virou **"Recebido no período"** = dinheiro que entrou (pagamentos à vista **+**
+> recebimentos de fiado, por `paidAt`) — o fiado conta **no dia do recebimento**, não no da venda, sem
+> contar o mesmo real 2×; linha informativa **"Vendas a prazo geradas"** (o que foi vendido a prazo, não
+> muda ao receber). **Recebimento em dinheiro = Suprimento no caixa** (reúso da CX.Movimentacao — a
+> descrição do Suprimento já citava "pagamento atrasado recebido"). **PDV:** "A prazo" é **opt-in**
+> (link "+ Venda a prazo", escondido até precisar — PDV limpo); `payableNow = total − a prazo` alimenta
+> toda a mecânica de parcelas (com `credit = 0` é a venda de sempre, zero regressão); exige **cliente**;
+> **online-only** nesta fatia. **Contas a Receber:** lista **paginada** (cursor keyset) + **busca** por
+> cliente + filtro **Em aberto / Quitadas / Todas**; **detalhe da dívida** (itens + histórico de
+> recebimentos com data/hora + **observação da dívida**). **Histórico de Vendas:** badge amarelo **"A
+> prazo"** (+ "· quitada"). **Perfil do cliente** (clicar no nome em Clientes): dados editáveis +
+> **observações** + **histórico** (contas a receber com selo **"Dívida ativa"** + vendas); novo `GET
+> /customers/:id/history`; `Customer.notes` já existia (sem migration). **Reúso:** `ReceivableDetailModal`
+> único nas duas telas. **🐞 Corrigido no refino:** o recebimento em dinheiro aparecia como "Estorno de
+> Sangria" — o `relatedOrderId` que ele setava colidia com o marcador de estorno (`isReversalRow`);
+> removido (o elo já existe via `ReceivablePayment.cashMovementId`). Gates a cada fatia: core 189/189,
+> typecheck api/web, build web (19 rotas), dry-run api; sem drift. ⚠️ **Deploy de API obrigatório** (rotas
+> novas + migrations). **NO AR (deploys finais):** API `47d0ed05` + web `a29d32e0` (fatias intermediárias:
+> `df12f3c8`/`51391172`, `acbea5cf`/`a2003504`); smokes ✅. **E2E do Owner VALIDADO (2026-07-28)** nas três
+> etapas ("validei tudo", "tudo ajustado e os fluxos do E2E validados", "tudo validado com sucesso").
+> Commits `39122cd` (venda a prazo) + `4d586f4` (refinos) + `4175eb3` (observações/perfil). **Fatia
+> ADR-019 CONCLUÍDA.** Ver "ADR-019" no registro. **Próximo passo combinado:** **ADR-020 — retirada /
+> entrega futura** (eixo ortogonal: adia a **saída de estoque**, não o pagamento; toca a invariante
+> ADR-001 ⇒ ADR próprio + aprovação de migration antes de codar).
+>
+> **Antes:** 2026-07-28 — **Estorno de lançamento manual (Suprimento/Sangria) — NO AR
 > e VALIDADO pelo Owner.** Pergunta do Owner: faltava como **corrigir** um lançamento manual feito por
 > engano. Decisão de produto (aprovada antes de codar): **não apagar a linha** — corrige-se com um
 > **contra-lançamento** (estorno) de sinal oposto que zera o efeito no caixa, deixando o par *erro +
