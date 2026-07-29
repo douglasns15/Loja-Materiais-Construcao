@@ -50,6 +50,12 @@ http://localhost:3000/
 
 <> Acesso via cel, PWA, quebrando durante o uso.
 
+<> Modo Dark e  opção de customização cores de layout.
+
+<> Peso tmbm em MLs no cadastro do Produto, eu coloquei em Gramas, mas depois de salvar ele converte pra kilos
+
+<> 
+
 ## Subir servidor
 
 cd C:\Users\Douglas\Documents\GitHub\Loja-Materiais-Construcao
