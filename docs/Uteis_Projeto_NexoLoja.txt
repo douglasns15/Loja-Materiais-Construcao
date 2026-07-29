@@ -42,6 +42,10 @@ http://localhost:3000/
 
 <> Os filtros devem desconsiderar acentos
 
+<> Em cadastros, tipo produto, quando estiver digitando o nome de um Fabricante, sugerir nome já existente na base e autocompletar com tab.
+
+<> Inserir cadastro de fornecedor
+
 ## Subir servidor
 
 cd C:\Users\Douglas\Documents\GitHub\Loja-Materiais-Construcao
