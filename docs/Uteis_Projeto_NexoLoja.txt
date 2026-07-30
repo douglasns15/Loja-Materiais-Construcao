@@ -56,6 +56,24 @@ http://localhost:3000/
 
 <> Mostrar campo Observação na info do produto no carrinho
 
+<> Campos de busca: Exemplo Luva ESG 40mm
+
+Onde ficou registrado (commit 2a9d7cf)
+📄 Novo docs/adr/ADR-020-retirada-entrega-futura.md — as 3 decisões + pendências para retomar.
+📑 docs/adr/README.md — índice de ADRs completado (faltavam 016–021).
+🗺️ docs/ROADMAP.md e o registro de testes — ponto de parada.
+🧠 Memória de estado do projeto atualizada com o ponto de retomada.
+
+Para a próxima sessão retomar deste ponto
+Antes de codar (regras 1 e 4), decidir os itens ainda abertos e então desenhar + aprovar a migration:
+
+- Entrega parcial (item a item, conforme sai) vs. tudo-ou-nada por pedido.
+- Onde marcar "entregue/retirado" (tela nova? ação no Histórico? reúso da tela de entregas).
+- Reúso do modelo Delivery (ADR-002, hoje ocioso) vs. colunas/tabela novas.
+- Depois: migration → core (Vitest) → API → UI.
+
+Os commits desta sessão (5635495 → 2a9d7cf) estão locais na main — o push fica com você, como no seu fluxo. É só me chamar quando quiser abrir a próxima sessão do ADR-020.
+
 ## Subir servidor
 
 cd C:\Users\Douglas\Documents\GitHub\Loja-Materiais-Construcao
