@@ -47,9 +47,16 @@
 > `StockDetail`/Histórico; volta à 1ª página quando busca/filtro/ordenação muda. Web-only, sem API/migration.
 > Gates: typecheck web ✅, build web (19 rotas, `/estoque` 7.76 kB) ✅. **NO AR:** web `a4b775b0` (smoke do CSS
 > OK). **E2E do Owner VALIDADO (2026-07-30):** "tudo validado com sucesso". Commit `9c5eeb5`. Ver
-> "UI.Estoque.Paginacao" no registro. **Próximo passo (combinado antes):** **ADR-020 — retirada / entrega
-> futura** (adia a **saída de estoque**, não o pagamento; toca a invariante ADR-001 ⇒ ADR próprio + aprovação
-> de migration antes de codar — regras 1 e 4).**
+> "UI.Estoque.Paginacao" no registro. **Próximo passo — ADR-020 (retirada / entrega futura): DIREÇÃO
+> APROVADA, sessão encerrada aqui a pedido do Owner.** Capturadas **3 decisões de produto** (ver
+> `docs/adr/ADR-020-retirada-entrega-futura.md`): **(1)** reserva no ato e a **saída real de estoque só na
+> entrega/retirada** (adia a saída de verdade; preserva o ADR-001, que passa a disparar no evento de
+> entrega); **(2)** o PDV trava pelo **disponível = estoque − reservado** (não vende a mesma peça 2×);
+> **(3)** pagamento suporta **as duas** formas (pago no ato **e** a prazo/ADR-019, que compõem no mesmo
+> pedido — dinheiro pendente + mercadoria pendente). **NADA de estoque/venda/schema foi tocado.**
+> **Retomar em outra sessão DESTE ponto:** decidir os itens ainda abertos (entrega **parcial** vs
+> tudo-ou-nada; onde marcar "entregue"; reúso do modelo `Delivery` ADR-002 vs colunas novas) → **desenhar
+> e aprovar a migration (regra 1)** → implementar core → API → UI.
 >
 > **Antes:** 2026-07-29 — **Cesta persistente sincronizada (carrinho do PDV por
 > usuário, entre dispositivos) — ADR-021 — CÓDIGO PRONTO, aguardando deploy + E2E do Owner.**

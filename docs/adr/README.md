@@ -34,6 +34,12 @@ Um *Architecture Decision Record* é um documento curto e versionado que captura
 | [ADR-013](./ADR-013-venda-em-unidade-alternativa.md) | Venda em unidade alternativa (segundo preço: rolo fechado × por metro) | Aceito (Opção A) — implementado/validado |
 | [ADR-014](./ADR-014-usuario-multi-loja.md) | Usuário multi-loja (membership + loja ativa da sessão) | Proposto |
 | [ADR-015](./ADR-015-produto-agregado-venda-em-par.md) | Produto agregado: venda em par com preço promocional (parafuso + bucha) | Aceito — implementado/validado |
+| [ADR-016](./ADR-016-preco-e-margem-por-forma-de-pagamento.md) | Preço e margem por forma de pagamento (taxa da maquininha + acréscimo por produto) | Aceito — implementado/validado |
+| [ADR-017](./ADR-017-unidade-fechada-como-principal-barra.md) | Unidade fechada como principal (barra/rolo) + venda por metro | Aceito — implementado/validado |
+| [ADR-018](./ADR-018-caixa-compartilhado-por-loja.md) | Caixa compartilhado por loja (quem abre, abre para todos) | Aceito — implementado/validado |
+| [ADR-019](./ADR-019-venda-a-prazo-contas-a-receber.md) | Venda a prazo / Contas a receber (o "fiado") | Aceito — implementado/validado |
+| [ADR-020](./ADR-020-retirada-entrega-futura.md) | Retirada / entrega futura (adiar a saída de estoque) | Direção aprovada — pendente migration + implementação |
+| [ADR-021](./ADR-021-cesta-persistente-sincronizada.md) | Cesta persistente sincronizada (carrinho do PDV entre dispositivos) | Aceito — implementado/validado |
 
 > O detalhamento da arquitetura (diagrama, estrutura do monorepo, segurança/RLS, offline, deploy e roadmap) está em [`../ARCHITECTURE.md`](../ARCHITECTURE.md).
 
