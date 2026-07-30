@@ -36,8 +36,18 @@
 > `<thead>` de todas as telas) do cinza-100 → **azul-200** (`text-blue-900`) — pedido do Owner ("as barras
 > azuis dos cabeçalhos mais vivas", escolhido +2 tons sobre preview); (iii) **textos cinzas um tom mais
 > escuros** em todas as telas (cinza-400→500, cinza-500→600; tamanhos mantidos). Script único (10 theads +
-> 2 sub-tabelas + 264 textos, 28 arquivos). Gates: typecheck web ✅, build web ✅. **Falta:** deploy do web +
-> conferência visual do Owner. **Próximo passo (combinado antes):** **ADR-020 — retirada / entrega futura.**
+> 2 sub-tabelas + 264 textos, 28 arquivos). Gates: typecheck web ✅, build web ✅. **NO AR:** web `30af452c`
+> (smoke do CSS OK). **E2E do Owner VALIDADO (2026-07-30):** "tudo funcionando corretamente". Commit
+> `d96be73`. **Depois (mesmo dia) — Estoque: paginação + reposição fechada (UI.Estoque.Paginacao):** pedido
+> do Owner. **(a) "Reposição de estoque"** passa a abrir **FECHADA** por padrão (`usePersistedOpen(…, false)`;
+> quem já tinha preferência mantém a dele). **(b) "Estoque atual"** ordena pelos **mais recentemente
+> atualizados** (novo default `updatedAt` desc — o payload de `GET /products` já traz `updatedAt`) e mostra
+> **20 + "Mostrar mais"** (+20). **(c) "Movimentações recentes"** também **20 + "Mostrar mais"**. Paginação
+> **client-side** (a lista já vem inteira em memória — sem tocar na API), no mesmo padrão do
+> `StockDetail`/Histórico; volta à 1ª página quando busca/filtro/ordenação muda. Web-only, sem API/migration.
+> Gates: typecheck web ✅, build web (19 rotas, `/estoque` 7.76 kB) ✅. **Falta:** deploy do web + E2E do Owner.
+> Ver "UI.Estoque.Paginacao" no registro. **Próximo passo (combinado antes):** **ADR-020 — retirada / entrega
+> futura.**
 >
 > **Antes:** 2026-07-29 — **Cesta persistente sincronizada (carrinho do PDV por
 > usuário, entre dispositivos) — ADR-021 — CÓDIGO PRONTO, aguardando deploy + E2E do Owner.**

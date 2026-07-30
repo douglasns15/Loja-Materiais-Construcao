@@ -25,10 +25,12 @@ import { MoneyInput } from '@/components/MoneyInput';
 
 // `GET /products` devolve a linha completa do produto; o detalhe de estoque (StockDetail)
 // usa esses campos extras (custo/venda, peso, descrição…), então o tipo espelha o StockProduct.
-type Product = StockProduct;
+// `updatedAt` (também no payload) ordena o "Estoque atual" pelos mais recentemente atualizados.
+type Product = StockProduct & { updatedAt: string };
 
-/** Colunas ordenáveis da tabela "Estoque atual". */
-type SortKey = 'name' | 'sku' | 'stock' | 'min' | 'income' | 'expense' | 'balance';
+/** Chaves de ordenação da tabela "Estoque atual". `recent` (padrão) = mais recentemente
+ *  atualizados primeiro; não é coluna clicável, é só a ordem inicial. As demais são colunas. */
+type SortKey = 'recent' | 'name' | 'sku' | 'stock' | 'min' | 'income' | 'expense' | 'balance';
 type SortState = { key: SortKey; dir: 'asc' | 'desc' };
 
 /**
@@ -99,6 +101,9 @@ const DATETIME = (iso: string) =>
 
 const EMPTY_FILTERS = { productId: '', type: '', reason: '', dateFrom: '', dateTo: '' };
 
+/** Quantos itens por página / clique em "Mostrar mais" (Estoque atual e Movimentações). */
+const PAGE_SIZE = 20;
+
 export default function EstoquePage() {
   const { me } = useMe();
   const online = useOnline();
@@ -116,7 +121,9 @@ export default function EstoquePage() {
 
   // Seções colapsáveis (minimizáveis) — cada uma lembra o próprio estado entre sessões, para
   // o operador deixar visível só o que quer ver naquele momento.
-  const [replenishOpen, toggleReplenish] = usePersistedOpen('estoque:replenishOpen');
+  // Reposição começa FECHADA por padrão (o operador abre se quiser) — quem já definiu preferência
+  // mantém a dele (localStorage). Estoque atual e Movimentações seguem abrindo por padrão.
+  const [replenishOpen, toggleReplenish] = usePersistedOpen('estoque:replenishOpen', false);
   const [stockOpen, toggleStock] = usePersistedOpen('estoque:stockOpen');
   const [movementsOpen, toggleMovements] = usePersistedOpen('estoque:movementsOpen');
 
@@ -124,7 +131,11 @@ export default function EstoquePage() {
   // qualquer coluna — para achar o produto sem rolar a página inteira.
   const [stockSearch, setStockSearch] = useState('');
   const [lowOnly, setLowOnly] = useState(false);
-  const [sort, setSort] = useState<SortState>({ key: 'name', dir: 'asc' });
+  // Ordem inicial: mais recentemente atualizados no topo (os "20 mais recentes" + Mostrar mais).
+  const [sort, setSort] = useState<SortState>({ key: 'recent', dir: 'desc' });
+  // Paginação client-side (dados já em memória): quantos itens exibir em cada tabela.
+  const [stockLimit, setStockLimit] = useState(PAGE_SIZE);
+  const [movLimit, setMovLimit] = useState(PAGE_SIZE);
 
   // Produto aberto no painel de detalhe (características + histórico de movimentações).
   const [detailProduct, setDetailProduct] = useState<Product | null>(null);
@@ -230,6 +241,8 @@ export default function EstoquePage() {
     const val = (p: Product): number | string => {
       const s = summary[p.id] ?? { income: 0, expense: 0 };
       switch (sort.key) {
+        case 'recent':
+          return new Date(p.updatedAt).getTime();
         case 'name':
           return normalizeSearchText(p.name);
         case 'sku':
@@ -263,6 +276,12 @@ export default function EstoquePage() {
     });
     return list;
   }, [products, summary, stockSearch, lowOnly, sort]);
+
+  // Volta à 1ª página ("Mostrar mais" zera) quando a busca/filtro/ordenação muda — mesmo padrão
+  // das outras telas. Movimentações reseta também ao recarregar (nova entrada/ajuste, ou filtro
+  // de produto resolvido no servidor).
+  useEffect(() => setStockLimit(PAGE_SIZE), [stockSearch, lowOnly, sort]);
+  useEffect(() => setMovLimit(PAGE_SIZE), [filters, movements]);
 
   const adjustProduct = products.find((p) => p.id === adjust.productId);
 
@@ -619,7 +638,7 @@ export default function EstoquePage() {
                 </td>
               </tr>
             ) : (
-              visibleStock.map((p) => {
+              visibleStock.slice(0, stockLimit).map((p) => {
                 const low = isLowStock({
                   stockQty: Number(p.stockQty),
                   minStockQty: Number(p.minStockQty),
@@ -673,10 +692,21 @@ export default function EstoquePage() {
             )}
           </tbody>
         </table>
+        {visibleStock.length > stockLimit && (
+          <div className="border-t border-gray-100 py-3 text-center">
+            <button
+              type="button"
+              onClick={() => setStockLimit((n) => n + PAGE_SIZE)}
+              className="rounded-lg border border-gray-300 px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+            >
+              Mostrar mais ({visibleStock.length - stockLimit})
+            </button>
+          </div>
+        )}
         <p className="px-4 py-2 text-xs text-gray-500">
-          Clique no produto para ver suas características e movimentações. “Saldo (hist.)” é Σ
-          entradas − Σ saídas (deve bater com o saldo atual — ADR-001). Clique num cabeçalho para
-          ordenar.
+          Ordenado pelos mais recentemente atualizados. Clique no produto para ver suas
+          características e movimentações. “Saldo (hist.)” é Σ entradas − Σ saídas (deve bater com o
+          saldo atual — ADR-001). Clique num cabeçalho para ordenar.
         </p>
         </div>
         )}
@@ -790,7 +820,7 @@ export default function EstoquePage() {
                 </td>
               </tr>
             ) : (
-              filteredMovements.map((m) => (
+              filteredMovements.slice(0, movLimit).map((m) => (
                 <tr key={m.id} className="border-t border-gray-100">
                   <td className="px-4 py-2 text-gray-600">{DATETIME(m.createdAt)}</td>
                   <td className="px-4 py-2">{m.product?.name ?? '—'}</td>
@@ -817,6 +847,17 @@ export default function EstoquePage() {
           </tbody>
         </table>
         </div>
+        {filteredMovements.length > movLimit && (
+          <div className="border-t border-gray-100 py-3 text-center">
+            <button
+              type="button"
+              onClick={() => setMovLimit((n) => n + PAGE_SIZE)}
+              className="rounded-lg border border-gray-300 px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+            >
+              Mostrar mais ({filteredMovements.length - movLimit})
+            </button>
+          </div>
+        )}
         </>
         )}
       </div>

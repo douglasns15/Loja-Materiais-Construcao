@@ -3866,6 +3866,33 @@ de 400→500 para nenhum texto pular dois tons.
 |---|---|---|
 | Typecheck `apps/web` (`tsc --noEmit`) | sem erros | ✅ |
 | Build de produção (`next build`) | sem erros | ✅ 19 rotas |
-| Conferência visual do Owner (cabeçalhos azul-200, textos mais nítidos) | — | ⏭️ pendente (deploy do web) |
+| Conferência visual do Owner (cabeçalhos azul-200, textos mais nítidos) | — | ✅ "tudo funcionando corretamente" |
 
-> **Falta:** deploy do web + conferência visual do Owner. **Próximo:** ADR-020 (retirada / entrega futura).
+> Commit `d96be73`, deploy web `30af452c`. **Fatia UI.Tema.Contraste CONCLUÍDA.**
+
+---
+
+### UI.Estoque.Paginacao — Estoque: paginação + reposição fechada (2026-07-30)
+
+Pedido do Owner na tela de Estoque, **100% de UI (sem API, sem migration)**. Em
+[estoque/page.tsx](../../apps/web/app/(app)/estoque/page.tsx).
+
+**(a)** "Reposição de estoque" passa a abrir **fechada** por padrão (`usePersistedOpen('estoque:replenishOpen',
+false)`) — o operador abre se quiser; quem já tinha preferência salva mantém a dele.
+
+**(b)** "Estoque atual" ordena pelos **mais recentemente atualizados** (novo default `updatedAt` desc; o
+payload de `GET /products` já traz `updatedAt`) e mostra **20 linhas + "Mostrar mais"** (+20). As colunas
+clicáveis e a busca/"só baixo" seguem funcionando; trocar qualquer um volta à 1ª página.
+
+**(c)** "Movimentações recentes" também **20 + "Mostrar mais"**. Paginação **client-side** (as listas já vêm
+inteiras em memória — `GET /products` e `GET /stock/movements` sem teto), no mesmo padrão visual do
+`StockDetail`/Histórico.
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Typecheck `apps/web` (`tsc --noEmit`) | sem erros | ✅ |
+| Build de produção (`next build`) | rota `/estoque` gerada | ✅ 19 rotas (`/estoque` 7.76 kB) |
+| `withMargin` preserva `updatedAt` (ordenação "recentes") | campo no payload | ✅ (`{ ...p, marginPercent }`) |
+| E2E do Owner (reposição fechada; 20 + Mostrar mais nas duas tabelas) | — | ⏭️ pendente (deploy do web) |
+
+> **Falta:** deploy do web + E2E do Owner. **Próximo:** ADR-020 (retirada / entrega futura).
