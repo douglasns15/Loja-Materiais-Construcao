@@ -45,9 +45,11 @@
 > **20 + "Mostrar mais"** (+20). **(c) "Movimentações recentes"** também **20 + "Mostrar mais"**. Paginação
 > **client-side** (a lista já vem inteira em memória — sem tocar na API), no mesmo padrão do
 > `StockDetail`/Histórico; volta à 1ª página quando busca/filtro/ordenação muda. Web-only, sem API/migration.
-> Gates: typecheck web ✅, build web (19 rotas, `/estoque` 7.76 kB) ✅. **Falta:** deploy do web + E2E do Owner.
-> Ver "UI.Estoque.Paginacao" no registro. **Próximo passo (combinado antes):** **ADR-020 — retirada / entrega
-> futura.**
+> Gates: typecheck web ✅, build web (19 rotas, `/estoque` 7.76 kB) ✅. **NO AR:** web `a4b775b0` (smoke do CSS
+> OK). **E2E do Owner VALIDADO (2026-07-30):** "tudo validado com sucesso". Commit `9c5eeb5`. Ver
+> "UI.Estoque.Paginacao" no registro. **Próximo passo (combinado antes):** **ADR-020 — retirada / entrega
+> futura** (adia a **saída de estoque**, não o pagamento; toca a invariante ADR-001 ⇒ ADR próprio + aprovação
+> de migration antes de codar — regras 1 e 4).**
 >
 > **Antes:** 2026-07-29 — **Cesta persistente sincronizada (carrinho do PDV por
 > usuário, entre dispositivos) — ADR-021 — CÓDIGO PRONTO, aguardando deploy + E2E do Owner.**

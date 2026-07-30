@@ -3893,6 +3893,8 @@ inteiras em memória — `GET /products` e `GET /stock/movements` sem teto), no 
 | Typecheck `apps/web` (`tsc --noEmit`) | sem erros | ✅ |
 | Build de produção (`next build`) | rota `/estoque` gerada | ✅ 19 rotas (`/estoque` 7.76 kB) |
 | `withMargin` preserva `updatedAt` (ordenação "recentes") | campo no payload | ✅ (`{ ...p, marginPercent }`) |
-| E2E do Owner (reposição fechada; 20 + Mostrar mais nas duas tabelas) | — | ⏭️ pendente (deploy do web) |
+| `npm run deploy` (web) + `postdeploy` (smoke do CSS) | publicado + smoke OK | ✅ versão `a4b775b0` |
+| E2E do Owner (reposição fechada; 20 + Mostrar mais nas duas tabelas) | — | ✅ "tudo validado com sucesso" |
 
-> **Falta:** deploy do web + E2E do Owner. **Próximo:** ADR-020 (retirada / entrega futura).
+> Commit `9c5eeb5`, deploy web `a4b775b0`. **Fatia UI.Estoque.Paginacao CONCLUÍDA.** **Próximo:** ADR-020
+> (retirada / entrega futura).
