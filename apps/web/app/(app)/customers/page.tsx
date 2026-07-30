@@ -178,7 +178,7 @@ export default function CustomersPage() {
 
       <div className="overflow-x-auto rounded-2xl bg-white shadow-sm">
         <table className="w-full text-sm">
-          <thead className="bg-gray-100 text-left text-gray-600">
+          <thead className="bg-blue-200 text-left text-blue-900">
             <tr>
               <th className="px-4 py-2">Nome</th>
               <th className="px-4 py-2">CPF/CNPJ</th>
@@ -190,7 +190,7 @@ export default function CustomersPage() {
           <tbody>
             {customers.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={5} className="px-4 py-6 text-center text-gray-500">
                   {search.trim()
                     ? 'Nenhum cliente encontrado para a busca.'
                     : 'Nenhum cliente cadastrado.'}
@@ -209,10 +209,10 @@ export default function CustomersPage() {
                       {c.name}
                     </button>
                   </td>
-                  <td className="px-4 py-2 text-gray-500">{c.cpfCnpj ?? '—'}</td>
-                  <td className="px-4 py-2 text-gray-500">{c.phone ?? '—'}</td>
-                  <td className="px-4 py-2 text-gray-500">{c.email ?? '—'}</td>
-                  <td className="px-4 py-2 text-xs text-gray-500">
+                  <td className="px-4 py-2 text-gray-600">{c.cpfCnpj ?? '—'}</td>
+                  <td className="px-4 py-2 text-gray-600">{c.phone ?? '—'}</td>
+                  <td className="px-4 py-2 text-gray-600">{c.email ?? '—'}</td>
+                  <td className="px-4 py-2 text-xs text-gray-600">
                     {byLine(c.updatedByName, c.updatedAt)}
                   </td>
                 </tr>

@@ -273,7 +273,7 @@ export default function VendasPage() {
     }
   }
 
-  if (!ready) return <p className="text-gray-500">Carregando…</p>;
+  if (!ready) return <p className="text-gray-600">Carregando…</p>;
 
   const caixaOpen = !!openSessionId;
 
@@ -282,7 +282,7 @@ export default function VendasPage() {
       <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Histórico de Vendas</h1>
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500">Modelo de impressão:</span>
+          <span className="text-sm text-gray-600">Modelo de impressão:</span>
           <select
             value={printModel}
             onChange={(e) => setPrintModel(e.target.value as '80mm' | 'A4')}
@@ -293,7 +293,7 @@ export default function VendasPage() {
           </select>
         </div>
       </div>
-      <p className="mb-4 text-sm text-gray-500">
+      <p className="mb-4 text-sm text-gray-600">
         Vendas mais recentes. Reimprima o comprovante, <strong>cancele</strong> vendas do caixa
         aberto (estorna estoque e caixa) ou <strong>devolva</strong> vendas de caixas já fechados
         (repõe o estoque e lança a saída no caixa de hoje).
@@ -316,7 +316,7 @@ export default function VendasPage() {
               30 dias
             </button>
           </div>
-          <label className="flex flex-col text-xs text-gray-500">
+          <label className="flex flex-col text-xs text-gray-600">
             De
             <input
               type="date"
@@ -329,7 +329,7 @@ export default function VendasPage() {
               className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
             />
           </label>
-          <label className="flex flex-col text-xs text-gray-500">
+          <label className="flex flex-col text-xs text-gray-600">
             Até
             <input
               type="date"
@@ -356,7 +356,7 @@ export default function VendasPage() {
             </button>
           )}
           {/* Ordenação — aplicada no servidor (não só nas páginas carregadas). */}
-          <label className="flex flex-col text-xs text-gray-500 sm:ml-auto">
+          <label className="flex flex-col text-xs text-gray-600 sm:ml-auto">
             Ordenar por
             <select
               value={sort}
@@ -372,7 +372,7 @@ export default function VendasPage() {
           </label>
         </div>
         {(range.from || range.to) && (
-          <p className="mt-2 text-xs text-gray-500">
+          <p className="mt-2 text-xs text-gray-600">
             Mostrando {range.from ? `de ${range.from}` : 'desde o início'}{' '}
             {range.to ? `até ${range.to}` : 'até hoje'}.
           </p>
@@ -394,7 +394,7 @@ export default function VendasPage() {
 
       <div className="space-y-3">
         {orders.length === 0 ? (
-          <div className="rounded-2xl bg-white p-6 text-center text-gray-400 shadow-sm">
+          <div className="rounded-2xl bg-white p-6 text-center text-gray-500 shadow-sm">
             {range.from || range.to
               ? 'Nenhuma venda no período selecionado.'
               : 'Nenhuma venda registrada ainda.'}
@@ -418,7 +418,7 @@ export default function VendasPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs text-gray-400">#{o.id.slice(0, 8)}</span>
+                      <span className="font-mono text-xs text-gray-500">#{o.id.slice(0, 8)}</span>
                       {cancelled ? (
                         <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
                           Cancelada
@@ -440,16 +440,16 @@ export default function VendasPage() {
                         </span>
                       )}
                     </div>
-                    <div className="mt-0.5 text-xs text-gray-500">{time}</div>
+                    <div className="mt-0.5 text-xs text-gray-600">{time}</div>
                     {o.registeredByName && (
-                      <div className="text-xs text-gray-400">Registrado por {o.registeredByName}</div>
+                      <div className="text-xs text-gray-500">Registrado por {o.registeredByName}</div>
                     )}
                   </div>
                   <div className="text-right">
                     <div className={`text-lg font-bold ${inactive ? 'line-through' : ''}`}>
                       {BRL(o.total)}
                     </div>
-                    {methods && <div className="text-xs text-gray-500">{methods}</div>}
+                    {methods && <div className="text-xs text-gray-600">{methods}</div>}
                   </div>
                 </div>
 
@@ -490,7 +490,7 @@ export default function VendasPage() {
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
                     />
                     {error && <p className="text-sm text-red-600">{error}</p>}
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-gray-600">
                       {action?.mode === 'cancel'
                         ? 'O estoque dos itens volta e o valor é estornado deste caixa. Não dá para desfazer.'
                         : 'O estoque dos itens volta e a saída do valor é lançada no caixa de hoje. Não dá para desfazer.'}

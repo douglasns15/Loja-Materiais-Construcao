@@ -621,7 +621,7 @@ export default function ProductsPage() {
                 className="rounded-lg border border-gray-300 px-3 py-2"
               />
             </div>
-            <p className="mt-2 text-xs text-gray-500">
+            <p className="mt-2 text-xs text-gray-600">
               Custo e preço acima são da <strong>{unitTypeLabels[form.unit]} inteira</strong>. O
               estoque é contado em metros e mostrado como barras + sobra. Preço por metro vazio ⇒
               só vende inteiro.
@@ -631,7 +631,7 @@ export default function ProductsPage() {
         {/* Venda em unidade alternativa (EF-3, ADR-013): embalagem fechada com preço próprio. */}
         {!isClosedUnit && (
         <fieldset className="rounded-xl border border-dashed border-gray-300 p-3 sm:col-span-6">
-          <legend className="px-1 text-xs font-medium text-gray-500">
+          <legend className="px-1 text-xs font-medium text-gray-600">
             Venda em unidade alternativa (opcional) — ex.: fio por metro OU rolo fechado
           </legend>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -667,14 +667,14 @@ export default function ProductsPage() {
               className="rounded-lg border border-gray-300 px-3 py-2"
             />
           </div>
-          <p className="mt-2 text-xs text-gray-400">
+          <p className="mt-2 text-xs text-gray-500">
             Preencha os três para habilitar a escolha “{unitTypeLabels[form.unit]} × embalagem” no PDV.
           </p>
         </fieldset>
         )}
         {/* Produto agregado — venda em par (ADR-015). Ex.: parafuso nº10 + bucha nº10. */}
         <fieldset className="rounded-xl border border-dashed border-gray-300 p-3 sm:col-span-6">
-          <legend className="px-1 text-xs font-medium text-gray-500">
+          <legend className="px-1 text-xs font-medium text-gray-600">
             Vendido em par (opcional) — ex.: parafuso + bucha, com preço do par
           </legend>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -707,7 +707,7 @@ export default function ProductsPage() {
               className="rounded-lg border border-gray-300 px-3 py-2 disabled:bg-gray-50"
             />
           </div>
-          <p className="mt-2 text-xs text-gray-400">
+          <p className="mt-2 text-xs text-gray-500">
             No PDV o operador escolhe vender avulso ou o par. Vale para os dois lados — não
             precisa cadastrar de novo no outro produto.
           </p>
@@ -715,7 +715,7 @@ export default function ProductsPage() {
         {/* Acréscimo por forma de pagamento (ADR-016). Opt-in: só sobe o preço de quem for
             preenchido aqui — nunca é derivado da taxa da maquininha da loja. */}
         <fieldset className="rounded-xl border border-dashed border-gray-300 p-3 sm:col-span-6">
-          <legend className="px-1 text-xs font-medium text-gray-500">
+          <legend className="px-1 text-xs font-medium text-gray-600">
             Acréscimo por forma de pagamento (opcional) — quanto o preço SOBE no cartão
           </legend>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -737,14 +737,14 @@ export default function ProductsPage() {
           {/* Prévia do preço resultante — evita a confusão "digitei o preço final?". */}
           {Number(form.salePrice) > 0 &&
           (Number(form.surchargeDebit) > 0 || Number(form.surchargeCredit) > 0) ? (
-            <p className="mt-2 text-xs text-gray-500">
+            <p className="mt-2 text-xs text-gray-600">
               Preço à vista {BRL(form.salePrice)} · no débito{' '}
               <strong>{BRL(Number(form.salePrice) + (Number(form.surchargeDebit) || 0))}</strong> ·
               no crédito{' '}
               <strong>{BRL(Number(form.salePrice) + (Number(form.surchargeCredit) || 0))}</strong>
             </p>
           ) : (
-            <p className="mt-2 text-xs text-gray-400">
+            <p className="mt-2 text-xs text-gray-500">
               Deixe vazio para cobrar o mesmo preço em qualquer forma de pagamento. Dinheiro e PIX
               nunca têm acréscimo.
             </p>
@@ -777,7 +777,7 @@ export default function ProductsPage() {
 
       <div className="overflow-x-auto rounded-2xl bg-white shadow-sm">
         <table className="w-full text-sm">
-          <thead className="bg-gray-100 text-left text-gray-600">
+          <thead className="bg-blue-200 text-left text-blue-900">
             <tr>
               <th className="px-4 py-2">Nome</th>
               <th className="px-4 py-2">Fabricante</th>
@@ -793,7 +793,7 @@ export default function ProductsPage() {
           <tbody>
             {products.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={9} className="px-4 py-6 text-center text-gray-500">
                   {search.trim()
                     ? 'Nenhum produto encontrado para a busca.'
                     : 'Nenhum produto cadastrado.'}
@@ -819,7 +819,7 @@ export default function ProductsPage() {
                         type="button"
                         onClick={() => openDetail(p.id)}
                         className={`text-left font-medium hover:text-blue-700 hover:underline ${
-                          p.isActive ? 'text-gray-900' : 'text-gray-400'
+                          p.isActive ? 'text-gray-900' : 'text-gray-500'
                         }`}
                         title="Ver / editar o cadastro deste produto"
                       >
@@ -831,15 +831,15 @@ export default function ProductsPage() {
                         </span>
                       )}
                       {p.popularName && (
-                        <span className="block text-xs text-gray-400">{p.popularName}</span>
+                        <span className="block text-xs text-gray-500">{p.popularName}</span>
                       )}
                     </td>
-                    <td className="px-4 py-2 text-gray-500">{p.manufacturer ?? '—'}</td>
-                    <td className="px-4 py-2 text-gray-500">{p.sku}</td>
+                    <td className="px-4 py-2 text-gray-600">{p.manufacturer ?? '—'}</td>
+                    <td className="px-4 py-2 text-gray-600">{p.sku}</td>
                     <td className="px-4 py-2 text-right">{BRL(p.costPrice)}</td>
                     <td className="px-4 py-2 text-right">{BRL(p.salePrice)}</td>
                     <td className="px-4 py-2 text-right">{p.marginPercent}%</td>
-                    <td className="px-4 py-2 text-xs text-gray-500">
+                    <td className="px-4 py-2 text-xs text-gray-600">
                       {byLine(p.updatedByName, p.updatedAt)}
                     </td>
                     <td className="px-4 py-2">
@@ -905,7 +905,7 @@ export default function ProductsPage() {
         </div>
       )}
 
-      <p className="mt-3 text-xs text-gray-400">
+      <p className="mt-3 text-xs text-gray-500">
         Clique no nome do produto para ver o cadastro completo e editar. Estoque mínimo é o
         ponto de reposição — quando o saldo fica igual ou abaixo dele (e maior que zero), o
         produto aparece como “baixo” na tela de Estoque.

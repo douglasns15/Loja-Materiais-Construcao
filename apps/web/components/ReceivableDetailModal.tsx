@@ -87,13 +87,13 @@ export function ReceivableDetailModal({
         className="my-8 w-full max-w-lg space-y-4 rounded-2xl bg-white p-5 shadow-lg"
       >
         {loading || !detail ? (
-          <p className="text-gray-500">{error ?? 'Carregando…'}</p>
+          <p className="text-gray-600">{error ?? 'Carregando…'}</p>
         ) : (
           <>
             <div className="flex items-start justify-between">
               <div>
                 <h2 className="text-lg font-bold">{detail.customerName ?? 'Cliente'}</h2>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-gray-600">
                   Venda de{' '}
                   {new Date(detail.orderCreatedAt ?? detail.createdAt).toLocaleString('pt-BR')}
                   {detail.createdByName ? ` · ${detail.createdByName}` : ''}
@@ -102,7 +102,7 @@ export function ReceivableDetailModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="text-gray-400 hover:text-gray-700"
+                className="text-gray-500 hover:text-gray-700"
                 aria-label="Fechar"
               >
                 ✕
@@ -114,15 +114,15 @@ export function ReceivableDetailModal({
             {/* Situação da dívida. */}
             <div className="grid grid-cols-3 gap-2 text-center">
               <div className="rounded-lg bg-gray-50 p-2">
-                <p className="text-xs text-gray-500">Original</p>
+                <p className="text-xs text-gray-600">Original</p>
                 <p className="font-semibold tabular-nums">{BRL(detail.originalAmount)}</p>
               </div>
               <div className="rounded-lg bg-gray-50 p-2">
-                <p className="text-xs text-gray-500">Recebido</p>
+                <p className="text-xs text-gray-600">Recebido</p>
                 <p className="font-semibold tabular-nums text-green-700">{BRL(detail.settledAmount)}</p>
               </div>
               <div className="rounded-lg bg-gray-50 p-2">
-                <p className="text-xs text-gray-500">Saldo</p>
+                <p className="text-xs text-gray-600">Saldo</p>
                 <p className="font-semibold tabular-nums">{BRL(detail.balance)}</p>
               </div>
             </div>
@@ -140,7 +140,7 @@ export function ReceivableDetailModal({
                 {RECEIVABLE_STATUS_LABELS[detail.status]}
               </span>
               {detail.dueDate && (
-                <span className="ml-2 text-gray-500">
+                <span className="ml-2 text-gray-600">
                   Vence em {new Date(detail.dueDate).toLocaleDateString('pt-BR')}
                 </span>
               )}
@@ -159,7 +159,7 @@ export function ReceivableDetailModal({
                   </li>
                 ))}
               </ul>
-              <p className="mt-1 text-xs text-gray-400">
+              <p className="mt-1 text-xs text-gray-500">
                 A mercadoria foi entregue na venda (a venda a prazo adia o pagamento, não a entrega).
               </p>
             </div>
@@ -168,7 +168,7 @@ export function ReceivableDetailModal({
             <div>
               <h3 className="mb-1 text-sm font-semibold">Recebimentos</h3>
               {detail.payments.length === 0 ? (
-                <p className="text-sm text-gray-500">Nenhum recebimento ainda.</p>
+                <p className="text-sm text-gray-600">Nenhum recebimento ainda.</p>
               ) : (
                 <ul className="divide-y divide-gray-100 rounded-lg border border-gray-100">
                   {detail.payments.map((p) => (
@@ -177,7 +177,7 @@ export function ReceivableDetailModal({
                         <span className="text-gray-700">
                           {PAYMENT_METHOD_LABELS[p.method as PaymentMethod] ?? p.method}
                         </span>
-                        <span className="block text-xs text-gray-400">
+                        <span className="block text-xs text-gray-500">
                           {new Date(p.paidAt).toLocaleString('pt-BR')}
                           {p.receivedByName ? ` · ${p.receivedByName}` : ''}
                         </span>

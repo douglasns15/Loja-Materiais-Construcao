@@ -19,7 +19,7 @@ export function CartChip() {
       className={`relative ml-auto inline-flex items-center rounded-full border p-2 transition ${
         has
           ? 'border-gray-300 bg-white text-gray-800 hover:bg-gray-100'
-          : 'border-transparent text-gray-400 hover:bg-gray-100 hover:text-gray-600'
+          : 'border-transparent text-gray-500 hover:bg-gray-100 hover:text-gray-600'
       }`}
       title={has ? `${count} ${count === 1 ? 'item' : 'itens'} na cesta` : 'Cesta vazia'}
       aria-label={has ? `Cesta com ${count} ${count === 1 ? 'item' : 'itens'}` : 'Cesta vazia'}

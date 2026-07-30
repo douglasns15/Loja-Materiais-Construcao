@@ -49,7 +49,7 @@ export function CashMovementsList({
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   if (movements.length === 0) {
-    return <p className="text-sm text-gray-500">{emptyLabel}</p>;
+    return <p className="text-sm text-gray-600">{emptyLabel}</p>;
   }
 
   return (
@@ -65,7 +65,7 @@ export function CashMovementsList({
                 {income ? '↑' : '↓'} {rowLabel(m)}
               </p>
               {m.reason && <p className="text-sm text-gray-600">{m.reason}</p>}
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-gray-500">
                 {new Date(m.createdAt).toLocaleString('pt-BR')}
                 {m.registeredByName ? ` · ${m.registeredByName}` : ''}
               </p>
@@ -88,7 +88,7 @@ export function CashMovementsList({
                       type="button"
                       disabled={busy}
                       onClick={() => setConfirmingId(null)}
-                      className="text-gray-500 hover:underline disabled:opacity-60"
+                      className="text-gray-600 hover:underline disabled:opacity-60"
                     >
                       Cancelar
                     </button>
@@ -97,7 +97,7 @@ export function CashMovementsList({
                   <button
                     type="button"
                     onClick={() => setConfirmingId(m.id)}
-                    className="mt-1 text-xs font-medium text-gray-500 hover:text-red-600 hover:underline"
+                    className="mt-1 text-xs font-medium text-gray-600 hover:text-red-600 hover:underline"
                   >
                     Estornar
                   </button>

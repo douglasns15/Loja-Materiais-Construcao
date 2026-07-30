@@ -169,17 +169,17 @@ function CashSessionSummary({
           <p className="mb-2 font-semibold text-gray-700">Turno do caixa</p>
           <dl className="space-y-2">
             <div>
-              <dt className="text-gray-400">Aberto</dt>
+              <dt className="text-gray-500">Aberto</dt>
               <dd className="text-gray-700">
                 {DATETIME(s.openedAt)}
-                <span className="text-gray-500"> · por {s.openedByName ?? 'não informado'}</span>
+                <span className="text-gray-600"> · por {s.openedByName ?? 'não informado'}</span>
               </dd>
             </div>
             <div>
-              <dt className="text-gray-400">Fechado</dt>
+              <dt className="text-gray-500">Fechado</dt>
               <dd className="text-gray-700">
                 {DATETIME(s.closedAt)}
-                <span className="text-gray-500"> · por {s.closedByName ?? 'não informado'}</span>
+                <span className="text-gray-600"> · por {s.closedByName ?? 'não informado'}</span>
               </dd>
             </div>
           </dl>
@@ -288,7 +288,7 @@ export default function RelatoriosPage() {
             );
           })}
         </div>
-        <label className="flex flex-col text-xs text-gray-500">
+        <label className="flex flex-col text-xs text-gray-600">
           De
           <input
             type="date"
@@ -298,7 +298,7 @@ export default function RelatoriosPage() {
             className="mt-1 rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-gray-900"
           />
         </label>
-        <label className="flex flex-col text-xs text-gray-500">
+        <label className="flex flex-col text-xs text-gray-600">
           Até
           <input
             type="date"
@@ -308,7 +308,7 @@ export default function RelatoriosPage() {
             className="mt-1 rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-gray-900"
           />
         </label>
-        {loading && <span className="pb-2 text-sm text-gray-400">Carregando…</span>}
+        {loading && <span className="pb-2 text-sm text-gray-500">Carregando…</span>}
       </div>
 
       {error && online && <p className="mb-4 text-sm text-red-600">{error}</p>}
@@ -318,21 +318,21 @@ export default function RelatoriosPage() {
         <div className="rounded-2xl bg-white p-4 shadow-sm">
           {/* Regime de caixa (ADR-019): dinheiro que entrou no período — inclui recebimentos de
               fiado no dia em que foram recebidos, não a parte a prazo ainda não paga. */}
-          <p className="text-xs text-gray-500" title="Dinheiro recebido no período (inclui recebimentos de fiado no dia do recebimento).">
+          <p className="text-xs text-gray-600" title="Dinheiro recebido no período (inclui recebimentos de fiado no dia do recebimento).">
             Recebido no período
           </p>
           <p className="mt-1 text-2xl font-bold">{BRL(sales?.totalRevenue ?? 0)}</p>
         </div>
         <div className="rounded-2xl bg-white p-4 shadow-sm">
-          <p className="text-xs text-gray-500">Vendas</p>
+          <p className="text-xs text-gray-600">Vendas</p>
           <p className="mt-1 text-2xl font-bold">{sales?.salesCount ?? 0}</p>
         </div>
         <div className="rounded-2xl bg-white p-4 shadow-sm">
-          <p className="text-xs text-gray-500">Ticket médio</p>
+          <p className="text-xs text-gray-600">Ticket médio</p>
           <p className="mt-1 text-2xl font-bold">{BRL(sales?.averageTicket ?? 0)}</p>
         </div>
         <div className="rounded-2xl bg-white p-4 shadow-sm">
-          <p className="text-xs text-gray-500">Canceladas</p>
+          <p className="text-xs text-gray-600">Canceladas</p>
           <p className="mt-1 text-2xl font-bold">{sales?.cancelledCount ?? 0}</p>
         </div>
       </div>
@@ -352,7 +352,7 @@ export default function RelatoriosPage() {
       <div className="mt-6 overflow-x-auto rounded-2xl bg-white shadow-sm">
         <h2 className="px-4 py-3 font-semibold">Por forma de pagamento</h2>
         <table className="w-full text-sm">
-          <thead className="bg-gray-100 text-left text-gray-600">
+          <thead className="bg-blue-200 text-left text-blue-900">
             <tr>
               <th className="px-4 py-2">Forma</th>
               <th className="px-4 py-2 text-right">Recebido</th>
@@ -363,7 +363,7 @@ export default function RelatoriosPage() {
           <tbody>
             {!sales || sales.byPaymentMethod.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={4} className="px-4 py-6 text-center text-gray-500">
                   Nenhuma venda no período.
                 </td>
               </tr>
@@ -372,8 +372,8 @@ export default function RelatoriosPage() {
                 <tr key={p.method} className="border-t border-gray-100">
                   <td className="px-4 py-2">{methodLabel(p.method)}</td>
                   <td className="px-4 py-2 text-right font-medium">{BRL(p.total)}</td>
-                  <td className="px-4 py-2 text-right text-gray-500">{p.count}</td>
-                  <td className="px-4 py-2 text-right text-gray-500">
+                  <td className="px-4 py-2 text-right text-gray-600">{p.count}</td>
+                  <td className="px-4 py-2 text-right text-gray-600">
                     {p.share.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%
                   </td>
                 </tr>
@@ -402,7 +402,7 @@ export default function RelatoriosPage() {
           )}
         </div>
         <table className="w-full text-sm">
-          <thead className="bg-gray-100 text-left text-gray-600">
+          <thead className="bg-blue-200 text-left text-blue-900">
             <tr>
               <th className="px-4 py-2">Fechado em</th>
               <th className="px-4 py-2 text-right">Abertura</th>
@@ -414,7 +414,7 @@ export default function RelatoriosPage() {
           <tbody>
             {sessions.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={5} className="px-4 py-6 text-center text-gray-500">
                   Nenhum fechamento de caixa no período.
                 </td>
               </tr>
@@ -422,7 +422,7 @@ export default function RelatoriosPage() {
               sessions.map((s) => (
                 <Fragment key={s.id}>
                 <tr className="border-t border-gray-100">
-                  <td className="px-4 py-2 text-gray-500">
+                  <td className="px-4 py-2 text-gray-600">
                     {/* Popover do turno (ADR-010): abertura/fechamento + quem abriu/fechou.
                         Hover no desktop, toque no celular/PWA; não duplica as colunas financeiras. */}
                     <CashSessionSummary s={s}>{DATETIME(s.closedAt)}</CashSessionSummary>
@@ -440,13 +440,13 @@ export default function RelatoriosPage() {
                       type="button"
                       onClick={() => toggleMovements(s.id)}
                       aria-expanded={expandedSession === s.id}
-                      className="mt-1 block text-xs font-medium text-gray-500 hover:text-gray-900"
+                      className="mt-1 block text-xs font-medium text-gray-600 hover:text-gray-900"
                     >
                       {expandedSession === s.id ? '▾' : '▸'} movimentações
                     </button>
                   </td>
-                  <td className="px-4 py-2 text-right text-gray-500">{BRL(s.openingAmount)}</td>
-                  <td className="px-4 py-2 text-right text-gray-500">
+                  <td className="px-4 py-2 text-right text-gray-600">{BRL(s.openingAmount)}</td>
+                  <td className="px-4 py-2 text-right text-gray-600">
                     {BRL(s.expectedAmount)}
                     {/* CS-5: esperado ajustado quando houve vendas em dinheiro após o fechamento. */}
                     {s.lateSalesCount > 0 && s.lateCashSalesTotal > 0 && (
@@ -462,7 +462,7 @@ export default function RelatoriosPage() {
                   <td
                     className={`px-4 py-2 text-right font-medium ${
                       s.divergence === 0
-                        ? 'text-gray-400'
+                        ? 'text-gray-500'
                         : s.divergence > 0
                           ? 'text-green-700'
                           : 'text-red-700'
@@ -475,7 +475,7 @@ export default function RelatoriosPage() {
                       <span
                         className={`mt-0.5 block text-xs ${
                           s.adjustedDivergence === 0
-                            ? 'text-gray-400'
+                            ? 'text-gray-500'
                             : s.adjustedDivergence > 0
                               ? 'text-green-700'
                               : 'text-red-700'
@@ -492,7 +492,7 @@ export default function RelatoriosPage() {
                   <tr className="border-t border-gray-100 bg-gray-50">
                     <td colSpan={5} className="px-4 py-3">
                       {loadingMovements === s.id ? (
-                        <p className="text-sm text-gray-400">Carregando…</p>
+                        <p className="text-sm text-gray-500">Carregando…</p>
                       ) : (
                         <CashMovementsList
                           movements={movementsBySession[s.id] ?? []}

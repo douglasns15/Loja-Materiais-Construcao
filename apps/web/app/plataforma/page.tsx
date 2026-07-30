@@ -183,7 +183,7 @@ export default function PlataformaPage() {
   return (
     <div className="mx-auto max-w-5xl">
       <h1 className="mb-1 text-2xl font-bold">Lojas</h1>
-      <p className="mb-6 text-sm text-gray-500">
+      <p className="mb-6 text-sm text-gray-600">
         Gestão da plataforma — criar lojas e controlar quais estão ativas.
       </p>
 
@@ -230,7 +230,7 @@ export default function PlataformaPage() {
         >
           {saving ? 'Criando…' : 'Criar loja e convidar admin'}
         </button>
-        <p className="mt-2 text-xs text-gray-400">
+        <p className="mt-2 text-xs text-gray-500">
           O admin recebe um e-mail para definir a senha e entra como dono (OWNER) da loja.
         </p>
       </form>
@@ -245,7 +245,7 @@ export default function PlataformaPage() {
       {/* Lista de lojas */}
       <div className="overflow-x-auto rounded-2xl bg-white shadow-sm">
         <table className="w-full text-sm">
-          <thead className="bg-gray-100 text-left text-gray-600">
+          <thead className="bg-blue-200 text-left text-blue-900">
             <tr>
               <th className="px-4 py-2">Loja</th>
               <th className="px-4 py-2">CNPJ</th>
@@ -260,7 +260,7 @@ export default function PlataformaPage() {
           <tbody>
             {tenants.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={8} className="px-4 py-6 text-center text-gray-500">
                   Nenhuma loja cadastrada.
                 </td>
               </tr>
@@ -269,21 +269,21 @@ export default function PlataformaPage() {
                 <tr key={t.id} className="border-t border-gray-100">
                   <td className="px-4 py-2">
                     <div className="font-medium">{t.name}</div>
-                    <div className="text-xs text-gray-400">{t.slug}</div>
+                    <div className="text-xs text-gray-500">{t.slug}</div>
                   </td>
-                  <td className="px-4 py-2 text-gray-500">{t.cnpj ? formatCnpj(t.cnpj) : '—'}</td>
-                  <td className="px-4 py-2 text-right text-gray-500">{t.userCount}</td>
-                  <td className="px-4 py-2 text-gray-500">{DATE(t.createdAt)}</td>
+                  <td className="px-4 py-2 text-gray-600">{t.cnpj ? formatCnpj(t.cnpj) : '—'}</td>
+                  <td className="px-4 py-2 text-right text-gray-600">{t.userCount}</td>
+                  <td className="px-4 py-2 text-gray-600">{DATE(t.createdAt)}</td>
                   <td className="px-4 py-2">
                     {t.lastActivityAt === null ? (
-                      <span className="text-gray-400">— sem atividade</span>
+                      <span className="text-gray-500">— sem atividade</span>
                     ) : Date.now() - new Date(t.lastActivityAt).getTime() < ACTIVE_NOW_MS ? (
                       <span className="inline-flex items-center gap-1.5 text-green-700">
                         <span className="h-2 w-2 rounded-full bg-green-500" aria-hidden />
                         ativa agora
                       </span>
                     ) : (
-                      <span className="text-gray-500" title={new Date(t.lastActivityAt).toLocaleString('pt-BR')}>
+                      <span className="text-gray-600" title={new Date(t.lastActivityAt).toLocaleString('pt-BR')}>
                         {timeAgoPtBr(t.lastActivityAt)}
                       </span>
                     )}
@@ -305,7 +305,7 @@ export default function PlataformaPage() {
                         className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                           t.offlineSales
                             ? 'bg-indigo-100 text-indigo-800'
-                            : 'bg-gray-100 text-gray-500'
+                            : 'bg-gray-100 text-gray-600'
                         }`}
                       >
                         {t.offlineSales ? 'ON' : 'OFF'}

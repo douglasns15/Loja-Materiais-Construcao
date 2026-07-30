@@ -67,10 +67,10 @@ export default function DefinirSenhaPage() {
     <main className="flex min-h-dvh items-center justify-center p-4">
       <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-sm">
         <h1 className="mb-1 text-2xl font-bold">NexoLoja</h1>
-        <p className="mb-6 text-sm text-gray-500">Defina sua senha de acesso</p>
+        <p className="mb-6 text-sm text-gray-600">Defina sua senha de acesso</p>
 
         {!ready ? (
-          <p className="text-sm text-gray-500">Validando o convite…</p>
+          <p className="text-sm text-gray-600">Validando o convite…</p>
         ) : !hasSession ? (
           <div className="space-y-3 text-sm">
             <p className="text-red-600">

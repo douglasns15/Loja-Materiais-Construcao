@@ -196,7 +196,7 @@ export default function SuportePage() {
                 className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium ${
                   tab === t.id
                     ? 'border-gray-900 text-gray-900'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                    : 'border-transparent text-gray-600 hover:text-gray-700'
                 }`}
               >
                 {t.label}
@@ -243,7 +243,7 @@ function ResumoTab({
     })();
   }, [token, tenantId, onExpired]);
 
-  if (loading) return <p className="text-gray-500">Carregando…</p>;
+  if (loading) return <p className="text-gray-600">Carregando…</p>;
   if (error) return <SectionError message={error} />;
   if (!data) return null;
 
@@ -253,7 +253,7 @@ function ResumoTab({
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold">{data.tenant.name}</h1>
-            <p className="text-xs text-gray-400">{data.tenant.slug}</p>
+            <p className="text-xs text-gray-500">{data.tenant.slug}</p>
           </div>
           <span
             className={`rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -265,18 +265,18 @@ function ResumoTab({
         </div>
         <div className="mt-3 grid grid-cols-2 gap-2 text-sm text-gray-600 sm:grid-cols-4">
           <div>
-            <span className="text-gray-400">CNPJ:</span>{' '}
+            <span className="text-gray-500">CNPJ:</span>{' '}
             {data.tenant.cnpj ? formatCnpj(data.tenant.cnpj) : '—'}
           </div>
           <div>
-            <span className="text-gray-400">Telefone:</span> {data.tenant.phone || '—'}
+            <span className="text-gray-500">Telefone:</span> {data.tenant.phone || '—'}
           </div>
           <div>
-            <span className="text-gray-400">Criada:</span>{' '}
+            <span className="text-gray-500">Criada:</span>{' '}
             {new Date(data.tenant.createdAt).toLocaleDateString('pt-BR')}
           </div>
           <div>
-            <span className="text-gray-400">Caixa:</span>{' '}
+            <span className="text-gray-500">Caixa:</span>{' '}
             {data.openCash ? (
               <span className="text-green-700">Aberto ({BRL(data.openCash.openingAmount)})</span>
             ) : (
@@ -294,7 +294,7 @@ function ResumoTab({
         ].map((k) => (
           <div key={k.label} className="rounded-2xl bg-white p-4 text-center shadow-sm">
             <div className="text-2xl font-bold">{k.value}</div>
-            <div className="text-xs text-gray-500">{k.label}</div>
+            <div className="text-xs text-gray-600">{k.label}</div>
           </div>
         ))}
       </div>
@@ -303,10 +303,10 @@ function ResumoTab({
         <section className="rounded-2xl bg-white p-4 shadow-sm">
           <h2 className="mb-3 font-semibold">
             Estoque baixo{' '}
-            <span className="text-xs font-normal text-gray-400">({data.lowStock.length})</span>
+            <span className="text-xs font-normal text-gray-500">({data.lowStock.length})</span>
           </h2>
           {data.lowStock.length === 0 ? (
-            <p className="text-sm text-gray-400">Nenhum item abaixo do mínimo.</p>
+            <p className="text-sm text-gray-500">Nenhum item abaixo do mínimo.</p>
           ) : (
             <ul className="divide-y divide-gray-100 text-sm">
               {data.lowStock.map((p) => (
@@ -324,14 +324,14 @@ function ResumoTab({
         <section className="rounded-2xl bg-white p-4 shadow-sm">
           <h2 className="mb-3 font-semibold">Últimas vendas</h2>
           {data.recentOrders.length === 0 ? (
-            <p className="text-sm text-gray-400">Nenhuma venda registrada.</p>
+            <p className="text-sm text-gray-500">Nenhuma venda registrada.</p>
           ) : (
             <ul className="divide-y divide-gray-100 text-sm">
               {data.recentOrders.map((o) => (
                 <li key={o.id} className="flex items-center justify-between py-1.5">
-                  <span className="text-gray-500">{DATETIME(o.createdAt)}</span>
+                  <span className="text-gray-600">{DATETIME(o.createdAt)}</span>
                   <span className="flex items-center gap-2">
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-gray-500">
                       {ORDER_STATUS[o.status]?.label ?? o.status}
                     </span>
                     <span className="font-medium">{BRL(o.total)}</span>
@@ -346,15 +346,15 @@ function ResumoTab({
       <section className="mt-5 rounded-2xl bg-white p-4 shadow-sm">
         <h2 className="mb-3 font-semibold">Eventos de auditoria recentes</h2>
         {data.recentAudit.length === 0 ? (
-          <p className="text-sm text-gray-400">Nenhum evento registrado.</p>
+          <p className="text-sm text-gray-500">Nenhum evento registrado.</p>
         ) : (
           <ul className="divide-y divide-gray-100 text-sm">
             {data.recentAudit.map((a) => (
               <li key={a.id} className="flex items-center justify-between py-1.5">
                 <span className="font-mono text-xs text-gray-700">
-                  {a.action} <span className="text-gray-400">· {a.entity}</span>
+                  {a.action} <span className="text-gray-500">· {a.entity}</span>
                 </span>
-                <span className="text-gray-500">{DATETIME(a.createdAt)}</span>
+                <span className="text-gray-600">{DATETIME(a.createdAt)}</span>
               </li>
             ))}
           </ul>
@@ -415,7 +415,7 @@ function VendasTab({
     <div className="rounded-2xl bg-white p-4 shadow-sm">
       {/* Filtros */}
       <div className="mb-4 flex flex-wrap items-end gap-3">
-        <label className="text-xs text-gray-500">
+        <label className="text-xs text-gray-600">
           De
           <input
             type="date"
@@ -424,7 +424,7 @@ function VendasTab({
             className="mt-1 block rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
           />
         </label>
-        <label className="text-xs text-gray-500">
+        <label className="text-xs text-gray-600">
           Até
           <input
             type="date"
@@ -433,7 +433,7 @@ function VendasTab({
             className="mt-1 block rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
           />
         </label>
-        <label className="text-xs text-gray-500">
+        <label className="text-xs text-gray-600">
           Status
           <select
             value={status}
@@ -465,15 +465,15 @@ function VendasTab({
       </div>
 
       {loading ? (
-        <p className="text-gray-500">Carregando…</p>
+        <p className="text-gray-600">Carregando…</p>
       ) : error ? (
         <SectionError message={error} />
       ) : orders.length === 0 ? (
-        <p className="text-sm text-gray-400">Nenhuma venda no filtro selecionado.</p>
+        <p className="text-sm text-gray-500">Nenhuma venda no filtro selecionado.</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-gray-100 text-left text-gray-600">
+            <thead className="bg-blue-200 text-left text-blue-900">
               <tr>
                 <th className="px-3 py-2">Data</th>
                 <th className="px-3 py-2">Cliente</th>
@@ -486,7 +486,7 @@ function VendasTab({
               {orders.map((o) => (
                 <Fragment key={o.id}>
                   <tr className="border-t border-gray-100">
-                    <td className="px-3 py-2 text-gray-500">{DATETIME(o.createdAt)}</td>
+                    <td className="px-3 py-2 text-gray-600">{DATETIME(o.createdAt)}</td>
                     <td className="px-3 py-2">{o.customerName ?? '—'}</td>
                     <td className="px-3 py-2">
                       <span
@@ -510,14 +510,14 @@ function VendasTab({
                   {expanded === o.id && (
                     <tr className="border-t border-gray-100 bg-gray-50">
                       <td colSpan={5} className="px-3 py-3">
-                        <div className="mb-2 text-xs text-gray-500">
+                        <div className="mb-2 text-xs text-gray-600">
                           Venda #{o.id.slice(0, 8)}
                           {o.cashClosed !== null &&
                             ` · caixa ${o.cashClosed ? 'fechado' : 'aberto'}`}
                           {o.registeredByName && ` · registrado por ${o.registeredByName}`}
                         </div>
                         <table className="w-full text-xs">
-                          <thead className="text-left text-gray-500">
+                          <thead className="text-left text-gray-600">
                             <tr>
                               <th className="py-1">Produto</th>
                               <th className="py-1 text-right">Qtd</th>
@@ -665,15 +665,15 @@ function ProdutosTab({
       </div>
 
       {loading ? (
-        <p className="text-gray-500">Carregando…</p>
+        <p className="text-gray-600">Carregando…</p>
       ) : error ? (
         <SectionError message={error} />
       ) : products.length === 0 ? (
-        <p className="text-sm text-gray-400">Nenhum produto no filtro selecionado.</p>
+        <p className="text-sm text-gray-500">Nenhum produto no filtro selecionado.</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-gray-100 text-left text-gray-600">
+            <thead className="bg-blue-200 text-left text-blue-900">
               <tr>
                 <th className="px-3 py-2">Produto</th>
                 <th className="px-3 py-2">Categoria</th>
@@ -690,31 +690,31 @@ function ProdutosTab({
                   <tr className="border-t border-gray-100">
                     <td className="px-3 py-2">
                       <div className="font-medium">{p.name}</div>
-                      <div className="text-xs text-gray-400">
+                      <div className="text-xs text-gray-500">
                         {p.sku} · {p.unit}
                         {!p.isActive && ' · inativo'}
                       </div>
                       {p.updatedByName && (
-                        <div className="text-xs text-gray-400">
+                        <div className="text-xs text-gray-500">
                           alterado por {p.updatedByName}
                         </div>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-gray-500">{p.categoryName ?? '—'}</td>
+                    <td className="px-3 py-2 text-gray-600">{p.categoryName ?? '—'}</td>
                     <td className="px-3 py-2 text-right">
                       <span className={p.low ? 'font-medium text-red-600' : ''}>
                         {QTY(p.stockQty)}
                       </span>
-                      <span className="text-xs text-gray-400"> / {QTY(p.minStockQty)}</span>
+                      <span className="text-xs text-gray-500"> / {QTY(p.minStockQty)}</span>
                       {p.low && (
                         <span className="ml-1 rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-700">
                           baixo
                         </span>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-right text-gray-500">{BRL(p.costPrice)}</td>
+                    <td className="px-3 py-2 text-right text-gray-600">{BRL(p.costPrice)}</td>
                     <td className="px-3 py-2 text-right">{BRL(p.salePrice)}</td>
-                    <td className="px-3 py-2 text-right text-gray-500">
+                    <td className="px-3 py-2 text-right text-gray-600">
                       {p.marginPercent.toFixed(1)}%
                     </td>
                     <td className="px-3 py-2 text-right">
@@ -733,12 +733,12 @@ function ProdutosTab({
                           Movimentações de estoque — {p.name}
                         </div>
                         {movLoading ? (
-                          <p className="text-xs text-gray-400">Carregando…</p>
+                          <p className="text-xs text-gray-500">Carregando…</p>
                         ) : movements.length === 0 ? (
-                          <p className="text-xs text-gray-400">Nenhuma movimentação.</p>
+                          <p className="text-xs text-gray-500">Nenhuma movimentação.</p>
                         ) : (
                           <table className="w-full text-xs">
-                            <thead className="text-left text-gray-500">
+                            <thead className="text-left text-gray-600">
                               <tr>
                                 <th className="py-1">Data</th>
                                 <th className="py-1">Tipo</th>
@@ -751,7 +751,7 @@ function ProdutosTab({
                             <tbody>
                               {movements.map((m) => (
                                 <tr key={m.id} className="border-t border-gray-200">
-                                  <td className="py-1 text-gray-500">{DATETIME(m.createdAt)}</td>
+                                  <td className="py-1 text-gray-600">{DATETIME(m.createdAt)}</td>
                                   <td className="py-1">
                                     <span
                                       className={
@@ -762,9 +762,9 @@ function ProdutosTab({
                                     </span>
                                   </td>
                                   <td className="py-1 text-right">{QTY(m.quantity)}</td>
-                                  <td className="py-1 text-gray-500">{m.reason ?? '—'}</td>
-                                  <td className="py-1 text-gray-500">{m.supplierName ?? '—'}</td>
-                                  <td className="py-1 text-gray-500">{m.registeredByName ?? '—'}</td>
+                                  <td className="py-1 text-gray-600">{m.reason ?? '—'}</td>
+                                  <td className="py-1 text-gray-600">{m.supplierName ?? '—'}</td>
+                                  <td className="py-1 text-gray-600">{m.registeredByName ?? '—'}</td>
                                 </tr>
                               ))}
                             </tbody>

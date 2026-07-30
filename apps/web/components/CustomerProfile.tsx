@@ -120,7 +120,7 @@ export function CustomerProfile({
   function field(label: string, key: keyof FormState, opts?: { type?: string; full?: boolean }) {
     return (
       <label className={`block ${opts?.full ? 'sm:col-span-2' : ''}`}>
-        <span className="mb-1 block text-xs text-gray-500">{label}</span>
+        <span className="mb-1 block text-xs text-gray-600">{label}</span>
         <input
           type={opts?.type ?? 'text'}
           value={form?.[key] ?? ''}
@@ -144,7 +144,7 @@ export function CustomerProfile({
         className="my-8 w-full max-w-2xl space-y-5 rounded-2xl bg-white p-5 shadow-lg"
       >
         {loading || !form ? (
-          <p className="text-gray-500">{error ?? 'Carregando…'}</p>
+          <p className="text-gray-600">{error ?? 'Carregando…'}</p>
         ) : (
           <>
             <div className="flex items-start justify-between">
@@ -152,7 +152,7 @@ export function CustomerProfile({
               <button
                 type="button"
                 onClick={onClose}
-                className="text-gray-400 hover:text-gray-700"
+                className="text-gray-500 hover:text-gray-700"
                 aria-label="Fechar"
               >
                 ✕
@@ -169,7 +169,7 @@ export function CustomerProfile({
               {field('E-mail', 'email', { type: 'email', full: true })}
               {field('Endereço', 'address', { full: true })}
               <label className="block sm:col-span-2">
-                <span className="mb-1 block text-xs text-gray-500">Observações</span>
+                <span className="mb-1 block text-xs text-gray-600">Observações</span>
                 <textarea
                   value={form.notes}
                   onChange={(e) => {
@@ -199,7 +199,7 @@ export function CustomerProfile({
             <div className="border-t border-gray-100 pt-4">
               <h3 className="mb-2 text-sm font-semibold">Contas a receber</h3>
               {!history || history.receivables.length === 0 ? (
-                <p className="text-sm text-gray-500">Nenhuma venda a prazo para este cliente.</p>
+                <p className="text-sm text-gray-600">Nenhuma venda a prazo para este cliente.</p>
               ) : (
                 <ul className="divide-y divide-gray-100 rounded-lg border border-gray-100">
                   {history.receivables.map((r) => (
@@ -208,7 +208,7 @@ export function CustomerProfile({
                         <span className="text-gray-600">
                           {new Date(r.createdAt).toLocaleDateString('pt-BR')} · {BRL(r.originalAmount)}
                         </span>
-                        <span className="block text-xs text-gray-400">
+                        <span className="block text-xs text-gray-500">
                           Saldo {BRL(r.balance)}
                           {r.dueDate ? ` · vence ${new Date(r.dueDate).toLocaleDateString('pt-BR')}` : ''}
                         </span>
@@ -231,13 +231,13 @@ export function CustomerProfile({
 
               <h3 className="mb-2 mt-4 text-sm font-semibold">Vendas</h3>
               {!history || history.orders.length === 0 ? (
-                <p className="text-sm text-gray-500">Nenhuma venda vinculada a este cliente.</p>
+                <p className="text-sm text-gray-600">Nenhuma venda vinculada a este cliente.</p>
               ) : (
                 <ul className="divide-y divide-gray-100 rounded-lg border border-gray-100">
                   {history.orders.map((o) => (
                     <li key={o.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
                       <div className="min-w-0">
-                        <span className="font-mono text-xs text-gray-400">#{o.id.slice(0, 8)}</span>{' '}
+                        <span className="font-mono text-xs text-gray-500">#{o.id.slice(0, 8)}</span>{' '}
                         <span className="text-gray-600">
                           {new Date(o.createdAt).toLocaleString('pt-BR')}
                         </span>

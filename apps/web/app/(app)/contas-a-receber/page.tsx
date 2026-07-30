@@ -188,15 +188,15 @@ export default function ContasAReceberPage() {
 
       {status === 'open' && rows.length > 0 && (
         <div className="mb-4 rounded-2xl bg-white p-4 shadow-sm">
-          <p className="text-xs text-gray-500">Total a receber (nesta página)</p>
+          <p className="text-xs text-gray-600">Total a receber (nesta página)</p>
           <p className="mt-1 text-2xl font-bold">{BRL(totalOwed)}</p>
         </div>
       )}
 
       {!loaded ? (
-        <p className="text-gray-500">Carregando…</p>
+        <p className="text-gray-600">Carregando…</p>
       ) : rows.length === 0 ? (
-        <p className="rounded-2xl bg-white p-6 text-center text-gray-500 shadow-sm">
+        <p className="rounded-2xl bg-white p-6 text-center text-gray-600 shadow-sm">
           {search.trim()
             ? 'Nenhuma conta encontrada para essa busca.'
             : status === 'open'
@@ -208,7 +208,7 @@ export default function ContasAReceberPage() {
           <div className="overflow-x-auto rounded-2xl bg-white shadow-sm">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-100 text-left text-gray-500">
+                <tr className="border-b border-gray-100 text-left text-gray-600">
                   <th className="px-4 py-3">Cliente</th>
                   <th className="px-4 py-3">Vencimento</th>
                   <th className="px-4 py-3 text-right">Original</th>
@@ -231,7 +231,7 @@ export default function ContasAReceberPage() {
                         >
                           {r.customerName ?? '—'}
                         </button>
-                        <span className="block text-xs text-gray-400">
+                        <span className="block text-xs text-gray-500">
                           {new Date(r.createdAt).toLocaleDateString('pt-BR')}
                           {r.status !== 'OPEN' ? ` · ${RECEIVABLE_STATUS_LABELS[r.status]}` : ''}
                         </span>
@@ -243,7 +243,7 @@ export default function ContasAReceberPage() {
                             {overdue ? ' · vencida' : ''}
                           </span>
                         ) : (
-                          <span className="text-gray-400">—</span>
+                          <span className="text-gray-500">—</span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums">{BRL(r.originalAmount)}</td>
@@ -263,7 +263,7 @@ export default function ContasAReceberPage() {
                             Receber
                           </button>
                         ) : (
-                          <span className="text-xs text-gray-400">quitada</span>
+                          <span className="text-xs text-gray-500">quitada</span>
                         )}
                       </td>
                     </tr>
@@ -301,7 +301,7 @@ export default function ContasAReceberPage() {
           >
             <div>
               <h2 className="text-lg font-bold">Receber de {selected.customerName ?? 'cliente'}</h2>
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-gray-600">
                 Saldo devedor: <strong>{BRL(selected.balance)}</strong>
               </p>
             </div>
@@ -343,7 +343,7 @@ export default function ContasAReceberPage() {
                 ))}
               </select>
               {method === 'CASH' && (
-                <p className="mt-1 text-xs text-gray-400">
+                <p className="mt-1 text-xs text-gray-500">
                   Em dinheiro, entra no caixa aberto como suprimento.
                 </p>
               )}

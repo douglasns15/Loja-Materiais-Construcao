@@ -29,9 +29,15 @@
 > controlado pelo número não deixava **apagar** para digitar outro (voltava ao valor na hora); novo
 > componente **`QtyInput`** (rascunho de texto interno: apaga/digita livre, comita só número válido, no
 > `blur` volta ao valor real com a **mesma trava de estoque** do `changeLineQty`). Gates: typecheck web ✅,
-> build web (19 rotas, `/venda` 13.6 kB) ✅. **Falta:** deploy do web + E2E do Owner no celular. Ver
-> "UI.PDV.MobileQty" no registro. **Próximo passo (combinado antes):** **ADR-020 — retirada / entrega
-> futura.**
+> build web (19 rotas, `/venda` 13.6 kB) ✅. **NO AR:** web `ddf86898` (o `postdeploy` rodou e o smoke do
+> CSS passou). **E2E do Owner VALIDADO (2026-07-30):** "tudo certo, nos dois pontos". Commit `3140118`. Ver
+> "UI.PDV.MobileQty" no registro. **Em seguida (mesmo dia) — polimento visual (UI.Tema.Contraste):** (i)
+> **"Falta receber" em vermelho** (simétrico ao Troco verde) no PDV; (ii) **cabeçalhos de tabela** (o
+> `<thead>` de todas as telas) do cinza-100 → **azul-200** (`text-blue-900`) — pedido do Owner ("as barras
+> azuis dos cabeçalhos mais vivas", escolhido +2 tons sobre preview); (iii) **textos cinzas um tom mais
+> escuros** em todas as telas (cinza-400→500, cinza-500→600; tamanhos mantidos). Script único (10 theads +
+> 2 sub-tabelas + 264 textos, 28 arquivos). Gates: typecheck web ✅, build web ✅. **Falta:** deploy do web +
+> conferência visual do Owner. **Próximo passo (combinado antes):** **ADR-020 — retirada / entrega futura.**
 >
 > **Antes:** 2026-07-29 — **Cesta persistente sincronizada (carrinho do PDV por
 > usuário, entre dispositivos) — ADR-021 — CÓDIGO PRONTO, aguardando deploy + E2E do Owner.**

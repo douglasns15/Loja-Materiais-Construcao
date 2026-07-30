@@ -181,7 +181,7 @@ export default function ConfiguracoesPage() {
   // RBAC (ADR-008): Configurações é área administrativa. A API já bloqueia as escritas;
   // aqui evitamos exibir a tela para quem não é Admin (acesso direto pela URL).
   if (meLoading) {
-    return <div className="p-2 text-gray-500">Carregando…</div>;
+    return <div className="p-2 text-gray-600">Carregando…</div>;
   }
   if (!isAdmin) {
     return (
@@ -207,7 +207,7 @@ export default function ConfiguracoesPage() {
 
       <section className="rounded-2xl bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold">Logo</h2>
-        <p className="mt-1 text-sm text-gray-500">
+        <p className="mt-1 text-sm text-gray-600">
           Aparece no cabeçalho dos comprovantes e orçamentos. PNG, JPG ou WebP, até{' '}
           {Math.round(LOGO_MAX_BYTES / 1024 / 1024)} MB.
         </p>
@@ -218,7 +218,7 @@ export default function ConfiguracoesPage() {
               // eslint-disable-next-line @next/next/no-img-element
               <img src={shownLogo} alt="Logo da loja" className="max-h-full max-w-full object-contain" />
             ) : (
-              <span className="px-2 text-center text-xs text-gray-400">Sem logo</span>
+              <span className="px-2 text-center text-xs text-gray-500">Sem logo</span>
             )}
           </div>
 
@@ -257,7 +257,7 @@ export default function ConfiguracoesPage() {
 
       <section className="mt-6 rounded-2xl bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold">Dados da loja</h2>
-        <p className="mt-1 text-sm text-gray-500">
+        <p className="mt-1 text-sm text-gray-600">
           Nome, CNPJ e telefone usados nos comprovantes e orçamentos.
         </p>
 
@@ -325,7 +325,7 @@ export default function ConfiguracoesPage() {
           */}
           <div className="border-t border-gray-100 pt-4">
             <h3 className="text-sm font-medium text-gray-900">Taxas da maquininha</h3>
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-gray-600">
               Percentual que a operadora desconta de cada venda no cartão. Usado só para calcular
               a <strong>margem real</strong> dos produtos — <strong>não</strong> altera o preço
               cobrado do cliente. Para cobrar mais no cartão, preencha o acréscimo no cadastro do

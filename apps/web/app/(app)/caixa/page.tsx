@@ -191,7 +191,7 @@ export default function CaixaPage() {
       {info && <p className="mb-4 rounded-lg bg-gray-100 px-3 py-2 text-sm">{info}</p>}
 
       {!loaded ? (
-        <p className="text-gray-500">Carregando…</p>
+        <p className="text-gray-600">Carregando…</p>
       ) : session ? (
         <div className="space-y-6">
           <div className="rounded-2xl bg-white p-5 shadow-sm">
@@ -199,32 +199,32 @@ export default function CaixaPage() {
               <span className="h-2 w-2 rounded-full bg-green-500" /> Caixa aberto
             </div>
             <dl className="grid grid-cols-2 gap-3 text-sm">
-              <dt className="text-gray-500">Aberto em</dt>
+              <dt className="text-gray-600">Aberto em</dt>
               <dd className="text-right">{new Date(session.openedAt).toLocaleString('pt-BR')}</dd>
               {session.openedByName && (
                 <>
-                  <dt className="text-gray-500">Aberto por</dt>
+                  <dt className="text-gray-600">Aberto por</dt>
                   <dd className="text-right">{session.openedByName}</dd>
                 </>
               )}
 
               {/* Mini-DRE do caixa: abertura, o que ENTROU e o que SAIU até o esperado. */}
-              <dt className="text-gray-500">Valor de abertura</dt>
+              <dt className="text-gray-600">Valor de abertura</dt>
               <dd className="text-right">{BRL(session.openingAmount)}</dd>
 
-              <dt className="text-gray-500">+ Vendas em dinheiro</dt>
+              <dt className="text-gray-600">+ Vendas em dinheiro</dt>
               <dd className="text-right text-green-700">{BRL(session.cashInflow)}</dd>
 
               {session.cashMovementsIn > 0 && (
                 <>
-                  <dt className="text-gray-500">+ Suprimentos</dt>
+                  <dt className="text-gray-600">+ Suprimentos</dt>
                   <dd className="text-right text-green-700">{BRL(session.cashMovementsIn)}</dd>
                 </>
               )}
 
               {session.cashMovementsOut > 0 && (
                 <>
-                  <dt className="text-gray-500">− Devoluções / saídas</dt>
+                  <dt className="text-gray-600">− Devoluções / saídas</dt>
                   <dd className="text-right text-red-600">− {BRL(session.cashMovementsOut)}</dd>
                 </>
               )}
@@ -255,7 +255,7 @@ export default function CaixaPage() {
               aria-expanded={movementsOpen}
             >
               <span className="font-medium">Movimentações do caixa</span>
-              <span className="flex items-center gap-2 text-sm text-gray-500">
+              <span className="flex items-center gap-2 text-sm text-gray-600">
                 {movements.length > 0 && (
                   <span className="rounded-full bg-gray-100 px-2 py-0.5 tabular-nums">
                     {movements.length}
@@ -319,15 +319,15 @@ export default function CaixaPage() {
             <span className="h-2 w-2 rounded-full bg-green-500" /> Caixa aberto
           </div>
           <dl className="grid grid-cols-2 gap-3 text-sm">
-            <dt className="text-gray-500">Aberto em</dt>
+            <dt className="text-gray-600">Aberto em</dt>
             <dd className="text-right">{new Date(cachedSession.openedAt).toLocaleString('pt-BR')}</dd>
             {cachedSession.openedByName && (
               <>
-                <dt className="text-gray-500">Aberto por</dt>
+                <dt className="text-gray-600">Aberto por</dt>
                 <dd className="text-right">{cachedSession.openedByName}</dd>
               </>
             )}
-            <dt className="text-gray-500">Valor de abertura</dt>
+            <dt className="text-gray-600">Valor de abertura</dt>
             <dd className="text-right">{BRL(cachedSession.openingAmount)}</dd>
           </dl>
           <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">

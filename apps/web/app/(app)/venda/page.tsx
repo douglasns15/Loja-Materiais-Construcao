@@ -196,7 +196,7 @@ function Summary({ items, total, discount }: { items: CartItem[]; total: number;
               {!i.pair && (i.saleMode === 'ALT' ? ` ${unitShort(i.unitType)} ` : '× ')}
               {i.name}
               {i.saleMode === 'ALT' && !i.pair && (
-                <span className="text-gray-400">
+                <span className="text-gray-500">
                   {' '}
                   (≈ {i.quantity * i.conversionFactor} {unitShort(i.baseUnitType)})
                 </span>
@@ -207,7 +207,7 @@ function Summary({ items, total, discount }: { items: CartItem[]; total: number;
         ))}
       </ul>
       {discount > 0 && (
-        <div className="space-y-1 border-t border-gray-200 pt-2 text-sm text-gray-500">
+        <div className="space-y-1 border-t border-gray-200 pt-2 text-sm text-gray-600">
           <div className="flex justify-between">
             <span>Subtotal</span>
             <span>{BRL(subtotal)}</span>
@@ -231,7 +231,7 @@ function PaymentsLines({ payments, change }: { payments: PaidPart[]; change: num
   return (
     <>
       {payments.map((p, i) => (
-        <div key={`${p.method}-${i}`} className="flex justify-between text-sm text-gray-500">
+        <div key={`${p.method}-${i}`} className="flex justify-between text-sm text-gray-600">
           <span>{payments.length > 1 ? `Pagamento · ${PAYMENT_METHOD_LABELS[p.method]}` : 'Pagamento'}</span>
           <span>
             {payments.length > 1 ? BRL(p.amount) : PAYMENT_METHOD_LABELS[p.method]}
@@ -1161,7 +1161,7 @@ export default function VendaPage() {
     setDueDate('');
   }
 
-  if (!ready) return <p className="text-gray-500">Carregando…</p>;
+  if (!ready) return <p className="text-gray-600">Carregando…</p>;
 
   // Loja desativada pelo Super Usuário (ADR-009): venda nova bloqueada (a API também barra).
   if (me?.tenantActive === false) {
@@ -1200,7 +1200,7 @@ export default function VendaPage() {
           </p>
           <Summary items={pricedCart} total={totals.total} discount={discountValue} />
           <PaymentsLines payments={buildPersistedPayments()} change={change} />
-          <p className="text-xs text-gray-400">
+          <p className="text-xs text-gray-500">
             O estoque só é baixado ao confirmar. Você pode voltar e editar sem afetar nada.
           </p>
           {error && <p className="text-sm text-red-600">{error}</p>}
@@ -1257,7 +1257,7 @@ export default function VendaPage() {
           ) : null}
 
           <div className="flex items-center gap-2 border-t border-gray-200 pt-3">
-            <span className="text-sm text-gray-500">Imprimir:</span>
+            <span className="text-sm text-gray-600">Imprimir:</span>
             <select
               value={printModel}
               onChange={(e) => setPrintModel(e.target.value as '80mm' | 'A4')}
@@ -1403,7 +1403,7 @@ export default function VendaPage() {
         {productSearch.trim() ? (
         <ul className="mt-3 max-h-[28rem] divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-200">
           {filteredProducts.length === 0 ? (
-            <li className="px-3 py-6 text-center text-sm text-gray-400">
+            <li className="px-3 py-6 text-center text-sm text-gray-500">
               {productSearch ? 'Nenhum produto encontrado.' : 'Nenhum produto cadastrado.'}
             </li>
           ) : (
@@ -1430,13 +1430,13 @@ export default function VendaPage() {
                     <div className="flex items-center justify-between gap-3">
                       <span className="min-w-0">
                         <span className="block truncate font-medium">{p.name}</span>
-                        <span className="block truncate text-xs text-gray-400">
+                        <span className="block truncate text-xs text-gray-500">
                           {p.popularName ? `${p.popularName} · ` : ''}
                           {p.manufacturer ? `${p.manufacturer} · ` : ''}
                           {p.sku}
                         </span>
                       </span>
-                      <span className={`shrink-0 text-xs ${out ? 'text-red-500' : 'text-gray-400'}`}>
+                      <span className={`shrink-0 text-xs ${out ? 'text-red-500' : 'text-gray-500'}`}>
                         {out
                           ? 'sem estoque'
                           : `est. ${whole} ${unitName.toLowerCase()}${remainderMeters > 0 ? ` + ${remainderMeters} m` : ''}`}
@@ -1482,7 +1482,7 @@ export default function VendaPage() {
                     >
                       <span className="min-w-0">
                         <span className="block truncate font-medium">{p.name}</span>
-                        <span className="block truncate text-xs text-gray-400">
+                        <span className="block truncate text-xs text-gray-500">
                           {p.popularName ? `${p.popularName} · ` : ''}
                           {p.manufacturer ? `${p.manufacturer} · ` : ''}
                           {p.sku}
@@ -1490,7 +1490,7 @@ export default function VendaPage() {
                       </span>
                       <span className="shrink-0 text-right">
                         <span className="block font-medium">{BRL(p.salePrice)}</span>
-                        <span className={`block text-xs ${out ? 'text-red-500' : 'text-gray-400'}`}>
+                        <span className={`block text-xs ${out ? 'text-red-500' : 'text-gray-500'}`}>
                           {out ? 'sem estoque' : `est. ${stock}`}
                         </span>
                       </span>
@@ -1515,13 +1515,13 @@ export default function VendaPage() {
                   <div className="flex items-center justify-between gap-3">
                     <span className="min-w-0">
                       <span className="block truncate font-medium">{p.name}</span>
-                      <span className="block truncate text-xs text-gray-400">
+                      <span className="block truncate text-xs text-gray-500">
                         {p.popularName ? `${p.popularName} · ` : ''}
                         {p.manufacturer ? `${p.manufacturer} · ` : ''}
                         {p.sku}
                       </span>
                     </span>
-                    <span className={`shrink-0 text-xs ${out ? 'text-red-500' : 'text-gray-400'}`}>
+                    <span className={`shrink-0 text-xs ${out ? 'text-red-500' : 'text-gray-500'}`}>
                       {out ? 'sem estoque' : `est. ${stock} ${unitShort(p.unit)}`}
                     </span>
                   </div>
@@ -1573,7 +1573,7 @@ export default function VendaPage() {
           )}
         </ul>
         ) : (
-          <p className="mt-3 rounded-lg border border-dashed border-gray-200 px-3 py-10 text-center text-sm text-gray-400">
+          <p className="mt-3 rounded-lg border border-dashed border-gray-200 px-3 py-10 text-center text-sm text-gray-500">
             Digite para buscar produtos por nome, apelido, fabricante ou código.
           </p>
         )}
@@ -1585,12 +1585,12 @@ export default function VendaPage() {
         <div className="flex items-center justify-between gap-2 border-b border-gray-100 px-4 py-2">
           <span className="text-sm font-medium text-gray-700">
             Carrinho
-            {cart.length > 0 && <span className="ml-1 text-gray-400">· {cart.length}</span>}
+            {cart.length > 0 && <span className="ml-1 text-gray-500">· {cart.length}</span>}
           </span>
           {cart.length > 0 &&
             (confirmClear ? (
               <span className="flex items-center gap-2 text-xs">
-                <span className="text-gray-500">Limpar tudo?</span>
+                <span className="text-gray-600">Limpar tudo?</span>
                 <button
                   type="button"
                   onClick={limparCarrinho}
@@ -1618,7 +1618,7 @@ export default function VendaPage() {
         </div>
         <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-gray-100 text-left text-gray-600">
+          <thead className="bg-blue-200 text-left text-blue-900">
             <tr>
               <th className="px-4 py-2">Produto</th>
               <th className="px-4 py-2 text-right">Qtd</th>
@@ -1630,7 +1630,7 @@ export default function VendaPage() {
           <tbody>
             {cart.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={5} className="px-4 py-6 text-center text-gray-500">
                   Carrinho vazio.
                 </td>
               </tr>
@@ -1645,14 +1645,14 @@ export default function VendaPage() {
                     <button
                       type="button"
                       onClick={() => setInfoKey(i.key)}
-                      className="ml-1.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-gray-300 align-middle text-[10px] font-bold leading-none text-gray-400 hover:border-gray-500 hover:text-gray-700"
+                      className="ml-1.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-gray-300 align-middle text-[10px] font-bold leading-none text-gray-500 hover:border-gray-500 hover:text-gray-700"
                       aria-label={`Informações de ${i.name}`}
                       title="Informações do item"
                     >
                       i
                     </button>
                     {i.saleMode === 'ALT' && !i.pair && (
-                      <span className="block text-xs text-gray-400">
+                      <span className="block text-xs text-gray-500">
                         embalagem fechada · ≈ {i.quantity * i.conversionFactor} {unitShort(i.baseUnitType)}
                       </span>
                     )}
@@ -1699,7 +1699,7 @@ export default function VendaPage() {
                       >
                         +
                       </button>
-                      <span className="ml-1 w-12 shrink-0 text-left text-xs text-gray-400">
+                      <span className="ml-1 w-12 shrink-0 text-left text-xs text-gray-500">
                         {i.pair
                           ? `par${i.quantity > 1 ? 'es' : ''}`
                           : i.saleMode === 'ALT' && !i.pair
@@ -1711,7 +1711,7 @@ export default function VendaPage() {
                   <td className="px-4 py-2 text-right">{BRL(i.unitPrice)}</td>
                   <td className="px-4 py-2 text-right">{BRL(i.unitPrice * i.quantity)}</td>
                   <td className="px-4 py-2 text-right">
-                    <button onClick={() => removeFromCart(i.key)} className="text-gray-400 hover:text-red-600">
+                    <button onClick={() => removeFromCart(i.key)} className="text-gray-500 hover:text-red-600">
                       remover
                     </button>
                   </td>
@@ -1773,7 +1773,7 @@ export default function VendaPage() {
                   <button
                     type="button"
                     onClick={() => removeLine(i)}
-                    className="shrink-0 rounded-lg px-2 py-2 text-lg leading-none text-gray-400 hover:text-red-600"
+                    className="shrink-0 rounded-lg px-2 py-2 text-lg leading-none text-gray-500 hover:text-red-600"
                     aria-label="Remover forma"
                     title="Remover forma"
                   >
@@ -1784,7 +1784,7 @@ export default function VendaPage() {
             ))}
           </div>
           {hasCashLine && (
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-gray-500">
               No dinheiro, informe o valor recebido — o troco é calculado automaticamente.
             </p>
           )}
@@ -1793,8 +1793,8 @@ export default function VendaPage() {
           <div className="rounded-lg bg-gray-50 px-3 py-2 ring-1 ring-gray-200">
             {payStatus.remaining > 0 ? (
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-700">Falta receber</span>
-                <span className="text-lg font-bold text-gray-900">{BRL(payStatus.remaining)}</span>
+                <span className="text-sm font-medium text-red-800">Falta receber</span>
+                <span className="text-lg font-bold text-red-700">{BRL(payStatus.remaining)}</span>
               </div>
             ) : change > 0 ? (
               <div className="flex items-center justify-between">
@@ -1808,7 +1808,7 @@ export default function VendaPage() {
               </div>
             )}
             {payments.length > 1 && (
-              <div className="mt-1 flex items-center justify-between text-xs text-gray-400">
+              <div className="mt-1 flex items-center justify-between text-xs text-gray-500">
                 <span>Total da venda</span>
                 <span>{BRL(totals.total)}</span>
               </div>
@@ -1847,7 +1847,7 @@ export default function VendaPage() {
                   <button
                     type="button"
                     onClick={resetCredit}
-                    className="shrink-0 rounded-lg px-2 py-1 text-lg leading-none text-gray-400 hover:text-red-600"
+                    className="shrink-0 rounded-lg px-2 py-1 text-lg leading-none text-gray-500 hover:text-red-600"
                     aria-label="Remover venda a prazo"
                     title="Remover venda a prazo"
                   >
@@ -1937,7 +1937,7 @@ export default function VendaPage() {
         <div className="flex min-w-0 flex-col justify-between rounded-2xl bg-white p-4 shadow-sm lg:col-start-1 lg:row-start-3">
           <div>
             <div className="space-y-1 text-sm">
-              <div className="flex justify-between text-gray-500">
+              <div className="flex justify-between text-gray-600">
                 <span>Subtotal</span>
                 <span>{BRL(totals.subtotal)}</span>
               </div>

@@ -40,7 +40,7 @@ export default function PlatformLayout({ children }: { children: React.ReactNode
   }
 
   if (!ready) {
-    return <div className="p-8 text-gray-500">Carregando…</div>;
+    return <div className="p-8 text-gray-600">Carregando…</div>;
   }
 
   return (
@@ -53,7 +53,7 @@ export default function PlatformLayout({ children }: { children: React.ReactNode
           </span>
         </div>
         <div className="flex items-center gap-3 text-sm">
-          <span className="hidden text-gray-500 sm:inline">{me?.email}</span>
+          <span className="hidden text-gray-600 sm:inline">{me?.email}</span>
           <button
             onClick={logout}
             className="rounded-lg px-3 py-1 font-medium text-red-600 hover:bg-red-50"

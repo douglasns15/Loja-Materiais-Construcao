@@ -47,7 +47,7 @@ function CounterRow({
   return (
     <div className="flex items-center gap-3">
       <span className="w-14 shrink-0 text-sm font-medium text-gray-700">{pieceLabel(value)}</span>
-      <span className="w-4 shrink-0 text-center text-gray-400">×</span>
+      <span className="w-4 shrink-0 text-center text-gray-500">×</span>
       <input
         type="text"
         inputMode="numeric"
@@ -119,7 +119,7 @@ export function CashCounter({
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded-lg px-2 py-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+            className="shrink-0 rounded-lg px-2 py-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
             aria-label="Fechar"
           >
             ✕
@@ -128,7 +128,7 @@ export function CashCounter({
 
         <div className="space-y-4">
           <div>
-            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-400">Moedas</p>
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">Moedas</p>
             <div className="space-y-2">
               {BRL_COIN_VALUES.map((v) => (
                 <CounterRow key={v} value={v} qty={counts[v] ?? ''} onQty={(raw) => setQty(v, raw)} />
@@ -136,7 +136,7 @@ export function CashCounter({
             </div>
           </div>
           <div>
-            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-400">Cédulas</p>
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">Cédulas</p>
             <div className="space-y-2">
               {BRL_BILL_VALUES.map((v) => (
                 <CounterRow key={v} value={v} qty={counts[v] ?? ''} onQty={(raw) => setQty(v, raw)} />
@@ -146,7 +146,7 @@ export function CashCounter({
         </div>
 
         <div className="mt-5 flex items-center justify-between border-t border-gray-200 pt-4">
-          <span className="text-sm text-gray-500">Total contado</span>
+          <span className="text-sm text-gray-600">Total contado</span>
           <span className="text-xl font-bold tabular-nums">{BRL(total)}</span>
         </div>
 

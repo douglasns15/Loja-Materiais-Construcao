@@ -136,7 +136,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   if (!ready) {
-    return <div className="p-8 text-gray-500">Carregando…</div>;
+    return <div className="p-8 text-gray-600">Carregando…</div>;
   }
 
   const currentLabel = NAV.find((item) => item.href === pathname)?.label ?? 'NexoLoja';
@@ -168,7 +168,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {/* Recolher a barra (desktop). No celular a gaveta fecha pelo fundo/atalho. */}
           <button
             onClick={toggleCollapsed}
-            className="hidden rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 md:inline-flex"
+            className="hidden rounded-lg p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700 md:inline-flex"
             title="Recolher menu"
             aria-label="Recolher menu"
           >
@@ -201,10 +201,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   {me?.name ?? 'Usuário'}
                 </div>
                 {me?.email && (
-                  <div className="truncate text-xs text-gray-500">{me.email}</div>
+                  <div className="truncate text-xs text-gray-600">{me.email}</div>
                 )}
                 {me && (
-                  <div className="mt-0.5 text-xs text-gray-400">
+                  <div className="mt-0.5 text-xs text-gray-500">
                     {STORE_ROLE_LABELS[me.storeRole]}
                   </div>
                 )}
@@ -235,7 +235,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           >
             {/* Ícone de usuário */}
             <svg
-              className="h-5 w-5 shrink-0 text-gray-500"
+              className="h-5 w-5 shrink-0 text-gray-600"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -250,7 +250,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <span className="flex-1 truncate">{me?.name ?? 'Minha conta'}</span>
             {/* Chevron (gira quando aberto) */}
             <svg
-              className={`h-4 w-4 shrink-0 text-gray-400 transition-transform ${menuOpen ? 'rotate-180' : ''}`}
+              className={`h-4 w-4 shrink-0 text-gray-500 transition-transform ${menuOpen ? 'rotate-180' : ''}`}
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"

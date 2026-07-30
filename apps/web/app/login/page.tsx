@@ -32,7 +32,7 @@ export default function LoginPage() {
     <main className="flex min-h-dvh items-center justify-center p-4">
       <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-sm">
         <h1 className="mb-1 text-2xl font-bold">NexoLoja</h1>
-        <p className="mb-6 text-sm text-gray-500">Entre com sua conta</p>
+        <p className="mb-6 text-sm text-gray-600">Entre com sua conta</p>
 
         <form onSubmit={onSubmit} className="space-y-4">
           <div>

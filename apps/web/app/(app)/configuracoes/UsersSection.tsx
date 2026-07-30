@@ -112,7 +112,7 @@ export function UsersSection({ currentUserId }: { currentUserId: string | null }
   return (
     <section className="mt-6 rounded-2xl bg-white p-6 shadow-sm">
       <h2 className="text-lg font-semibold">Usuários</h2>
-      <p className="mt-1 text-sm text-gray-500">
+      <p className="mt-1 text-sm text-gray-600">
         Defina quem é <strong>Admin</strong> (acesso total) ou <strong>Usuário</strong>{' '}
         (operação: venda, caixa, estoque). O dono da loja não pode ser alterado aqui.
       </p>
@@ -121,7 +121,7 @@ export function UsersSection({ currentUserId }: { currentUserId: string | null }
 
       <div className="mt-4 overflow-hidden rounded-xl border border-gray-200">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-left text-gray-600">
+          <thead className="bg-blue-200 text-left text-blue-900">
             <tr>
               <th className="px-4 py-2">Nome</th>
               <th className="px-4 py-2">E-mail</th>
@@ -137,10 +137,10 @@ export function UsersSection({ currentUserId }: { currentUserId: string | null }
                   <td className="px-4 py-2 font-medium">
                     {u.name}
                     {u.id === currentUserId && (
-                      <span className="ml-2 text-xs text-gray-400">(você)</span>
+                      <span className="ml-2 text-xs text-gray-500">(você)</span>
                     )}
                   </td>
-                  <td className="px-4 py-2 text-gray-500">{u.email}</td>
+                  <td className="px-4 py-2 text-gray-600">{u.email}</td>
                   <td className="px-4 py-2">
                     {isOwner(u) ? (
                       <span className="rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600">
@@ -167,7 +167,7 @@ export function UsersSection({ currentUserId }: { currentUserId: string | null }
                     {u.isActive ? (
                       <span className="text-green-700">Ativo</span>
                     ) : (
-                      <span className="text-gray-400">Inativo</span>
+                      <span className="text-gray-500">Inativo</span>
                     )}
                     {!isOwner(u) && u.id !== currentUserId && (
                       <>
@@ -197,7 +197,7 @@ export function UsersSection({ currentUserId }: { currentUserId: string | null }
 
       <form onSubmit={invite} className="mt-6 border-t border-gray-100 pt-6">
         <h3 className="text-sm font-semibold text-gray-900">Convidar novo usuário</h3>
-        <p className="mt-1 text-xs text-gray-500">
+        <p className="mt-1 text-xs text-gray-600">
           Enviaremos um e-mail com um link para a pessoa definir a senha e acessar a loja.
         </p>
         <div className="mt-3 flex flex-wrap items-end gap-3">

@@ -53,7 +53,7 @@ function usePersistedOpen(key: string, initial = true) {
 }
 
 /** Seta ▸ que gira 90° quando a seção está aberta — indicador de colapso reutilizado. */
-function Chevron({ open, className = 'text-gray-400' }: { open: boolean; className?: string }) {
+function Chevron({ open, className = 'text-gray-500' }: { open: boolean; className?: string }) {
   return (
     <span className={`transition-transform ${open ? 'rotate-90' : ''} ${className}`}>▸</span>
   );
@@ -530,7 +530,7 @@ export default function EstoquePage() {
           >
             {savingAdjust ? 'Ajustando…' : 'Ajustar estoque'}
           </button>
-          <p className="mt-2 text-xs text-gray-400">
+          <p className="mt-2 text-xs text-gray-500">
             O ajuste manual é registrado na auditoria (ADR-004).
           </p>
         </form>
@@ -565,18 +565,18 @@ export default function EstoquePage() {
                 />
                 Só baixo
               </label>
-              <span className="text-xs text-gray-400">
+              <span className="text-xs text-gray-500">
                 {visibleStock.length} de {products.length}
               </span>
             </div>
           ) : (
-            <span className="text-xs text-gray-400">{products.length} produtos</span>
+            <span className="text-xs text-gray-500">{products.length} produtos</span>
           )}
         </div>
         {stockOpen && (
         <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-gray-100 text-left text-gray-600">
+          <thead className="bg-blue-200 text-left text-blue-900">
             <tr>
               {(
                 [
@@ -608,13 +608,13 @@ export default function EstoquePage() {
           <tbody>
             {products.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={7} className="px-4 py-6 text-center text-gray-500">
                   Nenhum produto cadastrado.
                 </td>
               </tr>
             ) : visibleStock.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={7} className="px-4 py-6 text-center text-gray-500">
                   Nenhum produto para a busca/filtro.
                 </td>
               </tr>
@@ -647,17 +647,17 @@ export default function EstoquePage() {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-2 text-gray-500">{p.sku}</td>
+                    <td className="px-4 py-2 text-gray-600">{p.sku}</td>
                     <td
                       className={`px-4 py-2 text-right font-medium ${low ? 'text-amber-700' : ''}`}
                     >
                       {fmtStock(p)}
                     </td>
-                    <td className="px-4 py-2 text-right text-gray-500">{QTY(p.minStockQty)}</td>
+                    <td className="px-4 py-2 text-right text-gray-600">{QTY(p.minStockQty)}</td>
                     <td className="px-4 py-2 text-right text-green-700">{QTY(s.income)}</td>
                     <td className="px-4 py-2 text-right text-red-700">{QTY(s.expense)}</td>
                     <td
-                      className={`px-4 py-2 text-right ${diverges ? 'text-amber-700' : 'text-gray-500'}`}
+                      className={`px-4 py-2 text-right ${diverges ? 'text-amber-700' : 'text-gray-600'}`}
                       title={
                         diverges
                           ? `Saldo pelo histórico (Σ entradas − Σ saídas) = ${QTY(reconciled)}, diferente do saldo atual ${fmtStock(p)}.`
@@ -673,7 +673,7 @@ export default function EstoquePage() {
             )}
           </tbody>
         </table>
-        <p className="px-4 py-2 text-xs text-gray-400">
+        <p className="px-4 py-2 text-xs text-gray-500">
           Clique no produto para ver suas características e movimentações. “Saldo (hist.)” é Σ
           entradas − Σ saídas (deve bater com o saldo atual — ADR-001). Clique num cabeçalho para
           ordenar.
@@ -694,7 +694,7 @@ export default function EstoquePage() {
             <Chevron open={movementsOpen} />
             Movimentações recentes
           </button>
-          <span className="text-xs text-gray-400">
+          <span className="text-xs text-gray-500">
             {filteredMovements.length} de {movements.length}
           </span>
         </div>
@@ -703,7 +703,7 @@ export default function EstoquePage() {
         <>
         {/* Barra de filtros */}
         <div className="flex flex-wrap items-end gap-2 border-t border-gray-100 px-4 py-3">
-          <label className="flex flex-col text-xs text-gray-500">
+          <label className="flex flex-col text-xs text-gray-600">
             Produto
             <select
               value={filters.productId}
@@ -718,7 +718,7 @@ export default function EstoquePage() {
               ))}
             </select>
           </label>
-          <label className="flex flex-col text-xs text-gray-500">
+          <label className="flex flex-col text-xs text-gray-600">
             Tipo
             <select
               value={filters.type}
@@ -730,7 +730,7 @@ export default function EstoquePage() {
               <option value="EXPENSE">Saída</option>
             </select>
           </label>
-          <label className="flex flex-col text-xs text-gray-500">
+          <label className="flex flex-col text-xs text-gray-600">
             Motivo
             <input
               value={filters.reason}
@@ -739,7 +739,7 @@ export default function EstoquePage() {
               className="mt-1 rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-gray-900"
             />
           </label>
-          <label className="flex flex-col text-xs text-gray-500">
+          <label className="flex flex-col text-xs text-gray-600">
             De
             <input
               type="date"
@@ -748,7 +748,7 @@ export default function EstoquePage() {
               className="mt-1 rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-gray-900"
             />
           </label>
-          <label className="flex flex-col text-xs text-gray-500">
+          <label className="flex flex-col text-xs text-gray-600">
             Até
             <input
               type="date"
@@ -770,7 +770,7 @@ export default function EstoquePage() {
 
         <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-gray-100 text-left text-gray-600">
+          <thead className="bg-blue-200 text-left text-blue-900">
             <tr>
               <th className="px-4 py-2">Data</th>
               <th className="px-4 py-2">Produto</th>
@@ -783,7 +783,7 @@ export default function EstoquePage() {
           <tbody>
             {filteredMovements.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={6} className="px-4 py-6 text-center text-gray-500">
                   {movements.length === 0
                     ? 'Nenhuma movimentação ainda.'
                     : 'Nenhuma movimentação para os filtros selecionados.'}
@@ -792,7 +792,7 @@ export default function EstoquePage() {
             ) : (
               filteredMovements.map((m) => (
                 <tr key={m.id} className="border-t border-gray-100">
-                  <td className="px-4 py-2 text-gray-500">{DATETIME(m.createdAt)}</td>
+                  <td className="px-4 py-2 text-gray-600">{DATETIME(m.createdAt)}</td>
                   <td className="px-4 py-2">{m.product?.name ?? '—'}</td>
                   <td className="px-4 py-2">
                     <span
@@ -806,11 +806,11 @@ export default function EstoquePage() {
                     </span>
                   </td>
                   <td className="px-4 py-2 text-right">{QTY(m.quantity)}</td>
-                  <td className="px-4 py-2 text-gray-500">
+                  <td className="px-4 py-2 text-gray-600">
                     {m.reason ?? '—'}
                     {m.supplier?.name ? ` · ${m.supplier.name}` : ''}
                   </td>
-                  <td className="px-4 py-2 text-gray-500">{m.registeredByName ?? '—'}</td>
+                  <td className="px-4 py-2 text-gray-600">{m.registeredByName ?? '—'}</td>
                 </tr>
               ))
             )}

@@ -111,7 +111,7 @@ export function ProfileModal({
           <h2 className="text-lg font-semibold">Meus dados</h2>
           <button
             onClick={onClose}
-            className="rounded-lg px-2 py-1 text-sm text-gray-500 hover:bg-gray-100"
+            className="rounded-lg px-2 py-1 text-sm text-gray-600 hover:bg-gray-100"
             aria-label="Fechar"
           >
             ✕
@@ -151,8 +151,8 @@ export function ProfileModal({
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">E-mail</label>
-            <input value={me.email} disabled className={`${inputClass} bg-gray-50 text-gray-500`} />
-            <p className="mt-1 text-xs text-gray-400">O e-mail de acesso não pode ser alterado aqui.</p>
+            <input value={me.email} disabled className={`${inputClass} bg-gray-50 text-gray-600`} />
+            <p className="mt-1 text-xs text-gray-500">O e-mail de acesso não pode ser alterado aqui.</p>
           </div>
           <div className="flex items-center gap-3">
             <button

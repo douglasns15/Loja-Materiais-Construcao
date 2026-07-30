@@ -335,13 +335,13 @@ export function ProductDetail({
   }
 
   const inputCls = 'w-full rounded-lg border border-gray-300 px-3 py-2';
-  const labelCls = 'text-xs font-medium text-gray-500';
+  const labelCls = 'text-xs font-medium text-gray-600';
 
   /** Linha de leitura: rótulo + valor (ou "—" quando vazio). */
   const Row = ({ label, value }: { label: string; value: React.ReactNode }) => (
     <div>
       <dt className={labelCls}>{label}</dt>
-      <dd className="text-sm text-gray-900">{value || <span className="text-gray-400">—</span>}</dd>
+      <dd className="text-sm text-gray-900">{value || <span className="text-gray-500">—</span>}</dd>
     </div>
   );
 
@@ -366,7 +366,7 @@ export function ProductDetail({
                 </span>
               )}
             </div>
-            <p className="truncate text-xs text-gray-500">
+            <p className="truncate text-xs text-gray-600">
               {product.sku}
               {product.manufacturer ? ` · ${product.manufacturer}` : ''}
             </p>
@@ -374,7 +374,7 @@ export function ProductDetail({
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded-lg px-2 py-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+            className="shrink-0 rounded-lg px-2 py-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
             aria-label="Fechar"
           >
             ✕
@@ -430,10 +430,10 @@ export function ProductDetail({
                       <>
                         {BRL(preco)}
                         {extra > 0 && (
-                          <span className="text-gray-400"> (+{BRL(extra)})</span>
+                          <span className="text-gray-500"> (+{BRL(extra)})</span>
                         )}
                         <span
-                          className={`block text-xs ${margem < 0 ? 'text-red-600' : 'text-gray-400'}`}
+                          className={`block text-xs ${margem < 0 ? 'text-red-600' : 'text-gray-500'}`}
                         >
                           margem real {margem}%
                           {fee > 0 && ` · taxa ${fee}%`}
@@ -463,7 +463,7 @@ export function ProductDetail({
                     <>
                       {pairPartner.name} — par por{' '}
                       <span className="font-medium">{BRL(pairPriceShown)}</span>
-                      <span className="block text-xs text-gray-400">
+                      <span className="block text-xs text-gray-500">
                         avulsos: {BRL(Number(product.salePrice) + Number(pairPartner.salePrice))}
                         {pairLockedByOther && ' · cadastrado no outro produto'}
                       </span>
@@ -474,18 +474,18 @@ export function ProductDetail({
               <div className="col-span-2 sm:col-span-3">
                 <dt className={labelCls}>Descrição / observação</dt>
                 <dd className="whitespace-pre-wrap text-sm text-gray-900">
-                  {product.description || <span className="text-gray-400">—</span>}
+                  {product.description || <span className="text-gray-500">—</span>}
                 </dd>
               </div>
             </dl>
 
             {/* Autoria (ADR-010) — quem cadastrou e quem alterou por último. */}
-            <div className="mt-4 grid grid-cols-2 gap-4 border-t border-gray-100 pt-3 text-xs text-gray-500">
+            <div className="mt-4 grid grid-cols-2 gap-4 border-t border-gray-100 pt-3 text-xs text-gray-600">
               <div>Cadastrado por {byLine(product.createdByName, product.createdAt)}</div>
               <div>Última alteração {byLine(product.updatedByName, product.updatedAt)}</div>
             </div>
 
-            <p className="mt-3 text-xs text-gray-400">
+            <p className="mt-3 text-xs text-gray-500">
               O estoque não se edita pelo cadastro — o saldo só muda por movimentação, na tela
               de Estoque (ADR-001).
             </p>
@@ -712,14 +712,14 @@ export function ProductDetail({
                     className={inputCls}
                   />
                 </div>
-                <p className="mt-2 text-xs text-gray-500">
+                <p className="mt-2 text-xs text-gray-600">
                   Custo e preço acima são da <strong>{unitTypeLabels[form.unit]} inteira</strong>. O
                   estoque é contado em metros. Preço por metro vazio ⇒ só vende inteiro.
                 </p>
               </fieldset>
             ) : (
               <fieldset className="rounded-xl border border-dashed border-gray-300 p-3 sm:col-span-6">
-                <legend className="px-1 text-xs font-medium text-gray-500">
+                <legend className="px-1 text-xs font-medium text-gray-600">
                   Venda em unidade alternativa (opcional)
                 </legend>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -759,11 +759,11 @@ export function ProductDetail({
 
             {/* Produto agregado — venda em par (ADR-015). */}
             <fieldset className="rounded-xl border border-dashed border-gray-300 p-3 sm:col-span-6">
-              <legend className="px-1 text-xs font-medium text-gray-500">
+              <legend className="px-1 text-xs font-medium text-gray-600">
                 Vendido em par (opcional) — ex.: parafuso + bucha
               </legend>
               {pairLockedByOther ? (
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-gray-600">
                   Este par está cadastrado em <strong>{pairedFromOther?.name}</strong> e já vale
                   para os dois lados. Para alterar o preço do par, edite aquele produto.
                 </p>
@@ -797,7 +797,7 @@ export function ProductDetail({
                   </div>
                   {/* Mostra o que o cliente economiza — confere o preço na hora de cadastrar. */}
                   {form.pairedProductId && Number(form.pairPrice) > 0 && (
-                    <p className="mt-2 text-xs text-gray-500">
+                    <p className="mt-2 text-xs text-gray-600">
                       Avulsos:{' '}
                       {BRL(
                         Number(form.salePrice || 0) +
@@ -808,7 +808,7 @@ export function ProductDetail({
                       · no par: {BRL(Number(form.pairPrice))}
                     </p>
                   )}
-                  <p className="mt-2 text-xs text-gray-400">
+                  <p className="mt-2 text-xs text-gray-500">
                     O preço é o total dos dois juntos. Vale para os dois lados — não precisa
                     cadastrar de novo no outro produto.
                   </p>
@@ -818,7 +818,7 @@ export function ProductDetail({
 
             {/* Acréscimo por forma de pagamento (ADR-016) — opt-in por produto. */}
             <fieldset className="rounded-xl border border-dashed border-gray-300 p-3 sm:col-span-6">
-              <legend className="px-1 text-xs font-medium text-gray-500">
+              <legend className="px-1 text-xs font-medium text-gray-600">
                 Acréscimo por forma de pagamento — quanto o preço SOBE no cartão
               </legend>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -840,7 +840,7 @@ export function ProductDetail({
               {/* Prévia do preço resultante — evita a confusão "digitei o preço final?". */}
               {Number(form.salePrice) > 0 &&
               (Number(form.surchargeDebit) > 0 || Number(form.surchargeCredit) > 0) ? (
-                <p className="mt-2 text-xs text-gray-500">
+                <p className="mt-2 text-xs text-gray-600">
                   À vista {BRL(form.salePrice)} · no débito{' '}
                   <strong>
                     {BRL(Number(form.salePrice) + (Number(form.surchargeDebit) || 0))}
@@ -851,7 +851,7 @@ export function ProductDetail({
                   </strong>
                 </p>
               ) : (
-                <p className="mt-2 text-xs text-gray-400">
+                <p className="mt-2 text-xs text-gray-500">
                   Vazio = mesmo preço em qualquer forma de pagamento. Dinheiro e PIX nunca têm
                   acréscimo.
                 </p>

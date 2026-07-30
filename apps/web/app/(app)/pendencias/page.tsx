@@ -89,7 +89,7 @@ export default function PendenciasPage() {
     }
   }
 
-  if (!ready) return <p className="text-gray-500">Carregando…</p>;
+  if (!ready) return <p className="text-gray-600">Carregando…</p>;
 
   // Ordena por seq (FIFO). SYNCED (raro — podado após o dreno) fica por último, informativo.
   const rows = [...items].sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
@@ -110,7 +110,7 @@ export default function PendenciasPage() {
         )}
       </div>
 
-      <p className="mb-4 text-sm text-gray-500">
+      <p className="mb-4 text-sm text-gray-600">
         Vendas salvas neste aparelho que ainda não chegaram ao servidor. As <strong>pendentes</strong>{' '}
         sincronizam sozinhas quando a conexão volta; as <strong>com falha</strong> precisam de atenção.
       </p>
@@ -122,7 +122,7 @@ export default function PendenciasPage() {
       )}
 
       {rows.length === 0 ? (
-        <div className="rounded-2xl bg-white p-8 text-center text-gray-500 shadow-sm">
+        <div className="rounded-2xl bg-white p-8 text-center text-gray-600 shadow-sm">
           <p className="mb-3">Nenhuma venda na fila. Tudo sincronizado. ✅</p>
           <Link href="/venda" className="text-sm font-medium text-indigo-600 hover:underline">
             Ir para Nova Venda
@@ -143,14 +143,14 @@ export default function PendenciasPage() {
                     <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${meta.className}`}>
                       {meta.label}
                     </span>
-                    <span className="font-mono text-xs text-gray-400">
+                    <span className="font-mono text-xs text-gray-500">
                       #{rec.envelope.entityId.slice(0, 8)}
                     </span>
                   </div>
                   <span className="text-sm font-semibold">{BRL(total)}</span>
                 </div>
 
-                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600">
                   <span>
                     {itemCount} {itemCount === 1 ? 'item' : 'itens'}
                   </span>

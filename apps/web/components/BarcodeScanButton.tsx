@@ -186,7 +186,7 @@ export function BarcodeScanButton({ onScan, label = 'Escanear', className }: Pro
                 <video ref={videoRef} className="h-auto w-full" muted playsInline />
               </div>
             )}
-            <p className="mt-3 text-center text-xs text-gray-500">
+            <p className="mt-3 text-center text-xs text-gray-600">
               Aponte a câmera para o código de barras do produto.
             </p>
           </div>

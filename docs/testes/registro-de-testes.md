@@ -3837,6 +3837,35 @@ componente **`QtyInput`**: rascunho de texto interno (apaga/digita livre), comit
 |---|---|---|
 | Typecheck `apps/web` (`tsc --noEmit`) | sem erros | ✅ |
 | Build de produção (`next build`) | rota `/venda` gerada | ✅ 19 rotas (`/venda` 13.6 kB) |
-| **E2E do Owner (celular real)** — carrinho com itens não estica a página; qtd apaga e digita | ⏭️ pendente |
+| `npm run deploy` (web) + `postdeploy` (smoke do CSS) | publicado + smoke OK | ✅ versão `ddf86898` |
+| **E2E do Owner (celular real)** — carrinho com itens não estica a página; qtd apaga e digita | ✅ "tudo certo, nos dois pontos" |
 
-> **Falta:** deploy do web + E2E do Owner no celular. **Próximo:** ADR-020 (retirada / entrega futura).
+> Commit `3140118`. **Fatia UI.PDV.MobileQty CONCLUÍDA.** Em seguida (mesmo dia): polimento visual —
+> "Falta receber" em vermelho + azul/textos mais vivos (ver "UI.Tema.Contraste").
+
+---
+
+### UI.Tema.Contraste — polimento visual (todas as telas) (2026-07-30)
+
+Três pedidos de UX do Owner, **100% de apresentação (sem API, sem migration)**.
+
+**(1) "Falta receber" em vermelho** no painel de recebimento do PDV ([venda/page.tsx](../../apps/web/app/(app)/venda/page.tsx)),
+simétrico ao **Troco em verde** (`text-red-800/700`).
+
+**(2) Cabeçalhos de tabela mais vivos.** O Owner apontou os `<thead>` (as "barras" no topo das tabelas —
+Carrinho, Produtos, Estoque, Relatórios etc.), hoje `bg-gray-100` (um cinza que puxa para o azul-clarinho).
+Sobre um preview de +1/+2 tons, escolheu **+2**: `bg-gray-100 text-gray-600` → **`bg-blue-200 text-blue-900`**
+em todas as telas (10 cabeçalhos padrão + 2 de sub-tabela). O `<thead>` âmbar da "Reposição de estoque" e os
+comprovantes (`ReceiptPrint`) ficaram de fora (intencional).
+
+**(3) Textos cinzas um tom mais escuros** (mantendo os tamanhos), em todas as telas: `text-gray-400`→`500`
+(110×) e `text-gray-500`→`600` (154×). Aplicado por script único (28 arquivos), na ordem 500→600 **antes**
+de 400→500 para nenhum texto pular dois tons.
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Typecheck `apps/web` (`tsc --noEmit`) | sem erros | ✅ |
+| Build de produção (`next build`) | sem erros | ✅ 19 rotas |
+| Conferência visual do Owner (cabeçalhos azul-200, textos mais nítidos) | — | ⏭️ pendente (deploy do web) |
+
+> **Falta:** deploy do web + conferência visual do Owner. **Próximo:** ADR-020 (retirada / entrega futura).

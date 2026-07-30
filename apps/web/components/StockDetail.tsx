@@ -150,11 +150,11 @@ export function StockDetail({
     conversionFactor: product.conversionFactor != null ? Number(product.conversionFactor) : null,
   });
 
-  const labelCls = 'text-xs font-medium text-gray-500';
+  const labelCls = 'text-xs font-medium text-gray-600';
   const Row = ({ label, value }: { label: string; value: React.ReactNode }) => (
     <div>
       <dt className={labelCls}>{label}</dt>
-      <dd className="text-sm text-gray-900">{value || <span className="text-gray-400">—</span>}</dd>
+      <dd className="text-sm text-gray-900">{value || <span className="text-gray-500">—</span>}</dd>
     </div>
   );
 
@@ -173,7 +173,7 @@ export function StockDetail({
         <div className="mb-4 flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h2 className="truncate text-lg font-bold">{product.name}</h2>
-            <p className="truncate text-xs text-gray-500">
+            <p className="truncate text-xs text-gray-600">
               {product.sku}
               {product.manufacturer ? ` · ${product.manufacturer}` : ''}
             </p>
@@ -181,7 +181,7 @@ export function StockDetail({
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded-lg px-2 py-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+            className="shrink-0 rounded-lg px-2 py-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
             aria-label="Fechar"
           >
             ✕
@@ -237,14 +237,14 @@ export function StockDetail({
         <div className="mt-5 border-t border-gray-100 pt-4">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <h3 className="font-semibold">Movimentações</h3>
-            <span className="text-xs text-gray-400">
+            <span className="text-xs text-gray-500">
               {filtered.length} de {movements.length}
             </span>
           </div>
 
           {/* Filtros do histórico */}
           <div className="mb-3 flex flex-wrap items-end gap-2">
-            <label className="flex flex-col text-xs text-gray-500">
+            <label className="flex flex-col text-xs text-gray-600">
               Tipo
               <select
                 value={filters.type}
@@ -256,7 +256,7 @@ export function StockDetail({
                 <option value="EXPENSE">Saída</option>
               </select>
             </label>
-            <label className="flex flex-col text-xs text-gray-500">
+            <label className="flex flex-col text-xs text-gray-600">
               Motivo
               <input
                 value={filters.reason}
@@ -265,7 +265,7 @@ export function StockDetail({
                 className="mt-1 rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-gray-900"
               />
             </label>
-            <label className="flex flex-col text-xs text-gray-500">
+            <label className="flex flex-col text-xs text-gray-600">
               De
               <input
                 type="date"
@@ -274,7 +274,7 @@ export function StockDetail({
                 className="mt-1 rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-gray-900"
               />
             </label>
-            <label className="flex flex-col text-xs text-gray-500">
+            <label className="flex flex-col text-xs text-gray-600">
               Até
               <input
                 type="date"
@@ -295,11 +295,11 @@ export function StockDetail({
           </div>
 
           {loading ? (
-            <p className="py-6 text-center text-sm text-gray-400">Carregando movimentações…</p>
+            <p className="py-6 text-center text-sm text-gray-500">Carregando movimentações…</p>
           ) : error ? (
             <p className="py-6 text-center text-sm text-red-600">{error}</p>
           ) : filtered.length === 0 ? (
-            <p className="py-6 text-center text-sm text-gray-400">
+            <p className="py-6 text-center text-sm text-gray-500">
               {movements.length === 0
                 ? 'Nenhuma movimentação para este produto.'
                 : 'Nenhuma movimentação para os filtros selecionados.'}
@@ -308,7 +308,7 @@ export function StockDetail({
             <>
               <div className="overflow-x-auto rounded-xl border border-gray-100">
                 <table className="w-full text-sm">
-                  <thead className="bg-gray-50 text-left text-gray-600">
+                  <thead className="bg-blue-200 text-left text-blue-900">
                     <tr>
                       <th className="px-3 py-2">Data</th>
                       <th className="px-3 py-2">Tipo</th>
@@ -321,7 +321,7 @@ export function StockDetail({
                   <tbody>
                     {filtered.slice(0, limit).map((m) => (
                       <tr key={m.id} className="border-t border-gray-100">
-                        <td className="whitespace-nowrap px-3 py-2 text-gray-500">
+                        <td className="whitespace-nowrap px-3 py-2 text-gray-600">
                           {DATETIME(m.createdAt)}
                         </td>
                         <td className="px-3 py-2">
@@ -336,14 +336,14 @@ export function StockDetail({
                           </span>
                         </td>
                         <td className="px-3 py-2 text-right">{QTY(m.quantity)}</td>
-                        <td className="px-3 py-2 text-right text-gray-500">
+                        <td className="px-3 py-2 text-right text-gray-600">
                           {m.unitCost ? BRL(m.unitCost) : '—'}
                         </td>
                         <td className="px-3 py-2 text-gray-600">
                           {m.reason ?? '—'}
                           {m.supplier?.name ? ` · ${m.supplier.name}` : ''}
                         </td>
-                        <td className="px-3 py-2 text-gray-500">{m.registeredByName ?? '—'}</td>
+                        <td className="px-3 py-2 text-gray-600">{m.registeredByName ?? '—'}</td>
                       </tr>
                     ))}
                   </tbody>
