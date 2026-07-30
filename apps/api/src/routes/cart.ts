@@ -78,18 +78,32 @@ cart.post('/', async (c) => {
   }
 });
 
-/** Limpa a cesta do usuário (ao concluir a venda ou no "Limpar carrinho"). Idempotente. */
+/**
+ * Limpa a cesta do usuário (ao concluir a venda ou no "Limpar carrinho"). Idempotente.
+ *
+ * ⚠️ NÃO apaga a linha — grava a cesta **vazia** com um `updatedAt` NOVO (tombstone datado).
+ * Apagar a linha faria o `GET /cart` devolver `updatedAt: null`, que o cliente lê como época 0
+ * (muito velho): qualquer OUTRO aparelho com o espelho local ainda cheio venceria o last-write-wins
+ * (`localMs > 0`) e **RESSUSCITARIA a cesta excluída** (bug 2026-07-30). Uma cesta vazia carimbada
+ * agora vence os espelhos antigos ⇒ todos os aparelhos convergem para vazio. Continua idempotente.
+ */
 cart.delete('/', async (c) => {
+  const tenantId = getTenantId(c);
   const userId = c.get('userId');
   const connectionString = getConnectionString(c.env);
-  if (!userId || !connectionString) {
+  if (!tenantId || !userId || !connectionString) {
     return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
   }
   try {
     const prisma = createPrismaClient(connectionString);
-    // `deleteMany` não estoura quando a linha não existe (idempotente — limpar cesta já vazia é OK).
-    await prisma.cart.deleteMany({ where: { userId } });
-    return c.json({ ok: true, data: { cleared: true } });
+    const now = new Date();
+    const row = await prisma.cart.upsert({
+      where: { userId },
+      create: { userId, tenantId, items: [], updatedAt: now },
+      update: { items: [], updatedAt: now },
+      select: { updatedAt: true },
+    });
+    return c.json({ ok: true, data: { cleared: true, updatedAt: row.updatedAt } });
   } catch (err) {
     console.error('DELETE /cart falhou:', err);
     return c.json({ ok: false, error: 'Falha ao limpar a cesta.' }, 500);
