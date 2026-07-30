@@ -3,7 +3,37 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-29 — **Cesta persistente sincronizada (carrinho do PDV por
+> **Última atualização:** 2026-07-30 — **Cesta (ADR-021) NO AR + 🐞 bug do DELETE (ressurreição)
+> corrigido — E2E do Owner VALIDADO · trava de regressão do "abre sem CSS" · 2 ajustes de UI no PDV.**
+> **(1) Cesta:** deploy de API+web da ADR-021; no E2E do Owner surgiu um **bug de sincronização**: ao
+> **excluir** a cesta num aparelho, ela **ressuscitava** nos outros ("volta como se nunca tivesse sido
+> excluída"; o navegador do celular tinha armazenamento separado do PWA, o que embaralhava o sintoma).
+> **Causa raiz:** o `DELETE /cart` fazia `deleteMany` e **apagava a linha** → o `GET` devolvia
+> `updatedAt: null`, lido no cliente como época 0 (muito velho); qualquer aparelho com o **espelho local
+> ainda cheio** (`localMs > 0`) vencia o last-write-wins e **re-enviava os itens excluídos**. **Correção:**
+> o DELETE não apaga mais a linha — faz upsert da cesta **vazia com `updatedAt` novo** (tombstone datado):
+> "cesta limpa" vira um estado datado *agora* que vence os espelhos antigos ⇒ todos os aparelhos convergem
+> para vazio, deterministicamente. **Sem migration.** Typecheck API ✅. **NO AR:** API `bd036f55`; smoke ✅
+> (health 200, `DELETE`/`GET /cart` sem token 401). **E2E do Owner VALIDADO (2026-07-30):** "funcionou
+> corretamente". Commit `5635495`. **(2) CSS "abre sem estilo" — trava de regressão:** as correções já no
+> ar (force-dynamic + `no-store` nos documentos + predeploy clean + SW v4) mataram a causa raiz (HTML preso
+> no cache de borda apontando p/ hash de CSS que sumiu no deploy); para **garantir que não volte**, novo
+> `apps/web/scripts/verify-deploy.mjs` — falha (exit 1) se o HTML voltar a ser cacheável (sem `no-store` /
+> com `s-maxage`) **ou** se algum CSS `/_next/static` referenciado der ≠ 200 — ligado como **`postdeploy`**,
+> roda sozinho após todo `npm run deploy` do web (deixa de depender de conferência manual). Validado contra
+> produção ✅ (mesmo commit `5635495`). **(3) PDV — 2 ajustes de UI** (web-only, sem API/migration): **(a)
+> overflow no celular** — ao pôr itens no carrinho a tabela esticava a **página inteira** e "sambava" (o
+> grid do PDV não definia colunas no mobile ⇒ coluna `auto` = largura do conteúdo, e `min-width:auto` de
+> item de grid não encolhe); colunas → `minmax(0,…)` + `min-w-0` nos 4 blocos ⇒ a tabela rola dentro do
+> próprio card, a página fica estática. **(b) campo de quantidade travado** — o `<input type="number">`
+> controlado pelo número não deixava **apagar** para digitar outro (voltava ao valor na hora); novo
+> componente **`QtyInput`** (rascunho de texto interno: apaga/digita livre, comita só número válido, no
+> `blur` volta ao valor real com a **mesma trava de estoque** do `changeLineQty`). Gates: typecheck web ✅,
+> build web (19 rotas, `/venda` 13.6 kB) ✅. **Falta:** deploy do web + E2E do Owner no celular. Ver
+> "UI.PDV.MobileQty" no registro. **Próximo passo (combinado antes):** **ADR-020 — retirada / entrega
+> futura.**
+>
+> **Antes:** 2026-07-29 — **Cesta persistente sincronizada (carrinho do PDV por
 > usuário, entre dispositivos) — ADR-021 — CÓDIGO PRONTO, aguardando deploy + E2E do Owner.**
 > Pedido do Owner (antes de ADR-020): o carrinho da Nova Venda vivia só em `useState` e **se perdia**
 > ao trocar de tela/recarregar. Agora vira **"Cesta"**: persiste, **segue o usuário entre

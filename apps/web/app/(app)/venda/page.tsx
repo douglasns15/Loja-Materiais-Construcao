@@ -248,6 +248,51 @@ function PaymentsLines({ payments, change }: { payments: PaidPart[]; change: num
   );
 }
 
+/**
+ * Campo de quantidade do carrinho. Mantém um **rascunho** de texto interno para que o operador possa
+ * **apagar o campo** e digitar um novo número. Um `<input type="number">` controlado por `value={quantity}`
+ * "trava" a edição: ao apagar tudo, o campo volta ao número na hora (não dá para limpar e digitar de novo).
+ * Aqui o rascunho espelha o valor real enquanto não há edição; ao digitar, comita só quando há número
+ * válido; ao sair do campo (`blur`), volta a espelhar o valor real — o que aplica a trava de estoque do
+ * `changeLineQty` e descarta um campo deixado vazio. Assinatura enxuta: `value` + `onCommit`.
+ */
+function QtyInput({
+  value,
+  step,
+  min,
+  onCommit,
+  ariaLabel,
+  className,
+}: {
+  value: number;
+  step: string;
+  min: string;
+  onCommit: (n: number) => void;
+  ariaLabel: string;
+  className?: string;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  return (
+    <input
+      type="number"
+      min={min}
+      step={step}
+      value={draft ?? String(value)}
+      onChange={(e) => {
+        const raw = e.target.value;
+        setDraft(raw); // deixa o campo vazio/parcial existir enquanto o operador digita
+        if (raw !== '') {
+          const n = Number(raw);
+          if (Number.isFinite(n)) onCommit(n);
+        }
+      }}
+      onBlur={() => setDraft(null)} // volta a espelhar o valor real (trava de estoque / limpa vazio)
+      className={className}
+      aria-label={ariaLabel}
+    />
+  );
+}
+
 export default function VendaPage() {
   const { me, offlineSales } = useMe();
   const online = useOnline();
@@ -1318,8 +1363,12 @@ export default function VendaPage() {
           busca à DIREITA (fixa ao rolar, resultados só ao digitar). No celular/tablet volta a
           empilhar na ordem do DOM (busca, carrinho, pagamento, total). Posicionamento explícito de
           grid evita reordenar o DOM — cada bloco escolhe sua coluna/linha. */}
-      <div className="grid items-start gap-4 lg:[grid-template-columns:1.4fr_1fr]">
-      <div className="rounded-2xl bg-white p-4 shadow-sm lg:sticky lg:top-4 lg:col-start-2 lg:row-start-1">
+      {/* Colunas com `minmax(0,…)` (não `1fr`, que tem mínimo `auto`) para que a coluna possa
+          ENCOLHER abaixo do conteúdo — sem isso, a tabela larga do carrinho estica a coluna e a
+          página inteira no celular (em vez de rolar dentro do próprio `overflow-x-auto`). No mobile
+          é uma coluna única `minmax(0,1fr)`; no desktop, as duas colunas do PDV. */}
+      <div className="grid items-start gap-4 [grid-template-columns:minmax(0,1fr)] lg:[grid-template-columns:minmax(0,1.4fr)_minmax(0,1fr)]">
+      <div className="min-w-0 rounded-2xl bg-white p-4 shadow-sm lg:sticky lg:top-4 lg:col-start-2 lg:row-start-1">
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex basis-full gap-2">
             <input
@@ -1531,7 +1580,7 @@ export default function VendaPage() {
       </div>
 
       {/* Coluna esquerda (protagonista): carrinho no topo. */}
-      <div className="rounded-2xl bg-white shadow-sm lg:col-start-1 lg:row-start-1">
+      <div className="min-w-0 rounded-2xl bg-white shadow-sm lg:col-start-1 lg:row-start-1">
         {/* Cabeçalho do carrinho: título + botão "Limpar carrinho" (só com itens). */}
         <div className="flex items-center justify-between gap-2 border-b border-gray-100 px-4 py-2">
           <span className="text-sm font-medium text-gray-700">
@@ -1634,19 +1683,13 @@ export default function VendaPage() {
                       >
                         −
                       </button>
-                      <input
-                        type="number"
+                      <QtyInput
+                        value={i.quantity}
                         min="0"
                         step={isMeterLine(i) ? '0.5' : '1'}
-                        value={i.quantity}
-                        onChange={(e) => {
-                          // Campo vazio não remove (só o botão "remover" tira a linha); ao apagar,
-                          // deixa o operador digitar o novo valor sem sumir a linha.
-                          if (e.target.value === '') return;
-                          changeLineQty(i.key, Number(e.target.value));
-                        }}
+                        onCommit={(n) => changeLineQty(i.key, n)}
                         className="w-14 rounded border border-gray-300 px-1 py-1 text-right"
-                        aria-label={`Quantidade de ${i.name}`}
+                        ariaLabel={`Quantidade de ${i.name}`}
                       />
                       <button
                         type="button"
@@ -1681,7 +1724,7 @@ export default function VendaPage() {
       </div>
 
       {/* Coluna esquerda: pagamento (linha 2). */}
-      <div className="space-y-3 rounded-2xl bg-white p-4 shadow-sm lg:col-start-1 lg:row-start-2">
+      <div className="min-w-0 space-y-3 rounded-2xl bg-white p-4 shadow-sm lg:col-start-1 lg:row-start-2">
           <div className="flex items-center justify-between">
             <label className="block text-sm font-medium">Formas de pagamento</label>
             <button
@@ -1891,7 +1934,7 @@ export default function VendaPage() {
         </div>
 
         {/* Coluna esquerda: total + desconto + ações (linha 3). */}
-        <div className="flex flex-col justify-between rounded-2xl bg-white p-4 shadow-sm lg:col-start-1 lg:row-start-3">
+        <div className="flex min-w-0 flex-col justify-between rounded-2xl bg-white p-4 shadow-sm lg:col-start-1 lg:row-start-3">
           <div>
             <div className="space-y-1 text-sm">
               <div className="flex justify-between text-gray-500">

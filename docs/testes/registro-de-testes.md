@@ -3766,3 +3766,77 @@ continuam; (c) **outro dispositivo/navegador, mesmo usuário** → cesta aparece
 fechar a aba com itens → alerta; (e) ícone no topo mostra a contagem e some ao zerar; (f) "i" abre as infos
 do item; (g) concluir venda → cesta zera em todos os aparelhos; (h) outro usuário no mesmo aparelho **não**
 vê a cesta alheia. **Falta:** deploy (API+web) + E2E. Ver ADR-021. **Próximo:** ADR-020 (retirada / entrega).
+
+---
+
+### ADR-021.fix — Cesta: bug do DELETE (ressurreição entre dispositivos) (2026-07-30)
+
+Deploy da ADR-021 feito (API+web) e E2E do Owner iniciado. **Bug de sincronização reportado:** item posto
+no carrinho pelo PWA do PC aparecia no PWA do celular (OK), mas ao **excluir** pelo PC o item **continuava**
+no celular e **voltava** no PC ao reabrir, "como se nunca tivesse sido excluído". (O navegador do celular
+tinha `localStorage` separado do PWA instalado, o que embaralhava o sintoma até tudo reconciliar.)
+
+**Causa raiz:** `DELETE /cart` fazia `deleteMany` e **apagava a linha**. Sem linha, `GET /cart` devolve
+`updatedAt: null`, que o cliente lê como **época 0** (muito velho). Qualquer outro aparelho com o **espelho
+local ainda cheio** (`localMs > 0`) concluía no last-write-wins ([cartStore.tsx](../../apps/web/lib/cartStore.tsx),
+`reconcile`) que "o local é mais novo" e **re-enviava os itens excluídos** → a cesta ressuscitava.
+
+**Correção ([cart.ts](../../apps/api/src/routes/cart.ts)):** o DELETE não apaga mais a linha — faz `upsert`
+da cesta **vazia com `updatedAt` novo** (tombstone datado). "Cesta limpa" passa a ser um estado **datado
+agora**, que vence os espelhos antigos ⇒ todos os aparelhos convergem para vazio. Idempotente. **Sem migration.**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Typecheck `apps/api` (`tsc --noEmit`) | sem erros | ✅ |
+| `wrangler deploy` (API) | publicado | ✅ versão `bd036f55` |
+| Smoke `GET /health` | 200 | ✅ |
+| Smoke `DELETE /cart` sem token | 401 (rota existe, exige auth) | ✅ |
+| Smoke `GET /cart` sem token | 401 | ✅ |
+| **E2E do Owner** — excluir num aparelho → some nos outros e **não** volta ao reabrir | não ressuscita | ✅ "funcionou corretamente" |
+
+> Commit `5635495`. Ver "ADR-021.fix" no ROADMAP.
+
+---
+
+### CSS — trava de regressão do "abre sem CSS após deploy" (2026-07-30)
+
+O incidente 2026-07-29 (página sem estilo após deploy, por HTML preso no cache de borda apontando para hash
+de CSS que sumiu) foi resolvido na origem (force-dynamic + `no-store` nos documentos + `predeploy clean` +
+SW `v4`). Para **garantir que não regrida**, novo smoke automático
+[`apps/web/scripts/verify-deploy.mjs`](../../apps/web/scripts/verify-deploy.mjs), ligado como **`postdeploy`**
+(roda após todo `npm run deploy` do web).
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| HTML do documento (`/login`) volta com `Cache-Control` | contém `no-store`, **sem** `s-maxage` | ✅ `no-store, must-revalidate` |
+| Todo CSS `/_next/static/*.css` referenciado no HTML | 200 | ✅ |
+| Smoke falha (exit 1) se qualquer invariante regredir | trava o deploy | ✅ (por construção) |
+
+> Validado contra produção atual. Commit `5635495`.
+
+---
+
+### UI.PDV.MobileQty — PDV: overflow no celular + campo de quantidade editável (2026-07-30)
+
+Dois ajustes de UI no PDV reportados pelo Owner (web-only, **sem API/migration**). Ambos em
+[`venda/page.tsx`](../../apps/web/app/(app)/venda/page.tsx).
+
+**(1) Overflow no celular.** Ao pôr itens no carrinho, a tabela esticava a **página inteira** ("sambava",
+arrastava para a direita); sem itens, ficava estática. A tabela já vivia em `overflow-x-auto`, mas o
+container do PDV é um **grid sem colunas definidas no mobile** ⇒ coluna `auto` (largura do conteúdo), e
+`min-width:auto` de item de grid não encolhe abaixo do conteúdo. Colunas → `minmax(0,…)` (mobile 1 coluna,
+desktop as 2 do PDV) + `min-w-0` nos 4 blocos ⇒ a tabela rola **dentro do próprio card**.
+
+**(2) Campo de quantidade travado.** No carrinho, dava para editar dígitos mas **não apagar** para digitar
+outro (o `<input type="number">` controlado por `value={quantity}` voltava ao número na hora). Novo
+componente **`QtyInput`**: rascunho de texto interno (apaga/digita livre), comita só número válido via
+`onCommit`, e no `blur` volta a espelhar o valor real — o que aplica a **mesma trava de estoque** do
+`changeLineQty` e descarta um campo vazio.
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Typecheck `apps/web` (`tsc --noEmit`) | sem erros | ✅ |
+| Build de produção (`next build`) | rota `/venda` gerada | ✅ 19 rotas (`/venda` 13.6 kB) |
+| **E2E do Owner (celular real)** — carrinho com itens não estica a página; qtd apaga e digita | ⏭️ pendente |
+
+> **Falta:** deploy do web + E2E do Owner no celular. **Próximo:** ADR-020 (retirada / entrega futura).
