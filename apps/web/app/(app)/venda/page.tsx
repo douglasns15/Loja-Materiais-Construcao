@@ -351,6 +351,9 @@ export default function VendaPage() {
   const [pickupDate, setPickupDate] = useState('');
   const [perItemSchedule, setPerItemSchedule] = useState(false);
   const [itemPickupDates, setItemPickupDates] = useState<Record<string, string>>({});
+  // Observação livre do PEDIDO (ADR-020): informações gerais que quem abrir a Entrega precisa ver
+  // (ex.: "quem retira não é quem comprou"). Vai em `Order.notes` e aparece no detalhe da Entrega.
+  const [orderNote, setOrderNote] = useState('');
 
   async function loadProducts() {
     const raw = await apiGet<(Product & { reservedQty?: string })[]>('/products');
@@ -1124,13 +1127,17 @@ export default function VendaPage() {
       ...(isCredit
         ? { customerId, creditAmount: creditValue, ...(dueDate ? { dueDate } : {}) }
         : {}),
-      // Retirada/entrega futura (ADR-020): modo SCHEDULED + previsão (única ou por item). A data
-      // por item já vai anexada em cada item por `cartToSaleItems`. Compõe com o fiado acima.
+      // Cliente do pedido (ADR-020): na retirada futura o cliente é OPCIONAL, mas quando informado
+      // é gravado p/ a Entrega sair com nome. (No fiado o `customerId` já entra acima.)
+      ...(!isCredit && isScheduled && customerId ? { customerId } : {}),
+      // Retirada/entrega futura (ADR-020): modo SCHEDULED + previsão (única ou por item) + a
+      // observação livre do pedido. A data por item já vai anexada em cada item por `cartToSaleItems`.
       ...(isScheduled
         ? {
             deliveryMode: 'SCHEDULED' as const,
             perItemSchedule,
             ...(!perItemSchedule && pickupDate ? { scheduledPickupAt: pickupDate } : {}),
+            ...(orderNote.trim() ? { notes: orderNote.trim() } : {}),
           }
         : {}),
     };
@@ -1214,6 +1221,60 @@ export default function VendaPage() {
     setPickupDate('');
     setPerItemSchedule(false);
     setItemPickupDates({});
+    setOrderNote('');
+  }
+
+  /** Seletor de cliente (busca no servidor por nome) reusado no fiado (obrigatório) e na retirada
+   *  futura (opcional). Os dois recursos compartilham o cliente do pedido, então usam o MESMO
+   *  estado. `accent` casa a cor da borda com o bloco (âmbar no fiado, índigo na retirada). */
+  function renderCustomerPicker(accent: string) {
+    return customerId ? (
+      <div className="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-sm ring-1 ring-gray-200">
+        <span className="min-w-0 truncate">
+          Cliente: <strong>{customerName}</strong>
+        </span>
+        <button
+          type="button"
+          onClick={() => {
+            setCustomerId('');
+            setCustomerName('');
+            setCustomerQuery('');
+          }}
+          className="shrink-0 text-blue-600 hover:underline"
+        >
+          trocar
+        </button>
+      </div>
+    ) : (
+      <div>
+        <input
+          value={customerQuery}
+          onChange={(e) => setCustomerQuery(e.target.value)}
+          placeholder="Buscar cliente por nome…"
+          className={`w-full rounded-lg border ${accent} bg-white px-3 py-2 text-sm`}
+        />
+        {customerOptions.length > 0 && (
+          <ul className="mt-1 max-h-40 overflow-y-auto rounded-lg border border-gray-200 bg-white text-sm shadow-sm">
+            {customerOptions.map((o) => (
+              <li key={o.id}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCustomerId(o.id);
+                    setCustomerName(o.name);
+                    setCustomerQuery('');
+                    setCustomerOptions([]);
+                  }}
+                  className="block w-full px-3 py-2 text-left hover:bg-gray-50"
+                >
+                  {o.name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
   }
 
   if (!ready) return <p className="text-gray-600">Carregando…</p>;
@@ -1881,7 +1942,7 @@ export default function VendaPage() {
             <button
               type="button"
               onClick={() => setShowCredit(true)}
-              className="text-sm font-medium text-blue-600 hover:text-blue-700"
+              className="block text-sm font-medium text-blue-600 hover:text-blue-700"
             >
               + Venda a prazo
             </button>
@@ -1917,53 +1978,7 @@ export default function VendaPage() {
                     <span className="font-semibold tabular-nums">{BRL(payableNow)}</span>
                   </div>
                   {/* Cliente devedor (obrigatório): busca no servidor por nome. */}
-                  {customerId ? (
-                    <div className="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-sm ring-1 ring-amber-200">
-                      <span className="min-w-0 truncate">
-                        Cliente: <strong>{customerName}</strong>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCustomerId('');
-                          setCustomerName('');
-                          setCustomerQuery('');
-                        }}
-                        className="shrink-0 text-blue-600 hover:underline"
-                      >
-                        trocar
-                      </button>
-                    </div>
-                  ) : (
-                    <div>
-                      <input
-                        value={customerQuery}
-                        onChange={(e) => setCustomerQuery(e.target.value)}
-                        placeholder="Buscar cliente por nome…"
-                        className="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm"
-                      />
-                      {customerOptions.length > 0 && (
-                        <ul className="mt-1 max-h-40 overflow-y-auto rounded-lg border border-gray-200 bg-white text-sm shadow-sm">
-                          {customerOptions.map((o) => (
-                            <li key={o.id}>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setCustomerId(o.id);
-                                  setCustomerName(o.name);
-                                  setCustomerQuery('');
-                                  setCustomerOptions([]);
-                                }}
-                                className="block w-full px-3 py-2 text-left hover:bg-gray-50"
-                              >
-                                {o.name}
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  )}
+                  {renderCustomerPicker('border-amber-300')}
                   <div className="flex items-center justify-between">
                     <label htmlFor="due" className="text-sm text-gray-600">
                       Vencimento (opcional)
@@ -1993,7 +2008,7 @@ export default function VendaPage() {
             <button
               type="button"
               onClick={() => setShowSchedule(true)}
-              className="text-sm font-medium text-blue-600 hover:text-blue-700"
+              className="mt-2 block text-sm font-medium text-blue-600 hover:text-blue-700"
             >
               + Venda com retirada/entrega posterior
             </button>
@@ -2066,6 +2081,32 @@ export default function VendaPage() {
                   )}
                 </div>
               )}
+
+              {/* Cliente (opcional) — para a Entrega sair com nome. Se o fiado já está ligado, ele
+                  coleta o cliente (mesmo estado), então aqui só aparece quando NÃO é a prazo. */}
+              {!showCredit && (
+                <div>
+                  <label className="mb-1 block text-sm text-gray-600">Cliente (opcional)</label>
+                  {renderCustomerPicker('border-indigo-300')}
+                </div>
+              )}
+
+              {/* Observação livre do pedido — informações gerais que quem abrir a Entrega precisa ver
+                  (ex.: "quem retira não é quem comprou"). Editável também no detalhe da Entrega. */}
+              <div>
+                <label htmlFor="ordernote" className="mb-1 block text-sm text-gray-600">
+                  Observação do pedido (opcional)
+                </label>
+                <textarea
+                  id="ordernote"
+                  value={orderNote}
+                  onChange={(e) => setOrderNote(e.target.value)}
+                  rows={2}
+                  maxLength={500}
+                  placeholder="Ex.: quem vai retirar é o pedreiro João; ligar antes de separar…"
+                  className="w-full rounded-lg border border-indigo-300 bg-white px-3 py-2 text-sm"
+                />
+              </div>
 
               {!online && (
                 <p className="text-xs text-red-600">

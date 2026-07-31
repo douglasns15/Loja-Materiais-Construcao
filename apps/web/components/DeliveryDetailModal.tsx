@@ -7,7 +7,7 @@ import {
   type DeliveryDetail,
   type UnitType,
 } from '@nexoloja/shared';
-import { apiGet, apiPost } from '@/lib/api';
+import { apiGet, apiPatch, apiPost } from '@/lib/api';
 
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -45,6 +45,10 @@ export function DeliveryDetailModal({
   // Rascunho da quantidade a retirar por item (default = o que falta), preenchido ao carregar.
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState('');
+  // Observação LIVRE do pedido (editável): rascunho + estado de salvamento.
+  const [orderNote, setOrderNote] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
+  const [noteSaved, setNoteSaved] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -56,6 +60,8 @@ export function DeliveryDetailModal({
         if (it.remainingBaseQty > 0) d[it.id] = String(qty(it.remainingBaseQty));
       }
       setDraft(d);
+      setOrderNote(data.notes ?? '');
+      setNoteSaved(false);
       setError(null);
     } catch (e) {
       setError((e as Error).message);
@@ -84,6 +90,21 @@ export function DeliveryDetailModal({
       setError((e as Error).message);
     } finally {
       setBusy(false);
+    }
+  }
+
+  /** Salva a observação livre do pedido (Order.notes). */
+  async function saveNote() {
+    setSavingNote(true);
+    setError(null);
+    try {
+      await apiPatch(`/deliveries/${orderId}`, { notes: orderNote.trim() ? orderNote.trim() : null });
+      setNoteSaved(true);
+      setDetail((prev) => (prev ? { ...prev, notes: orderNote.trim() ? orderNote.trim() : null } : prev));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSavingNote(false);
     }
   }
 
@@ -170,6 +191,37 @@ export function DeliveryDetailModal({
             </div>
 
             {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+
+            {/* Observação livre do pedido (editável) — informações gerais p/ quem separa/entrega
+                (ex.: "quem retira não é quem comprou"). Distinta da observação por retirada (log). */}
+            <div className="mb-4">
+              <label htmlFor="ordernote" className="mb-1 block text-sm font-semibold text-gray-700">
+                Observações do pedido
+              </label>
+              <textarea
+                id="ordernote"
+                value={orderNote}
+                onChange={(e) => {
+                  setOrderNote(e.target.value);
+                  setNoteSaved(false);
+                }}
+                rows={2}
+                maxLength={500}
+                placeholder="Ex.: quem vai retirar é o pedreiro João; ligar antes de separar…"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+              <div className="mt-1 flex items-center justify-end gap-2">
+                {noteSaved && <span className="text-xs text-green-700">Salvo ✓</span>}
+                <button
+                  type="button"
+                  onClick={saveNote}
+                  disabled={savingNote || (orderNote.trim() === (detail.notes ?? '').trim())}
+                  className="rounded-lg border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                >
+                  {savingNote ? 'Salvando…' : 'Salvar observação'}
+                </button>
+              </div>
+            </div>
 
             {/* Itens: o que foi vendido, o que já saiu e o que falta; retirada por linha. */}
             <div className="overflow-x-auto rounded-xl border border-gray-100">

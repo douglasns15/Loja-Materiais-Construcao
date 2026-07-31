@@ -28,9 +28,17 @@
 > core **212/212** ✅, typecheck API ✅, dry-run API ✅, build web (**20 rotas**, `/entregas` 3.54 kB,
 > `/venda` 14.2 kB) ✅; migration `0017` aplicada, **sem drift**. **NO AR:** API `0d9ef2bf` + web
 > `1025446e`; smoke ✅ (health 200, `/deliveries` e `/deliveries/:id/deliver` sem token 401, `/orders`
-> 401; postdeploy do web: HTML no-store + CSS 200). **Falta:** **E2E do Owner** (vender com retirada
-> futura → conferir reserva/disponível no PDV → retirar parcial na tela Entregas → retirar o resto →
-> finalizar). Ver ADR-020 (seção "Implementação") e "ADR-020" no registro de testes.
+> 401; postdeploy do web: HTML no-store + CSS 200). **E2E do Owner VALIDADO (2026-07-31):** os 6
+> passos passaram. **3 refinos pedidos no E2E (NO AR):** (a) **espaçamento** entre os links "+ Venda a
+> prazo" e "+ Venda com retirada/entrega posterior" (viraram `block` + `mt-2`); (b) **cliente na
+> retirada futura sem fiado** — o seletor de cliente (extraído p/ `renderCustomerPicker`, reusado nos
+> dois blocos) agora aparece também no bloco de agendamento (cliente **opcional**; antes a Entrega
+> saía "sem nome" quando não era a prazo); (c) **observação livre do pedido** — campo geral no PDV
+> **e editável no detalhe da Entrega** (`Order.notes`; novo `PATCH /deliveries/:id` +
+> `updateOrderNotesSchema`), distinta da "observação da retirada" (que fica no log). Gates: core
+> 212/212, typecheck api/web, build web (20 rotas, `/entregas` 3.86 kB, `/venda` 14.5 kB). **NO AR
+> (refinos):** API `e7e7b7c7` + web `27d7d416`; smoke ✅ (health 200, `PATCH /deliveries/:id` 401).
+> **Falta:** re-teste do Owner dos 3 refinos. Ver ADR-020 e "ADR-020" no registro de testes.
 >
 > **Antes:** 2026-07-30 — **Cesta (ADR-021) NO AR + 🐞 bug do DELETE (ressurreição)
 > corrigido — E2E do Owner VALIDADO · trava de regressão do "abre sem CSS" · 2 ajustes de UI no PDV.**

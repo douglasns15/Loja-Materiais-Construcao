@@ -5,7 +5,7 @@ import {
   orderFulfillmentStatus,
   remainingToDeliver,
 } from '@nexoloja/core';
-import { deliverOrderSchema } from '@nexoloja/shared';
+import { deliverOrderSchema, updateOrderNotesSchema } from '@nexoloja/shared';
 import { type Env, getConnectionString, getTenantId } from '../lib/request';
 import { requireActiveTenant, requireAuth } from '../middleware/auth';
 
@@ -175,6 +175,48 @@ deliveries.get('/:id', async (c) => {
   } catch (err) {
     console.error('GET /deliveries/:id falhou:', err);
     return c.json({ ok: false, error: 'Falha ao abrir o pedido.' }, 500);
+  }
+});
+
+/**
+ * Atualiza a observação LIVRE do pedido de retirada futura (ADR-020) — informação geral que quem
+ * abrir a Entrega precisa ver (ex.: "quem retira não é quem comprou"). Grava em `Order.notes`.
+ * `null`/vazio limpa. Só sobre pedidos SCHEDULED do tenant.
+ */
+deliveries.patch('/:id', requireActiveTenant, async (c) => {
+  const tenantId = getTenantId(c);
+  const connectionString = getConnectionString(c.env);
+  if (!tenantId || !connectionString) {
+    return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
+  }
+  const orderId = c.req.param('id');
+  if (!UUID_RE.test(orderId)) {
+    return c.json({ ok: false, error: 'Pedido não encontrado.' }, 404);
+  }
+  const parsed = updateOrderNotesSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) {
+    return c.json({ ok: false, error: 'Observação inválida.', issues: parsed.error.flatten() }, 400);
+  }
+  const notes = parsed.data.notes?.trim() ? parsed.data.notes.trim() : null;
+
+  try {
+    const prisma = createPrismaClient(connectionString);
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, tenantId, deliveryMode: 'SCHEDULED' },
+      select: { id: true },
+    });
+    if (!order) {
+      return c.json({ ok: false, error: 'Pedido não encontrado.' }, 404);
+    }
+    const updated = await prisma.order.update({
+      where: { id: order.id },
+      data: { notes },
+      select: { id: true, notes: true },
+    });
+    return c.json({ ok: true, data: updated });
+  } catch (err) {
+    console.error('PATCH /deliveries/:id falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao salvar a observação.' }, 500);
   }
 });
 

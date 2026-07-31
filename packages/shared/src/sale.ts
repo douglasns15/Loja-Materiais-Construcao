@@ -131,6 +131,16 @@ export const deliverOrderSchema = z.object({
 export type DeliverOrderInput = z.infer<typeof deliverOrderSchema>;
 
 /**
+ * Atualização da observação LIVRE do pedido de retirada futura (ADR-020) — informação geral que
+ * quem abrir a Entrega precisa ver (ex.: "quem retira não é quem comprou"). Grava em `Order.notes`.
+ * `null`/vazio limpa. Distinta da observação POR RETIRADA (`deliverOrderSchema.notes`), que fica no log.
+ */
+export const updateOrderNotesSchema = z.object({
+  notes: z.string().max(500).nullable(),
+});
+export type UpdateOrderNotesInput = z.infer<typeof updateOrderNotesSchema>;
+
+/**
  * Payload para cancelar uma venda (ADR-004). O motivo é obrigatório porque o
  * cancelamento é um evento crítico auditado (`AuditEvent CANCEL_ORDER`).
  */
