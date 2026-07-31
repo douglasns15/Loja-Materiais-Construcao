@@ -4017,3 +4017,54 @@ enxugando a lista) + a ordenação por clique nos cabeçalhos "funcionou perfeit
 
 > Commits `779f196` (ajustes: rótulo + busca + filtros server-side) + `3158a71` (ordenação das
 > Movimentações). **Fatia UI.Estoque.Ajustes CONCLUÍDA.**
+
+---
+
+## ADR-022 — Conta do cliente (fiado acumulado), Fatia A + A.2 + refinos (2026-07-31)
+
+Conta **implícita** por cliente: adicionar itens = nova venda a prazo que soma na conta; receber
+abate as dívidas FIFO (mais antiga primeiro). Extrato consolidado + alerta de dívida ativa no PDV +
+observação da dívida (separada do cadastro). ADR-022 escrito e aprovado antes de codar.
+
+**Core (Vitest) — `distributeAccountPayment` / `customerAccountBalance`**
+
+| Teste | Resultado |
+|---|---|
+| Saldo da conta = soma dos saldos devedores (com centavos) | ✅ |
+| FIFO: abate a dívida mais antiga primeiro | ✅ |
+| Recebimento menor que a 1ª dívida cai só nela | ✅ |
+| Receber a conta inteira quita todas | ✅ |
+| Pula dívidas com saldo 0 e para quando o valor esgota | ✅ |
+| Distribui em centavos sem estourar (arredondamento) | ✅ |
+| **Total do core** | ✅ **219/219** (+7) |
+
+**Gates (a cada passo)**
+
+| Teste | Resultado |
+|---|---|
+| Typecheck `apps/api` (`tsc --noEmit`) | ✅ |
+| Typecheck `apps/web` (`tsc --noEmit`) | ✅ |
+| Build web (`next build`) | ✅ 20 rotas (`/contas-a-receber` 5.25 kB, `/venda` 14.7 kB) |
+| Dry-run do worker | ✅ |
+| Migration `0018_customer_debt_notes` aplicada + drift | ✅ "No difference detected" |
+
+**Deploy + smoke (2026-07-31)**
+
+| Passo | Resultado |
+|---|---|
+| Deploy API (Fatia A → A.2 → refino) | ✅ `2de4f22c` → `cb507a49` → `271b6b87` → `72cd47d5` |
+| Smoke API: health 200; `/receivables/accounts`, `.../:id/receive`, `.../accounts/:id` sem token 401 | ✅ |
+| Deploy web + `postdeploy` | ✅ `c6e9786d` → `7339e087` → `aced5a65` → `bef084f8` (HTML no-store + CSS 200) |
+
+**E2E do Owner — VALIDADO (2026-07-31)**
+
+| Etapa | Resultado |
+|---|---|
+| Fatia A (conta que soma + receber FIFO + caixa; regressão "Por venda") | ✅ 5/5 "passaram com sucesso" |
+| A.2: extrato consolidado (log vendas+recebimentos) + "+ Adicionar itens" abre PDV | ✅ |
+| A.2: alerta "Dívida ativa" no PDV ao selecionar cliente devedor | ✅ |
+| Refino: observação da dívida **separada** do cadastro, compartilhada por todas as vendas | ✅ "Tudo certo e aprovado" |
+
+> **Fatia A CONCLUÍDA** (A + A.2 + refino da observação). Próximo: **Fatia B** — devolução/troca por
+> item (migration `0019`), abatendo a dívida com excedente em crédito **ou** dinheiro (escolha do
+> operador). Ver ADR-022.

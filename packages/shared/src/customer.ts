@@ -14,8 +14,12 @@ export const createCustomerSchema = z.object({
 });
 export type CreateCustomerInput = z.infer<typeof createCustomerSchema>;
 
-/// Payload para atualizar — todos os campos opcionais.
-export const updateCustomerSchema = createCustomerSchema.partial();
+/// Payload para atualizar — todos os campos opcionais. `debtNotes` (observação da DÍVIDA/conta,
+/// ADR-022) só existe no update — é editado nas telas de Contas a Receber, não no cadastro; fica
+/// separado de `notes` (observação do cadastro/perfil), nunca se cruzam.
+export const updateCustomerSchema = createCustomerSchema.partial().extend({
+  debtNotes: z.string().max(500).optional(),
+});
 export type UpdateCustomerInput = z.infer<typeof updateCustomerSchema>;
 
 /** Uma venda do cliente no seu histórico (perfil do cliente). `receivableId` presente = venda a

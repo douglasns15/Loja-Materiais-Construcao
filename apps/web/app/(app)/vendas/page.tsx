@@ -6,6 +6,7 @@ import {
   PAYMENT_METHOD_LABELS,
   cancelOrderSchema,
   returnOrderSchema,
+  type PartialReturnResult,
   type PaymentMethod,
 } from '@nexoloja/shared';
 import { groupPairedItems } from '@nexoloja/core';
@@ -13,6 +14,7 @@ import { apiGet, apiPost } from '@/lib/api';
 import { useOnline } from '@/lib/useOnline';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { ReceiptPrint, type Store } from '@/components/ReceiptPrint';
+import { ReturnItemsModal } from '@/components/ReturnItemsModal';
 
 type OrderItem = {
   id: string;
@@ -22,6 +24,9 @@ type OrderItem = {
   total: string;
   /** Agrupamento do par (ADR-015): os dois itens viram uma linha só na exibição. */
   pairGroup: number | null;
+  // Devolução por item (ADR-022): base e já-devolvido, para a tela calcular o devolvível.
+  baseQuantity?: string | null;
+  returnedBaseQty?: string;
 };
 type Payment = { id: string; method: string; amount: string };
 type OrderStatus = 'DRAFT' | 'CONFIRMED' | 'INVOICED' | 'CANCELLED' | 'RETURNED';
@@ -33,11 +38,19 @@ type Order = {
   total: string;
   createdAt: string;
   registeredByName: string | null;
+  customerId?: string | null;
+  // ADR-020: retirada futura (a devolução por item — ADR-022 — só vale para IMMEDIATE).
+  deliveryMode?: 'IMMEDIATE' | 'SCHEDULED';
   cashSession: { id: string; closedAt: string | null } | null;
   items: OrderItem[];
   payments: Payment[];
   // Venda a prazo (ADR-019): presente quando a venda gerou uma conta a receber.
-  receivable?: { originalAmount: string; settledAmount: string; status: 'OPEN' | 'PAID' | 'CANCELLED' } | null;
+  receivable?: {
+    originalAmount: string;
+    settledAmount: string;
+    returnedAmount?: string;
+    status: 'OPEN' | 'PAID' | 'CANCELLED';
+  } | null;
 };
 
 /** Ação em curso no modal: cancelamento (caixa aberto) ou devolução (caixa fechado). */
@@ -106,6 +119,9 @@ export default function VendasPage() {
   const [action, setAction] = useState<{ id: string; mode: ActionMode } | null>(null);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
+  // Devolução POR ITEM (ADR-022): a venda cujo modal está aberto + mensagem de sucesso.
+  const [returnOrder, setReturnOrder] = useState<Order | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [store, setStore] = useState<Store | null>(null);
   const [printModel, setPrintModel] = useState<'80mm' | 'A4'>('80mm');
   // Job de reimpressão: novo objeto a cada clique força o efeito a disparar de novo.
@@ -391,6 +407,7 @@ export default function VendasPage() {
 
       {/* Erro cru da lista só quando online (offline = "Failed to fetch"; o aviso acima já cobre). */}
       {error && online && !action && <p className="mb-4 text-sm text-red-600">{error}</p>}
+      {info && <p className="mb-4 rounded-lg bg-gray-100 px-3 py-2 text-sm">{info}</p>}
 
       <div className="space-y-3">
         {orders.length === 0 ? (
@@ -521,13 +538,25 @@ export default function VendasPage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="mt-3 flex justify-end gap-2 border-t border-gray-100 pt-3">
+                  <div className="mt-3 flex flex-wrap justify-end gap-2 border-t border-gray-100 pt-3">
                     <button
                       onClick={() => reimprimir(o)}
                       className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
                     >
                       Reimprimir nota
                     </button>
+                    {/* Devolução POR ITEM (ADR-022): vendas confirmadas de entrega imediata. */}
+                    {o.status === 'CONFIRMED' && o.deliveryMode !== 'SCHEDULED' && (
+                      <button
+                        onClick={() => {
+                          setInfo(null);
+                          setReturnOrder(o);
+                        }}
+                        className="rounded-lg border border-orange-200 px-3 py-1.5 text-sm font-medium text-orange-600 hover:bg-orange-50"
+                      >
+                        Devolver itens
+                      </button>
+                    )}
                     {canAct &&
                       (isOpenSessionOrder ? (
                         <button
@@ -586,6 +615,30 @@ export default function VendasPage() {
             method: p.method as PaymentMethod,
             amount: Number(p.amount),
           }))}
+        />
+      )}
+
+      {/* Devolução por item (ADR-022): modal com seleção de itens/quantidades + destino do troco. */}
+      {returnOrder && (
+        <ReturnItemsModal
+          orderId={returnOrder.id}
+          items={returnOrder.items}
+          receivable={returnOrder.receivable ?? null}
+          hasCustomer={!!returnOrder.customerId}
+          onClose={() => setReturnOrder(null)}
+          onDone={(res: PartialReturnResult) => {
+            const parts = [`Devolução registrada (${BRL(res.totalValue)}).`];
+            if (res.abatedAmount > 0) parts.push(`Abateu ${BRL(res.abatedAmount)} da dívida.`);
+            if (res.excessAmount > 0)
+              parts.push(
+                res.target === 'CASH'
+                  ? `Troco ${BRL(res.excessAmount)} devolvido em dinheiro.`
+                  : `Troco ${BRL(res.excessAmount)} virou crédito na loja.`,
+              );
+            setInfo(parts.join(' '));
+            setReturnOrder(null);
+            loadOrders().catch((e) => setError((e as Error).message));
+          }}
         />
       )}
 

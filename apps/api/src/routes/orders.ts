@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import { createPrismaClient } from '@nexoloja/db';
 import {
+  applyItemReturn,
+  applyReceivableReturn,
   availableQty,
   calcSaleItemTotal,
   calcSaleTotals,
@@ -9,9 +11,18 @@ import {
   hasAltUnit,
   isClosedPrimary,
   isValidMeterStep,
+  isValidPartialReturn,
+  receivableBalance,
+  returnableBaseQty,
+  splitReturnValue,
   toBaseQuantity,
 } from '@nexoloja/core';
-import { cancelOrderSchema, createSaleSchema, returnOrderSchema } from '@nexoloja/shared';
+import {
+  cancelOrderSchema,
+  createReturnSchema,
+  createSaleSchema,
+  returnOrderSchema,
+} from '@nexoloja/shared';
 import { type Env, getConnectionString, getTenantId } from '../lib/request';
 import { requireActiveTenant, requireAuth } from '../middleware/auth';
 
@@ -155,8 +166,11 @@ orders.get('/', async (c) => {
           items: true,
           payments: true,
           cashSession: { select: { id: true, closedAt: true } },
-          // Venda a prazo (ADR-019): expõe a conta a receber p/ o Histórico marcar o badge "A prazo".
-          receivable: { select: { originalAmount: true, settledAmount: true, status: true } },
+          // Venda a prazo (ADR-019): expõe a conta a receber p/ o Histórico marcar o badge "A prazo"
+          // e prever o abate da devolução (ADR-022 — `returnedAmount`).
+          receivable: {
+            select: { id: true, originalAmount: true, settledAmount: true, returnedAmount: true, status: true },
+          },
         },
       });
 
@@ -760,6 +774,14 @@ orders.post('/:id/return', async (c) => {
         400,
       );
     }
+    // ADR-022: se já houve devolução PARCIAL de itens, a devolução da venda inteira (que refunde o
+    // total) duplicaria o estorno — o caminho passa a ser a devolução por item.
+    if (order.items.some((i) => Number(i.returnedBaseQty) > 0)) {
+      return c.json(
+        { ok: false, error: 'Esta venda já teve devolução parcial; use a devolução por item.' },
+        409,
+      );
+    }
 
     const total = Number(order.total);
 
@@ -845,6 +867,284 @@ orders.post('/:id/return', async (c) => {
     return c.json({ ok: true, data: returned });
   } catch (err) {
     console.error('POST /orders/:id/return falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao registrar a devolução.' }, 500);
+  }
+});
+
+/**
+ * Devolução PARCIAL, por item (ADR-022, Fatia B). Diferente do `/return` (venda inteira, devolve o
+ * total em dinheiro): aqui o operador escolhe ITENS e QUANTIDADES. Em transação atômica:
+ *  - estorna estoque de cada item (StockMovement INCOME + stockQty) e incrementa `returnedBaseQty`
+ *    (trava contra devolver a mesma peça 2×);
+ *  - abate a dívida da venda (`Receivable.returnedAmount`), se era a prazo e está aberta;
+ *  - o EXCEDENTE (valor além do saldo devedor) vira CRÉDITO na loja (customer_credits + creditBalance)
+ *    OU DINHEIRO no caixa (CashMovement RETURN) — escolha do operador (`target`), exigida só quando
+ *    há excedente. Crédito exige cliente na venda; dinheiro exige caixa aberto.
+ *  - grava OrderReturn (cabeçalho) + OrderReturnItem (linhas) + AuditEvent.
+ * Só para vendas IMMEDIATE confirmadas (SCHEDULED/ADR-020 tem o fluxo de retirada em Entregas).
+ */
+orders.post('/:id/return-items', async (c) => {
+  const tenantId = getTenantId(c);
+  const userId = c.get('userId');
+  const connectionString = getConnectionString(c.env);
+  if (!tenantId || !connectionString) {
+    return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
+  }
+
+  const orderId = c.req.param('id');
+  const parsed = createReturnSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) {
+    return c.json(
+      { ok: false, error: 'Dados da devolução inválidos.', issues: parsed.error.flatten() },
+      400,
+    );
+  }
+  const { items: reqItems, reason, target } = parsed.data;
+
+  try {
+    const prisma = createPrismaClient(connectionString);
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, tenantId },
+      include: {
+        items: true,
+        receivable: {
+          select: { id: true, originalAmount: true, settledAmount: true, returnedAmount: true, status: true },
+        },
+      },
+    });
+    if (!order) {
+      return c.json({ ok: false, error: 'Venda não encontrada.' }, 404);
+    }
+    if (order.status === 'CANCELLED' || order.status === 'RETURNED') {
+      return c.json({ ok: false, error: 'Esta venda foi cancelada/devolvida; não há o que devolver.' }, 409);
+    }
+    if (order.status !== 'CONFIRMED') {
+      return c.json({ ok: false, error: 'Só é possível devolver vendas confirmadas.' }, 400);
+    }
+    if (order.deliveryMode === 'SCHEDULED') {
+      return c.json(
+        { ok: false, error: 'Venda com retirada futura: use a tela de Entregas para o que ainda não saiu.' },
+        400,
+      );
+    }
+
+    // Prepara e valida cada linha devolvida (quantidade na unidade VENDIDA → base + valor rateado).
+    const byId = new Map(order.items.map((i) => [i.id, i]));
+    const seen = new Set<string>();
+    const prep: { item: (typeof order.items)[number]; requestedBase: number; value: number }[] = [];
+    for (const req of reqItems) {
+      if (seen.has(req.orderItemId)) {
+        return c.json({ ok: false, error: 'Item repetido na devolução.' }, 400);
+      }
+      seen.add(req.orderItemId);
+      const item = byId.get(req.orderItemId);
+      if (!item) {
+        return c.json({ ok: false, error: 'Item não pertence a esta venda.' }, 400);
+      }
+      const soldQty = Number(item.quantity);
+      const baseQty = Number(item.baseQuantity ?? item.quantity);
+      const basePerSold = soldQty > 0 ? baseQty / soldQty : 1;
+      const requestedBase = Number((req.quantity * basePerSold).toFixed(4));
+      const remainingBase = returnableBaseQty(baseQty, Number(item.returnedBaseQty));
+      if (!isValidPartialReturn(requestedBase, remainingBase)) {
+        return c.json(
+          { ok: false, error: `Quantidade inválida para "${item.productName}" (devolvível: ${(remainingBase / basePerSold).toFixed(2)}).` },
+          400,
+        );
+      }
+      const value = Number((Number(item.total) * (req.quantity / soldQty)).toFixed(2));
+      prep.push({ item, requestedBase, value });
+    }
+    const totalValue = Number(prep.reduce((s, p) => s + p.value, 0).toFixed(2));
+
+    // Reparte: abate a dívida da venda (se a prazo e aberta), o resto é excedente.
+    const rec = order.receivable;
+    const debtBalance =
+      rec && rec.status === 'OPEN'
+        ? receivableBalance(Number(rec.originalAmount), Number(rec.settledAmount), Number(rec.returnedAmount))
+        : 0;
+    const { abated, excess } = splitReturnValue(totalValue, debtBalance);
+
+    // Excedente exige destino (crédito × dinheiro). Crédito precisa de cliente; dinheiro, caixa aberto.
+    const customerId = order.customerId;
+    if (excess > 0 && !target) {
+      return c.json({ ok: false, error: 'Escolha o destino do troco: crédito na loja ou dinheiro.' }, 400);
+    }
+    if (excess > 0 && target === 'STORE_CREDIT' && !customerId) {
+      return c.json({ ok: false, error: 'Crédito exige um cliente na venda; devolva em dinheiro.' }, 400);
+    }
+    let openSessionId: string | null = null;
+    if (excess > 0 && target === 'CASH') {
+      const session = await prisma.cashSession.findFirst({
+        where: { tenantId, closedAt: null },
+        select: { id: true },
+      });
+      if (!session) {
+        return c.json({ ok: false, error: 'Abra o caixa para devolver em dinheiro.' }, 400);
+      }
+      openSessionId = session.id;
+    }
+
+    const userName = c.get('userName');
+    const result = await prisma.$transaction(async (tx) => {
+      // 1) Estorno de estoque + trava por item (returnedBaseQty).
+      for (const p of prep) {
+        await tx.stockMovement.create({
+          data: {
+            tenantId,
+            productId: p.item.productId,
+            type: 'INCOME',
+            quantity: p.requestedBase,
+            reason: `Devolução parcial da venda ${order.id}`,
+            syncStatus: 'SYNCED',
+            userId, // autoria (ADR-010)
+            registeredByName: userName,
+          },
+        });
+        const applied = applyItemReturn(
+          Number(p.item.baseQuantity ?? p.item.quantity),
+          Number(p.item.returnedBaseQty),
+          p.requestedBase,
+        );
+        await tx.product.update({
+          where: { id: p.item.productId },
+          data: { stockQty: { increment: p.requestedBase } },
+        });
+        await tx.orderItem.update({
+          where: { id: p.item.id },
+          data: { returnedBaseQty: applied.returnedBaseQty },
+        });
+      }
+
+      // 2) Abate a dívida (se a prazo e aberta).
+      let receivableBalanceAfter: number | null = rec && rec.status === 'OPEN' ? debtBalance : null;
+      if (rec && rec.status === 'OPEN' && abated > 0) {
+        const applied = applyReceivableReturn(
+          Number(rec.originalAmount),
+          Number(rec.settledAmount),
+          Number(rec.returnedAmount),
+          abated,
+        );
+        await tx.receivable.update({
+          where: { id: rec.id },
+          data: { returnedAmount: applied.returnedAmount, status: applied.status },
+        });
+        receivableBalanceAfter = receivableBalance(
+          Number(rec.originalAmount),
+          Number(rec.settledAmount),
+          applied.returnedAmount,
+        );
+      }
+
+      // 3) Excedente → dinheiro (caixa) OU crédito (livro-razão + cache).
+      let cashMovementId: string | null = null;
+      let customerCreditId: string | null = null;
+      let creditBalanceAfter = 0;
+      if (excess > 0 && target === 'CASH' && openSessionId) {
+        const mov = await tx.cashMovement.create({
+          data: {
+            tenantId,
+            cashSessionId: openSessionId,
+            userId,
+            type: 'EXPENSE',
+            kind: 'RETURN',
+            amount: excess,
+            reason: `Devolução (troco) — venda ${order.id}`,
+            relatedOrderId: order.id,
+            syncStatus: 'SYNCED',
+            registeredByName: userName,
+          },
+        });
+        cashMovementId = mov.id;
+      } else if (excess > 0 && target === 'STORE_CREDIT' && customerId) {
+        const credit = await tx.customerCredit.create({
+          data: {
+            tenantId,
+            customerId,
+            amount: excess, // + (crédito a favor)
+            origin: 'RETURN',
+            relatedOrderId: order.id,
+            createdById: userId,
+            createdByName: userName,
+          },
+        });
+        customerCreditId = credit.id;
+        const cust = await tx.customer.update({
+          where: { id: customerId },
+          data: { creditBalance: { increment: excess } },
+          select: { creditBalance: true },
+        });
+        creditBalanceAfter = Number(cust.creditBalance);
+      }
+
+      // 4) Cabeçalho + linhas da devolução.
+      const header = await tx.orderReturn.create({
+        data: {
+          tenantId,
+          orderId: order.id,
+          customerId: customerId ?? null,
+          totalValue,
+          abatedAmount: abated,
+          excessAmount: excess,
+          target: excess > 0 ? target ?? null : null,
+          receivableId: rec?.id ?? null,
+          cashMovementId,
+          customerCreditId,
+          reason,
+          createdById: userId,
+          createdByName: userName,
+          items: {
+            create: prep.map((p) => ({
+              tenantId,
+              orderItemId: p.item.id,
+              baseQty: p.requestedBase,
+              value: p.value,
+            })),
+          },
+        },
+        select: { id: true },
+      });
+
+      // 5) Auditoria (ADR-004).
+      await tx.auditEvent.create({
+        data: {
+          tenantId,
+          userId,
+          entity: 'Order',
+          entityId: order.id,
+          action: 'RETURN_ITEMS',
+          meta: {
+            returnId: header.id,
+            totalValue,
+            abated,
+            excess,
+            target: excess > 0 ? target ?? null : null,
+            itemsCount: prep.length,
+            reason,
+          },
+        },
+      });
+
+      return { returnId: header.id, receivableBalanceAfter, creditBalanceAfter };
+    });
+
+    return c.json(
+      {
+        ok: true,
+        data: {
+          returnId: result.returnId,
+          totalValue,
+          abatedAmount: abated,
+          excessAmount: excess,
+          target: excess > 0 ? target ?? null : null,
+          receivableBalance: result.receivableBalanceAfter,
+          creditBalance: result.creditBalanceAfter,
+        },
+      },
+      201,
+    );
+  } catch (err) {
+    console.error('POST /orders/:id/return-items falhou:', err);
     return c.json({ ok: false, error: 'Falha ao registrar a devolução.' }, 500);
   }
 });

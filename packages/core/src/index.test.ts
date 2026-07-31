@@ -23,6 +23,13 @@ import {
   isValidReceipt,
   applyReceivablePayment,
   creditSaleBalances,
+  customerAccountBalance,
+  distributeAccountPayment,
+  returnableBaseQty,
+  isValidPartialReturn,
+  applyItemReturn,
+  splitReturnValue,
+  applyReceivableReturn,
   sumCashCount,
   paymentStatus,
   BRL_COIN_VALUES,
@@ -437,6 +444,122 @@ describe('creditSaleBalances (venda a prazo — ADR-019)', () => {
 
   it('tolera 1 centavo de arredondamento', () => {
     expect(creditSaleBalances(100, 33.33, 66.67)).toBe(true);
+  });
+});
+
+describe('customerAccountBalance / distributeAccountPayment (conta do cliente — ADR-022)', () => {
+  it('saldo da conta = soma dos saldos devedores em aberto', () => {
+    expect(customerAccountBalance([{ id: 'a', balance: 100 }, { id: 'b', balance: 50 }])).toBe(150);
+    expect(customerAccountBalance([])).toBe(0);
+  });
+
+  it('soma sem erro de ponto flutuante (centavos)', () => {
+    expect(customerAccountBalance([{ id: 'a', balance: 0.1 }, { id: 'b', balance: 0.2 }])).toBe(0.3);
+  });
+
+  it('FIFO: abate a dívida mais antiga primeiro', () => {
+    const recs = [{ id: 'velha', balance: 30 }, { id: 'nova', balance: 80 }];
+    // Recebe 50 → quita a velha (30) e abate 20 da nova.
+    expect(distributeAccountPayment(50, recs)).toEqual([
+      { receivableId: 'velha', amount: 30 },
+      { receivableId: 'nova', amount: 20 },
+    ]);
+  });
+
+  it('recebimento menor que a 1ª dívida cai só nela', () => {
+    const recs = [{ id: 'a', balance: 30 }, { id: 'b', balance: 80 }];
+    expect(distributeAccountPayment(20, recs)).toEqual([{ receivableId: 'a', amount: 20 }]);
+  });
+
+  it('recebe a conta inteira quita todas', () => {
+    const recs = [{ id: 'a', balance: 30 }, { id: 'b', balance: 80 }];
+    expect(distributeAccountPayment(110, recs)).toEqual([
+      { receivableId: 'a', amount: 30 },
+      { receivableId: 'b', amount: 80 },
+    ]);
+  });
+
+  it('pula dívidas com saldo zero e para quando o valor esgota', () => {
+    const recs = [{ id: 'quitada', balance: 0 }, { id: 'a', balance: 40 }, { id: 'b', balance: 40 }];
+    expect(distributeAccountPayment(40, recs)).toEqual([{ receivableId: 'a', amount: 40 }]);
+  });
+
+  it('distribui em centavos sem estourar (arredondamento)', () => {
+    const recs = [{ id: 'a', balance: 33.33 }, { id: 'b', balance: 66.67 }];
+    const alloc = distributeAccountPayment(100, recs);
+    expect(alloc.reduce((s, a) => s + a.amount, 0)).toBe(100);
+  });
+});
+
+describe('devolução/troca por item + crédito (ADR-022 Fatia B)', () => {
+  it('returnableBaseQty: base − já devolvido, nunca negativo', () => {
+    expect(returnableBaseQty(10, 0)).toBe(10);
+    expect(returnableBaseQty(10, 4)).toBe(6);
+    expect(returnableBaseQty(10, 10)).toBe(0);
+    expect(returnableBaseQty(10, 12)).toBe(0);
+  });
+
+  it('isValidPartialReturn: positiva e ≤ devolvível', () => {
+    expect(isValidPartialReturn(3, 6)).toBe(true);
+    expect(isValidPartialReturn(6, 6)).toBe(true); // devolver o resto exato
+    expect(isValidPartialReturn(0, 6)).toBe(false);
+    expect(isValidPartialReturn(-1, 6)).toBe(false);
+    expect(isValidPartialReturn(6.5, 6)).toBe(false); // além do devolvível
+  });
+
+  it('applyItemReturn: acumula e marca linha completa', () => {
+    const a = applyItemReturn(10, 0, 4);
+    expect(a).toEqual({ returnedBaseQty: 4, fullyReturned: false });
+    const b = applyItemReturn(10, 4, 6);
+    expect(b).toEqual({ returnedBaseQty: 10, fullyReturned: true });
+  });
+
+  it('splitReturnValue: abate a dívida primeiro, resto é excedente', () => {
+    // Venda a prazo com R$ 40 de saldo devedor; devolve R$ 30 → abate 30, excedente 0.
+    expect(splitReturnValue(30, 40)).toEqual({ abated: 30, excess: 0 });
+    // Devolve R$ 50 numa dívida de 40 → abate 40, excedente 10 (crédito/dinheiro).
+    expect(splitReturnValue(50, 40)).toEqual({ abated: 40, excess: 10 });
+    // Venda à vista (saldo devedor 0) → tudo é excedente.
+    expect(splitReturnValue(25, 0)).toEqual({ abated: 0, excess: 25 });
+  });
+
+  it('splitReturnValue: soma abatido + excedente = valor (centavos)', () => {
+    const { abated, excess } = splitReturnValue(33.33, 20);
+    expect(Number((abated + excess).toFixed(2))).toBe(33.33);
+  });
+
+  it('applyReceivableReturn: quita quando recebido + devolvido alcança o original', () => {
+    // Dívida 100, recebido 0, devolvido 0; abate 100 por devolução → quitada.
+    expect(applyReceivableReturn(100, 0, 0, 100)).toEqual({
+      returnedAmount: 100,
+      status: 'PAID',
+      fullySettled: true,
+    });
+    // Dívida 100, recebido 30, devolvido 0; abate 40 → devolvido 40, ainda aberta (30+40<100).
+    expect(applyReceivableReturn(100, 30, 0, 40)).toEqual({
+      returnedAmount: 40,
+      status: 'OPEN',
+      fullySettled: false,
+    });
+    // Recebido 30 + devolvido 70 = 100 → quita.
+    expect(applyReceivableReturn(100, 30, 0, 70)).toEqual({
+      returnedAmount: 70,
+      status: 'PAID',
+      fullySettled: true,
+    });
+  });
+
+  it('receivableBalance: devolvido abate junto com o recebido', () => {
+    expect(receivableBalance(100, 0, 0)).toBe(100);
+    expect(receivableBalance(100, 30, 40)).toBe(30); // 100 − 30 − 40
+    expect(receivableBalance(100, 60, 60)).toBe(0); // não fica negativo
+  });
+
+  it('applyReceivablePayment: com devolvido, quita antes (recebido+devolvido≥original)', () => {
+    // Dívida 100, já devolvido 70; recebe 30 → quita (30+70=100).
+    const r = applyReceivablePayment(100, 0, 30, 70);
+    expect(r.fullyPaid).toBe(true);
+    expect(r.status).toBe('PAID');
   });
 });
 

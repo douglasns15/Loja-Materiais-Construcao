@@ -176,8 +176,15 @@ function toCents(value: number): number {
  * a prazo = `originalAmount − settledAmount`, nunca negativo (recebeu tudo ⇒ 0). Fonte única
  * para API e UI mostrarem o mesmo "falta R$…".
  */
-export function receivableBalance(originalAmount: number, settledAmount: number): number {
-  return Number(Math.max(0, originalAmount - settledAmount).toFixed(2));
+export function receivableBalance(
+  originalAmount: number,
+  settledAmount: number,
+  returnedAmount = 0,
+): number {
+  // ADR-022: a devolução de itens (`returnedAmount`) abate a dívida junto com o recebido, então
+  // o saldo devedor é `original − recebido − devolvido`. `returnedAmount` default 0 preserva os
+  // chamadores antigos (só recebimento) — pré-Fatia B toda dívida tem devolvido 0.
+  return Number(Math.max(0, originalAmount - settledAmount - returnedAmount).toFixed(2));
 }
 
 /**
@@ -200,9 +207,12 @@ export function applyReceivablePayment(
   originalAmount: number,
   settledAmount: number,
   amount: number,
+  returnedAmount = 0,
 ): { settledAmount: number; status: 'OPEN' | 'PAID'; fullyPaid: boolean } {
   const newSettled = Number((settledAmount + amount).toFixed(2));
-  const fullyPaid = toCents(newSettled) >= toCents(originalAmount); // ≥ tolera arredondamento
+  // Quita quando recebido + devolvido (ADR-022) alcança o original; `returnedAmount` default 0
+  // mantém o comportamento antigo (só recebimento). ≥ tolera arredondamento.
+  const fullyPaid = toCents(newSettled + returnedAmount) >= toCents(originalAmount);
   return { settledAmount: newSettled, status: fullyPaid ? 'PAID' : 'OPEN', fullyPaid };
 }
 
@@ -213,6 +223,123 @@ export function applyReceivablePayment(
  */
 export function creditSaleBalances(total: number, paidNow: number, creditAmount: number): boolean {
   return Math.abs(toCents(paidNow) + toCents(creditAmount) - toCents(total)) <= 1;
+}
+
+// ---------------------------------------------------------------------------
+// Conta do cliente — fiado acumulado (ADR-022, Fatia A)
+// ---------------------------------------------------------------------------
+
+/** Uma dívida em aberto do cliente para fins de conta (ADR-022): id + saldo devedor já calculado. */
+export interface AccountReceivable {
+  id: string;
+  balance: number;
+}
+
+/**
+ * Saldo da CONTA do cliente (ADR-022): a soma dos saldos devedores das dívidas em aberto.
+ * A "conta" é implícita — não há entidade nova; é a visão agregada das contas a receber do
+ * cliente. Soma em centavos para não acumular erro de ponto flutuante. (O crédito a favor do
+ * cliente — saldo negativo — entra na Fatia B; aqui a conta é só o que ele deve.)
+ */
+export function customerAccountBalance(receivables: AccountReceivable[]): number {
+  const cents = receivables.reduce((acc, r) => acc + toCents(r.balance), 0);
+  return Number((cents / 100).toFixed(2));
+}
+
+/**
+ * Distribui um recebimento **contra a conta inteira** do cliente (ADR-022): abate as dívidas em
+ * aberto **do mais antigo para o mais novo** (FIFO). Recebe as dívidas **já ordenadas** (mais
+ * antiga primeiro) e devolve quanto cai em cada uma, até esgotar o valor. Cada alocação nunca
+ * passa do saldo daquela dívida; a soma das alocações nunca passa do `amount`. Aritmética em
+ * centavos (sem erro de ponto flutuante). Não valida o teto total (ver `isValidReceipt` contra
+ * `customerAccountBalance`) — assume um valor já aceito. Fonte única para o servidor aplicar e a
+ * UI prever o mesmo rateio.
+ */
+export function distributeAccountPayment(
+  amount: number,
+  receivables: AccountReceivable[],
+): { receivableId: string; amount: number }[] {
+  let remaining = toCents(amount);
+  const allocations: { receivableId: string; amount: number }[] = [];
+  for (const r of receivables) {
+    if (remaining <= 0) break;
+    const take = Math.min(remaining, toCents(r.balance));
+    if (take <= 0) continue; // dívida já quitada (saldo 0) — pula
+    allocations.push({ receivableId: r.id, amount: Number((take / 100).toFixed(2)) });
+    remaining -= take;
+  }
+  return allocations;
+}
+
+// ---------------------------------------------------------------------------
+// Devolução/troca por item + crédito do cliente (ADR-022, Fatia B/C)
+// ---------------------------------------------------------------------------
+
+/**
+ * Quanto (em unidade-base) de uma linha ainda PODE ser devolvido (ADR-022): `baseQuantity −
+ * returnedBaseQty`, nunca negativo. Trava contra devolver a mesma peça duas vezes. Espelha o
+ * `remainingToDeliver` (ADR-020). Fonte única do "devolvível" por item.
+ */
+export function returnableBaseQty(baseQuantity: number, returnedBaseQty: number): number {
+  return Number(Math.max(0, baseQuantity - returnedBaseQty).toFixed(4));
+}
+
+/**
+ * Uma devolução (parcial ou total) de uma linha é válida se for **positiva** e **não exceder o
+ * que ainda é devolvível**. Comparação em unidades × 10^4 p/ não tropeçar em arredondamento.
+ * Espelha `isValidDelivery`. Reusada no servidor e na UI.
+ */
+export function isValidPartialReturn(qty: number, returnable: number): boolean {
+  const units = toQtyUnits(qty);
+  return units > 0 && units <= toQtyUnits(returnable);
+}
+
+/**
+ * Aplica uma devolução a uma linha e devolve o novo total devolvido e se a linha ficou
+ * **completa** (`≥` tolera arredondamento). Não valida (ver `isValidPartialReturn`) — assume uma
+ * devolução já aceita. Espelha `applyItemDelivery`; fonte única da transição por linha.
+ */
+export function applyItemReturn(
+  baseQuantity: number,
+  returnedBaseQty: number,
+  qty: number,
+): { returnedBaseQty: number; fullyReturned: boolean } {
+  const newReturned = Number((returnedBaseQty + qty).toFixed(4));
+  const fullyReturned = toQtyUnits(newReturned) >= toQtyUnits(baseQuantity);
+  return { returnedBaseQty: newReturned, fullyReturned };
+}
+
+/**
+ * Reparte o valor devolvido `V` (ADR-022): primeiro **abate a dívida** daquela venda (até o saldo
+ * devedor), e o que **sobra** é o EXCEDENTE (vira crédito na loja OU dinheiro, escolha do
+ * operador). Numa venda à vista o saldo devedor é 0 ⇒ `V` inteiro é excedente. Aritmética em
+ * centavos. `debtBalance` deve ser o saldo devedor já calculado (`receivableBalance`).
+ */
+export function splitReturnValue(
+  value: number,
+  debtBalance: number,
+): { abated: number; excess: number } {
+  const abatedCents = Math.min(toCents(value), Math.max(0, toCents(debtBalance)));
+  const abated = Number((abatedCents / 100).toFixed(2));
+  const excess = Number((value - abated).toFixed(2));
+  return { abated, excess };
+}
+
+/**
+ * Aplica um abatimento por DEVOLUÇÃO a uma conta a receber (ADR-022) e devolve o novo total
+ * devolvido e a situação: quita (`PAID`) quando **recebido + devolvido** alcança o valor original
+ * (dívida sem saldo — por dinheiro e/ou devolução), senão segue `OPEN`. Não valida — assume um
+ * abatimento já calculado por `splitReturnValue`. Espelha `applyReceivablePayment`.
+ */
+export function applyReceivableReturn(
+  originalAmount: number,
+  settledAmount: number,
+  returnedAmount: number,
+  abated: number,
+): { returnedAmount: number; status: 'OPEN' | 'PAID'; fullySettled: boolean } {
+  const newReturned = Number((returnedAmount + abated).toFixed(2));
+  const fullySettled = toCents(settledAmount + newReturned) >= toCents(originalAmount);
+  return { returnedAmount: newReturned, status: fullySettled ? 'PAID' : 'OPEN', fullySettled };
 }
 
 /** Valores (em reais) das moedas do Real em circulação, para o contador de gaveta. */

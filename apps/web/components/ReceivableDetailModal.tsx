@@ -47,7 +47,9 @@ export function ReceivableDetailModal({
         const d = await apiGet<ReceivableDetail>(`/receivables/${receivableId}`);
         if (cancelled) return;
         setDetail(d);
-        setNotes(d.notes ?? '');
+        // A observação é da DÍVIDA/conta (ADR-022) — compartilhada por todas as vendas do cliente,
+        // e separada da nota do cadastro/perfil.
+        setNotes(d.debtNotes ?? '');
         setError(null);
       } catch (e) {
         if (!cancelled) setError((e as Error).message);
@@ -62,11 +64,14 @@ export function ReceivableDetailModal({
 
   async function saveNotes() {
     if (!detail) return;
+    const clean = notes.trim() ? notes.trim() : '';
     setSavingNotes(true);
     setNotesSaved(false);
     try {
-      await apiPatch(`/receivables/${detail.id}`, { notes: notes.trim() ? notes.trim() : null });
-      setDetail({ ...detail, notes: notes.trim() ? notes.trim() : null });
+      // Nota da DÍVIDA (separada do cadastro) — PATCH /customers/:id { debtNotes }; vale p/ todas
+      // as vendas do cliente (ADR-022).
+      await apiPatch(`/customers/${detail.customerId}`, { debtNotes: clean });
+      setDetail({ ...detail, debtNotes: clean || null });
       setNotesSaved(true);
     } catch (e) {
       setError((e as Error).message);
@@ -75,7 +80,7 @@ export function ReceivableDetailModal({
     }
   }
 
-  const notesChanged = detail !== null && notes.trim() !== (detail.notes ?? '').trim();
+  const notesChanged = detail !== null && notes.trim() !== (detail.debtNotes ?? '').trim();
 
   return (
     <div
@@ -191,7 +196,7 @@ export function ReceivableDetailModal({
               )}
             </div>
 
-            {/* Observação da dívida. */}
+            {/* Observação do CLIENTE (compartilhada por todas as vendas dele — ADR-022). */}
             <div>
               <h3 className="mb-1 text-sm font-semibold">Observações</h3>
               <textarea
@@ -215,6 +220,7 @@ export function ReceivableDetailModal({
                   {savingNotes ? 'Salvando…' : 'Salvar observação'}
                 </button>
                 {notesSaved && !notesChanged && <span className="text-xs text-green-700">Salvo ✓</span>}
+                <span className="text-xs text-gray-500">Vale para todas as vendas deste cliente.</span>
               </div>
             </div>
 

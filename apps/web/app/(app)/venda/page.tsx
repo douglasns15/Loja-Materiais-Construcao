@@ -341,6 +341,9 @@ export default function VendaPage() {
   const [customerName, setCustomerName] = useState('');
   const [customerQuery, setCustomerQuery] = useState('');
   const [customerOptions, setCustomerOptions] = useState<{ id: string; name: string }[]>([]);
+  // Saldo em aberto do cliente selecionado (ADR-022): alerta de "Dívida ativa" ao pôr numa conta
+  // que já existe. `null` = ainda não sabido / sem dívida / offline. Só informativo.
+  const [customerDebt, setCustomerDebt] = useState<number | null>(null);
   const [dueDate, setDueDate] = useState('');
   // Retirada/entrega futura (ADR-020) — opt-in, escondida por padrão (PDV limpo), como o fiado.
   // Quando ligada, a venda RESERVA a mercadoria (não baixa o estoque); a retirada é registrada
@@ -439,6 +442,40 @@ export default function VendaPage() {
       clearTimeout(t);
     };
   }, [customerQuery]);
+
+  // Ao selecionar um cliente, busca o saldo em aberto dele (conta do cliente — ADR-022) para o
+  // alerta de "Dívida ativa". Best-effort e online-only; some/limpa quando não há cliente.
+  useEffect(() => {
+    if (!customerId) {
+      setCustomerDebt(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const acc = await apiGet<{ totalBalance: number }>(`/receivables/accounts/${customerId}`);
+        if (!cancelled) setCustomerDebt(acc.totalBalance);
+      } catch {
+        if (!cancelled) setCustomerDebt(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [customerId]);
+
+  // Atalho "+ Adicionar itens" da tela de Contas a Receber (ADR-022): chega com `?customerId=` +
+  // `?customerName=` → pré-seleciona o cliente e abre o bloco de venda a prazo (a saída dos itens
+  // roda aqui no PDV, motor único). Lê da URL uma vez, no cliente (evita o boundary de Suspense).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const cid = params.get('customerId');
+    if (cid) {
+      setCustomerId(cid);
+      setCustomerName(params.get('customerName') ?? '');
+      setShowCredit(true);
+    }
+  }, []);
 
   /** Define o modelo (80mm/A4), injeta a regra @page e abre o diálogo de impressão. */
   function imprimir() {
@@ -1232,6 +1269,12 @@ export default function VendaPage() {
       <div className="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-sm ring-1 ring-gray-200">
         <span className="min-w-0 truncate">
           Cliente: <strong>{customerName}</strong>
+          {/* Alerta: este cliente já tem conta em aberto — a venda cai numa dívida existente. */}
+          {customerDebt != null && customerDebt > 0 && (
+            <span className="ml-2 font-semibold text-red-600">
+              Dívida ativa: {BRL(customerDebt)}
+            </span>
+          )}
         </span>
         <button
           type="button"

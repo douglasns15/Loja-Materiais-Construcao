@@ -3,7 +3,41 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-31 — **Tela de Estoque: 4 ajustes de UI + ordenação das
+> **Última atualização:** 2026-07-31 — **Conta do cliente (fiado acumulado) — ADR-022, Fatia A
+> (+ A.2 + 2 refinos) — NO AR e VALIDADO pelo Owner.** Pedido do Owner: uma vez gerada uma venda a
+> prazo, não dava para **adicionar/remover/trocar** itens — mas o cliente **volta pegar mais** e
+> **paga no fim**. **ADR-022 escrito e aprovado ANTES de codar** (regras 1 e 4). **Decisões de
+> produto:** (1) **adicionar itens = nova venda a prazo que SOMA na conta** (o `Order` original fica
+> imutável — preserva estoque/auditoria); (2) **conta IMPLÍCITA por cliente** (`saldo = Σ recebíveis
+> em aberto`); (3) devolução com **escolha crédito×dinheiro** (fica p/ a Fatia B). **Fatia A = a
+> conta que soma + receber no fim (FIFO), SEM migration.** **Core (+7 → 219/219):**
+> `distributeAccountPayment` (rateia um recebimento nas dívidas do mais antigo pro mais novo, em
+> centavos) + `customerAccountBalance`. **API:** `GET /receivables/accounts` (agrupa por cliente via
+> `groupBy` — saldo somado, nº de dívidas, vencimento mais próximo), `POST
+> /receivables/accounts/:customerId/receive` (recebe contra a conta inteira, abate FIFO, lança **um**
+> Suprimento no caixa pelo total; reúso do motor do ADR-019). **Web (`/contas-a-receber`):** duas
+> visões — **"Por cliente"** (padrão, a conta que soma) e **"Por venda"** (a lista dívida-a-dívida de
+> antes, preservada, sem regressão). **A.2 (mesma sessão):** **extrato consolidado** — clicar no
+> cliente abre uma tela maior (`CustomerAccountModal`) com **log cronológico único** (cada venda com
+> seus itens + cada recebimento, saldo corrente linha a linha; `GET /receivables/accounts/:customerId`);
+> **PDV** ganhou **alerta "Dívida ativa: R$ X"** (vermelho) ao escolher cliente que já deve e um
+> atalho **"+ Adicionar itens"** que abre o PDV já com o cliente (`?customerId=`) — a saída de
+> mercadoria roda no PDV (motor único), **prática de mercado** (opção validada com o Owner vs.
+> adicionar itens dentro da tela de contas). **Refino (observação da dívida):** a nota tinha que ser
+> **da dívida, separada do cadastro** e **compartilhada por todas as vendas** do cliente → migration
+> **`0018_customer_debt_notes`** (1 coluna aditiva `customers.debtNotes VARCHAR(500)`, aplicada, **sem
+> drift**), editada nas duas visões, isolada de `customers.notes` (perfil). Gates a cada passo: core
+> **219/219**, typecheck api/web, build web (**20 rotas**, `/contas-a-receber` 5.25 kB), dry-run api;
+> migration `0018` sem drift. ⚠️ **Deploy de API obrigatório** (rotas novas). **NO AR (deploy final):**
+> API `72cd47d5` + web `bef084f8`; smokes ✅ (health 200; `/receivables/accounts` e `.../receive` e
+> `.../accounts/:id` sem token 401; postdeploy do web HTML no-store + CSS 200). **E2E do Owner
+> VALIDADO (2026-07-31):** Fatia A **5/5** ("passaram com sucesso"), A.2 (extrato + PDV) e a separação
+> da observação (dívida × cadastro) — "Tudo certo e aprovado". **Fatia A CONCLUÍDA.** Ver ADR-022 e
+> "ADR-022" no registro. **Próximo passo (combinado):** **Fatia B — devolução/troca por item** (abate
+> a dívida; excedente vira crédito **ou** dinheiro, escolha do operador) — usa a migration **`0019`**
+> (renumerada: a `0018` foi consumida pelo refino da observação; anotado no ADR-022).
+>
+> **Antes:** 2026-07-31 — **Tela de Estoque: 4 ajustes de UI + ordenação das
 > Movimentações — NO AR e VALIDADO pelo Owner.** Pedidos do Owner, todos na tela de Estoque; sem
 > migration. **(1) Rótulo por unidade fechada (ADR-017):** ao escolher um produto de **rolo** o campo
 > de quantidade mostrava "Quantidade (barras)" fixo → agora reflete a unidade real ("Quantidade

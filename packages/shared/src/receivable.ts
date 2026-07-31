@@ -67,6 +67,65 @@ export type ReceivableRow = {
 /** Página de contas a receber (cursor keyset) — mesmo contrato das demais telas paginadas. */
 export type ReceivablesPage = { rows: ReceivableRow[]; nextCursor: string | null };
 
+/**
+ * A CONTA de um cliente (ADR-022, Fatia A): a visão agregada das dívidas em aberto do cliente.
+ * `totalBalance` é a soma dos saldos devedores (fonte única `customerAccountBalance` do core);
+ * `openCount` é quantas dívidas a compõem; `nextDueDate` é o vencimento mais próximo (para
+ * destacar vencidos). Retornada por `GET /receivables/accounts`.
+ */
+export type CustomerAccountRow = {
+  customerId: string;
+  customerName: string | null;
+  totalBalance: number;
+  openCount: number;
+  oldestCreatedAt: string | null;
+  nextDueDate: string | null;
+};
+
+/** Lista de contas por cliente — `GET /receivables/accounts` (conjunto pequeno, sem paginação). */
+export type CustomerAccountsResponse = { rows: CustomerAccountRow[] };
+
+/** Resultado de receber contra a conta inteira (FIFO) — `POST /receivables/accounts/:id/receive`. */
+export type ReceiveAccountResult = {
+  customerId: string;
+  received: number;
+  remainingBalance: number;
+  fullyPaidCount: number;
+  debtsTouched: number;
+  accountCleared: boolean;
+};
+
+/** Uma venda a prazo que compõe a conta do cliente (ADR-022, Fatia A.2): a dívida daquela venda,
+ * seus itens e os recebimentos que a abateram. Base do extrato/timeline da conta. */
+export type AccountReceivableDetail = {
+  id: string;
+  orderId: string;
+  originalAmount: string;
+  settledAmount: string;
+  balance: number;
+  status: ReceivableStatus;
+  dueDate: string | null;
+  createdAt: string;
+  orderTotal: string | null;
+  items: ReceivableItem[];
+  payments: ReceivablePaymentRow[];
+};
+
+/** Detalhe da CONTA de um cliente — `GET /receivables/accounts/:customerId`. Reúne as vendas a
+ * prazo (em aberto + quitadas) com itens e recebimentos; a UI monta o log cronológico. */
+export type CustomerAccountDetail = {
+  customerId: string;
+  customerName: string | null;
+  /** Observação da DÍVIDA/conta (ADR-022) — uma só nota por cliente, compartilhada por todas as
+   * vendas dele. Separada da nota do cadastro/perfil (`Customer.notes`). */
+  debtNotes: string | null;
+  /** Crédito a favor do cliente (ADR-022 Fatia B) — sobra de devolução guardada como crédito. */
+  creditBalance: number;
+  totalBalance: number;
+  openCount: number;
+  receivables: AccountReceivableDetail[];
+};
+
 /** Um item da venda que originou a dívida (para o detalhe da conta a receber). */
 export type ReceivableItem = {
   productName: string;
@@ -81,6 +140,9 @@ export type ReceivableItem = {
  * origem + o histórico de recebimentos (com data/hora). Base da tela de detalhe do cliente. */
 export type ReceivableDetail = ReceivableRow & {
   notes: string | null;
+  /** Observação da DÍVIDA/conta do cliente (ADR-022) — uma só nota por cliente, compartilhada por
+   * todas as vendas dele; é a que as telas editam. Separada da nota do cadastro (`Customer.notes`). */
+  debtNotes: string | null;
   orderTotal: string | null;
   orderCreatedAt: string | null;
   items: ReceivableItem[];
