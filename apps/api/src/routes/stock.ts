@@ -9,8 +9,32 @@ const stock = new Hono<Env>();
 stock.use('*', requireAuth);
 
 /**
+ * Bordas de período no fuso da loja (Brasil, UTC-3), mesmo critério dos Relatórios:
+ * `from` começa às 00:00 e `to` termina às 23:59:59.999 daquele dia (não perde a noite).
+ * Sem datas, retorna `undefined` (cobre todo o histórico). Mantido local para o endpoint
+ * ficar autocontido (o helper dos Relatórios não é exportado).
+ */
+function buildDateFilter(from?: string, to?: string): Prisma.DateTimeFilter | undefined {
+  const filter: Prisma.DateTimeFilter = {};
+  if (from) filter.gte = new Date(`${from}T00:00:00.000-03:00`);
+  if (to) filter.lte = new Date(`${to}T23:59:59.999-03:00`);
+  return from || to ? filter : undefined;
+}
+
+/**
+ * Teto de segurança (não é paginação de verdade): a tela filtra no servidor por
+ * produto/tipo/motivo/período, então o retorno já vem enxuto; 1000 cobre com folga um
+ * período escolhido mesmo numa loja movimentada. Se um dia estourar, o caminho é keyset
+ * (como no Histórico de Vendas). A tela ainda pagina o exibido com "Mostrar mais".
+ */
+const MOVEMENTS_CAP = 1000;
+
+/**
  * Histórico de movimentações do tenant (entradas/saídas), mais recentes primeiro.
- * Filtro opcional por produto via `?productId=`. Inclui nome do produto/fornecedor.
+ * Filtros OPCIONAIS aplicados no SERVIDOR (assim a busca varre todo o histórico, não só a
+ * página carregada): `?productId=`, `?type=INCOME|EXPENSE`, `?reason=` (casa o motivo OU o
+ * nome do fornecedor, sem diferenciar maiúsc./minúsc.) e `?from=`/`?to=` (AAAA-MM-DD, fuso
+ * da loja). Inclui nome do produto/fornecedor.
  */
 stock.get('/movements', async (c) => {
   const tenantId = getTenantId(c);
@@ -20,13 +44,32 @@ stock.get('/movements', async (c) => {
   }
 
   const productId = c.req.query('productId');
+  const typeParam = c.req.query('type');
+  const type = typeParam === 'INCOME' || typeParam === 'EXPENSE' ? typeParam : undefined;
+  const reason = c.req.query('reason')?.trim();
+  const createdAt = buildDateFilter(c.req.query('from'), c.req.query('to'));
 
   try {
     const prisma = createPrismaClient(connectionString);
     const items = await prisma.stockMovement.findMany({
-      where: { tenantId, ...(productId ? { productId } : {}) },
+      where: {
+        tenantId,
+        ...(productId ? { productId } : {}),
+        ...(type ? { type } : {}),
+        // Motivo: busca o texto no motivo OU no nome do fornecedor (mesma cobertura do filtro
+        // que antes rodava no cliente), agora no banco → acha em todo o histórico.
+        ...(reason
+          ? {
+              OR: [
+                { reason: { contains: reason, mode: 'insensitive' } },
+                { supplier: { is: { name: { contains: reason, mode: 'insensitive' } } } },
+              ],
+            }
+          : {}),
+        ...(createdAt ? { createdAt } : {}),
+      },
       orderBy: { createdAt: 'desc' },
-      take: 50,
+      take: MOVEMENTS_CAP,
       include: {
         product: { select: { name: true, unit: true } },
         supplier: { select: { name: true } },

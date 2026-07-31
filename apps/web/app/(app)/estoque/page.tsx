@@ -22,6 +22,7 @@ import { useMe } from '@/lib/useMe';
 import { StoreDisabledNotice } from '@/components/StoreDisabledNotice';
 import { StockDetail, type StockProduct } from '@/components/StockDetail';
 import { MoneyInput } from '@/components/MoneyInput';
+import { ProductPicker } from '@/components/ProductPicker';
 
 // `GET /products` devolve a linha completa do produto; o detalhe de estoque (StockDetail)
 // usa esses campos extras (custo/venda, peso, descrição…), então o tipo espelha o StockProduct.
@@ -74,6 +75,15 @@ function fmtStock(p: { unit: string; stockQty: string; conversionFactor: string 
     return `${whole} ${unitName}${remainderMeters > 0 ? ` + ${QTY(remainderMeters)} m` : ''}`;
   }
   return QTY(qty);
+}
+
+/**
+ * Nome da unidade de venda no singular, minúsculo (ex.: "rolo", "barra") — para os rótulos
+ * da entrada refletirem a unidade REAL do produto (ADR-017), e não um "barras" fixo mesmo
+ * quando o item é vendido em rolo. `unitTypeLabels` traz "Rolo"/"Barra" sem o parêntese.
+ */
+function unitWord(p: { unit: string } | undefined | null): string {
+  return p ? unitTypeLabels[p.unit as UnitType].toLowerCase() : 'unidade';
 }
 
 type Supplier = { id: string; name: string };
@@ -172,10 +182,19 @@ export default function EstoquePage() {
     }
   }
 
+  // Movimentações resolvidas TODAS no servidor (produto, tipo, motivo e período) — assim a busca
+  // por motivo varre o histórico inteiro (não só a página carregada) e o período realmente enxuga
+  // a lista. A tela ainda pagina o EXIBIDO com "Mostrar mais". `apiGet` já desembrulha `{ data }`.
   async function loadMovements() {
     try {
-      const q = filters.productId ? `?productId=${encodeURIComponent(filters.productId)}` : '';
-      setMovements(await apiGet<Movement[]>(`/stock/movements${q}`));
+      const params = new URLSearchParams();
+      if (filters.productId) params.set('productId', filters.productId);
+      if (filters.type) params.set('type', filters.type);
+      if (filters.reason.trim()) params.set('reason', filters.reason.trim());
+      if (filters.dateFrom) params.set('from', filters.dateFrom);
+      if (filters.dateTo) params.set('to', filters.dateTo);
+      const qs = params.toString();
+      setMovements(await apiGet<Movement[]>(`/stock/movements${qs ? `?${qs}` : ''}`));
       setError(null);
     } catch (e) {
       setError((e as Error).message);
@@ -186,11 +205,14 @@ export default function EstoquePage() {
     loadCatalog();
   }, []);
 
-  // Recarrega as movimentações quando o filtro de produto muda (resolvido no servidor).
+  // Recarrega as movimentações quando QUALQUER filtro muda (tudo resolvido no servidor).
+  // Debounce de 300 ms para o campo de Motivo não disparar uma busca por tecla; os demais
+  // filtros (selects/datas) também passam pelo timer, atraso imperceptível.
   useEffect(() => {
-    loadMovements();
+    const t = setTimeout(loadMovements, 300);
+    return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.productId]);
+  }, [filters.productId, filters.type, filters.reason, filters.dateFrom, filters.dateTo]);
 
   // Painel de reposição (EF-2): produtos no ponto de reposição (saldo ≤ mínimo, com mínimo
   // definido — regra pura `isLowStock` do core), já com a sugestão de quanto comprar
@@ -211,21 +233,6 @@ export default function EstoquePage() {
         .sort((a, b) => Number(b.out) - Number(a.out) || b.shortfall - a.shortfall),
     [products],
   );
-
-  // Filtros aplicados no cliente (tipo, motivo e período) sobre a lista já carregada.
-  const filteredMovements = useMemo(() => {
-    return movements.filter((m) => {
-      if (filters.type && m.type !== filters.type) return false;
-      if (filters.reason) {
-        const hay = `${m.reason ?? ''} ${m.supplier?.name ?? ''}`.toLowerCase();
-        if (!hay.includes(filters.reason.toLowerCase())) return false;
-      }
-      const day = (m.createdAt ?? '').slice(0, 10); // yyyy-mm-dd
-      if (filters.dateFrom && day < filters.dateFrom) return false;
-      if (filters.dateTo && day > filters.dateTo) return false;
-      return true;
-    });
-  }, [movements, filters.type, filters.reason, filters.dateFrom, filters.dateTo]);
 
   const filtersActive =
     filters.productId || filters.type || filters.reason || filters.dateFrom || filters.dateTo;
@@ -446,30 +453,31 @@ export default function EstoquePage() {
         <form onSubmit={onEntry} className="rounded-2xl bg-white p-4 shadow-sm">
           <h2 className="mb-3 font-semibold">Entrada de estoque</h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <select
-              value={entry.productId}
-              onChange={(e) => setEntry({ ...entry, productId: e.target.value })}
-              className="rounded-lg border border-gray-300 px-3 py-2 sm:col-span-2"
-            >
-              <option value="">Selecione o produto…</option>
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} ({fmtStock(p)} em estoque)
-                </option>
-              ))}
-            </select>
+            <div className="sm:col-span-2">
+              <ProductPicker
+                products={products}
+                value={entry.productId}
+                onChange={(id) => setEntry({ ...entry, productId: id })}
+                formatStock={(p) => `${fmtStock(p)} em estoque`}
+                placeholder="Buscar produto ou SKU…"
+              />
+            </div>
             <input
-              placeholder={entryClosed ? 'Quantidade (barras)' : 'Quantidade'}
+              placeholder={entryClosed ? `Quantidade (${unitWord(entryProduct)}s)` : 'Quantidade'}
               type="number"
               step={entryClosed ? '1' : 'any'}
               min="0"
               value={entry.quantity}
               onChange={(e) => setEntry({ ...entry, quantity: e.target.value })}
-              title={entryClosed ? 'Quantas barras/rolos inteiros entram (convertido para metros pelo tamanho).' : undefined}
+              title={
+                entryClosed
+                  ? `A quantidade é em ${unitWord(entryProduct)}s inteiros; convertemos para metros pelo tamanho.`
+                  : undefined
+              }
               className="rounded-lg border border-gray-300 px-3 py-2"
             />
             <MoneyInput
-              placeholder={entryClosed ? 'Custo por barra (opcional)' : 'Custo unitário (opcional)'}
+              placeholder={entryClosed ? `Custo por ${unitWord(entryProduct)} (opcional)` : 'Custo unitário (opcional)'}
               value={entry.unitCost}
               onChange={(v) => setEntry({ ...entry, unitCost: v })}
               className="rounded-lg border border-gray-300 px-3 py-2"
@@ -507,18 +515,13 @@ export default function EstoquePage() {
         <form onSubmit={onAdjust} className="rounded-2xl bg-white p-4 shadow-sm">
           <h2 className="mb-3 font-semibold">Ajuste de inventário</h2>
           <div className="grid grid-cols-1 gap-3">
-            <select
+            <ProductPicker
+              products={products}
               value={adjust.productId}
-              onChange={(e) => setAdjust({ ...adjust, productId: e.target.value })}
-              className="rounded-lg border border-gray-300 px-3 py-2"
-            >
-              <option value="">Selecione o produto…</option>
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} ({fmtStock(p)} em estoque)
-                </option>
-              ))}
-            </select>
+              onChange={(id) => setAdjust({ ...adjust, productId: id })}
+              formatStock={(p) => `${fmtStock(p)} em estoque`}
+              placeholder="Buscar produto ou SKU…"
+            />
             <input
               placeholder="Contagem real"
               type="number"
@@ -725,7 +728,9 @@ export default function EstoquePage() {
             Movimentações recentes
           </button>
           <span className="text-xs text-gray-500">
-            {filteredMovements.length} de {movements.length}
+            {movements.length}
+            {movements.length >= 1000 ? '+ (refine o período)' : ''}{' '}
+            {movements.length === 1 ? 'movimentação' : 'movimentações'}
           </span>
         </div>
 
@@ -811,16 +816,16 @@ export default function EstoquePage() {
             </tr>
           </thead>
           <tbody>
-            {filteredMovements.length === 0 ? (
+            {movements.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-4 py-6 text-center text-gray-500">
-                  {movements.length === 0
-                    ? 'Nenhuma movimentação ainda.'
-                    : 'Nenhuma movimentação para os filtros selecionados.'}
+                  {filtersActive
+                    ? 'Nenhuma movimentação para os filtros selecionados.'
+                    : 'Nenhuma movimentação ainda.'}
                 </td>
               </tr>
             ) : (
-              filteredMovements.slice(0, movLimit).map((m) => (
+              movements.slice(0, movLimit).map((m) => (
                 <tr key={m.id} className="border-t border-gray-100">
                   <td className="px-4 py-2 text-gray-600">{DATETIME(m.createdAt)}</td>
                   <td className="px-4 py-2">{m.product?.name ?? '—'}</td>
@@ -847,14 +852,14 @@ export default function EstoquePage() {
           </tbody>
         </table>
         </div>
-        {filteredMovements.length > movLimit && (
+        {movements.length > movLimit && (
           <div className="border-t border-gray-100 py-3 text-center">
             <button
               type="button"
               onClick={() => setMovLimit((n) => n + PAGE_SIZE)}
               className="rounded-lg border border-gray-300 px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
             >
-              Mostrar mais ({filteredMovements.length - movLimit})
+              Mostrar mais ({movements.length - movLimit})
             </button>
           </div>
         )}
