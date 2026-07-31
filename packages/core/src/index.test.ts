@@ -44,6 +44,12 @@ import {
   hasPair,
   pairAvailableQty,
   groupPairedItems,
+  availableQty,
+  remainingToDeliver,
+  isValidDelivery,
+  applyItemDelivery,
+  orderFulfillmentStatus,
+  reconcileReserved,
 } from './index';
 
 describe('calcSubtotal', () => {
@@ -1016,6 +1022,144 @@ describe('EF-3 — venda em unidade alternativa', () => {
 
     it('arredonda a 4 casas (100 / 3)', () => {
       expect(effectiveBaseUnitPrice({ salePrice: 1, altUnit: 'ROLL', altSalePrice: 100, conversionFactor: 3 }, 'ALT')).toBe(33.3333);
+    });
+  });
+});
+
+describe('ADR-020 — retirada / entrega futura', () => {
+  describe('availableQty', () => {
+    it('disponível = estoque − reservado', () => {
+      expect(availableQty(100, 30)).toBe(70);
+    });
+
+    it('sem reserva ⇒ disponível = estoque', () => {
+      expect(availableQty(50, 0)).toBe(50);
+    });
+
+    it('nunca negativo (reservado > estoque, borda de reconciliação)', () => {
+      expect(availableQty(10, 25)).toBe(0);
+    });
+
+    it('preserva fracionado a 4 casas (metros)', () => {
+      expect(availableQty(12.5, 2.5)).toBe(10);
+    });
+  });
+
+  describe('remainingToDeliver', () => {
+    it('falta = base − entregue', () => {
+      expect(remainingToDeliver(200, 50)).toBe(150);
+    });
+
+    it('tudo retirado ⇒ 0', () => {
+      expect(remainingToDeliver(200, 200)).toBe(0);
+    });
+
+    it('nunca negativo (defensivo)', () => {
+      expect(remainingToDeliver(200, 250)).toBe(0);
+    });
+  });
+
+  describe('isValidDelivery', () => {
+    it('retirada positiva dentro do que falta é válida', () => {
+      expect(isValidDelivery(50, 150)).toBe(true);
+    });
+
+    it('retirada exata do que falta é válida', () => {
+      expect(isValidDelivery(150, 150)).toBe(true);
+    });
+
+    it('acima do que falta é inválida', () => {
+      expect(isValidDelivery(151, 150)).toBe(false);
+    });
+
+    it('zero ou negativa é inválida', () => {
+      expect(isValidDelivery(0, 150)).toBe(false);
+      expect(isValidDelivery(-5, 150)).toBe(false);
+    });
+
+    it('tolera arredondamento em fracionados (0,5 m)', () => {
+      expect(isValidDelivery(0.5, 0.5)).toBe(true);
+    });
+  });
+
+  describe('applyItemDelivery', () => {
+    it('retirada parcial mantém a linha incompleta', () => {
+      const r = applyItemDelivery(200, 0, 50);
+      expect(r.deliveredBaseQty).toBe(50);
+      expect(r.fullyDelivered).toBe(false);
+    });
+
+    it('somatório das parciais completa a linha', () => {
+      const r1 = applyItemDelivery(200, 0, 120);
+      const r2 = applyItemDelivery(200, r1.deliveredBaseQty, 80);
+      expect(r2.deliveredBaseQty).toBe(200);
+      expect(r2.fullyDelivered).toBe(true);
+    });
+
+    it('≥ tolera arredondamento ao completar', () => {
+      const r = applyItemDelivery(0.3, 0.1, 0.2); // 0.1 + 0.2 = 0.30000000000000004
+      expect(r.deliveredBaseQty).toBe(0.3);
+      expect(r.fullyDelivered).toBe(true);
+    });
+  });
+
+  describe('orderFulfillmentStatus', () => {
+    it('nada retirado ⇒ PENDING', () => {
+      expect(
+        orderFulfillmentStatus([
+          { baseQuantity: 200, deliveredBaseQty: 0 },
+          { baseQuantity: 10, deliveredBaseQty: 0 },
+        ]),
+      ).toBe('PENDING');
+    });
+
+    it('parte retirada (uma linha) ⇒ PARTIAL', () => {
+      expect(
+        orderFulfillmentStatus([
+          { baseQuantity: 200, deliveredBaseQty: 200 },
+          { baseQuantity: 10, deliveredBaseQty: 0 },
+        ]),
+      ).toBe('PARTIAL');
+    });
+
+    it('linha parcialmente retirada ⇒ PARTIAL', () => {
+      expect(
+        orderFulfillmentStatus([{ baseQuantity: 200, deliveredBaseQty: 50 }]),
+      ).toBe('PARTIAL');
+    });
+
+    it('tudo retirado ⇒ COMPLETED', () => {
+      expect(
+        orderFulfillmentStatus([
+          { baseQuantity: 200, deliveredBaseQty: 200 },
+          { baseQuantity: 10, deliveredBaseQty: 10 },
+        ]),
+      ).toBe('COMPLETED');
+    });
+
+    it('pedido sem linhas (defensivo) ⇒ COMPLETED', () => {
+      expect(orderFulfillmentStatus([])).toBe('COMPLETED');
+    });
+  });
+
+  describe('reconcileReserved', () => {
+    it('soma o que falta sair de todas as linhas pendentes do produto', () => {
+      expect(
+        reconcileReserved([
+          { baseQuantity: 200, deliveredBaseQty: 50 }, // falta 150
+          { baseQuantity: 30, deliveredBaseQty: 0 }, //  falta 30
+          { baseQuantity: 10, deliveredBaseQty: 10 }, // falta 0
+        ]),
+      ).toBe(180);
+    });
+
+    it('nenhuma linha pendente ⇒ 0', () => {
+      expect(reconcileReserved([])).toBe(0);
+    });
+
+    it('coerência com availableQty: estoque − reservado reconciliado', () => {
+      const reserved = reconcileReserved([{ baseQuantity: 40, deliveredBaseQty: 10 }]); // 30
+      expect(availableQty(100, reserved)).toBe(70);
     });
   });
 });

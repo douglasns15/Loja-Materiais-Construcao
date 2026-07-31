@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { createPrismaClient } from '@nexoloja/db';
 import {
+  availableQty,
   calcSaleItemTotal,
   calcSaleTotals,
   closedStockMeters,
@@ -223,6 +224,15 @@ orders.post('/', requireActiveTenant, async (c) => {
   }
   const sale = parsed.data;
   const isOffline = !!sale.id; // `id` gerado no cliente ⇒ venda de origem offline (ADR-011)
+  // Retirada/entrega futura (ADR-020): reserva agora, baixa parcial na retirada. Online-only
+  // nesta fatia (como o fiado) — a venda offline sempre baixa no ato.
+  const isScheduled = sale.deliveryMode === 'SCHEDULED';
+  if (isScheduled && isOffline) {
+    return c.json(
+      { ok: false, error: 'Venda com retirada/entrega futura não está disponível offline.' },
+      400,
+    );
+  }
 
   try {
     const prisma = createPrismaClient(connectionString);
@@ -330,11 +340,14 @@ orders.post('/', requireActiveTenant, async (c) => {
       }
       // Estoque insuficiente (em unidade-base): bloqueia no online; no offline registra e deixa
       // negativo p/ reconciliação (§6). A venda offline de EF-3 também traz `saleMode` no envelope.
-      if (!isOffline && Number(p.stockQty) < baseQty) {
+      // ADR-020: a trava é pelo DISPONÍVEL = estoque − reservado (mercadoria já comprometida com
+      // retiradas futuras não pode ser vendida de novo) — vale para venda no ato E agendada.
+      const available = availableQty(Number(p.stockQty), Number(p.reservedQty));
+      if (!isOffline && available < baseQty) {
         return c.json(
           {
             ok: false,
-            error: `Estoque insuficiente para "${p.name}" (disponível: ${Number(p.stockQty)}).`,
+            error: `Estoque insuficiente para "${p.name}" (disponível: ${available}).`,
           },
           400,
         );
@@ -398,6 +411,20 @@ orders.post('/', requireActiveTenant, async (c) => {
           total,
           notes: sale.notes,
           syncStatus: 'SYNCED',
+          // Retirada/entrega futura (ADR-020). Em IMMEDIATE (padrão) estes campos ficam inertes.
+          // Em SCHEDULED nasce "A retirar" (nada saiu ainda); a previsão é única (do pedido) ou
+          // por item conforme a flag `perItemSchedule`.
+          deliveryMode: sale.deliveryMode,
+          ...(isScheduled
+            ? {
+                fulfillmentStatus: 'PENDING' as const,
+                perItemSchedule: sale.perItemSchedule ?? false,
+                scheduledPickupAt:
+                  !sale.perItemSchedule && sale.scheduledPickupAt
+                    ? new Date(sale.scheduledPickupAt)
+                    : null,
+              }
+            : {}),
           items: {
             create: lines.map(({ item, product, baseQty, soldUnit }) => ({
               productId: item.productId,
@@ -411,6 +438,11 @@ orders.post('/', requireActiveTenant, async (c) => {
               // Par (ADR-015): agrupa os dois itens vendidos juntos, p/ o comprovante imprimir
               // UMA linha. Não afeta estoque nem estorno — cada item continua sendo um item.
               pairGroup: item.pairGroup ?? null,
+              // ADR-020: previsão por item (só quando a flag "Data por item" está ligada).
+              scheduledPickupAt:
+                isScheduled && sale.perItemSchedule && item.scheduledPickupAt
+                  ? new Date(item.scheduledPickupAt)
+                  : null,
             })),
           },
           payments: {
@@ -424,10 +456,20 @@ orders.post('/', requireActiveTenant, async (c) => {
         include: { items: true, payments: true },
       });
 
-      // ADR-001: cada item gera saída de estoque + decremento atômico do cache (pode ficar
-      // negativo no sync offline — sinaliza cadastro desatualizado, vai p/ reconciliação, §6).
-      // EF-3 (ADR-013): a baixa é sempre em UNIDADE-BASE (`baseQty` = qtd × fator no modo embalagem).
+      // Estoque. Dois caminhos (ADR-020):
+      //  - SCHEDULED (retirada futura): NÃO baixa; apenas RESERVA (incrementa o cache
+      //    `reservedQty`). A baixa real (StockMovement EXPENSE + stockQty) acontece na RETIRADA,
+      //    parcial, preservando o ADR-001 — só que disparada no evento de entrega.
+      //  - IMMEDIATE (padrão): ADR-001 — cada item gera saída de estoque + decremento atômico do
+      //    cache (pode ficar negativo no sync offline, §6). EF-3 (ADR-013): sempre em UNIDADE-BASE.
       for (const { item, baseQty } of lines) {
+        if (isScheduled) {
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { reservedQty: { increment: baseQty } },
+          });
+          continue;
+        }
         await tx.stockMovement.create({
           data: {
             tenantId,
@@ -580,28 +622,42 @@ orders.post('/:id/cancel', async (c) => {
       );
     }
 
+    const isScheduled = order.deliveryMode === 'SCHEDULED';
     const cancelled = await prisma.$transaction(async (tx) => {
-      // ADR-001: estorna cada item — movimento reverso (INCOME) + incremento do cache.
-      // EF-3 (ADR-013): estorna em UNIDADE-BASE (`baseQuantity`); `?? quantity` cobre pedidos
-      // antigos (pré-EF-3, sem a coluna) — para eles base == vendida (fator 1), então é exato.
+      // Estorno de estoque. EF-3 (ADR-013): em UNIDADE-BASE (`baseQuantity`); `?? quantity` cobre
+      // pedidos antigos (pré-EF-3, base == vendida, fator 1). Dois caminhos (ADR-020):
+      //  - IMMEDIATE: a mercadoria saiu inteira na venda ⇒ INCOME reverso do total (ADR-001).
+      //  - SCHEDULED: só saiu a parte já RETIRADA (`deliveredBaseQty`) ⇒ INCOME reverso dela; o
+      //    RESERVADO remanescente (base − retirado) nunca deixou o estoque, então só se LIBERA a
+      //    reserva (decrementa o cache `reservedQty`), sem StockMovement.
       for (const item of order.items) {
         const baseQty = Number(item.baseQuantity ?? item.quantity);
-        await tx.stockMovement.create({
-          data: {
-            tenantId,
-            productId: item.productId,
-            type: 'INCOME',
-            quantity: baseQty,
-            reason: `Cancelamento da venda ${order.id}`,
-            syncStatus: 'SYNCED',
-            userId, // autoria (ADR-010): quem cancelou/estornou
-            registeredByName: c.get('userName'),
-          },
-        });
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { stockQty: { increment: baseQty } },
-        });
+        const delivered = Number(item.deliveredBaseQty ?? 0);
+        const returnToStock = isScheduled ? delivered : baseQty;
+        const releaseReserved = isScheduled ? Math.max(0, baseQty - delivered) : 0;
+        if (returnToStock > 0) {
+          await tx.stockMovement.create({
+            data: {
+              tenantId,
+              productId: item.productId,
+              type: 'INCOME',
+              quantity: returnToStock,
+              reason: `Cancelamento da venda ${order.id}`,
+              syncStatus: 'SYNCED',
+              userId, // autoria (ADR-010): quem cancelou/estornou
+              registeredByName: c.get('userName'),
+            },
+          });
+        }
+        if (returnToStock > 0 || releaseReserved > 0) {
+          await tx.product.update({
+            where: { id: item.productId },
+            data: {
+              ...(returnToStock > 0 ? { stockQty: { increment: returnToStock } } : {}),
+              ...(releaseReserved > 0 ? { reservedQty: { decrement: releaseReserved } } : {}),
+            },
+          });
+        }
       }
 
       const updated = await tx.order.update({
@@ -707,27 +763,39 @@ orders.post('/:id/return', async (c) => {
 
     const total = Number(order.total);
 
+    const isScheduled = order.deliveryMode === 'SCHEDULED';
     const returned = await prisma.$transaction(async (tx) => {
-      // ADR-001: estorna cada item — movimento reverso (INCOME) + incremento do cache.
-      // EF-3 (ADR-013): estorna em UNIDADE-BASE (`baseQuantity`); `?? quantity` cobre pedidos antigos.
+      // Estorno de estoque — mesma lógica do cancelamento (ADR-020): IMMEDIATE devolve o total;
+      // SCHEDULED devolve só a parte já retirada (`deliveredBaseQty`) via INCOME e LIBERA a reserva
+      // remanescente (sem StockMovement). EF-3 (ADR-013): sempre em UNIDADE-BASE (`?? quantity`).
       for (const item of order.items) {
         const baseQty = Number(item.baseQuantity ?? item.quantity);
-        await tx.stockMovement.create({
-          data: {
-            tenantId,
-            productId: item.productId,
-            type: 'INCOME',
-            quantity: baseQty,
-            reason: `Devolução da venda ${order.id}`,
-            syncStatus: 'SYNCED',
-            userId, // autoria (ADR-010): quem devolveu/estornou
-            registeredByName: c.get('userName'),
-          },
-        });
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { stockQty: { increment: baseQty } },
-        });
+        const delivered = Number(item.deliveredBaseQty ?? 0);
+        const returnToStock = isScheduled ? delivered : baseQty;
+        const releaseReserved = isScheduled ? Math.max(0, baseQty - delivered) : 0;
+        if (returnToStock > 0) {
+          await tx.stockMovement.create({
+            data: {
+              tenantId,
+              productId: item.productId,
+              type: 'INCOME',
+              quantity: returnToStock,
+              reason: `Devolução da venda ${order.id}`,
+              syncStatus: 'SYNCED',
+              userId, // autoria (ADR-010): quem devolveu/estornou
+              registeredByName: c.get('userName'),
+            },
+          });
+        }
+        if (returnToStock > 0 || releaseReserved > 0) {
+          await tx.product.update({
+            where: { id: item.productId },
+            data: {
+              ...(returnToStock > 0 ? { stockQty: { increment: returnToStock } } : {}),
+              ...(releaseReserved > 0 ? { reservedQty: { decrement: releaseReserved } } : {}),
+            },
+          });
+        }
       }
 
       // ADR-006: saída de dinheiro no caixa de HOJE (não no caixa original).

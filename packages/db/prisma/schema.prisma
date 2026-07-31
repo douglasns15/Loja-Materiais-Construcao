@@ -17,8 +17,8 @@ generator client {
 
 datasource db {
   provider  = "postgresql"
-  url       = env("DATABASE_URL")  // Pooler 6543 (pgbouncer) — runtime da aplicação
-  directUrl = env("DIRECT_URL")    // Porta direta 5432 — usada pelas migrations (migrate/diff)
+  url       = env("DATABASE_URL") // Pooler 6543 (pgbouncer) — runtime da aplicação
+  directUrl = env("DIRECT_URL") // Porta direta 5432 — usada pelas migrations (migrate/diff)
 }
 
 // =============================================================================
@@ -27,69 +27,83 @@ datasource db {
 
 /// Status de sincronização para suporte Offline-First (IndexedDB → Supabase)
 enum SyncStatus {
-  PENDING   // Criado localmente, aguardando envio ao servidor
-  SYNCED    // Confirmado no servidor
-  CONFLICT  // Conflito detectado durante sincronização
+  PENDING // Criado localmente, aguardando envio ao servidor
+  SYNCED // Confirmado no servidor
+  CONFLICT // Conflito detectado durante sincronização
 }
 
 /// Tipo de movimentação financeira
 enum TransactionType {
-  INCOME    // Entrada
-  EXPENSE   // Saída
+  INCOME // Entrada
+  EXPENSE // Saída
 }
 
 /// Status de um pedido/venda
 enum OrderStatus {
-  DRAFT      // Rascunho (aberto no caixa offline)
-  CONFIRMED  // Confirmado
-  INVOICED   // Faturado / NF emitida
-  CANCELLED  // Cancelado (estorno dentro do caixa aberto)
-  RETURNED   // Devolvido (estorno de venda de caixa já fechado — saída no caixa de hoje)
+  DRAFT // Rascunho (aberto no caixa offline)
+  CONFIRMED // Confirmado
+  INVOICED // Faturado / NF emitida
+  CANCELLED // Cancelado (estorno dentro do caixa aberto)
+  RETURNED // Devolvido (estorno de venda de caixa já fechado — saída no caixa de hoje)
 }
 
 /// Natureza de uma movimentação de caixa que não é uma venda (CashMovement).
 enum CashMovementKind {
-  RETURN      // Devolução de venda (saída de dinheiro)
-  WITHDRAWAL  // Sangria — retirada de dinheiro do caixa (saída)
-  SUPPLY      // Suprimento — reforço de troco (entrada)
-  EXPENSE     // Despesa paga pelo caixa (saída)
+  RETURN // Devolução de venda (saída de dinheiro)
+  WITHDRAWAL // Sangria — retirada de dinheiro do caixa (saída)
+  SUPPLY // Suprimento — reforço de troco (entrada)
+  EXPENSE // Despesa paga pelo caixa (saída)
 }
 
 /// Situação de uma conta a receber (venda a prazo / "fiado" — ADR-019).
 enum ReceivableStatus {
-  OPEN       // Em aberto (ainda há saldo devedor)
-  PAID       // Quitada (recebida por inteiro)
-  CANCELLED  // Cancelada (a venda de origem foi cancelada/devolvida antes de qualquer recebimento)
+  OPEN // Em aberto (ainda há saldo devedor)
+  PAID // Quitada (recebida por inteiro)
+  CANCELLED // Cancelada (a venda de origem foi cancelada/devolvida antes de qualquer recebimento)
 }
 
 /// Tipo de unidade de medida — relevante para módulo Material de Construção
 enum UnitType {
-  UNIT       // Unidade (un)
-  METER      // Metro linear (m)
+  UNIT // Unidade (un)
+  METER // Metro linear (m)
   SQUARE_METER // Metro quadrado (m²)
-  CUBIC_METER  // Metro cúbico (m³)
-  KILOGRAM   // Quilograma (kg)
-  LITER      // Litro (l)
-  THOUSAND   // Milheiro (mil) — ex: tijolos
-  BAG        // Saco (sc) — ex: cimento
-  ROLL       // Rolo — ex: manta, tela
-  BARRA      // Barra — ex: vergalhão/perfil vendido em barra fechada, cortável por metro (ADR-017)
+  CUBIC_METER // Metro cúbico (m³)
+  KILOGRAM // Quilograma (kg)
+  LITER // Litro (l)
+  THOUSAND // Milheiro (mil) — ex: tijolos
+  BAG // Saco (sc) — ex: cimento
+  ROLL // Rolo — ex: manta, tela
+  BARRA // Barra — ex: vergalhão/perfil vendido em barra fechada, cortável por metro (ADR-017)
 }
 
 /// Papel do usuário dentro de um tenant
 enum UserRole {
-  OWNER      // Dono da loja (acesso total)
-  MANAGER    // Gerente
-  CASHIER    // Operador de caixa
-  STOCK      // Responsável de estoque
+  OWNER // Dono da loja (acesso total)
+  MANAGER // Gerente
+  CASHIER // Operador de caixa
+  STOCK // Responsável de estoque
 }
 
 /// Status de entrega (ADR-002)
 enum DeliveryStatus {
-  PENDING    // Pendente
-  IN_ROUTE   // Em rota
-  DELIVERED  // Entregue
-  CANCELLED  // Cancelado
+  PENDING // Pendente
+  IN_ROUTE // Em rota
+  DELIVERED // Entregue
+  CANCELLED // Cancelado
+}
+
+/// Modo de saída da mercadoria de um pedido (ADR-020 — retirada/entrega futura).
+enum DeliveryMode {
+  IMMEDIATE // Venda de balcão: a mercadoria sai no ato (baixa de estoque na venda — comportamento padrão)
+  SCHEDULED // Retirada/entrega posterior: reserva na venda, baixa real só na retirada (parcial, conforme sai)
+}
+
+/// Situação de retirada de um pedido SCHEDULED (ADR-020). Cache derivado dos itens,
+/// no espírito do ADR-001 (cache desnormalizado + itens/eventos como fonte de verdade).
+enum FulfillmentStatus {
+  PENDING // Nada saiu ainda
+  PARTIAL // Parte dos itens já foi retirada
+  COMPLETED // Tudo retirado — pedido finalizado
 }
 
 // =============================================================================
@@ -98,39 +112,40 @@ enum DeliveryStatus {
 
 /// Representa uma loja/empresa (tenant). Raiz do multi-tenancy.
 model Tenant {
-  id          String   @id @default(uuid()) @db.Uuid
-  name        String   @db.VarChar(120)
-  slug        String   @unique @db.VarChar(60)  // Identificador único amigável (ex: "loja-do-ze")
-  cnpj        String?  @unique @db.VarChar(18)
-  phone       String?  @db.VarChar(20)
-  logoUrl     String?  @db.VarChar(500)          // URL no Cloudflare R2 — nunca BLOB
+  id                   String   @id @default(uuid()) @db.Uuid
+  name                 String   @db.VarChar(120)
+  slug                 String   @unique @db.VarChar(60) // Identificador único amigável (ex: "loja-do-ze")
+  cnpj                 String?  @unique @db.VarChar(18)
+  phone                String?  @db.VarChar(20)
+  logoUrl              String?  @db.VarChar(500) // URL no Cloudflare R2 — nunca BLOB
   /// Taxa da maquininha por modalidade, em PERCENTUAL (ADR-016). Ex.: 3.50 = 3,5%.
   /// Serve APENAS para exibir a margem REAL (o que sobra depois da taxa) — nunca altera o preço
   /// cobrado do cliente. Quem altera preço é o acréscimo opt-in de cada produto. Vazio ⇒ margem
   /// exibida como sempre foi (sem desconto de taxa).
   cardFeeDebitPercent  Decimal? @db.Decimal(5, 2)
   cardFeeCreditPercent Decimal? @db.Decimal(5, 2)
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  isActive             Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
   // Relações
-  users       User[]
-  modules     TenantModule[]
-  products    Product[]
-  categories  Category[]
-  customers   Customer[]
-  suppliers   Supplier[]
-  orders      Order[]
-  payments    Payment[]
-  cashSessions CashSession[]
-  cashMovements CashMovement[]
-  stockMovements StockMovement[]
-  deliveries  Delivery[]
-  auditEvents AuditEvent[]
-  receivables Receivable[]
-  receivablePayments ReceivablePayment[]
-  carts       Cart[]
+  users               User[]
+  modules             TenantModule[]
+  products            Product[]
+  categories          Category[]
+  customers           Customer[]
+  suppliers           Supplier[]
+  orders              Order[]
+  payments            Payment[]
+  cashSessions        CashSession[]
+  cashMovements       CashMovement[]
+  stockMovements      StockMovement[]
+  deliveries          Delivery[]
+  auditEvents         AuditEvent[]
+  receivables         Receivable[]
+  receivablePayments  ReceivablePayment[]
+  orderItemDeliveries OrderItemDelivery[]
+  carts               Cart[]
 
   @@map("tenants")
 }
@@ -139,12 +154,12 @@ model Tenant {
 model TenantModule {
   id        String   @id @default(uuid()) @db.Uuid
   tenantId  String   @db.Uuid
-  moduleKey String   @db.VarChar(60)  // Ex: "CONSTRUCTION_MATERIALS"
+  moduleKey String   @db.VarChar(60) // Ex: "CONSTRUCTION_MATERIALS"
   isActive  Boolean  @default(true)
-  config    Json?                      // Configurações específicas do módulo (JSON leve)
+  config    Json? // Configurações específicas do módulo (JSON leve)
   createdAt DateTime @default(now())
 
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, moduleKey])
   @@map("tenant_modules")
@@ -155,20 +170,20 @@ model TenantModule {
 /// `id` é fornecido pela aplicação e DEVE ser igual ao `auth.users.id` do Supabase Auth.
 /// O vínculo formal (FK cross-schema para auth.users) será configurado na Fase 2 (Auth/RLS).
 model User {
-  id           String    @id @db.Uuid       // = Supabase Auth user id (auth.users.id)
-  tenantId     String    @db.Uuid
-  name         String    @db.VarChar(100)
-  email        String    @db.VarChar(150)
-  phone        String?   @db.VarChar(20)     // Telefone pessoal do usuário (opcional; só dígitos)
-  role         UserRole  @default(CASHIER)
-  isActive     Boolean   @default(true)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id        String   @id @db.Uuid // = Supabase Auth user id (auth.users.id)
+  tenantId  String   @db.Uuid
+  name      String   @db.VarChar(100)
+  email     String   @db.VarChar(150)
+  phone     String?  @db.VarChar(20) // Telefone pessoal do usuário (opcional; só dígitos)
+  role      UserRole @default(CASHIER)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   orders       Order[]
   cashSessions CashSession[]
-  cart         Cart?     // Cesta persistente do PDV (ADR-021): uma por usuário
+  cart         Cart? // Cesta persistente do PDV (ADR-021): uma por usuário
 
   @@unique([tenantId, email])
   @@map("users")
@@ -181,7 +196,7 @@ model User {
 /// (só a API-dono lê); o access token hook (supabase_auth_admin) lê esta tabela para injetar
 /// o claim `is_platform_admin` no JWT — atalho de UI; a autorização confia na tabela.
 model PlatformAdmin {
-  id        String   @id @db.Uuid       // = Supabase Auth user id (auth.users.id)
+  id        String   @id @db.Uuid // = Supabase Auth user id (auth.users.id)
   email     String   @unique @db.VarChar(150)
   name      String   @db.VarChar(100)
   isActive  Boolean  @default(true)
@@ -199,16 +214,16 @@ model PlatformAdmin {
 model Category {
   id        String    @id @default(uuid()) @db.Uuid
   tenantId  String    @db.Uuid
-  parentId  String?   @db.Uuid          // Subcategoria (opcional)
+  parentId  String?   @db.Uuid // Subcategoria (opcional)
   name      String    @db.VarChar(80)
   isActive  Boolean   @default(true)
-  deletedAt DateTime?                   // Soft-delete (ADR-004)
+  deletedAt DateTime? // Soft-delete (ADR-004)
   createdAt DateTime  @default(now())
 
-  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  parent    Category? @relation("CategoryHierarchy", fields: [parentId], references: [id])
-  children  Category[] @relation("CategoryHierarchy")
-  products  Product[]
+  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryHierarchy")
+  products Product[]
 
   @@unique([tenantId, name, parentId])
   @@map("categories")
@@ -216,73 +231,78 @@ model Category {
 
 /// Produto do catálogo. Suporta unidades especiais do módulo Material de Construção.
 model Product {
-  id              String    @id @default(uuid()) @db.Uuid
-  tenantId        String    @db.Uuid
-  categoryId      String?   @db.Uuid
-  sku             String    @db.VarChar(60)   // Código interno ou código de barras
-  name            String    @db.VarChar(150)
+  id               String     @id @default(uuid()) @db.Uuid
+  tenantId         String     @db.Uuid
+  categoryId       String?    @db.Uuid
+  sku              String     @db.VarChar(60) // Código interno ou código de barras
+  name             String     @db.VarChar(150)
   /// Nome popular/regional do produto — usado para busca no PDV além do nome oficial.
   /// Genérico p/ qualquer ramo. Ex.: "Ferro 8" p/ "Vergalhão CA-50 8mm"; "Dipirona" p/ "Dipirona Sódica 500mg".
-  popularName     String?   @db.VarChar(150)
+  popularName      String?    @db.VarChar(150)
   /// Fabricante/marca do produto (ex.: "Votorantim", "Tigre"). Genérico p/ qualquer ramo.
   /// Também entra na busca (nome, nome popular, SKU e fabricante) — daí o índice abaixo.
-  manufacturer    String?   @db.VarChar(120)
-  description     String?   @db.VarChar(500)
-  imageUrl        String?   @db.VarChar(500)  // URL no Cloudflare R2 — nunca BLOB
-  unit            UnitType  @default(UNIT)
+  manufacturer     String?    @db.VarChar(120)
+  description      String?    @db.VarChar(500)
+  imageUrl         String?    @db.VarChar(500) // URL no Cloudflare R2 — nunca BLOB
+  unit             UnitType   @default(UNIT)
   /// Fator de conversão para módulo Material de Construção (ADR-013 — EF-3).
   /// Ex: 1 milheiro = 1000 unidades → conversionFactor = 1000; 1 rolo = 100 metros → 100.
   /// Reusado como TAMANHO da embalagem alternativa (unidade-base por embalagem fechada).
-  conversionFactor Decimal? @db.Decimal(10, 4)
-  costPrice       Decimal   @db.Decimal(12, 4)
-  salePrice       Decimal   @db.Decimal(12, 4)
+  conversionFactor Decimal?   @db.Decimal(10, 4)
+  costPrice        Decimal    @db.Decimal(12, 4)
+  salePrice        Decimal    @db.Decimal(12, 4)
   /// Venda em unidade alternativa (ADR-013 — EF-3). Quando `altUnit` + `altSalePrice` +
   /// `conversionFactor` estão preenchidos, o produto pode ser vendido também na embalagem
   /// fechada (ex.: ROLO de 100 m) com PREÇO PRÓPRIO — o fechado costuma sair mais barato por
   /// unidade-base, então NÃO é `salePrice × conversionFactor`. Vazio ⇒ produto de uma unidade só.
-  altUnit         UnitType?                     // Unidade da embalagem fechada (ex.: ROLL)
-  altSalePrice    Decimal?  @db.Decimal(12, 4)  // Preço de 1 embalagem fechada
+  altUnit          UnitType? // Unidade da embalagem fechada (ex.: ROLL)
+  altSalePrice     Decimal?   @db.Decimal(12, 4) // Preço de 1 embalagem fechada
   /// Produto agregado (ADR-015): o par "parafuso + bucha". Os dois seguem sendo produtos
   /// independentes (preço e estoque próprios); juntos, saem por `pairPrice` — o preço TOTAL
   /// do par, NÃO por item. Grava-se só de UM lado; o outro é resolvido por consulta reversa
   /// (`pairedBy`), então é impossível os dois lados divergirem de preço. Vazio ⇒ sem par.
-  pairedProductId String?   @db.Uuid
-  pairPrice       Decimal?  @db.Decimal(12, 4)
+  pairedProductId  String?    @db.Uuid
+  pairPrice        Decimal?   @db.Decimal(12, 4)
   /// Acréscimo por forma de pagamento (ADR-016). Valor em R$ POR UNIDADE-BASE que é somado ao
   /// preço quando a venda é no débito/crédito — é quanto o preço SOBE, não um custo nem o preço
   /// final. Opt-in por produto: vazio ⇒ o produto não muda de preço naquela forma de pagamento
   /// (nunca é derivado automaticamente da taxa da maquininha do tenant, que é só informativa).
   /// Na embalagem fechada (EF-3) é aplicado proporcionalmente (× `conversionFactor`); no par
   /// (ADR-015), os acréscimos dos dois lados se somam ANTES do rateio. CASH/PIX nunca acrescem.
-  surchargeDebit  Decimal?  @db.Decimal(12, 4)
-  surchargeCredit Decimal?  @db.Decimal(12, 4)
-  stockQty        Decimal   @default(0) @db.Decimal(12, 4)
-  minStockQty     Decimal   @default(0) @db.Decimal(12, 4)
-  isActive        Boolean   @default(true)
-  deletedAt       DateTime?                   // Soft-delete (ADR-004)
+  surchargeDebit   Decimal?   @db.Decimal(12, 4)
+  surchargeCredit  Decimal?   @db.Decimal(12, 4)
+  stockQty         Decimal    @default(0) @db.Decimal(12, 4)
+  /// Cache desnormalizado do total RESERVADO em unidade-base (ADR-020), análogo ao `stockQty`
+  /// (ADR-001). Soma do que está comprometido com pedidos SCHEDULED ainda não retirados. O PDV
+  /// trava pelo DISPONÍVEL = `stockQty − reservedQty` (não vende a mesma peça 2×). Fonte de
+  /// verdade = Σ dos itens reservados; existe reconciliação no mesmo espírito do `stockQty`.
+  reservedQty      Decimal    @default(0) @db.Decimal(12, 4)
+  minStockQty      Decimal    @default(0) @db.Decimal(12, 4)
+  isActive         Boolean    @default(true)
+  deletedAt        DateTime? // Soft-delete (ADR-004)
   /// Peso em kg — usado para cálculo de frete pesado (módulo Material de Construção)
-  weightKg        Decimal?  @db.Decimal(8, 3)
+  weightKg         Decimal?   @db.Decimal(8, 3)
   // Campos de sincronização offline
-  syncStatus      SyncStatus @default(SYNCED)
-  updatedAt       DateTime   @updatedAt
-  createdAt       DateTime   @default(now())
+  syncStatus       SyncStatus @default(SYNCED)
+  updatedAt        DateTime   @updatedAt
+  createdAt        DateTime   @default(now())
   // Autoria (ADR-010): quem criou/alterou/excluiu. `*Id` é referência SOLTA (sem FK, sobrevive à
   // exclusão do usuário); `*Name` é snapshot congelado do nome no momento (exibido em tela).
-  createdById     String?    @db.Uuid
-  createdByName   String?    @db.VarChar(100)
-  updatedById     String?    @db.Uuid
-  updatedByName   String?    @db.VarChar(100)
-  deletedById     String?    @db.Uuid
-  deletedByName   String?    @db.VarChar(100)
+  createdById      String?    @db.Uuid
+  createdByName    String?    @db.VarChar(100)
+  updatedById      String?    @db.Uuid
+  updatedByName    String?    @db.VarChar(100)
+  deletedById      String?    @db.Uuid
+  deletedByName    String?    @db.VarChar(100)
 
-  tenant          Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  category        Category?  @relation(fields: [categoryId], references: [id])
-  orderItems      OrderItem[]
-  stockMovements  StockMovement[]
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category       Category?       @relation(fields: [categoryId], references: [id])
+  orderItems     OrderItem[]
+  stockMovements StockMovement[]
   // Auto-relação do par (ADR-015). `SetNull`: se o agregado for apagado de vez, o par
   // simplesmente deixa de existir e o produto principal segue vendendo avulso.
-  pairedProduct   Product?   @relation("ProductPair", fields: [pairedProductId], references: [id], onDelete: SetNull)
-  pairedBy        Product[]  @relation("ProductPair")
+  pairedProduct  Product?        @relation("ProductPair", fields: [pairedProductId], references: [id], onDelete: SetNull)
+  pairedBy       Product[]       @relation("ProductPair")
 
   @@unique([tenantId, sku])
   @@index([tenantId, name])
@@ -298,29 +318,29 @@ model Product {
 
 /// Cliente da loja.
 model Customer {
-  id          String    @id @default(uuid()) @db.Uuid
-  tenantId    String    @db.Uuid
-  name        String    @db.VarChar(120)
-  cpfCnpj     String?   @db.VarChar(18)
-  phone       String?   @db.VarChar(20)
-  email       String?   @db.VarChar(150)
-  address     String?   @db.VarChar(300)
-  notes       String?   @db.VarChar(500)
-  isActive    Boolean   @default(true)
-  deletedAt   DateTime?                   // Soft-delete (ADR-004)
+  id            String     @id @default(uuid()) @db.Uuid
+  tenantId      String     @db.Uuid
+  name          String     @db.VarChar(120)
+  cpfCnpj       String?    @db.VarChar(18)
+  phone         String?    @db.VarChar(20)
+  email         String?    @db.VarChar(150)
+  address       String?    @db.VarChar(300)
+  notes         String?    @db.VarChar(500)
+  isActive      Boolean    @default(true)
+  deletedAt     DateTime? // Soft-delete (ADR-004)
   // Campos de sincronização offline
-  syncStatus  SyncStatus @default(SYNCED)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  syncStatus    SyncStatus @default(SYNCED)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
   // Autoria (ADR-010): quem criou/alterou/excluiu. `*Id` referência solta (sem FK); `*Name` snapshot.
-  createdById   String?  @db.Uuid
-  createdByName String?  @db.VarChar(100)
-  updatedById   String?  @db.Uuid
-  updatedByName String?  @db.VarChar(100)
-  deletedById   String?  @db.Uuid
-  deletedByName String?  @db.VarChar(100)
+  createdById   String?    @db.Uuid
+  createdByName String?    @db.VarChar(100)
+  updatedById   String?    @db.Uuid
+  updatedByName String?    @db.VarChar(100)
+  deletedById   String?    @db.Uuid
+  deletedByName String?    @db.VarChar(100)
 
-  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   orders      Order[]
   deliveries  Delivery[]
   receivables Receivable[]
@@ -332,19 +352,19 @@ model Customer {
 
 /// Fornecedor de produtos.
 model Supplier {
-  id          String    @id @default(uuid()) @db.Uuid
-  tenantId    String    @db.Uuid
-  name        String    @db.VarChar(120)
-  cnpj        String?   @db.VarChar(18)
-  phone       String?   @db.VarChar(20)
-  email       String?   @db.VarChar(150)
-  address     String?   @db.VarChar(300)
-  isActive    Boolean   @default(true)
-  deletedAt   DateTime?                   // Soft-delete (ADR-004)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @db.Uuid
+  name      String    @db.VarChar(120)
+  cnpj      String?   @db.VarChar(18)
+  phone     String?   @db.VarChar(20)
+  email     String?   @db.VarChar(150)
+  address   String?   @db.VarChar(300)
+  isActive  Boolean   @default(true)
+  deletedAt DateTime? // Soft-delete (ADR-004)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
-  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   stockMovements StockMovement[]
 
   @@unique([tenantId, cnpj])
@@ -357,26 +377,26 @@ model Supplier {
 
 /// Sessão de caixa. Controla abertura/fechamento e totais do operador.
 model CashSession {
-  id            String    @id @default(uuid()) @db.Uuid
-  tenantId      String    @db.Uuid
-  userId        String    @db.Uuid
-  openedAt      DateTime  @default(now())
-  closedAt      DateTime?
-  openingAmount Decimal   @db.Decimal(12, 2)  // Valor de abertura do caixa
-  closingAmount Decimal?  @db.Decimal(12, 2)  // Valor de fechamento informado
-  expectedAmount Decimal? @db.Decimal(12, 2)  // Valor calculado pelo sistema
-  notes         String?   @db.VarChar(500)
+  id             String     @id @default(uuid()) @db.Uuid
+  tenantId       String     @db.Uuid
+  userId         String     @db.Uuid
+  openedAt       DateTime   @default(now())
+  closedAt       DateTime?
+  openingAmount  Decimal    @db.Decimal(12, 2) // Valor de abertura do caixa
+  closingAmount  Decimal?   @db.Decimal(12, 2) // Valor de fechamento informado
+  expectedAmount Decimal?   @db.Decimal(12, 2) // Valor calculado pelo sistema
+  notes          String?    @db.VarChar(500)
   // Campos de sincronização offline
-  syncStatus    SyncStatus @default(SYNCED)
+  syncStatus     SyncStatus @default(SYNCED)
   // Autoria (ADR-010): `userId` (com FK) é quem abriu; snapshot do nome + quem fechou (solto).
-  openedByName  String?   @db.VarChar(100)
-  closedById    String?   @db.Uuid
-  closedByName  String?   @db.VarChar(100)
+  openedByName   String?    @db.VarChar(100)
+  closedById     String?    @db.Uuid
+  closedByName   String?    @db.VarChar(100)
 
-  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user          User      @relation(fields: [userId], references: [id])
-  orders        Order[]
-  movements     CashMovement[]
+  tenant    Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      User           @relation(fields: [userId], references: [id])
+  orders    Order[]
+  movements CashMovement[]
 
   @@index([tenantId, openedAt])
   @@map("cash_sessions")
@@ -384,63 +404,80 @@ model CashSession {
 
 /// Pedido / Venda. Criado no caixa (pode ser offline).
 model Order {
-  id             String      @id @default(uuid()) @db.Uuid
-  tenantId       String      @db.Uuid
-  cashSessionId  String?     @db.Uuid
-  userId         String      @db.Uuid       // Operador que realizou a venda
-  customerId     String?     @db.Uuid
-  status         OrderStatus @default(DRAFT)
-  subtotal       Decimal     @db.Decimal(12, 2)
-  discountAmount Decimal     @default(0) @db.Decimal(12, 2)
-  freightAmount  Decimal     @default(0) @db.Decimal(12, 2)  // Frete pesado (módulo Material de Construção)
-  total          Decimal     @db.Decimal(12, 2)
-  notes          String?     @db.VarChar(500)
+  id                String             @id @default(uuid()) @db.Uuid
+  tenantId          String             @db.Uuid
+  cashSessionId     String?            @db.Uuid
+  userId            String             @db.Uuid // Operador que realizou a venda
+  customerId        String?            @db.Uuid
+  status            OrderStatus        @default(DRAFT)
+  subtotal          Decimal            @db.Decimal(12, 2)
+  discountAmount    Decimal            @default(0) @db.Decimal(12, 2)
+  freightAmount     Decimal            @default(0) @db.Decimal(12, 2) // Frete pesado (módulo Material de Construção)
+  total             Decimal            @db.Decimal(12, 2)
+  notes             String?            @db.VarChar(500)
+  // Retirada/entrega futura (ADR-020). Em pedidos IMMEDIATE (padrão) estes campos ficam
+  // inertes e o comportamento é o de sempre (baixa no ato).
+  deliveryMode      DeliveryMode       @default(IMMEDIATE) // SCHEDULED = reserva agora, sai depois
+  fulfillmentStatus FulfillmentStatus? // Só p/ SCHEDULED; null em IMMEDIATE. Cache derivado dos itens.
+  scheduledPickupAt DateTime? // Previsão ÚNICA de retirada (modo padrão)
+  perItemSchedule   Boolean            @default(false) // Flag "Data por item": true ⇒ a previsão vem de cada OrderItem
   // Campos de sincronização offline
-  syncStatus     SyncStatus  @default(PENDING)  // Vendas nascem como PENDING no caixa offline
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  syncStatus        SyncStatus         @default(PENDING) // Vendas nascem como PENDING no caixa offline
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
   // Autoria (ADR-010): `userId` (com FK) é o operador; `registeredByName` é o snapshot do nome.
-  registeredByName String?   @db.VarChar(100)
+  registeredByName  String?            @db.VarChar(100)
 
-  tenant         Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  cashSession    CashSession? @relation(fields: [cashSessionId], references: [id])
-  user           User        @relation(fields: [userId], references: [id])
-  customer       Customer?   @relation(fields: [customerId], references: [id])
+  tenant         Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  cashSession    CashSession?        @relation(fields: [cashSessionId], references: [id])
+  user           User                @relation(fields: [userId], references: [id])
+  customer       Customer?           @relation(fields: [customerId], references: [id])
   items          OrderItem[]
   payments       Payment[]
   delivery       Delivery?
   receivable     Receivable?
+  itemDeliveries OrderItemDelivery[]
 
   @@index([tenantId, createdAt])
   @@index([tenantId, status])
+  @@index([tenantId, fulfillmentStatus])
   @@map("orders")
 }
 
 /// Item de um pedido.
 model OrderItem {
-  id          String   @id @default(uuid()) @db.Uuid
-  orderId     String   @db.Uuid
-  productId   String   @db.Uuid
-  productName String   @db.VarChar(150)  // Snapshot do nome no momento da venda
-  unit        UnitType                   // Snapshot da unidade vendida (base OU embalagem — ADR-013)
-  quantity    Decimal  @db.Decimal(12, 4) // Quantidade na unidade VENDIDA (ex.: 2 rolos)
+  id                String    @id @default(uuid()) @db.Uuid
+  orderId           String    @db.Uuid
+  productId         String    @db.Uuid
+  productName       String    @db.VarChar(150) // Snapshot do nome no momento da venda
+  unit              UnitType // Snapshot da unidade vendida (base OU embalagem — ADR-013)
+  quantity          Decimal   @db.Decimal(12, 4) // Quantidade na unidade VENDIDA (ex.: 2 rolos)
   /// Quantidade em UNIDADE-BASE debitada do estoque (ADR-013 — EF-3). Snapshot congelado no
   /// momento da venda: modo embalagem ⇒ quantity × conversionFactor (ex.: 2 rolos = 200 m);
   /// modo base ⇒ igual a `quantity`. NULL em pedidos antigos (pré-EF-3) — o estorno usa
   /// `baseQuantity ?? quantity`, que é exato para eles (fator 1). Base do estorno de estoque
   /// no cancelamento/devolução (ADR-001), robusto mesmo se `conversionFactor` mudar depois.
-  baseQuantity Decimal? @db.Decimal(12, 4)
-  unitPrice   Decimal  @db.Decimal(12, 4) // Preço na unidade vendida (ex.: preço do rolo)
-  discount    Decimal  @default(0) @db.Decimal(12, 4)
-  total       Decimal  @db.Decimal(12, 2)
+  baseQuantity      Decimal?  @db.Decimal(12, 4)
+  unitPrice         Decimal   @db.Decimal(12, 4) // Preço na unidade vendida (ex.: preço do rolo)
+  discount          Decimal   @default(0) @db.Decimal(12, 4)
+  total             Decimal   @db.Decimal(12, 2)
   /// Agrupamento do par (ADR-015). Itens do MESMO pedido com o mesmo `pairGroup` foram vendidos
   /// juntos como par e imprimem como UMA linha no comprovante ("Parafuso + Bucha nº10"). Numerado
   /// por pedido (1, 2, 3…) — a mesma venda pode ter vários pares. NULL = item avulso, que é o caso
   /// de todos os pedidos anteriores a esta migration.
-  pairGroup   Int?     @db.SmallInt
+  pairGroup         Int?      @db.SmallInt
+  /// Retirada/entrega futura (ADR-020). Quanto (em UNIDADE-BASE) desta linha JÁ SAIU do estoque —
+  /// cache do total retirado, análogo ao `Receivable.settledAmount` (ADR-019). Reservado da linha =
+  /// `(baseQuantity ?? quantity) − deliveredBaseQty` enquanto o pedido é SCHEDULED e não CANCELLED;
+  /// linha finalizada quando iguala `baseQuantity`. 0 em vendas IMMEDIATE (saída no ato).
+  deliveredBaseQty  Decimal   @default(0) @db.Decimal(12, 4)
+  /// Previsão de retirada POR ITEM (ADR-020). Usada quando `Order.perItemSchedule = true`; caso
+  /// contrário vale a previsão única do pedido (`Order.scheduledPickupAt`). Opcional.
+  scheduledPickupAt DateTime?
 
-  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product     Product  @relation(fields: [productId], references: [id])
+  order      Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product    Product             @relation(fields: [productId], references: [id])
+  deliveries OrderItemDelivery[]
 
   @@map("order_items")
 }
@@ -449,15 +486,15 @@ model OrderItem {
 /// ADR-003: tenantId denormalizado para multi-tenancy estrito e RLS
 model Payment {
   id        String   @id @default(uuid()) @db.Uuid
-  tenantId  String   @db.Uuid          // Denormalizado para isolamento multi-tenant (ADR-003)
+  tenantId  String   @db.Uuid // Denormalizado para isolamento multi-tenant (ADR-003)
   orderId   String   @db.Uuid
-  method    String   @db.VarChar(30)   // Ex: "CASH", "CREDIT_CARD", "PIX", "BOLETO"
+  method    String   @db.VarChar(30) // Ex: "CASH", "CREDIT_CARD", "PIX", "BOLETO"
   amount    Decimal  @db.Decimal(12, 2)
   paidAt    DateTime @default(now())
-  reference String?  @db.VarChar(100)  // NSU, código de transação, etc.
+  reference String?  @db.VarChar(100) // NSU, código de transação, etc.
 
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order  Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, orderId])
   @@map("payments")
@@ -469,23 +506,23 @@ model Payment {
 /// entrega — o motor de estoque NÃO muda); só o dinheiro fica pendente aqui.
 model Receivable {
   id             String           @id @default(uuid()) @db.Uuid
-  tenantId       String           @db.Uuid          // Denormalizado para isolamento multi-tenant (ADR-003)
-  orderId        String           @unique @db.Uuid  // A venda que originou a dívida (1 conta por venda)
-  customerId     String           @db.Uuid          // O devedor (obrigatório — não há fiado anônimo)
+  tenantId       String           @db.Uuid // Denormalizado para isolamento multi-tenant (ADR-003)
+  orderId        String           @unique @db.Uuid // A venda que originou a dívida (1 conta por venda)
+  customerId     String           @db.Uuid // O devedor (obrigatório — não há fiado anônimo)
   originalAmount Decimal          @db.Decimal(12, 2) // Valor a prazo original da venda
   settledAmount  Decimal          @default(0) @db.Decimal(12, 2) // Quanto já foi recebido (corrente)
   status         ReceivableStatus @default(OPEN)
-  dueDate        DateTime?                          // Vencimento opcional (destaca vencidos)
-  notes          String?          @db.VarChar(500)  // Observação livre da dívida (ex.: "prometeu pagar dia 10")
+  dueDate        DateTime? // Vencimento opcional (destaca vencidos)
+  notes          String?          @db.VarChar(500) // Observação livre da dívida (ex.: "prometeu pagar dia 10")
   createdAt      DateTime         @default(now())
   // Autoria (ADR-010): quem registrou a venda a prazo. Referência solta (sem FK); snapshot do nome.
   createdById    String?          @db.Uuid
   createdByName  String?          @db.VarChar(100)
 
-  tenant         Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  order          Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  customer       Customer         @relation(fields: [customerId], references: [id])
-  payments       ReceivablePayment[]
+  tenant   Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order    Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  customer Customer            @relation(fields: [customerId], references: [id])
+  payments ReceivablePayment[]
 
   @@index([tenantId, status])
   @@index([tenantId, customerId])
@@ -499,25 +536,55 @@ model Receivable {
 /// recebimento gera um `CashMovement SUPPLY` no caixa de hoje (reúso da CX.Movimentacao) —
 /// `cashSessionId`/`cashMovementId` guardam esse elo (referências soltas, sem FK).
 model ReceivablePayment {
-  id             String     @id @default(uuid()) @db.Uuid
-  tenantId       String     @db.Uuid          // Denormalizado para isolamento multi-tenant (ADR-003)
-  receivableId   String     @db.Uuid
-  amount         Decimal    @db.Decimal(12, 2)
-  method         String     @db.VarChar(30)   // "CASH", "PIX", "CREDIT_CARD", "DEBIT_CARD"…
-  paidAt         DateTime   @default(now())   // Dia do recebimento (base do relatório em regime de caixa)
-  cashSessionId  String?    @db.Uuid          // Caixa que recebeu (quando em dinheiro)
-  cashMovementId String?    @db.Uuid          // Elo com o Suprimento gerado (quando em dinheiro)
-  reference      String?    @db.VarChar(100)
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @db.Uuid // Denormalizado para isolamento multi-tenant (ADR-003)
+  receivableId   String   @db.Uuid
+  amount         Decimal  @db.Decimal(12, 2)
+  method         String   @db.VarChar(30) // "CASH", "PIX", "CREDIT_CARD", "DEBIT_CARD"…
+  paidAt         DateTime @default(now()) // Dia do recebimento (base do relatório em regime de caixa)
+  cashSessionId  String?  @db.Uuid // Caixa que recebeu (quando em dinheiro)
+  cashMovementId String?  @db.Uuid // Elo com o Suprimento gerado (quando em dinheiro)
+  reference      String?  @db.VarChar(100)
   // Autoria (ADR-010): quem recebeu. Referência solta (sem FK); snapshot do nome.
-  receivedById   String?    @db.Uuid
-  receivedByName String?    @db.VarChar(100)
+  receivedById   String?  @db.Uuid
+  receivedByName String?  @db.VarChar(100)
 
-  tenant         Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  receivable     Receivable @relation(fields: [receivableId], references: [id], onDelete: Cascade)
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  receivable Receivable @relation(fields: [receivableId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, paidAt])
   @@index([receivableId])
   @@map("receivable_payments")
+}
+
+/// Retirada parcial de um item de pedido (ADR-020): cada evento de saída de mercadoria de um
+/// pedido SCHEDULED. Espelha o `ReceivablePayment` do fiado — assim como a dívida é baixada em
+/// recebimentos parciais, a mercadoria reservada sai em retiradas parciais. É o LOG auditável do
+/// que já foi levado (quanto, quando, por quem); o `OrderItem.deliveredBaseQty` é o cache da soma.
+/// Cada retirada dispara a baixa atômica de estoque (ADR-001): `StockMovement EXPENSE` +
+/// decremento de `stockQty` + `reservedQty`; `stockMovementId` guarda esse elo (referência solta,
+/// sem FK — ≡ `cashMovementId` do fiado).
+model OrderItemDelivery {
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String   @db.Uuid // Denormalizado para isolamento multi-tenant (ADR-003)
+  orderId         String   @db.Uuid
+  orderItemId     String   @db.Uuid
+  quantity        Decimal  @db.Decimal(12, 4) // Quantidade em UNIDADE-BASE retirada NESTE evento
+  deliveredAt     DateTime @default(now())
+  stockMovementId String?  @db.Uuid // Elo com a baixa de estoque gerada (referência solta, sem FK)
+  reference       String?  @db.VarChar(100)
+  notes           String?  @db.VarChar(300) // Observação da retirada (ex.: "levou no caminhão da obra")
+  // Autoria (ADR-010): quem entregou/registrou. Referência solta (sem FK); snapshot do nome.
+  deliveredById   String?  @db.Uuid
+  deliveredByName String?  @db.VarChar(100)
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order     Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, orderId])
+  @@index([tenantId, orderItemId])
+  @@map("order_item_deliveries")
 }
 
 /// Cesta persistente do PDV (ADR-021): o carrinho-rascunho de um usuário, sincronizado entre
@@ -526,13 +593,13 @@ model ReceivablePayment {
 /// de verdade: preço/estoque são revalidados no `POST /orders` na hora de vender. RLS isola por
 /// USUÁRIO (`auth.uid()`), não só por tenant, pois é dado pessoal (um colega não vê a cesta alheia).
 model Cart {
-  userId    String   @id @db.Uuid       // = users.id; uma cesta por usuário
-  tenantId  String   @db.Uuid           // Denormalizado para isolamento multi-tenant + RLS
-  items     Json     @default("[]")     // Snapshot do CartItem[] do cliente (rascunho)
-  updatedAt DateTime @updatedAt         // Relógio do last-write-wins entre dispositivos
+  userId    String   @id @db.Uuid // = users.id; uma cesta por usuário
+  tenantId  String   @db.Uuid // Denormalizado para isolamento multi-tenant + RLS
+  items     Json     @default("[]") // Snapshot do CartItem[] do cliente (rascunho)
+  updatedAt DateTime @updatedAt // Relógio do last-write-wins entre dispositivos
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@map("carts")
@@ -545,23 +612,23 @@ model Cart {
 /// referencia a venda de origem (devolução) — referência solta, no estilo de
 /// AuditEvent (sem FK), pois a venda pode pertencer a outra sessão.
 model CashMovement {
-  id             String           @id @default(uuid()) @db.Uuid
-  tenantId       String           @db.Uuid          // Denormalizado para isolamento multi-tenant (ADR-003)
-  cashSessionId  String           @db.Uuid
-  userId         String           @db.Uuid          // Operador que lançou a movimentação
-  type           TransactionType                    // INCOME soma / EXPENSE subtrai do esperado
-  kind           CashMovementKind
-  amount         Decimal          @db.Decimal(12, 2)
-  reason         String?          @db.VarChar(300)
-  relatedOrderId String?          @db.Uuid          // Venda de origem (devolução)
+  id               String           @id @default(uuid()) @db.Uuid
+  tenantId         String           @db.Uuid // Denormalizado para isolamento multi-tenant (ADR-003)
+  cashSessionId    String           @db.Uuid
+  userId           String           @db.Uuid // Operador que lançou a movimentação
+  type             TransactionType // INCOME soma / EXPENSE subtrai do esperado
+  kind             CashMovementKind
+  amount           Decimal          @db.Decimal(12, 2)
+  reason           String?          @db.VarChar(300)
+  relatedOrderId   String?          @db.Uuid // Venda de origem (devolução)
   // Campos de sincronização offline
-  syncStatus     SyncStatus       @default(SYNCED)
-  createdAt      DateTime         @default(now())
+  syncStatus       SyncStatus       @default(SYNCED)
+  createdAt        DateTime         @default(now())
   // Autoria (ADR-010): `userId` (solto, sem FK) é o operador; `registeredByName` é o snapshot.
-  registeredByName String?        @db.VarChar(100)
+  registeredByName String?          @db.VarChar(100)
 
-  tenant         Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  cashSession    CashSession      @relation(fields: [cashSessionId], references: [id], onDelete: Cascade)
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  cashSession CashSession @relation(fields: [cashSessionId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, cashSessionId])
   @@map("cash_movements")
@@ -575,27 +642,27 @@ model CashMovement {
 /// Suporta agendamento e controle de frete pesado.
 /// ADR-002: status migrado de Int para enum DeliveryStatus
 model Delivery {
-  id             String         @id @default(uuid()) @db.Uuid
-  tenantId       String         @db.Uuid
-  orderId        String         @unique @db.Uuid
-  customerId     String         @db.Uuid
-  scheduledAt    DateTime?                      // Data/hora agendada para entrega
-  deliveredAt    DateTime?                      // Data/hora efetiva da entrega
-  address        String         @db.VarChar(300)
-  status         DeliveryStatus @default(PENDING)  // ADR-002: enum para type-safety
-  driverName     String?        @db.VarChar(100)
-  vehiclePlate   String?        @db.VarChar(10)
-  totalWeightKg  Decimal?       @db.Decimal(10, 3)  // Peso total calculado dos itens
-  freightCost    Decimal?       @db.Decimal(12, 2)
-  notes          String?        @db.VarChar(500)
+  id            String         @id @default(uuid()) @db.Uuid
+  tenantId      String         @db.Uuid
+  orderId       String         @unique @db.Uuid
+  customerId    String         @db.Uuid
+  scheduledAt   DateTime? // Data/hora agendada para entrega
+  deliveredAt   DateTime? // Data/hora efetiva da entrega
+  address       String         @db.VarChar(300)
+  status        DeliveryStatus @default(PENDING) // ADR-002: enum para type-safety
+  driverName    String?        @db.VarChar(100)
+  vehiclePlate  String?        @db.VarChar(10)
+  totalWeightKg Decimal?       @db.Decimal(10, 3) // Peso total calculado dos itens
+  freightCost   Decimal?       @db.Decimal(12, 2)
+  notes         String?        @db.VarChar(500)
   // Campos de sincronização offline
-  syncStatus     SyncStatus     @default(SYNCED)
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  syncStatus    SyncStatus     @default(SYNCED)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
-  tenant         Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  order          Order          @relation(fields: [orderId], references: [id])
-  customer       Customer       @relation(fields: [customerId], references: [id])
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order    Order    @relation(fields: [orderId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id])
 
   @@index([tenantId, scheduledAt])
   @@map("deliveries")
@@ -607,24 +674,24 @@ model Delivery {
 
 /// Movimentação de estoque. Rastreabilidade de entradas e saídas.
 model StockMovement {
-  id          String          @id @default(uuid()) @db.Uuid
-  tenantId    String          @db.Uuid
-  productId   String          @db.Uuid
-  supplierId  String?         @db.Uuid
-  type        TransactionType                    // INCOME = entrada, EXPENSE = saída
-  quantity    Decimal         @db.Decimal(12, 4)
-  unitCost    Decimal?        @db.Decimal(12, 4) // Custo unitário na entrada
-  reason      String?         @db.VarChar(150)   // Ex: "Compra NF 1234", "Ajuste de inventário"
+  id               String          @id @default(uuid()) @db.Uuid
+  tenantId         String          @db.Uuid
+  productId        String          @db.Uuid
+  supplierId       String?         @db.Uuid
+  type             TransactionType // INCOME = entrada, EXPENSE = saída
+  quantity         Decimal         @db.Decimal(12, 4)
+  unitCost         Decimal?        @db.Decimal(12, 4) // Custo unitário na entrada
+  reason           String?         @db.VarChar(150) // Ex: "Compra NF 1234", "Ajuste de inventário"
   // Campos de sincronização offline
-  syncStatus  SyncStatus      @default(SYNCED)
-  createdAt   DateTime        @default(now())
+  syncStatus       SyncStatus      @default(SYNCED)
+  createdAt        DateTime        @default(now())
   // Autoria (ADR-010): quem movimentou. Antes NÃO existia — referência solta (sem FK) + snapshot.
-  userId          String?     @db.Uuid
-  registeredByName String?    @db.VarChar(100)
+  userId           String?         @db.Uuid
+  registeredByName String?         @db.VarChar(100)
 
-  tenant      Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  product     Product         @relation(fields: [productId], references: [id])
-  supplier    Supplier?       @relation(fields: [supplierId], references: [id])
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product  Product   @relation(fields: [productId], references: [id])
+  supplier Supplier? @relation(fields: [supplierId], references: [id])
 
   @@index([tenantId, productId, createdAt])
   @@map("stock_movements")
@@ -640,14 +707,14 @@ model StockMovement {
 model AuditEvent {
   id        String   @id @default(uuid()) @db.Uuid
   tenantId  String   @db.Uuid
-  userId    String?  @db.Uuid              // Usuário que executou a ação (null para ações do sistema)
-  entity    String   @db.VarChar(60)       // Ex: "Order", "Product", "CashSession", "User"
-  entityId  String   @db.Uuid              // ID da entidade afetada
-  action    String   @db.VarChar(60)       // Ex: "CANCEL_ORDER", "CHANGE_PRICE", "ADJUST_STOCK", "CLOSE_CASH_WITH_DIVERGENCE"
-  meta      Json?                          // Metadados compactos da ação (valores antes/depois, motivo, etc.)
+  userId    String?  @db.Uuid // Usuário que executou a ação (null para ações do sistema)
+  entity    String   @db.VarChar(60) // Ex: "Order", "Product", "CashSession", "User"
+  entityId  String   @db.Uuid // ID da entidade afetada
+  action    String   @db.VarChar(60) // Ex: "CANCEL_ORDER", "CHANGE_PRICE", "ADJUST_STOCK", "CLOSE_CASH_WITH_DIVERGENCE"
+  meta      Json? // Metadados compactos da ação (valores antes/depois, motivo, etc.)
   createdAt DateTime @default(now())
 
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, entity, entityId])
   @@index([tenantId, createdAt])

@@ -16,6 +16,7 @@ export * from './cashSession';
 export * from './sale';
 export * from './cart';
 export * from './receivable';
+export * from './delivery';
 export * from './stock';
 export * from './report';
 export * from './tenant';

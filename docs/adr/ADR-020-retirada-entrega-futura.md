@@ -1,15 +1,16 @@
 # ADR-020: Retirada / Entrega Futura (adiar a saída de estoque)
 
-**Status:** Direção APROVADA pelo Owner (3 decisões, 2026-07-30). **Pendente, para a próxima
-sessão:** desenho + aprovação da **migration**, e só então implementação. ⚠️ **NÃO iniciar código
-nem aplicar migration antes disso** (regras 1 e 4 do CLAUDE.md).
-**Data:** 2026-07-30
+**Status:** IMPLEMENTADO (2026-07-31) — migration `0017` aplicada, core+API+UI no código, gates
+verdes. **Falta:** deploy (API+web) + E2E do Owner. Direção e schema aprovados pelo Owner.
+**Data:** 2026-07-30 (decisões) · 2026-07-31 (implementação)
 **Deciders:** Owner do produto
 
-> **Ponto de parada (2026-07-30):** a sessão capturou as **3 decisões de produto** abaixo e encerrou
-> aqui, a pedido do Owner. A próxima sessão retoma **deste ponto**: desenhar o schema/migration,
-> explicar o impacto e pedir aprovação (regra 1), aplicar, e então implementar core → API → UI.
-> **Nada de estoque/venda foi tocado ainda.**
+> **Atualização (2026-07-31):** as pendências de produto foram fechadas com o Owner e a **migration
+> `0017_scheduled_delivery` foi desenhada, aprovada e aplicada** (regra 1). Decisões finais:
+> **entrega PARCIAL, item a item**; tela dedicada **"Entregas"** (lista + detalhe/log, estilo
+> Contas a Receber); **previsão de retirada** com data única do pedido **e** flag opcional "Data por
+> item"; **reúso do `Delivery` (ADR-002) descartado** (é por-pedido/tudo-ou-nada e tem `address` NOT
+> NULL — parcial exige rastreio por linha). Ver a seção "Implementação (2026-07-31)" no fim.
 
 ## Contexto
 
@@ -79,3 +80,46 @@ A venda com retirada/entrega futura pode ser **paga no ato** (à vista ou dividi
 **"Sai no ato (só um rótulo)"** — baixar o estoque já na venda e usar "retirada futura" apenas como
 status operacional. Mais simples, mas **não adia a saída** de estoque (o pedido do Owner), então foi
 recusada na decisão 1.
+
+## Implementação (2026-07-31)
+
+### Decisões de produto (fechadas com o Owner)
+- **Entrega PARCIAL, item a item** (o cliente leva parte hoje, parte depois) — não tudo-ou-nada.
+- **Tela dedicada "Entregas"** (novo item de menu), na **mesma lógica de Contas a Receber**: lista
+  paginada com filtro **A retirar / Finalizadas / Todas** + **detalhe com o LOG completo** (o que já
+  saiu, o que falta, quando e por quem) + ações de baixa.
+- **Previsão de retirada:** data **única do pedido** por padrão + **flag opcional "Data por item"**
+  (liga um campo de data por linha). Sempre opcional.
+- **PDV:** opção opt-in **"Venda com retirada/entrega posterior"** (no estilo do "+ Venda a prazo").
+
+### Schema — migration `0017_scheduled_delivery` (aditiva, sem backfill)
+- Enums novos: `DeliveryMode {IMMEDIATE, SCHEDULED}`, `FulfillmentStatus {PENDING, PARTIAL, COMPLETED}`.
+- `orders`: `deliveryMode` (default IMMEDIATE), `fulfillmentStatus?` (cache, indexado), `scheduledPickupAt?`,
+  `perItemSchedule` (flag "Data por item").
+- `order_items`: `deliveredBaseQty` (cache do retirado, ≡ `Receivable.settledAmount`), `scheduledPickupAt?`.
+- `products`: `reservedQty` (cache do reservado, ADR-001; **disponível = `stockQty − reservedQty`**).
+- Tabela nova `order_item_deliveries` (o LOG de cada retirada, ≡ `receivable_payments`) + RLS por tenant.
+
+### Core (`packages/core`, +23 testes → 212)
+`availableQty`, `remainingToDeliver`, `isValidDelivery`, `applyItemDelivery`, `orderFulfillmentStatus`,
+`reconcileReserved` — todas puras, espelhando as funções do fiado (ADR-019).
+
+### API
+- `POST /orders` (SCHEDULED): **reserva** (`reservedQty += base`) em vez de baixar; trava pelo
+  **disponível** (vale p/ os dois modos); grava modo/previsão/flag. Online-only.
+- `POST /deliveries/:id/deliver`: **retirada parcial** — por item, valida com `isValidDelivery`;
+  numa transação faz `StockMovement EXPENSE` + `stockQty--` + `reservedQty--` + `deliveredBaseQty++`
+  + `OrderItemDelivery` (log); recalcula `fulfillmentStatus`. A baixa REAL (ADR-001) dispara aqui.
+- `GET /deliveries` (lista, filtro de situação) e `GET /deliveries/:id` (detalhe + log).
+- **Cancelamento/devolução** cientes da reserva: liberam o reservado remanescente e estornam via
+  `INCOME` **só a parte já retirada** (o reservado nunca deixou o estoque).
+
+### UI
+- **PDV:** opt-in "Venda com retirada/entrega posterior" + previsão (única/por item); o PDV passou a
+  travar pelo **disponível** (`stockQty − reservedQty`, num ponto só no carregamento do catálogo).
+- **Tela "Entregas"** + `DeliveryDetailModal` (detalhe + log + "Retirar" por item + "Retirar tudo o
+  que falta").
+
+### Como compõe com o fiado (ADR-019)
+Ortogonais: um pedido pode ser SCHEDULED **e** a prazo — leva depois **e/ou** paga depois. O
+`deliveryMode` não toca o `Receivable`.

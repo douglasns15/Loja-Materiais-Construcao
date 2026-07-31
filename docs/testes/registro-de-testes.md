@@ -3898,3 +3898,59 @@ inteiras em memória — `GET /products` e `GET /stock/movements` sem teto), no 
 
 > Commit `9c5eeb5`, deploy web `a4b775b0`. **Fatia UI.Estoque.Paginacao CONCLUÍDA.** **Próximo:** ADR-020
 > (retirada / entrega futura).
+
+### ADR-020 — Retirada / Entrega futura (2026-07-31)
+
+Migration `0017_scheduled_delivery` (2 enums + colunas em `orders`/`order_items`/`products` +
+tabela `order_item_deliveries` + RLS) aplicada no Supabase via `db:deploy` (memória: nunca
+`migrate dev` — shadow DB quebra no schema `auth`). **100% aditiva**, sem backfill. Eixo ortogonal
+ao fiado (ADR-019): adia a **saída da mercadoria**, não o pagamento. Desenho espelha o fiado
+(`order_item_deliveries` ≡ `receivable_payments`; `OrderItem.deliveredBaseQty` ≡
+`Receivable.settledAmount`). **Aguardando deploy (API+web) + E2E do Owner.**
+
+**Migration / schema**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| `prisma validate` + `prisma format` | schema válido | ✅ |
+| `prisma migrate status` → `0017` pendente | 1 pendente | ✅ |
+| `db:deploy` (aplica `0017`) | aplicada | ✅ |
+| `prisma migrate diff` (schema × banco) | sem drift | ✅ "No difference detected" |
+
+**Core (Vitest) — +23 → 212/212**
+
+| Função | Cobertura | Resultado |
+|---|---|---|
+| `availableQty` | disponível = estoque − reservado, não negativo, fracionado | ✅ |
+| `remainingToDeliver` | falta = base − entregue, não negativo | ✅ |
+| `isValidDelivery` | positiva e ≤ falta; tolera arredondamento | ✅ |
+| `applyItemDelivery` | parcial → total; `≥` tolera float | ✅ |
+| `orderFulfillmentStatus` | PENDING / PARTIAL / COMPLETED (+ vazio) | ✅ |
+| `reconcileReserved` | Σ do que falta; coerência com `availableQty` | ✅ |
+| **Total core** | — | ✅ **212/212** |
+
+**Gates (build / typecheck)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Typecheck `apps/api` (`tsc --noEmit`) | sem erros | ✅ |
+| Dry-run do worker (`wrangler deploy --dry-run`) | bundle OK | ✅ (3283 KiB / gzip 1080) |
+| Typecheck `apps/web` (`tsc --noEmit`) | sem erros | ✅ |
+| Build de produção do web (`next build`) | rota `/entregas` gerada | ✅ 20 rotas (`/entregas` 3.54 kB, `/venda` 14.2 kB) |
+
+**API (superfície nova)** — `POST /orders` (modo SCHEDULED reserva; trava pelo disponível),
+`POST /deliveries/:id/deliver` (retirada parcial → baixa real ADR-001 + log + recálculo de status),
+`GET /deliveries` (lista, filtro A retirar/Finalizadas/Todas), `GET /deliveries/:id` (detalhe + log).
+Cancelamento/devolução cientes da reserva. ⚠️ **Deploy de API obrigatório** (rotas novas + mudança
+no `POST /orders`).
+
+**Deploy + smoke (2026-07-31)**
+
+| Passo | Resultado |
+|---|---|
+| `wrangler deploy` API (rotas `/deliveries` + `POST /orders` novo) | ✅ versão `0d9ef2bf` |
+| Smoke API: health 200 · `/deliveries` 401 · `/deliveries/:id/deliver` 401 · `/orders` 401 | ✅ |
+| `npm run deploy` web + `postdeploy` (smoke do CSS) | ✅ versão `1025446e` (HTML no-store + CSS 200) |
+
+> **Falta:** **E2E do Owner** (vender com retirada futura → conferir reserva/disponível no PDV →
+> retirar parcial na tela Entregas → retirar o resto → finalizar).

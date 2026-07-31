@@ -342,9 +342,26 @@ export default function VendaPage() {
   const [customerQuery, setCustomerQuery] = useState('');
   const [customerOptions, setCustomerOptions] = useState<{ id: string; name: string }[]>([]);
   const [dueDate, setDueDate] = useState('');
+  // Retirada/entrega futura (ADR-020) — opt-in, escondida por padrão (PDV limpo), como o fiado.
+  // Quando ligada, a venda RESERVA a mercadoria (não baixa o estoque); a retirada é registrada
+  // depois, parcial, na tela de Entregas. `pickupDate` é a previsão ÚNICA do pedido; se
+  // `perItemSchedule` estiver ligado, a previsão vem de cada item (`itemPickupDates` por linha).
+  // Online-only nesta fatia (como o fiado).
+  const [showSchedule, setShowSchedule] = useState(false);
+  const [pickupDate, setPickupDate] = useState('');
+  const [perItemSchedule, setPerItemSchedule] = useState(false);
+  const [itemPickupDates, setItemPickupDates] = useState<Record<string, string>>({});
 
   async function loadProducts() {
-    const list = await apiGet<Product[]>('/products');
+    const raw = await apiGet<(Product & { reservedQty?: string })[]>('/products');
+    // ADR-020: o PDV trava pelo DISPONÍVEL = estoque − reservado. Mercadoria comprometida com
+    // retiradas/entregas futuras (pedidos SCHEDULED ainda não retirados) não pode ser vendida de
+    // novo. Substituímos `stockQty` pelo disponível num ponto só — toda a trava do carrinho passa
+    // a respeitar o reservado sem mais edições. O servidor revalida no `POST /orders` (autoritativo).
+    const list: Product[] = raw.map((p) => ({
+      ...p,
+      stockQty: String(Math.max(0, Number(p.stockQty) - Number(p.reservedQty ?? 0))),
+    }));
     setProducts(list);
     // Rede venceu (ADR-012 CS-2): espelha o catálogo p/ o cold-start offline (best-effort).
     void cacheProducts(list);
@@ -508,6 +525,11 @@ export default function VendaPage() {
   const isCredit = creditValue > 0;
   const payableNow = Number((totals.total - creditValue).toFixed(2));
 
+  // --- Retirada / entrega futura (ADR-020) ---
+  // `isScheduled` liga o modo SCHEDULED do pedido (reserva agora, retira depois). Não altera o
+  // pagamento (paga-se normalmente, à vista ou a prazo) — só a saída da mercadoria é adiada.
+  const isScheduled = showSchedule;
+
   // --- Recebimento (pagamento dividido) ---
   // Parcelas resolvidas (vazio = resto) e a situação do recebimento (pago/falta/troco), pela mesma
   // função pura do servidor. O DINHEIRO nas parcelas é o RECEBIDO (pode passar do total → troco).
@@ -631,6 +653,12 @@ export default function VendaPage() {
    */
   function cartToSaleItems() {
     let group = 0;
+    // ADR-020: quando a previsão é por item, anexa a data da linha (`itemPickupDates[key]`) ao(s)
+    // item(ns) do payload. No par, os dois lados herdam a data da linha.
+    const lineDate = (key: string) =>
+      isScheduled && perItemSchedule && itemPickupDates[key]
+        ? { scheduledPickupAt: itemPickupDates[key] }
+        : {};
     // Parte do carrinho JÁ reprecificado (ADR-016) — o `unitPrice` daqui é o que será cobrado,
     // e no par o acréscimo entra antes do rateio, mantendo a soma exata dos dois itens.
     return pricedCart.flatMap((c) => {
@@ -641,6 +669,7 @@ export default function VendaPage() {
             quantity: c.quantity,
             unitPrice: c.unitPrice,
             saleMode: c.saleMode, // EF-3: o servidor converte a baixa p/ unidade-base
+            ...lineDate(c.key),
           },
         ];
       }
@@ -660,6 +689,7 @@ export default function VendaPage() {
           unitPrice: split.mainUnitPrice,
           saleMode: 'BASE' as SaleUnitMode,
           pairGroup: group,
+          ...lineDate(c.key),
         },
         {
           productId: c.pair.partnerId,
@@ -667,6 +697,7 @@ export default function VendaPage() {
           unitPrice: split.pairedUnitPrice,
           saleMode: 'BASE' as SaleUnitMode,
           pairGroup: group,
+          ...lineDate(c.key),
         },
       ];
     });
@@ -1010,6 +1041,11 @@ export default function VendaPage() {
       setError('A venda a prazo exige conexão.');
       return;
     }
+    // Retirada/entrega futura (ADR-020): online-only nesta fatia (reserva no servidor).
+    if (isScheduled && !online) {
+      setError('A venda com retirada/entrega futura exige conexão.');
+      return;
+    }
     // Parcelas que somam o total (troco já fora); o troco (`change`) é o excedente do dinheiro
     // recebido, calculado no core, e é só exibição — a API devolveria 0 porque o enviado fecha o total.
     const persistedPayments = buildPersistedPayments();
@@ -1088,6 +1124,15 @@ export default function VendaPage() {
       ...(isCredit
         ? { customerId, creditAmount: creditValue, ...(dueDate ? { dueDate } : {}) }
         : {}),
+      // Retirada/entrega futura (ADR-020): modo SCHEDULED + previsão (única ou por item). A data
+      // por item já vai anexada em cada item por `cartToSaleItems`. Compõe com o fiado acima.
+      ...(isScheduled
+        ? {
+            deliveryMode: 'SCHEDULED' as const,
+            perItemSchedule,
+            ...(!perItemSchedule && pickupDate ? { scheduledPickupAt: pickupDate } : {}),
+          }
+        : {}),
     };
     const parsed = createSaleSchema.safeParse(payload);
     if (!parsed.success) {
@@ -1148,6 +1193,8 @@ export default function VendaPage() {
     setDiscount('');
     // Limpa a venda a prazo para a próxima venda nascer à vista.
     resetCredit();
+    // Limpa a retirada futura para a próxima venda nascer no ato (ADR-020).
+    resetSchedule();
   }
 
   /** Limpa/esconde a venda a prazo (usado ao remover a opção e ao iniciar nova venda). */
@@ -1159,6 +1206,14 @@ export default function VendaPage() {
     setCustomerQuery('');
     setCustomerOptions([]);
     setDueDate('');
+  }
+
+  /** Limpa/esconde a retirada futura (ADR-020) — usado ao remover a opção e ao iniciar nova venda. */
+  function resetSchedule() {
+    setShowSchedule(false);
+    setPickupDate('');
+    setPerItemSchedule(false);
+    setItemPickupDates({});
   }
 
   if (!ready) return <p className="text-gray-600">Carregando…</p>;
@@ -1928,6 +1983,94 @@ export default function VendaPage() {
                     <p className="text-xs text-red-600">A venda a prazo exige conexão.</p>
                   )}
                 </div>
+              )}
+            </div>
+          )}
+
+          {/* Retirada / entrega futura (ADR-020) — opt-in, escondida por padrão (PDV limpo). Reserva
+              a mercadoria: o estoque só baixa na retirada (tela de Entregas). Compõe com o fiado. */}
+          {!showSchedule ? (
+            <button
+              type="button"
+              onClick={() => setShowSchedule(true)}
+              className="text-sm font-medium text-blue-600 hover:text-blue-700"
+            >
+              + Venda com retirada/entrega posterior
+            </button>
+          ) : (
+            <div className="space-y-3 rounded-xl border border-indigo-200 bg-indigo-50/60 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-semibold text-indigo-900">
+                  Retirada/entrega posterior
+                </span>
+                <button
+                  type="button"
+                  onClick={resetSchedule}
+                  className="shrink-0 rounded-lg px-2 py-1 text-lg leading-none text-gray-500 hover:text-red-600"
+                  aria-label="Remover retirada futura"
+                  title="Remover retirada futura"
+                >
+                  ×
+                </button>
+              </div>
+              <p className="text-xs text-indigo-800">
+                A mercadoria fica <strong>reservada</strong> e sai do estoque na retirada. Acompanhe
+                e dê baixa (parcial ou total) na tela <strong>Entregas</strong>.
+              </p>
+
+              {/* Previsão única do pedido (quando não é por item). */}
+              {!perItemSchedule && (
+                <div className="flex items-center justify-between">
+                  <label htmlFor="pickup" className="text-sm text-gray-600">
+                    Previsão de retirada (opcional)
+                  </label>
+                  <input
+                    id="pickup"
+                    type="date"
+                    value={pickupDate}
+                    onChange={(e) => setPickupDate(e.target.value)}
+                    className="rounded-lg border border-indigo-300 bg-white px-2 py-1 text-sm"
+                  />
+                </div>
+              )}
+
+              {/* Flag "Data por item": libera um campo de data por linha do carrinho. */}
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={perItemSchedule}
+                  onChange={(e) => setPerItemSchedule(e.target.checked)}
+                  className="h-4 w-4 rounded border-indigo-300"
+                />
+                Data por item
+              </label>
+
+              {perItemSchedule && (
+                <div className="space-y-2">
+                  {cart.length === 0 ? (
+                    <p className="text-xs text-gray-500">Adicione itens ao carrinho para definir as datas.</p>
+                  ) : (
+                    cart.map((c) => (
+                      <div key={c.key} className="flex items-center justify-between gap-2">
+                        <span className="min-w-0 flex-1 truncate text-sm text-gray-700">{c.name}</span>
+                        <input
+                          type="date"
+                          value={itemPickupDates[c.key] ?? ''}
+                          onChange={(e) =>
+                            setItemPickupDates((prev) => ({ ...prev, [c.key]: e.target.value }))
+                          }
+                          className="rounded-lg border border-indigo-300 bg-white px-2 py-1 text-sm"
+                        />
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+
+              {!online && (
+                <p className="text-xs text-red-600">
+                  A venda com retirada/entrega futura exige conexão.
+                </p>
               )}
             </div>
           )}

@@ -3,7 +3,36 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-30 — **Cesta (ADR-021) NO AR + 🐞 bug do DELETE (ressurreição)
+> **Última atualização:** 2026-07-31 — **ADR-020 (retirada / entrega futura) — NO AR,
+> aguardando E2E do Owner.** Eixo ortogonal ao fiado (ADR-019, que adia o
+> PAGAMENTO): aqui adiamos a **SAÍDA da mercadoria**. **Decisões de produto fechadas com o Owner:**
+> entrega **PARCIAL, item a item** (leva parte hoje, parte depois); **tela dedicada "Entregas"**
+> (lista + detalhe/log, na mesma lógica de Contas a Receber); **previsão de retirada** com **data
+> única do pedido** + **flag opcional "Data por item"**; no PDV, opção opt-in **"Venda com
+> retirada/entrega posterior"** (estilo "+ Venda a prazo"). **Migration `0017_scheduled_delivery`
+> desenhada, aprovada (regra 1) e aplicada** (via `db:deploy`, sem drift): **100% aditiva** (2 enums
+> `DeliveryMode`/`FulfillmentStatus`; `orders.deliveryMode/fulfillmentStatus/scheduledPickupAt/
+> perItemSchedule`; `order_items.deliveredBaseQty/scheduledPickupAt`; `products.reservedQty` —
+> **disponível = `stockQty − reservedQty`**; tabela nova **`order_item_deliveries`** = o LOG de cada
+> retirada + RLS). **Desenho espelha o fiado:** `order_item_deliveries` ≡ `receivable_payments`,
+> `OrderItem.deliveredBaseQty` ≡ `Receivable.settledAmount`. **Reúso do `Delivery` (ADR-002)
+> descartado** (é por-pedido/tudo-ou-nada, `address` NOT NULL; parcial exige rastreio por linha).
+> **Como preserva as invariantes:** venda SCHEDULED **reserva** (`reservedQty += base`) e NÃO baixa;
+> a baixa REAL (ADR-001: `StockMovement EXPENSE` + `stockQty`) dispara na **retirada**, parcial, no
+> `POST /deliveries/:id/deliver`, que também abate `reservedQty`, incrementa `deliveredBaseQty`,
+> grava o log e recalcula `fulfillmentStatus`. **PDV trava pelo disponível** (num ponto só, no
+> carregamento do catálogo). **Cancelamento/devolução cientes da reserva:** liberam o reservado
+> remanescente e estornam via `INCOME` só a parte já retirada. **Compõe com o fiado** (ortogonal:
+> leva-depois **e/ou** paga-depois). **Core +23 → 212/212** (`availableQty`, `remainingToDeliver`,
+> `isValidDelivery`, `applyItemDelivery`, `orderFulfillmentStatus`, `reconcileReserved`). Gates:
+> core **212/212** ✅, typecheck API ✅, dry-run API ✅, build web (**20 rotas**, `/entregas` 3.54 kB,
+> `/venda` 14.2 kB) ✅; migration `0017` aplicada, **sem drift**. **NO AR:** API `0d9ef2bf` + web
+> `1025446e`; smoke ✅ (health 200, `/deliveries` e `/deliveries/:id/deliver` sem token 401, `/orders`
+> 401; postdeploy do web: HTML no-store + CSS 200). **Falta:** **E2E do Owner** (vender com retirada
+> futura → conferir reserva/disponível no PDV → retirar parcial na tela Entregas → retirar o resto →
+> finalizar). Ver ADR-020 (seção "Implementação") e "ADR-020" no registro de testes.
+>
+> **Antes:** 2026-07-30 — **Cesta (ADR-021) NO AR + 🐞 bug do DELETE (ressurreição)
 > corrigido — E2E do Owner VALIDADO · trava de regressão do "abre sem CSS" · 2 ajustes de UI no PDV.**
 > **(1) Cesta:** deploy de API+web da ADR-021; no E2E do Owner surgiu um **bug de sincronização**: ao
 > **excluir** a cesta num aparelho, ela **ressuscitava** nos outros ("volta como se nunca tivesse sido

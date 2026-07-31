@@ -855,6 +855,105 @@ export function replenishmentShortfall(item: StockLevelFields): number {
 }
 
 // =============================================================================
+// RETIRADA / ENTREGA FUTURA (ADR-020) — reserva agora, baixa parcial na retirada
+// =============================================================================
+//
+// Eixo ortogonal ao fiado (ADR-019, que adia o PAGAMENTO): aqui adiamos a SAÍDA da
+// mercadoria. Na venda SCHEDULED a quantidade fica RESERVADA (sem baixa); a baixa real
+// de estoque (ADR-001) dispara na RETIRADA, que é PARCIAL (item a item). Tudo em
+// UNIDADE-BASE (a mesma de `stockQty`/`baseQuantity`). O paralelo com o fiado é direto:
+// `remainingToDeliver` ≡ `receivableBalance`, `isValidDelivery` ≡ `isValidReceipt`,
+// `applyItemDelivery` ≡ `applyReceivablePayment`.
+
+/** Converte uma quantidade em "unidades de 4 casas" inteiras — evita erro de ponto
+ * flutuante ao comparar quantidades (mesma ideia do `toCents`, na precisão do estoque). */
+function toQtyUnits(value: number): number {
+  return Math.round(value * 10000);
+}
+
+/**
+ * Disponível para venda (ADR-020): `stockQty − reservedQty`, nunca negativo. O PDV trava
+ * por aqui — mercadoria reservada (vendida num pedido SCHEDULED e ainda não retirada) não
+ * pode ser vendida de novo. Em unidade-base (mesma de `stockQty`).
+ */
+export function availableQty(stockQty: number, reservedQty: number): number {
+  return Number(Math.max(0, stockQty - reservedQty).toFixed(4));
+}
+
+/**
+ * Quanto (em unidade-base) ainda falta sair de UMA linha de pedido SCHEDULED:
+ * `baseQuantity − deliveredBaseQty`, nunca negativo (tudo retirado ⇒ 0). Espelha o
+ * `receivableBalance` do fiado. Fonte única do "falta X" por item.
+ */
+export function remainingToDeliver(baseQuantity: number, deliveredBaseQty: number): number {
+  return Number(Math.max(0, baseQuantity - deliveredBaseQty).toFixed(4));
+}
+
+/**
+ * Uma retirada (parcial ou total) de uma linha é válida se for **positiva** e **não
+ * exceder o que falta** entregar. Comparação em unidades × 10^4 p/ não tropeçar em
+ * arredondamento. Espelha `isValidReceipt`. Reusada no servidor e na UI.
+ */
+export function isValidDelivery(qty: number, remaining: number): boolean {
+  const units = toQtyUnits(qty);
+  return units > 0 && units <= toQtyUnits(remaining);
+}
+
+/**
+ * Aplica uma retirada a uma linha e devolve o novo total retirado e se a linha ficou
+ * **completa** (`≥` tolera arredondamento). Não valida (ver `isValidDelivery`) — assume uma
+ * retirada já aceita. Espelha `applyReceivablePayment`; fonte única da transição por linha.
+ */
+export function applyItemDelivery(
+  baseQuantity: number,
+  deliveredBaseQty: number,
+  qty: number,
+): { deliveredBaseQty: number; fullyDelivered: boolean } {
+  const newDelivered = Number((deliveredBaseQty + qty).toFixed(4));
+  const fullyDelivered = toQtyUnits(newDelivered) >= toQtyUnits(baseQuantity);
+  return { deliveredBaseQty: newDelivered, fullyDelivered };
+}
+
+/** Uma linha de pedido para fins de retirada (ADR-020), em unidade-base. */
+export interface DeliverableLine {
+  baseQuantity: number;
+  deliveredBaseQty: number;
+}
+
+/**
+ * Deriva a situação de retirada de um pedido SCHEDULED a partir das suas linhas (ADR-020):
+ * `COMPLETED` quando **toda** a mercadoria já saiu, `PENDING` quando **nada** saiu, e
+ * `PARTIAL` no meio. Cache derivado (ADR-001) — a API grava `Order.fulfillmentStatus`, mas
+ * a verdade são as linhas. Pedido sem linhas (defensivo) ⇒ `COMPLETED` (nada a entregar).
+ */
+export function orderFulfillmentStatus(
+  lines: DeliverableLine[],
+): 'PENDING' | 'PARTIAL' | 'COMPLETED' {
+  let anyDelivered = false;
+  let anyRemaining = false;
+  for (const l of lines) {
+    if (toQtyUnits(l.deliveredBaseQty) > 0) anyDelivered = true;
+    if (toQtyUnits(remainingToDeliver(l.baseQuantity, l.deliveredBaseQty)) > 0) anyRemaining = true;
+  }
+  if (!anyRemaining) return 'COMPLETED';
+  return anyDelivered ? 'PARTIAL' : 'PENDING';
+}
+
+/**
+ * Reconciliação do reservado de um produto (ADR-020), no espírito do `reconcileStock`: soma
+ * o que **ainda falta sair** de todas as linhas de pedidos SCHEDULED não cancelados daquele
+ * produto. Fonte de verdade p/ corrigir o cache `Product.reservedQty` (que o PDV usa no
+ * disponível). Passe apenas linhas de pedidos com mercadoria pendente.
+ */
+export function reconcileReserved(lines: DeliverableLine[]): number {
+  const total = lines.reduce(
+    (acc, l) => acc + remainingToDeliver(l.baseQuantity, l.deliveredBaseQty),
+    0,
+  );
+  return Number(total.toFixed(4));
+}
+
+// =============================================================================
 // RELATÓRIOS (Reports) — vendas por período e formas de pagamento
 // =============================================================================
 
