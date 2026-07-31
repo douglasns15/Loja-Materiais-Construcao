@@ -3952,5 +3952,20 @@ no `POST /orders`).
 | Smoke API: health 200 · `/deliveries` 401 · `/deliveries/:id/deliver` 401 · `/orders` 401 | ✅ |
 | `npm run deploy` web + `postdeploy` (smoke do CSS) | ✅ versão `1025446e` (HTML no-store + CSS 200) |
 
-> **Falta:** **E2E do Owner** (vender com retirada futura → conferir reserva/disponível no PDV →
-> retirar parcial na tela Entregas → retirar o resto → finalizar).
+**E2E do Owner — VALIDADO (2026-07-31)** — os 6 passos passaram: vender com retirada futura →
+reserva/disponível conferidos no PDV (bloqueia venda além do disponível; `stockQty` real intacto) →
+pedido em "A retirar" na tela Entregas → retirada parcial (status "Retirada parcial", estoque baixa,
+log registra) → "Retirar tudo o que falta" (status "Finalizada") → cancelamento libera reserva.
+
+**Refinos pós-E2E (2026-07-31) — NO AR e VALIDADOS**
+
+| Refino | Resultado |
+|---|---|
+| Espaçamento entre "+ Venda a prazo" e "+ Venda com retirada/entrega posterior" (`block` + `mt-2`) | ✅ |
+| Cliente na retirada futura sem fiado (`renderCustomerPicker` reusado; opcional no agendamento) | ✅ Entrega sai com nome |
+| Observação livre do pedido (PDV + editável no detalhe; `PATCH /deliveries/:id`) | ✅ distinta da obs. por retirada (log) |
+| Gates: typecheck api/web, build web (20 rotas) | ✅ |
+| Deploy: API `e7e7b7c7` + web `27d7d416`; smoke (`PATCH /deliveries/:id` sem token 401) | ✅ |
+
+> **E2E do Owner VALIDADO (2026-07-31):** "deu tudo certo". Commits `a5202a6` (fatia) + `e7f60b7`
+> (refinos), **push feito pelo Owner**. **Fatia ADR-020 CONCLUÍDA.**

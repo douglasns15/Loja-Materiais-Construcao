@@ -3,8 +3,8 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-31 — **ADR-020 (retirada / entrega futura) — NO AR,
-> aguardando E2E do Owner.** Eixo ortogonal ao fiado (ADR-019, que adia o
+> **Última atualização:** 2026-07-31 — **ADR-020 (retirada / entrega futura) — NO AR e
+> VALIDADO pelo Owner (E2E 6/6 + 3 refinos). Fatia CONCLUÍDA.** Eixo ortogonal ao fiado (ADR-019, que adia o
 > PAGAMENTO): aqui adiamos a **SAÍDA da mercadoria**. **Decisões de produto fechadas com o Owner:**
 > entrega **PARCIAL, item a item** (leva parte hoje, parte depois); **tela dedicada "Entregas"**
 > (lista + detalhe/log, na mesma lógica de Contas a Receber); **previsão de retirada** com **data
@@ -38,7 +38,9 @@
 > `updateOrderNotesSchema`), distinta da "observação da retirada" (que fica no log). Gates: core
 > 212/212, typecheck api/web, build web (20 rotas, `/entregas` 3.86 kB, `/venda` 14.5 kB). **NO AR
 > (refinos):** API `e7e7b7c7` + web `27d7d416`; smoke ✅ (health 200, `PATCH /deliveries/:id` 401).
-> **Falta:** re-teste do Owner dos 3 refinos. Ver ADR-020 e "ADR-020" no registro de testes.
+> **E2E do Owner VALIDADO (2026-07-31):** "deu tudo certo" (E2E 6/6 + os 3 refinos). Commits
+> `a5202a6` (fatia) + `e7f60b7` (refinos), **push feito pelo Owner**. **Fatia ADR-020 CONCLUÍDA.**
+> Ver ADR-020 (seção "Implementação") e "ADR-020" no registro de testes.
 >
 > **Antes:** 2026-07-30 — **Cesta (ADR-021) NO AR + 🐞 bug do DELETE (ressurreição)
 > corrigido — E2E do Owner VALIDADO · trava de regressão do "abre sem CSS" · 2 ajustes de UI no PDV.**

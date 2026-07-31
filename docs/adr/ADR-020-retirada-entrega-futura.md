@@ -1,8 +1,8 @@
 # ADR-020: Retirada / Entrega Futura (adiar a saída de estoque)
 
-**Status:** IMPLEMENTADO (2026-07-31) — migration `0017` aplicada, core+API+UI no código, gates
-verdes. **Falta:** deploy (API+web) + E2E do Owner. Direção e schema aprovados pelo Owner.
-**Data:** 2026-07-30 (decisões) · 2026-07-31 (implementação)
+**Status:** CONCLUÍDO (2026-07-31) — migration `0017` aplicada, core+API+UI no ar, **E2E do Owner
+VALIDADO** (6/6 + 3 refinos). Commits `a5202a6` + `e7f60b7` (push do Owner). API `e7e7b7c7` · web `27d7d416`.
+**Data:** 2026-07-30 (decisões) · 2026-07-31 (implementação + validação)
 **Deciders:** Owner do produto
 
 > **Atualização (2026-07-31):** as pendências de produto foram fechadas com o Owner e a **migration
@@ -123,3 +123,13 @@ recusada na decisão 1.
 ### Como compõe com o fiado (ADR-019)
 Ortogonais: um pedido pode ser SCHEDULED **e** a prazo — leva depois **e/ou** paga depois. O
 `deliveryMode` não toca o `Receivable`.
+
+### Refinos do E2E (2026-07-31, após validação 6/6 do Owner)
+- **Espaçamento** entre os links "+ Venda a prazo" e "+ Venda com retirada/entrega posterior"
+  (viraram `block` + `mt-2`).
+- **Cliente na retirada futura sem fiado:** o seletor de cliente foi extraído p/ `renderCustomerPicker`
+  e passou a aparecer também no bloco de agendamento — cliente **opcional** ali (antes a Entrega saía
+  "sem nome" quando a venda não era a prazo). O `POST /orders` já aceitava `customerId` opcional.
+- **Observação livre do pedido:** campo geral no PDV **e editável no detalhe da Entrega** (grava em
+  `Order.notes`; novo `PATCH /deliveries/:id` + `updateOrderNotesSchema`). É distinta da "observação
+  da retirada" (`deliverOrderSchema.notes`), que fica no **log** de cada evento.
