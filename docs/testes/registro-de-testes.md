@@ -3969,3 +3969,51 @@ log registra) → "Retirar tudo o que falta" (status "Finalizada") → cancelame
 
 > **E2E do Owner VALIDADO (2026-07-31):** "deu tudo certo". Commits `a5202a6` (fatia) + `e7f60b7`
 > (refinos), **push feito pelo Owner**. **Fatia ADR-020 CONCLUÍDA.**
+
+### UI.Estoque.Ajustes — tela de Estoque: 4 ajustes de UI + ordenação das Movimentações (2026-07-31)
+
+Pedidos do Owner, todos na tela de Estoque. Fixes 1, 2 e 4 são **web-only**; o fix 3 exige
+**deploy de API**. Sem migration.
+
+1. **Rótulo por unidade fechada (ADR-017):** ao escolher um produto de **rolo**, o campo de
+   quantidade mostrava "Quantidade (barras)" fixo → passa a refletir a unidade real via helper
+   `unitWord` ("Quantidade (rolos)", "Custo por rolo (opcional)", tooltip).
+2. **Busca estilo PDV:** os dois `<select>` de produto (Entrada e Ajuste de inventário) viraram o
+   mesmo campo de busca do PDV — novo `apps/web/components/ProductPicker.tsx` (reusa
+   `productMatchesQuery`: nome/apelido/fabricante/SKU), lista só ao digitar, estoque por linha,
+   botão "Trocar".
+3. **Filtros das Movimentações no SERVIDOR:** `GET /stock/movements` filtrava com `take:50` + filtro
+   no cliente, então **Motivo** e **Data** só enxergavam as 50 linhas carregadas. Agora o endpoint
+   aceita `type`/`reason`/`from`/`to` (reason casa motivo **OU** nome do fornecedor,
+   case-insensitive; datas no fuso da loja UTC-3, mesmo critério dos Relatórios) → a busca varre
+   **todo o histórico** e o período enxuga de verdade. Teto de segurança de 1000; a tela ainda pagina
+   o exibido com "Mostrar mais".
+4. **Ordenação das Movimentações:** cabeçalhos clicáveis (↑/↓) no mesmo padrão do "Estoque atual" —
+   Data (default desc), Produto, Tipo, Qtd, Motivo, Registrado por; ordenação client-side sobre a
+   lista já filtrada (números por valor, textos por `localeCompare` pt-BR); "Mostrar mais" volta ao
+   topo ao trocar a ordenação.
+
+**Gates**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Core (Vitest) — regressão (nada quebrou) | 212/212 | ✅ 212/212 |
+| Typecheck `apps/web` (`tsc --noEmit`) | sem erros | ✅ |
+| Build de produção do web (`next build`) | rota `/estoque` gerada | ✅ 20 rotas (`/estoque` 7.76 → 8.52 kB) |
+| Dry-run do worker (`wrangler deploy --dry-run`) | bundle OK | ✅ |
+
+**Deploy + smoke (2026-07-31)**
+
+| Passo | Resultado |
+|---|---|
+| `wrangler deploy` API (filtros server-side em `/stock/movements`) | ✅ versão `0cddb35b` |
+| Smoke API: health 200 · `/stock/movements?reason=&from=&to=` sem token 401 | ✅ |
+| `npm run deploy` web (ajustes) + `postdeploy` | ✅ versão `dd9c4fa5` (HTML no-store + CSS 200) |
+| `npm run deploy` web (ordenação) + `postdeploy` | ✅ versão `9695c005` (HTML no-store + CSS 200) |
+
+**E2E do Owner — VALIDADO (2026-07-31)** — as 4 etapas de teste "passaram com sucesso" (rótulo por
+rolo, busca estilo PDV nos dois formulários, busca por motivo em todo o histórico, range de data
+enxugando a lista) + a ordenação por clique nos cabeçalhos "funcionou perfeitamente".
+
+> Commits `779f196` (ajustes: rótulo + busca + filtros server-side) + `3158a71` (ordenação das
+> Movimentações). **Fatia UI.Estoque.Ajustes CONCLUÍDA.**

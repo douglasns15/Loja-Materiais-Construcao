@@ -3,7 +3,28 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-31 — **ADR-020 (retirada / entrega futura) — NO AR e
+> **Última atualização:** 2026-07-31 — **Tela de Estoque: 4 ajustes de UI + ordenação das
+> Movimentações — NO AR e VALIDADO pelo Owner.** Pedidos do Owner, todos na tela de Estoque; sem
+> migration. **(1) Rótulo por unidade fechada (ADR-017):** ao escolher um produto de **rolo** o campo
+> de quantidade mostrava "Quantidade (barras)" fixo → agora reflete a unidade real ("Quantidade
+> (rolos)", "Custo por rolo…") via helper `unitWord`. **(2) Busca estilo PDV:** os dois `<select>`
+> gigantes de produto (Entrada e Ajuste) viraram o mesmo campo de **busca do PDV** — novo
+> `apps/web/components/ProductPicker.tsx` (reusa `productMatchesQuery`: nome/apelido/fabricante/SKU),
+> lista só ao digitar, estoque por linha, botão "Trocar". **(3) Filtros das Movimentações no
+> SERVIDOR:** o `GET /stock/movements` filtrava com `take:50` + filtro no cliente, então **Motivo** e
+> **Data** só enxergavam as 50 linhas carregadas → agora o endpoint aceita `type`/`reason`/`from`/`to`
+> (reason casa motivo **OU** fornecedor, case-insensitive; datas no fuso da loja UTC-3), a busca varre
+> **todo o histórico** e o período enxuga de verdade; teto de 1000 + "Mostrar mais". **(4) Ordenação
+> das Movimentações:** cabeçalhos clicáveis (↑/↓) como no "Estoque atual" — Data (default desc),
+> Produto, Tipo, Qtd, Motivo, Registrado por; ordenação client-side sobre a lista já filtrada. Gates:
+> core 212/212, typecheck web, build web (20 rotas, `/estoque` 8.52 kB), API dry-run. ⚠️ **Deploy de
+> API obrigatório** (fix 3). **NO AR:** API `0cddb35b` + web `dd9c4fa5` (ordenação: web `9695c005`);
+> smoke ✅ (health 200, `/stock/movements` com filtros sem token 401; web HTML no-store + CSS 200).
+> **E2E do Owner VALIDADO (2026-07-31):** os 4 ajustes ("passaram com sucesso") + a ordenação
+> ("funcionou perfeitamente"). Commits `779f196` (ajustes) + `3158a71` (ordenação). **Fatia
+> UI.Estoque.Ajustes CONCLUÍDA.** Ver "UI.Estoque.Ajustes" no registro.
+>
+> **Antes:** 2026-07-31 — **ADR-020 (retirada / entrega futura) — NO AR e
 > VALIDADO pelo Owner (E2E 6/6 + 3 refinos). Fatia CONCLUÍDA.** Eixo ortogonal ao fiado (ADR-019, que adia o
 > PAGAMENTO): aqui adiamos a **SAÍDA da mercadoria**. **Decisões de produto fechadas com o Owner:**
 > entrega **PARCIAL, item a item** (leva parte hoje, parte depois); **tela dedicada "Entregas"**
