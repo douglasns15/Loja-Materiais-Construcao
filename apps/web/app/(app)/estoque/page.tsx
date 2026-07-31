@@ -34,6 +34,11 @@ type Product = StockProduct & { updatedAt: string };
 type SortKey = 'recent' | 'name' | 'sku' | 'stock' | 'min' | 'income' | 'expense' | 'balance';
 type SortState = { key: SortKey; dir: 'asc' | 'desc' };
 
+/** Chaves de ordenação da tabela "Movimentações recentes" (clique no cabeçalho, ↑/↓), no mesmo
+ *  padrão do "Estoque atual". `date` desc é a ordem inicial (mais recentes primeiro). */
+type MovSortKey = 'date' | 'product' | 'type' | 'qty' | 'reason' | 'by';
+type MovSortState = { key: MovSortKey; dir: 'asc' | 'desc' };
+
 /**
  * Estado "aberto/minimizado" de uma seção, lembrado entre sessões (localStorage).
  * Começa no `initial` e lê a preferência salva após montar (evita divergência de
@@ -143,6 +148,9 @@ export default function EstoquePage() {
   const [lowOnly, setLowOnly] = useState(false);
   // Ordem inicial: mais recentemente atualizados no topo (os "20 mais recentes" + Mostrar mais).
   const [sort, setSort] = useState<SortState>({ key: 'recent', dir: 'desc' });
+  // "Movimentações recentes": ordenação por clique no cabeçalho (mesmo padrão do Estoque atual).
+  // Ordem inicial `date` desc = mais recentes primeiro (bate com a ordem que vem do servidor).
+  const [movSort, setMovSort] = useState<MovSortState>({ key: 'date', dir: 'desc' });
   // Paginação client-side (dados já em memória): quantos itens exibir em cada tabela.
   const [stockLimit, setStockLimit] = useState(PAGE_SIZE);
   const [movLimit, setMovLimit] = useState(PAGE_SIZE);
@@ -243,6 +251,46 @@ export default function EstoquePage() {
   }
   const sortArrow = (key: SortKey) => (sort.key === key ? (sort.dir === 'asc' ? ' ↑' : ' ↓') : '');
 
+  // Mesma mecânica para "Movimentações recentes" (ordenação client-side sobre a lista já carregada
+  // do servidor). Clicar inverte a direção; a 1ª vez numa coluna começa crescente.
+  function movSortBy(key: MovSortKey) {
+    setMovSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }));
+  }
+  const movSortArrow = (key: MovSortKey) =>
+    movSort.key === key ? (movSort.dir === 'asc' ? ' ↑' : ' ↓') : '';
+
+  // Lista de movimentações ordenada pela coluna escolhida (números por valor, textos por
+  // localeCompare pt-BR). O servidor já entrega filtrada; aqui só reordenamos o que está em memória.
+  const sortedMovements = useMemo(() => {
+    const val = (m: Movement): number | string => {
+      switch (movSort.key) {
+        case 'date':
+          return new Date(m.createdAt).getTime();
+        case 'product':
+          return normalizeSearchText(m.product?.name ?? '');
+        case 'type':
+          return m.type;
+        case 'qty':
+          return Number(m.quantity);
+        case 'reason':
+          return normalizeSearchText(`${m.reason ?? ''} ${m.supplier?.name ?? ''}`);
+        case 'by':
+          return normalizeSearchText(m.registeredByName ?? '');
+      }
+    };
+    const list = [...movements];
+    list.sort((a, b) => {
+      const va = val(a);
+      const vb = val(b);
+      const cmp =
+        typeof va === 'number' && typeof vb === 'number'
+          ? va - vb
+          : String(va).localeCompare(String(vb), 'pt-BR');
+      return movSort.dir === 'asc' ? cmp : -cmp;
+    });
+    return list;
+  }, [movements, movSort]);
+
   // Tabela "Estoque atual": busca + "só baixo" + ordenação. Aplicado no cliente sobre a lista.
   const visibleStock = useMemo(() => {
     const val = (p: Product): number | string => {
@@ -288,7 +336,7 @@ export default function EstoquePage() {
   // das outras telas. Movimentações reseta também ao recarregar (nova entrada/ajuste, ou filtro
   // de produto resolvido no servidor).
   useEffect(() => setStockLimit(PAGE_SIZE), [stockSearch, lowOnly, sort]);
-  useEffect(() => setMovLimit(PAGE_SIZE), [filters, movements]);
+  useEffect(() => setMovLimit(PAGE_SIZE), [filters, movements, movSort]);
 
   const adjustProduct = products.find((p) => p.id === adjust.productId);
 
@@ -807,12 +855,30 @@ export default function EstoquePage() {
         <table className="w-full text-sm">
           <thead className="bg-blue-200 text-left text-blue-900">
             <tr>
-              <th className="px-4 py-2">Data</th>
-              <th className="px-4 py-2">Produto</th>
-              <th className="px-4 py-2">Tipo</th>
-              <th className="px-4 py-2 text-right">Qtd</th>
-              <th className="px-4 py-2">Motivo</th>
-              <th className="px-4 py-2">Registrado por</th>
+              {(
+                [
+                  ['date', 'Data', 'left'],
+                  ['product', 'Produto', 'left'],
+                  ['type', 'Tipo', 'left'],
+                  ['qty', 'Qtd', 'right'],
+                  ['reason', 'Motivo', 'left'],
+                  ['by', 'Registrado por', 'left'],
+                ] as [MovSortKey, string, 'left' | 'right'][]
+              ).map(([key, label, align]) => (
+                <th key={key} className={`px-4 py-2 ${align === 'right' ? 'text-right' : ''}`}>
+                  <button
+                    type="button"
+                    onClick={() => movSortBy(key)}
+                    title={`Ordenar por ${label}`}
+                    className={`font-medium hover:text-gray-900 ${
+                      movSort.key === key ? 'text-gray-900' : ''
+                    }`}
+                  >
+                    {label}
+                    {movSortArrow(key)}
+                  </button>
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -825,7 +891,7 @@ export default function EstoquePage() {
                 </td>
               </tr>
             ) : (
-              movements.slice(0, movLimit).map((m) => (
+              sortedMovements.slice(0, movLimit).map((m) => (
                 <tr key={m.id} className="border-t border-gray-100">
                   <td className="px-4 py-2 text-gray-600">{DATETIME(m.createdAt)}</td>
                   <td className="px-4 py-2">{m.product?.name ?? '—'}</td>
