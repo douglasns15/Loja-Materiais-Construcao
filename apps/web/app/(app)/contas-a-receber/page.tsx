@@ -6,6 +6,7 @@ import {
   RECEIVABLE_STATUS_LABELS,
   receiveReceivableSchema,
   type AccountFilter,
+  type CustomerAccountDetail,
   type CustomerAccountRow,
   type CustomerAccountsResponse,
   type PaymentMethod,
@@ -174,8 +175,14 @@ export default function ContasAReceberPage() {
     setSelected(null);
     setAmount(String(a.totalBalance));
     setMethod('CASH');
+    setSurchargeInput('');
+    setDebtItems([]);
     setError(null);
     setInfo(null);
+    // Itens de TODAS as dívidas em aberto da conta — p/ o aviso de acréscimo por cartão (C.3).
+    apiGet<CustomerAccountDetail>(`/receivables/accounts/${a.customerId}`)
+      .then((d) => setDebtItems(d.receivables.flatMap((r) => r.items)))
+      .catch(() => setDebtItems([]));
   }
 
   async function onReceiveDebt(e: React.FormEvent) {
@@ -223,7 +230,12 @@ export default function ContasAReceberPage() {
     e.preventDefault();
     if (!acctSelected) return;
     setError(null);
-    const parsed = receiveReceivableSchema.safeParse({ amount: Number(amount), method });
+    const surcharge = isCardMethod(method) ? Math.max(0, Number(surchargeInput) || 0) : 0;
+    const parsed = receiveReceivableSchema.safeParse({
+      amount: Number(amount),
+      method,
+      ...(surcharge > 0 ? { surcharge } : {}),
+    });
     if (!parsed.success) {
       setError('Informe um valor de recebimento válido.');
       return;
@@ -400,6 +412,10 @@ export default function ContasAReceberPage() {
               )}
             </div>
 
+            {/* Acréscimo de cartão (ADR-022, Fatia C.3) — também no recebimento da conta: o valor é
+                manual, então o rateio entre dívidas não é problema (o operador decide). */}
+            {renderSurchargeBlock()}
+
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
@@ -481,63 +497,7 @@ export default function ContasAReceberPage() {
               )}
             </div>
 
-            {/* Acréscimo de cartão (ADR-022, Fatia C.3): quando recebe por débito/crédito e algum
-                item da dívida tem acréscimo, avisa e libera um campo MANUAL — o operador decide o
-                valor (não abate a dívida; entra como receita da forma no relatório). */}
-            {isCardMethod(method) &&
-              (() => {
-                const perUnit = (it: ReceivableItem) =>
-                  Number((method === 'DEBIT_CARD' ? it.surchargeDebit : it.surchargeCredit) ?? 0);
-                const items = debtItems.filter((it) => perUnit(it) > 0);
-                if (items.length === 0) return null;
-                const label = method === 'DEBIT_CARD' ? 'débito' : 'crédito';
-                const suggested = Number(
-                  items.reduce((s, it) => s + perUnit(it) * Number(it.quantity), 0).toFixed(2),
-                );
-                const surcharge = Math.max(0, Number(surchargeInput) || 0);
-                return (
-                  <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
-                    <p className="text-xs font-medium text-amber-900">
-                      Acréscimo no {label} (cadastro do produto):
-                    </p>
-                    <ul className="space-y-0.5 text-xs text-amber-800">
-                      {items.map((it, i) => (
-                        <li key={i}>
-                          {it.productName} ({Number(it.quantity)}×): +{BRL(perUnit(it))}/un
-                        </li>
-                      ))}
-                    </ul>
-                    <div className="flex items-center justify-between gap-2">
-                      <label htmlFor="surcharge" className="text-sm text-amber-900">
-                        Acréscimo a cobrar
-                      </label>
-                      <div className="flex items-center gap-1">
-                        <MoneyInput
-                          id="surcharge"
-                          value={surchargeInput}
-                          onChange={setSurchargeInput}
-                          placeholder="0,00"
-                          className="w-28 rounded-lg border border-amber-300 bg-white px-2 py-1 text-right"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setSurchargeInput(String(suggested))}
-                          className="shrink-0 rounded-lg px-2 py-1 text-xs font-medium text-blue-600 hover:underline"
-                          title={`Sugerido: ${BRL(suggested)}`}
-                        >
-                          usar sug.
-                        </button>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between rounded-lg bg-white px-3 py-1.5 text-sm ring-1 ring-amber-200">
-                      <span className="text-gray-600">Total a receber</span>
-                      <span className="font-semibold tabular-nums">
-                        {BRL(Math.max(0, Number(amount) || 0) + surcharge)}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })()}
+            {renderSurchargeBlock()}
 
             <div className="grid grid-cols-2 gap-2">
               <button
@@ -584,6 +544,62 @@ export default function ContasAReceberPage() {
   // -------------------------------------------------------------------------
   // Render helpers (fecham sobre o estado do componente)
   // -------------------------------------------------------------------------
+
+  /** Bloco de acréscimo de cartão (ADR-022, Fatia C.3), reusado nos dois recebimentos (dívida e
+   *  conta). Só aparece com forma de cartão E algum item da dívida/conta com acréscimo naquela forma;
+   *  o valor é MANUAL (o operador decide). Fecha sobre `method`/`debtItems`/`surchargeInput`/`amount`. */
+  function renderSurchargeBlock() {
+    if (!isCardMethod(method)) return null;
+    const perUnit = (it: ReceivableItem) =>
+      Number((method === 'DEBIT_CARD' ? it.surchargeDebit : it.surchargeCredit) ?? 0);
+    const items = debtItems.filter((it) => perUnit(it) > 0);
+    if (items.length === 0) return null;
+    const label = method === 'DEBIT_CARD' ? 'débito' : 'crédito';
+    const suggested = Number(
+      items.reduce((s, it) => s + perUnit(it) * Number(it.quantity), 0).toFixed(2),
+    );
+    const surcharge = Math.max(0, Number(surchargeInput) || 0);
+    return (
+      <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+        <p className="text-xs font-medium text-amber-900">Acréscimo no {label} (cadastro do produto):</p>
+        <ul className="space-y-0.5 text-xs text-amber-800">
+          {items.map((it, i) => (
+            <li key={i}>
+              {it.productName} ({Number(it.quantity)}×): +{BRL(perUnit(it))}/un
+            </li>
+          ))}
+        </ul>
+        <div className="flex items-center justify-between gap-2">
+          <label htmlFor="surcharge" className="text-sm text-amber-900">
+            Acréscimo a cobrar
+          </label>
+          <div className="flex items-center gap-1">
+            <MoneyInput
+              id="surcharge"
+              value={surchargeInput}
+              onChange={setSurchargeInput}
+              placeholder="0,00"
+              className="w-28 rounded-lg border border-amber-300 bg-white px-2 py-1 text-right"
+            />
+            <button
+              type="button"
+              onClick={() => setSurchargeInput(String(suggested))}
+              className="shrink-0 rounded-lg px-2 py-1 text-xs font-medium text-blue-600 hover:underline"
+              title={`Sugerido: ${BRL(suggested)}`}
+            >
+              usar sug.
+            </button>
+          </div>
+        </div>
+        <div className="flex items-center justify-between rounded-lg bg-white px-3 py-1.5 text-sm ring-1 ring-amber-200">
+          <span className="text-gray-600">Total a receber</span>
+          <span className="font-semibold tabular-nums">
+            {BRL(Math.max(0, Number(amount) || 0) + surcharge)}
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   function renderAccounts() {
     if (!accountsLoaded) return <p className="text-gray-600">Carregando…</p>;
