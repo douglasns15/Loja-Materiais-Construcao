@@ -639,7 +639,7 @@ export default function ContasAReceberPage() {
                         {r.customerName ?? '—'}
                       </button>
                       <span className="block text-xs text-gray-500">
-                        {new Date(r.createdAt).toLocaleDateString('pt-BR')}
+                        #{r.orderId.slice(0, 8)} · {new Date(r.createdAt).toLocaleDateString('pt-BR')}
                         {r.status !== 'OPEN' ? ` · ${RECEIVABLE_STATUS_LABELS[r.status]}` : ''}
                       </span>
                     </td>

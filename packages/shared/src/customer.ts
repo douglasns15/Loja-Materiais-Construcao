@@ -36,6 +36,8 @@ export type CustomerHistoryOrder = {
 /** Uma conta a receber do cliente no seu histórico (perfil do cliente). */
 export type CustomerHistoryReceivable = {
   id: string;
+  /** Venda de origem — usada para mostrar o código da dívida (#xxxxxxxx) na consulta (ADR-022). */
+  orderId: string;
   originalAmount: string;
   settledAmount: string;
   balance: number;

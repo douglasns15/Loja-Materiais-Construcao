@@ -168,6 +168,7 @@ customers.get('/:id/history', async (c) => {
         orderBy: { createdAt: 'desc' },
         select: {
           id: true,
+          orderId: true,
           originalAmount: true,
           settledAmount: true,
           returnedAmount: true,
@@ -191,6 +192,7 @@ customers.get('/:id/history', async (c) => {
         })),
         receivables: receivables.map((r) => ({
           id: r.id,
+          orderId: r.orderId,
           originalAmount: r.originalAmount,
           settledAmount: r.settledAmount,
           balance: receivableBalance(Number(r.originalAmount), Number(r.settledAmount), Number(r.returnedAmount)),

@@ -23,6 +23,7 @@ type TimelineEvent =
       at: string;
       amount: number; // valor a prazo daquela venda (+ no saldo)
       orderId: string; // p/ mostrar o código da venda (#xxxxxxxx)
+      paid: boolean; // dívida já quitada → selo "Quitada"
       items: { productName: string; quantity: string; total: string }[];
     }
   | {
@@ -134,6 +135,7 @@ export function CustomerAccountModal({
         at: r.createdAt,
         amount: Number(r.originalAmount),
         orderId: r.orderId,
+        paid: r.status === 'PAID',
         items: r.items.map((it) => ({
           productName: it.productName,
           quantity: it.quantity,
@@ -341,6 +343,11 @@ export function CustomerAccountModal({
                                   · {e.items.length} {e.items.length === 1 ? 'item' : 'itens'} ·{' '}
                                   {shortCode(e.orderId)}
                                 </span>
+                                {e.paid && (
+                                  <span className="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                                    Quitada
+                                  </span>
+                                )}
                               </>
                             ) : e.kind === 'return' ? (
                               <>

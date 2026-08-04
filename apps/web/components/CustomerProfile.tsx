@@ -206,6 +206,7 @@ export function CustomerProfile({
                     <li key={r.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
                       <div className="min-w-0">
                         <span className="text-gray-600">
+                          #{r.orderId.slice(0, 8)} ·{' '}
                           {new Date(r.createdAt).toLocaleDateString('pt-BR')} · {BRL(r.originalAmount)}
                         </span>
                         <span className="block text-xs text-gray-500">
