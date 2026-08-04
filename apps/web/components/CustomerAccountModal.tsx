@@ -22,6 +22,7 @@ type TimelineEvent =
       kind: 'sale';
       at: string;
       amount: number; // valor a prazo daquela venda (+ no saldo)
+      orderId: string; // p/ mostrar o código da venda (#xxxxxxxx)
       items: { productName: string; quantity: string; total: string }[];
     }
   | {
@@ -40,7 +41,18 @@ type TimelineEvent =
       reason: string;
       by: string | null;
       items: { productName: string; quantity: string; total: string }[];
+    }
+  | {
+      kind: 'credit';
+      at: string;
+      amount: number; // ASSINADO: − usado numa venda, + estornado (não mexe no saldo DEVEDOR)
+      origin: string; // SALE_USE | SALE_REVERSAL | MANUAL
+      relatedOrderId: string | null;
+      by: string | null;
     };
+
+/** Código curto da venda (8 primeiros do UUID) — para identificar/consultar a dívida em tela. */
+const shortCode = (id: string) => `#${id.slice(0, 8)}`;
 
 /**
  * Extrato consolidado da CONTA de um cliente (ADR-022, Fatia A.2). Junta todas as vendas a prazo
@@ -121,6 +133,7 @@ export function CustomerAccountModal({
         kind: 'sale',
         at: r.createdAt,
         amount: Number(r.originalAmount),
+        orderId: r.orderId,
         items: r.items.map((it) => ({
           productName: it.productName,
           quantity: it.quantity,
@@ -155,11 +168,26 @@ export function CustomerAccountModal({
         })),
       });
     }
+    // Crédito da loja (ADR-022, Fatia C): usos/estornos entram na timeline (a GERAÇÃO já aparece no
+    // evento de devolução — origin RETURN é ignorada aqui para não duplicar). Não mexe no saldo
+    // DEVEDOR (o crédito é um saldo à parte, mostrado no topo).
+    for (const cr of detail.credits ?? []) {
+      if (cr.origin === 'RETURN') continue;
+      events.push({
+        kind: 'credit',
+        at: cr.createdAt,
+        amount: Number(cr.amount), // assinado (− usado, + estornado)
+        origin: cr.origin,
+        relatedOrderId: cr.relatedOrderId,
+        by: cr.createdByName,
+      });
+    }
     events.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
-    // Saldo corrente em centavos (venda +, recebimento e devolução −).
+    // Saldo corrente em centavos (venda +, recebimento e devolução −; crédito não mexe no devedor).
     let cents = 0;
     return events.map((e) => {
-      cents += Math.round(e.amount * 100) * (e.kind === 'sale' ? 1 : -1);
+      const sign = e.kind === 'sale' ? 1 : e.kind === 'credit' ? 0 : -1;
+      cents += Math.round(e.amount * 100) * sign;
       return { ...e, running: cents / 100 };
     });
   }, [detail]);
@@ -310,7 +338,8 @@ export function CustomerAccountModal({
                               <>
                                 Venda a prazo
                                 <span className="ml-1 font-normal text-gray-500">
-                                  · {e.items.length} {e.items.length === 1 ? 'item' : 'itens'}
+                                  · {e.items.length} {e.items.length === 1 ? 'item' : 'itens'} ·{' '}
+                                  {shortCode(e.orderId)}
                                 </span>
                               </>
                             ) : e.kind === 'return' ? (
@@ -318,6 +347,14 @@ export function CustomerAccountModal({
                                 Devolução
                                 <span className="ml-1 font-normal text-gray-500">
                                   · {e.items.length} {e.items.length === 1 ? 'item' : 'itens'}
+                                  {e.by ? ` · ${e.by}` : ''}
+                                </span>
+                              </>
+                            ) : e.kind === 'credit' ? (
+                              <>
+                                {e.amount < 0 ? 'Crédito usado' : 'Crédito estornado'}
+                                <span className="ml-1 font-normal text-gray-500">
+                                  {e.relatedOrderId ? ` · ${shortCode(e.relatedOrderId)}` : ''}
                                   {e.by ? ` · ${e.by}` : ''}
                                 </span>
                               </>
@@ -350,15 +387,20 @@ export function CustomerAccountModal({
                                 ? 'text-gray-800'
                                 : e.kind === 'return'
                                   ? 'text-amber-700'
-                                  : 'text-green-700'
+                                  : e.kind === 'credit'
+                                    ? 'text-indigo-600'
+                                    : 'text-green-700'
                             }`}
                           >
-                            {e.kind === 'sale' ? '+' : '−'}
-                            {BRL(e.amount)}
+                            {e.kind === 'sale' ? '+' : e.kind === 'credit' ? (e.amount < 0 ? '−' : '+') : '−'}
+                            {BRL(Math.abs(e.amount))}
                           </p>
-                          <p className="text-xs text-gray-500 tabular-nums">
-                            saldo {BRL(e.running)}
-                          </p>
+                          {/* Crédito não mexe no saldo DEVEDOR (é um saldo à parte, no topo). */}
+                          {e.kind === 'credit' ? (
+                            <p className="text-xs text-indigo-500">crédito</p>
+                          ) : (
+                            <p className="text-xs text-gray-500 tabular-nums">saldo {BRL(e.running)}</p>
+                          )}
                         </div>
                       </div>
 

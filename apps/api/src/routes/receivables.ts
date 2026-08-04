@@ -596,6 +596,23 @@ receivables.get('/accounts/:customerId', async (c) => {
     });
     const returns = returnRows.map(mapReturnEvent);
 
+    // Livro-razão do crédito (ADR-022, Fatia C): entradas/saídas do crédito a favor do cliente. A UI
+    // intercala os USOS (SALE_USE) e ESTORNOS (SALE_REVERSAL) na timeline; a geração (RETURN) já
+    // aparece no evento de devolução, então a UI a ignora para não duplicar.
+    const credits = await prisma.customerCredit.findMany({
+      where: { tenantId, customerId },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      take: 200,
+      select: {
+        id: true,
+        createdAt: true,
+        amount: true,
+        origin: true,
+        relatedOrderId: true,
+        createdByName: true,
+      },
+    });
+
     const totalBalance = customerAccountBalance(
       receivables.filter((r) => r.status === 'OPEN').map((r) => ({ id: r.id, balance: r.balance })),
     );
@@ -613,6 +630,7 @@ receivables.get('/accounts/:customerId', async (c) => {
         receivables,
         returns,
         openItems,
+        credits,
       },
     });
   } catch (err) {

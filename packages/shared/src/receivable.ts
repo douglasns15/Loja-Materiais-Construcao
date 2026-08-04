@@ -153,6 +153,18 @@ export type AccountOpenItem = {
   total: string;
 };
 
+/** Um lançamento do livro-razão de CRÉDITO do cliente (ADR-022, Fatia C) — o histórico de entradas
+ * e saídas do crédito a favor. `amount` é ASSINADO (+ gerado/estornado, − usado numa venda). */
+export type AccountCreditEvent = {
+  id: string;
+  createdAt: string;
+  amount: string;
+  /** "RETURN" (gerado na devolução) · "SALE_USE" (usado numa venda) · "SALE_REVERSAL" (estornado). */
+  origin: string;
+  relatedOrderId: string | null;
+  createdByName: string | null;
+};
+
 /** Detalhe da CONTA de um cliente — `GET /receivables/accounts/:customerId`. Reúne as vendas a
  * prazo (em aberto + quitadas) com itens e recebimentos; a UI monta o log cronológico. */
 export type CustomerAccountDetail = {
@@ -171,6 +183,9 @@ export type CustomerAccountDetail = {
   /** Resumo consolidado da situação atual (ADR-022): itens ainda em aberto (vendido − devolvido),
    * somados por produto. Só dívidas OPEN entram; item totalmente devolvido some. */
   openItems: AccountOpenItem[];
+  /** Livro-razão do crédito do cliente (ADR-022, Fatia C) — entradas/saídas do crédito a favor. A
+   * UI mostra os usos/estornos na timeline (a geração já aparece no evento de devolução). */
+  credits: AccountCreditEvent[];
 };
 
 /** Um item da venda que originou a dívida (para o detalhe da conta a receber). */

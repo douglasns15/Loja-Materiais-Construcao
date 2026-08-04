@@ -1424,7 +1424,17 @@ export default function VendaPage() {
             Confira antes de confirmar
           </p>
           <Summary items={pricedCart} total={totals.total} discount={discountValue} />
-          <PaymentsLines payments={buildPersistedPayments()} change={change} />
+          <PaymentsLines
+            payments={buildPersistedPayments()}
+            change={change}
+            storeCredit={storeCreditUsed}
+          />
+          {isCredit && (
+            <div className="flex items-center justify-between rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 ring-1 ring-amber-200">
+              <span>A prazo{customerName ? ` — ${customerName}` : ''}</span>
+              <span className="font-semibold tabular-nums">{BRL(creditValue)}</span>
+            </div>
+          )}
           <p className="text-xs text-gray-500">
             O estoque só é baixado ao confirmar. Você pode voltar e editar sem afetar nada.
           </p>
@@ -2189,6 +2199,12 @@ export default function VendaPage() {
                     <span className="text-gray-600">A pagar agora</span>
                     <span className="font-semibold tabular-nums">{BRL(payableNow)}</span>
                   </div>
+                  {/* Aviso quando o operador digita mais que o aplicável — usamos só o máximo. */}
+                  {Number(storeCreditInput) > maxStoreCredit + 0.005 && (
+                    <p className="text-xs text-amber-700">
+                      Máximo aplicável nesta venda: {BRL(maxStoreCredit)}. Usando {BRL(storeCreditUsed)}.
+                    </p>
+                  )}
                   {!online && <p className="text-xs text-red-600">Usar crédito exige conexão.</p>}
                 </div>
               )}
