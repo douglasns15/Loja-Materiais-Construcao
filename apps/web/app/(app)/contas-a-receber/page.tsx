@@ -5,6 +5,7 @@ import {
   PAYMENT_METHOD_LABELS,
   RECEIVABLE_STATUS_LABELS,
   receiveReceivableSchema,
+  type AccountFilter,
   type CustomerAccountRow,
   type CustomerAccountsResponse,
   type PaymentMethod,
@@ -49,6 +50,8 @@ export default function ContasAReceberPage() {
   // ---- Visão POR CLIENTE (contas) ----
   const [accounts, setAccounts] = useState<CustomerAccountRow[]>([]);
   const [accountsLoaded, setAccountsLoaded] = useState(false);
+  // Filtro da conta (ADR-022, Fatia C): com dívida (default) / com crédito / todos.
+  const [acctFilter, setAcctFilter] = useState<AccountFilter>('debt');
   const [acctSelected, setAcctSelected] = useState<CustomerAccountRow | null>(null);
   // Extrato consolidado da conta (ao clicar no cliente): customerId aberto + sinal de recarga.
   const [accountDetailId, setAccountDetailId] = useState<string | null>(null);
@@ -73,7 +76,7 @@ export default function ContasAReceberPage() {
 
   const loadAccounts = useCallback(async () => {
     try {
-      const p = new URLSearchParams();
+      const p = new URLSearchParams({ filter: acctFilter });
       if (search.trim()) p.set('q', search.trim());
       const res = await apiGet<CustomerAccountsResponse>(`/receivables/accounts?${p.toString()}`);
       setAccounts(res.rows);
@@ -83,7 +86,7 @@ export default function ContasAReceberPage() {
     } finally {
       setAccountsLoaded(true);
     }
-  }, [search]);
+  }, [search, acctFilter]);
 
   const debtsQuery = useCallback(
     (cursor: string | null) => {
@@ -264,7 +267,7 @@ export default function ContasAReceberPage() {
           placeholder="Buscar por cliente…"
           className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
         />
-        {view === 'debts' && (
+        {view === 'debts' ? (
           <div className="flex gap-1">
             {(['open', 'paid', 'all'] as StatusFilter[]).map((s) => (
               <button
@@ -278,6 +281,23 @@ export default function ContasAReceberPage() {
                 }`}
               >
                 {s === 'open' ? 'Em aberto' : s === 'paid' ? 'Quitadas' : 'Todas'}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="flex gap-1">
+            {(['debt', 'credit', 'all'] as AccountFilter[]).map((f) => (
+              <button
+                key={f}
+                type="button"
+                onClick={() => setAcctFilter(f)}
+                className={`rounded-lg px-3 py-2 text-sm font-medium ${
+                  acctFilter === f
+                    ? 'bg-gray-900 text-white'
+                    : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                {f === 'debt' ? 'Com dívida' : f === 'credit' ? 'Com crédito' : 'Todos'}
               </button>
             ))}
           </div>
@@ -487,20 +507,25 @@ export default function ContasAReceberPage() {
   function renderAccounts() {
     if (!accountsLoaded) return <p className="text-gray-600">Carregando…</p>;
     if (accounts.length === 0) {
+      const emptyMsg = search.trim()
+        ? 'Nenhuma conta para essa busca.'
+        : acctFilter === 'credit'
+          ? 'Nenhum cliente com crédito a favor. Créditos de devolução aparecem aqui.'
+          : acctFilter === 'all'
+            ? 'Nenhuma conta com dívida ou crédito.'
+            : 'Nenhuma conta em aberto. As vendas a prazo aparecem aqui, somadas por cliente.';
       return (
-        <p className="rounded-2xl bg-white p-6 text-center text-gray-600 shadow-sm">
-          {search.trim()
-            ? 'Nenhuma conta em aberto para essa busca.'
-            : 'Nenhuma conta em aberto. As vendas a prazo aparecem aqui, somadas por cliente.'}
-        </p>
+        <p className="rounded-2xl bg-white p-6 text-center text-gray-600 shadow-sm">{emptyMsg}</p>
       );
     }
     return (
       <>
-        <div className="mb-4 rounded-2xl bg-white p-4 shadow-sm">
-          <p className="text-xs text-gray-600">Total a receber ({accounts.length} clientes)</p>
-          <p className="mt-1 text-2xl font-bold">{BRL(totalOwedPage)}</p>
-        </div>
+        {acctFilter !== 'credit' && (
+          <div className="mb-4 rounded-2xl bg-white p-4 shadow-sm">
+            <p className="text-xs text-gray-600">Total a receber ({accounts.length} clientes)</p>
+            <p className="mt-1 text-2xl font-bold">{BRL(totalOwedPage)}</p>
+          </div>
+        )}
 
         <div className="overflow-x-auto rounded-2xl bg-white shadow-sm">
           <table className="w-full text-sm">
@@ -510,6 +535,7 @@ export default function ContasAReceberPage() {
                 <th className="px-4 py-3">Vencimento mais próximo</th>
                 <th className="px-4 py-3 text-right">Dívidas</th>
                 <th className="px-4 py-3 text-right">Saldo da conta</th>
+                <th className="px-4 py-3 text-right">Crédito</th>
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>
@@ -540,16 +566,27 @@ export default function ContasAReceberPage() {
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums text-gray-600">{a.openCount}</td>
                     <td className="px-4 py-3 text-right font-semibold tabular-nums">
-                      {BRL(a.totalBalance)}
+                      {a.totalBalance > 0 ? BRL(a.totalBalance) : <span className="text-gray-400">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      {a.creditBalance > 0 ? (
+                        <span className="font-medium text-green-700">{BRL(a.creditBalance)}</span>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() => openReceiveAccount(a)}
-                        className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800"
-                      >
-                        Receber
-                      </button>
+                      {a.totalBalance > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => openReceiveAccount(a)}
+                          className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800"
+                        >
+                          Receber
+                        </button>
+                      ) : (
+                        <span className="text-xs text-gray-400">—</span>
+                      )}
                     </td>
                   </tr>
                 );

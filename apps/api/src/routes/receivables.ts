@@ -194,50 +194,113 @@ receivables.get('/accounts', async (c) => {
   }
   const q = (c.req.query('q') ?? '').trim();
   const qWhere = q ? { customer: { name: { contains: q, mode: 'insensitive' as const } } } : {};
+  // Filtro (ADR-022, Fatia C): quem DEVE (default), quem tem CRÉDITO a favor, ou TODOS.
+  const filterRaw = c.req.query('filter');
+  const filter: 'debt' | 'credit' | 'all' =
+    filterRaw === 'credit' || filterRaw === 'all' ? filterRaw : 'debt';
 
   try {
     const prisma = createPrismaClient(connectionString);
-    // Agrega as dívidas OPEN por cliente. Numa dívida OPEN o saldo é sempre > 0 (vira PAID quando
-    // recebido ≥ original), então `Σ original − Σ settled` = soma dos saldos devedores.
-    const grouped = await prisma.receivable.groupBy({
-      by: ['customerId'],
-      where: { tenantId, status: 'OPEN', ...qWhere },
-      _sum: { originalAmount: true, settledAmount: true, returnedAmount: true },
-      _count: { _all: true },
-      _min: { createdAt: true, dueDate: true },
-      // groupBy exige orderBy quando há `take`; ordena pelo maior devedor (o sort final em JS
-      // usa o saldo exato, mas isto já traz os maiores dentro do teto defensivo).
-      orderBy: { _sum: { originalAmount: 'desc' } },
-      take: 500,
-    });
-    if (grouped.length === 0) {
+
+    // Linha da conta acumulada por cliente (dívida + crédito), montada de duas fontes.
+    type Acc = {
+      customerId: string;
+      customerName: string | null;
+      totalBalance: number;
+      openCount: number;
+      oldestCreatedAt: Date | null;
+      nextDueDate: Date | null;
+      creditBalance: number;
+    };
+    const accById = new Map<string, Acc>();
+
+    // (1) Dívidas OPEN por cliente (só quando o filtro precisa delas). Numa dívida OPEN o saldo é
+    // sempre > 0 (vira PAID quando recebido ≥ original), então `Σ original − Σ settled − Σ devolvido`
+    // = soma dos saldos devedores.
+    if (filter === 'debt' || filter === 'all') {
+      const grouped = await prisma.receivable.groupBy({
+        by: ['customerId'],
+        where: { tenantId, status: 'OPEN', ...qWhere },
+        _sum: { originalAmount: true, settledAmount: true, returnedAmount: true },
+        _count: { _all: true },
+        _min: { createdAt: true, dueDate: true },
+        orderBy: { _sum: { originalAmount: 'desc' } },
+        take: 500,
+      });
+      for (const g of grouped) {
+        accById.set(g.customerId, {
+          customerId: g.customerId,
+          customerName: null, // preenchido abaixo
+          totalBalance: receivableBalance(
+            Number(g._sum.originalAmount ?? 0),
+            Number(g._sum.settledAmount ?? 0),
+            Number(g._sum.returnedAmount ?? 0),
+          ),
+          openCount: g._count._all,
+          oldestCreatedAt: g._min.createdAt,
+          nextDueDate: g._min.dueDate,
+          creditBalance: 0,
+        });
+      }
+    }
+
+    // (2) Clientes com CRÉDITO a favor (só quando o filtro precisa deles). Pode haver crédito sem
+    // dívida — nesse caso a conta aparece só nos filtros "credit"/"all".
+    if (filter === 'credit' || filter === 'all') {
+      const withCredit = await prisma.customer.findMany({
+        where: {
+          tenantId,
+          creditBalance: { gt: 0 },
+          ...(q ? { name: { contains: q, mode: 'insensitive' as const } } : {}),
+        },
+        select: { id: true, name: true, creditBalance: true },
+        take: 500,
+      });
+      for (const cu of withCredit) {
+        const cur = accById.get(cu.id);
+        if (cur) {
+          cur.creditBalance = Number(cu.creditBalance);
+        } else {
+          accById.set(cu.id, {
+            customerId: cu.id,
+            customerName: cu.name,
+            totalBalance: 0,
+            openCount: 0,
+            oldestCreatedAt: null,
+            nextDueDate: null,
+            creditBalance: Number(cu.creditBalance),
+          });
+        }
+      }
+    }
+
+    if (accById.size === 0) {
       return c.json({ ok: true, data: { rows: [] } });
     }
 
-    const customerIds = grouped.map((g) => g.customerId);
-    const customers = await prisma.customer.findMany({
-      where: { tenantId, id: { in: customerIds } },
-      select: { id: true, name: true },
-    });
-    const nameById = new Map(customers.map((cu) => [cu.id, cu.name]));
+    // Nomes que ainda faltam (os que vieram só da dívida).
+    const missingNames = [...accById.values()].filter((a) => a.customerName === null).map((a) => a.customerId);
+    if (missingNames.length > 0) {
+      const customers = await prisma.customer.findMany({
+        where: { tenantId, id: { in: missingNames } },
+        select: { id: true, name: true },
+      });
+      const nameById = new Map(customers.map((cu) => [cu.id, cu.name]));
+      for (const a of accById.values()) {
+        if (a.customerName === null) a.customerName = nameById.get(a.customerId) ?? null;
+      }
+    }
 
-    const rows = grouped
-      .map((g) => ({
-        customerId: g.customerId,
-        customerName: nameById.get(g.customerId) ?? null,
-        totalBalance: receivableBalance(
-          Number(g._sum.originalAmount ?? 0),
-          Number(g._sum.settledAmount ?? 0),
-          Number(g._sum.returnedAmount ?? 0),
-        ),
-        openCount: g._count._all,
-        oldestCreatedAt: g._min.createdAt,
-        nextDueDate: g._min.dueDate,
-      }))
-      // Maior devedor primeiro (visão "quem me deve"); desempate por nome.
+    const rows = [...accById.values()]
+      // Filtro final: "debt" só quem tem saldo devedor; "credit" só quem tem crédito; "all" ambos.
+      .filter((a) =>
+        filter === 'debt' ? a.totalBalance > 0 : filter === 'credit' ? a.creditBalance > 0 : true,
+      )
+      // Maior devedor primeiro; depois maior crédito; desempate por nome.
       .sort(
         (a, b) =>
           b.totalBalance - a.totalBalance ||
+          b.creditBalance - a.creditBalance ||
           (a.customerName ?? '').localeCompare(b.customerName ?? '', 'pt-BR'),
       );
 

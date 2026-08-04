@@ -81,7 +81,13 @@ export type CustomerAccountRow = {
   openCount: number;
   oldestCreatedAt: string | null;
   nextDueDate: string | null;
+  /** Crédito a favor do cliente (ADR-022, Fatia C) — sobra de devolução guardada. Pode haver
+   * crédito SEM dívida (a conta aparece só quando o filtro inclui crédito). 0 quando não há. */
+  creditBalance: number;
 };
+
+/** Filtro da visão "Por cliente" (ADR-022, Fatia C): quem deve, quem tem crédito, ou todos. */
+export type AccountFilter = 'debt' | 'credit' | 'all';
 
 /** Lista de contas por cliente — `GET /receivables/accounts` (conjunto pequeno, sem paginação). */
 export type CustomerAccountsResponse = { rows: CustomerAccountRow[] };
