@@ -9,6 +9,8 @@ import {
   type CustomerAccountRow,
   type CustomerAccountsResponse,
   type PaymentMethod,
+  type ReceivableDetail,
+  type ReceivableItem,
   type ReceivableRow,
   type ReceivablesPage,
   type ReceiveAccountResult,
@@ -25,6 +27,11 @@ const BRL = (v: string | number) =>
 type StatusFilter = 'open' | 'paid' | 'all';
 /** Visão: por CLIENTE (conta que soma — ADR-022) ou por VENDA (dívida a dívida, o histórico). */
 type View = 'accounts' | 'debts';
+
+/** Formas de cartão — as que podem ter acréscimo do produto (ADR-016 × ADR-022, Fatia C.3). */
+function isCardMethod(m: PaymentMethod): boolean {
+  return m === 'DEBIT_CARD' || m === 'CREDIT_CARD';
+}
 
 /** Uma conta/dívida está VENCIDA quando tem vencimento e ele já passou (comparando só a data). */
 function isOverdue(dueDate: string | null): boolean {
@@ -69,6 +76,10 @@ export default function ContasAReceberPage() {
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState<PaymentMethod>('CASH');
   const [busy, setBusy] = useState(false);
+  // Acréscimo de cartão ao receber (ADR-022, Fatia C.3): itens da dívida (p/ o aviso) + valor MANUAL
+  // digitado pelo operador. Só no recebimento de UMA dívida (produtos conhecidos).
+  const [debtItems, setDebtItems] = useState<ReceivableItem[]>([]);
+  const [surchargeInput, setSurchargeInput] = useState('');
 
   // Detalhe da dívida (ao clicar): id aberto + sinal de recarga (após um recebimento).
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -149,8 +160,14 @@ export default function ContasAReceberPage() {
     setAcctSelected(null);
     setAmount(String(r.balance));
     setMethod('CASH');
+    setSurchargeInput('');
+    setDebtItems([]);
     setError(null);
     setInfo(null);
+    // Busca os itens da dívida para o aviso de acréscimo por cartão (ADR-022, Fatia C.3).
+    apiGet<ReceivableDetail>(`/receivables/${r.id}`)
+      .then((d) => setDebtItems(d.items ?? []))
+      .catch(() => setDebtItems([]));
   }
   function openReceiveAccount(a: CustomerAccountRow) {
     setAcctSelected(a);
@@ -165,7 +182,13 @@ export default function ContasAReceberPage() {
     e.preventDefault();
     if (!selected) return;
     setError(null);
-    const parsed = receiveReceivableSchema.safeParse({ amount: Number(amount), method });
+    // Acréscimo só vale para cartão (ADR-022, Fatia C.3); em dinheiro/PIX é ignorado.
+    const surcharge = isCardMethod(method) ? Math.max(0, Number(surchargeInput) || 0) : 0;
+    const parsed = receiveReceivableSchema.safeParse({
+      amount: Number(amount),
+      method,
+      ...(surcharge > 0 ? { surcharge } : {}),
+    });
     if (!parsed.success) {
       setError('Informe um valor de recebimento válido.');
       return;
@@ -457,6 +480,64 @@ export default function ContasAReceberPage() {
                 </p>
               )}
             </div>
+
+            {/* Acréscimo de cartão (ADR-022, Fatia C.3): quando recebe por débito/crédito e algum
+                item da dívida tem acréscimo, avisa e libera um campo MANUAL — o operador decide o
+                valor (não abate a dívida; entra como receita da forma no relatório). */}
+            {isCardMethod(method) &&
+              (() => {
+                const perUnit = (it: ReceivableItem) =>
+                  Number((method === 'DEBIT_CARD' ? it.surchargeDebit : it.surchargeCredit) ?? 0);
+                const items = debtItems.filter((it) => perUnit(it) > 0);
+                if (items.length === 0) return null;
+                const label = method === 'DEBIT_CARD' ? 'débito' : 'crédito';
+                const suggested = Number(
+                  items.reduce((s, it) => s + perUnit(it) * Number(it.quantity), 0).toFixed(2),
+                );
+                const surcharge = Math.max(0, Number(surchargeInput) || 0);
+                return (
+                  <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+                    <p className="text-xs font-medium text-amber-900">
+                      Acréscimo no {label} (cadastro do produto):
+                    </p>
+                    <ul className="space-y-0.5 text-xs text-amber-800">
+                      {items.map((it, i) => (
+                        <li key={i}>
+                          {it.productName} ({Number(it.quantity)}×): +{BRL(perUnit(it))}/un
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="flex items-center justify-between gap-2">
+                      <label htmlFor="surcharge" className="text-sm text-amber-900">
+                        Acréscimo a cobrar
+                      </label>
+                      <div className="flex items-center gap-1">
+                        <MoneyInput
+                          id="surcharge"
+                          value={surchargeInput}
+                          onChange={setSurchargeInput}
+                          placeholder="0,00"
+                          className="w-28 rounded-lg border border-amber-300 bg-white px-2 py-1 text-right"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setSurchargeInput(String(suggested))}
+                          className="shrink-0 rounded-lg px-2 py-1 text-xs font-medium text-blue-600 hover:underline"
+                          title={`Sugerido: ${BRL(suggested)}`}
+                        >
+                          usar sug.
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between rounded-lg bg-white px-3 py-1.5 text-sm ring-1 ring-amber-200">
+                      <span className="text-gray-600">Total a receber</span>
+                      <span className="font-semibold tabular-nums">
+                        {BRL(Math.max(0, Number(amount) || 0) + surcharge)}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
 
             <div className="grid grid-cols-2 gap-2">
               <button

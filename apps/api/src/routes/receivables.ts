@@ -690,6 +690,8 @@ receivables.get('/:id', async (c) => {
                 unitPrice: true,
                 total: true,
                 pairGroup: true,
+                // Acréscimo por unidade do produto no cartão (ADR-016) — p/ o aviso ao receber (C.3).
+                product: { select: { surchargeDebit: true, surchargeCredit: true } },
               },
             },
             payments: { select: { method: true, amount: true } },
@@ -700,6 +702,7 @@ receivables.get('/:id', async (c) => {
           select: {
             id: true,
             amount: true,
+            surcharge: true,
             method: true,
             paidAt: true,
             receivedByName: true,
@@ -740,9 +743,17 @@ receivables.get('/:id', async (c) => {
         createdByName: r.createdByName,
         orderTotal: r.order?.total ?? null,
         orderCreatedAt: r.order?.createdAt ?? null,
-        items: r.order?.items ?? [],
+        // Achata o acréscimo do produto em cada item (ADR-022, Fatia C.3) — o aviso ao receber usa isso.
+        items: (r.order?.items ?? []).map((it) => {
+          const { product, ...rest } = it;
+          return {
+            ...rest,
+            surchargeDebit: String(product?.surchargeDebit ?? 0),
+            surchargeCredit: String(product?.surchargeCredit ?? 0),
+          };
+        }),
         orderPayments: r.order?.payments ?? [],
-        payments: r.payments,
+        payments: r.payments.map((p) => ({ ...p, surcharge: String(p.surcharge ?? 0) })),
       },
     });
   } catch (err) {
@@ -805,6 +816,10 @@ receivables.post('/:id/receive', requireActiveTenant, async (c) => {
     return c.json({ ok: false, error: 'Dados do recebimento inválidos.' }, 400);
   }
   const { amount, method, reference } = parsed.data;
+  // Acréscimo de cartão (ADR-022, Fatia C.3): só faz sentido no débito/crédito (recupera a taxa do
+  // cartão). Em dinheiro/PIX é ignorado (0). Digitado pelo operador; receita a mais, não abate a dívida.
+  const isCard = method === 'DEBIT_CARD' || method === 'CREDIT_CARD';
+  const surcharge = isCard ? Number((parsed.data.surcharge ?? 0).toFixed(2)) : 0;
 
   try {
     const prisma = createPrismaClient(connectionString);
@@ -885,7 +900,8 @@ receivables.post('/:id/receive', requireActiveTenant, async (c) => {
         data: {
           tenantId,
           receivableId: receivable.id,
-          amount,
+          amount, // quita a dívida
+          surcharge, // acréscimo de cartão — receita a mais (não abate a dívida) — ADR-022 C.3
           method,
           reference: reference ?? null,
           cashSessionId: openSessionId,

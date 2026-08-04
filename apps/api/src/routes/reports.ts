@@ -80,10 +80,11 @@ reports.get('/sales', async (c) => {
           order: { status: { not: 'CANCELLED' }, ...(createdAt ? { createdAt } : {}) },
         },
       }),
-      // Recebimentos de fiado por forma (pela data do recebimento — regime de caixa).
+      // Recebimentos de fiado por forma (pela data do recebimento — regime de caixa). `surcharge` é o
+      // acréscimo de cartão cobrado ao receber (ADR-022, Fatia C.3) — soma na receita daquela forma.
       prisma.receivablePayment.groupBy({
         by: ['method'],
-        _sum: { amount: true },
+        _sum: { amount: true, surcharge: true },
         _count: { _all: true },
         where: { tenantId, ...(paidAt ? { paidAt } : {}) },
       }),
@@ -97,9 +98,19 @@ reports.get('/sales', async (c) => {
     // Junta pagamentos à vista + recebimentos de fiado por forma de pagamento, para o "recebido"
     // e a quebra por forma baterem (Σ formas = recebido).
     const byMethod = new Map<string, { total: number; count: number }>();
-    for (const g of [...grouped, ...creditReceipts]) {
+    // Pagamentos à vista das vendas (não têm acréscimo separado — já embutido no preço, ADR-016).
+    for (const g of grouped) {
       const cur = byMethod.get(g.method) ?? { total: 0, count: 0 };
       cur.total = Number((cur.total + Number(g._sum.amount ?? 0)).toFixed(2));
+      cur.count += g._count._all;
+      byMethod.set(g.method, cur);
+    }
+    // Recebimentos de fiado: valor + acréscimo de cartão (ADR-022, Fatia C.3) na mesma forma.
+    for (const g of creditReceipts) {
+      const cur = byMethod.get(g.method) ?? { total: 0, count: 0 };
+      cur.total = Number(
+        (cur.total + Number(g._sum.amount ?? 0) + Number(g._sum.surcharge ?? 0)).toFixed(2),
+      );
       cur.count += g._count._all;
       byMethod.set(g.method, cur);
     }

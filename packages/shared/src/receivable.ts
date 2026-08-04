@@ -27,6 +27,9 @@ export const receiveReceivableSchema = z.object({
   amount: z.number().positive(),
   method: paymentMethodSchema,
   reference: z.string().max(100).optional(),
+  /** Acréscimo de cartão cobrado NESTE recebimento (ADR-016 × ADR-022, Fatia C.3) — digitado pelo
+   * operador quando recebe por débito/crédito. Receita a mais (não abate a dívida). Só vale p/ cartão. */
+  surcharge: z.number().nonnegative().optional(),
 });
 export type ReceiveReceivableInput = z.infer<typeof receiveReceivableSchema>;
 
@@ -40,6 +43,8 @@ export type UpdateReceivableInput = z.infer<typeof updateReceivableSchema>;
 export type ReceivablePaymentRow = {
   id: string;
   amount: string;
+  /** Acréscimo de cartão cobrado neste recebimento (ADR-022, Fatia C.3). "0" quando não houve. */
+  surcharge?: string;
   method: PaymentMethod | string;
   paidAt: string;
   receivedByName: string | null;
@@ -196,6 +201,10 @@ export type ReceivableItem = {
   unitPrice: string;
   total: string;
   pairGroup: number | null;
+  /** Acréscimo POR UNIDADE do produto no cartão (ADR-016) — usado no aviso ao receber por débito/
+   * crédito (ADR-022, Fatia C.3). Presente só no detalhe da dívida; ausente no extrato consolidado. */
+  surchargeDebit?: string;
+  surchargeCredit?: string;
 };
 
 /** Detalhe de uma conta a receber (`GET /receivables/:id`): a conta + os itens da venda de

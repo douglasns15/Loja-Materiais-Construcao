@@ -198,6 +198,10 @@ export function ReceivableDetailModal({
                         <span className="block text-xs text-gray-500">
                           {new Date(p.paidAt).toLocaleString('pt-BR')}
                           {p.receivedByName ? ` · ${p.receivedByName}` : ''}
+                          {/* Acréscimo de cartão cobrado neste recebimento (ADR-022, Fatia C.3). */}
+                          {Number(p.surcharge ?? 0) > 0
+                            ? ` · acréscimo ${BRL(p.surcharge ?? 0)}`
+                            : ''}
                         </span>
                       </span>
                       <span className="shrink-0 font-medium tabular-nums text-green-700">

@@ -571,6 +571,10 @@ model ReceivablePayment {
   tenantId       String   @db.Uuid // Denormalizado para isolamento multi-tenant (ADR-003)
   receivableId   String   @db.Uuid
   amount         Decimal  @db.Decimal(12, 2)
+  /// Acréscimo de cartão cobrado NESTE recebimento (ADR-016 × ADR-022, Fatia C.3). Digitado pelo
+  /// operador quando recebe por débito/crédito um produto com acréscimo. É receita A MAIS (recupera a
+  /// taxa do cartão) — NÃO abate a dívida (o `amount` é que quita); soma no relatório à forma do cartão.
+  surcharge      Decimal  @default(0) @db.Decimal(12, 2)
   method         String   @db.VarChar(30) // "CASH", "PIX", "CREDIT_CARD", "DEBIT_CARD"…
   paidAt         DateTime @default(now()) // Dia do recebimento (base do relatório em regime de caixa)
   cashSessionId  String?  @db.Uuid // Caixa que recebeu (quando em dinheiro)
