@@ -225,6 +225,21 @@ export function creditSaleBalances(total: number, paidNow: number, creditAmount:
   return Math.abs(toCents(paidNow) + toCents(creditAmount) - toCents(total)) <= 1;
 }
 
+/**
+ * Máximo de "Crédito da loja" (ADR-022, Fatia C) aplicável a uma venda: não passa do saldo de
+ * crédito do cliente nem do que resta a pagar AGORA (`total − a prazo`). Nunca negativo. Fonte única
+ * usada pelo PDV (para travar o campo) e pelo servidor (para validar). Em centavos, sem erro de float.
+ */
+export function maxStoreCreditForSale(
+  total: number,
+  creditAmount: number,
+  creditBalance: number,
+): number {
+  const payNowC = Math.max(0, toCents(total) - toCents(Math.max(0, creditAmount)));
+  const balanceC = Math.max(0, toCents(Math.max(0, creditBalance)));
+  return Math.max(0, Math.min(balanceC, payNowC)) / 100;
+}
+
 // ---------------------------------------------------------------------------
 // Conta do cliente — fiado acumulado (ADR-022, Fatia A)
 // ---------------------------------------------------------------------------

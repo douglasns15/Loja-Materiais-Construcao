@@ -3,11 +3,10 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
-  PAYMENT_METHOD_LABELS,
+  paymentMethodLabel,
   cancelOrderSchema,
   returnOrderSchema,
   type PartialReturnResult,
-  type PaymentMethod,
 } from '@nexoloja/shared';
 import { groupPairedItems } from '@nexoloja/core';
 import { apiGet, apiPost } from '@/lib/api';
@@ -94,9 +93,9 @@ function ordersQuery(cursor: string | null, r: Range, sort: Sort): string {
   return `/orders?${p.toString()}`;
 }
 
-/** Rótulo da forma de pagamento (cai no código bruto se vier algo fora do enum). */
+/** Rótulo da forma de pagamento — inclui "Crédito da loja" (ADR-022, Fatia C), fora do enum. */
 function methodLabel(m: string): string {
-  return PAYMENT_METHOD_LABELS[m as PaymentMethod] ?? m;
+  return paymentMethodLabel(m);
 }
 
 export default function VendasPage() {
@@ -612,7 +611,7 @@ export default function VendasPage() {
           date={new Date(printJob.order.createdAt).toLocaleString('pt-BR')}
           // Pagamento dividido: reimprime TODAS as formas da venda (não só a primeira).
           payments={printJob.order.payments.map((p) => ({
-            method: p.method as PaymentMethod,
+            method: p.method, // string livre — inclui "STORE_CREDIT" (ADR-022, Fatia C)
             amount: Number(p.amount),
           }))}
         />

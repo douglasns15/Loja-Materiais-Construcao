@@ -6,6 +6,7 @@ import {
   PAYMENT_METHOD_LABELS,
   buildSaleMutation,
   createSaleSchema,
+  paymentMethodLabel,
   unitTypeLabels,
   type PaymentMethod,
   type SaleUnitMode,
@@ -19,6 +20,7 @@ import {
   hasPair,
   isClosedPrimary,
   isValidMeterStep,
+  maxStoreCreditForSale,
   pairAvailableQty,
   paymentStatus,
   productMatchesQuery,
@@ -154,6 +156,8 @@ type View =
       pending?: boolean;
       /** Venda a prazo (fiado — ADR-019): valor deixado a prazo + cliente devedor. */
       credit?: number;
+      /** Crédito da loja usado nesta venda (ADR-022, Fatia C) — mostrado como forma no comprovante. */
+      storeCredit?: number;
       customerName?: string | null;
     }
   | { kind: 'quote'; total: number; discount: number; items: CartItem[]; date: string };
@@ -226,18 +230,33 @@ function Summary({ items, total, discount }: { items: CartItem[]; total: number;
   );
 }
 
-/** Formas de pagamento de uma venda (uma linha por forma) + troco, reusado na revisão e na conclusão. */
-function PaymentsLines({ payments, change }: { payments: PaidPart[]; change: number }) {
+/** Formas de pagamento de uma venda (uma linha por forma) + crédito da loja + troco, reusado na
+ *  revisão e na conclusão. `storeCredit` (ADR-022, Fatia C) aparece como uma forma a mais. */
+function PaymentsLines({
+  payments,
+  change,
+  storeCredit = 0,
+}: {
+  payments: PaidPart[];
+  change: number;
+  storeCredit?: number;
+}) {
+  // Com crédito da loja há sempre ≥ 2 "formas" na exibição (a parcela + o crédito).
+  const multi = payments.length + (storeCredit > 0 ? 1 : 0) > 1;
   return (
     <>
       {payments.map((p, i) => (
         <div key={`${p.method}-${i}`} className="flex justify-between text-sm text-gray-600">
-          <span>{payments.length > 1 ? `Pagamento · ${PAYMENT_METHOD_LABELS[p.method]}` : 'Pagamento'}</span>
-          <span>
-            {payments.length > 1 ? BRL(p.amount) : PAYMENT_METHOD_LABELS[p.method]}
-          </span>
+          <span>{multi ? `Pagamento · ${PAYMENT_METHOD_LABELS[p.method]}` : 'Pagamento'}</span>
+          <span>{multi ? BRL(p.amount) : PAYMENT_METHOD_LABELS[p.method]}</span>
         </div>
       ))}
+      {storeCredit > 0 && (
+        <div className="flex justify-between text-sm text-gray-600">
+          <span>Pagamento · Crédito da loja</span>
+          <span>{BRL(storeCredit)}</span>
+        </div>
+      )}
       {change > 0 && (
         <div className="flex justify-between text-sm">
           <span>Troco</span>
@@ -344,6 +363,11 @@ export default function VendaPage() {
   // Saldo em aberto do cliente selecionado (ADR-022): alerta de "Dívida ativa" ao pôr numa conta
   // que já existe. `null` = ainda não sabido / sem dívida / offline. Só informativo.
   const [customerDebt, setCustomerDebt] = useState<number | null>(null);
+  // Crédito a favor do cliente selecionado (ADR-022, Fatia C). `null` = não sabido / sem crédito /
+  // offline. Libera o bloco "Usar crédito da loja" só quando > 0.
+  const [customerCredit, setCustomerCredit] = useState<number | null>(null);
+  const [showStoreCredit, setShowStoreCredit] = useState(false);
+  const [storeCreditInput, setStoreCreditInput] = useState('');
   const [dueDate, setDueDate] = useState('');
   // Retirada/entrega futura (ADR-020) — opt-in, escondida por padrão (PDV limpo), como o fiado.
   // Quando ligada, a venda RESERVA a mercadoria (não baixa o estoque); a retirada é registrada
@@ -448,15 +472,25 @@ export default function VendaPage() {
   useEffect(() => {
     if (!customerId) {
       setCustomerDebt(null);
+      setCustomerCredit(null);
       return;
     }
     let cancelled = false;
     (async () => {
       try {
-        const acc = await apiGet<{ totalBalance: number }>(`/receivables/accounts/${customerId}`);
-        if (!cancelled) setCustomerDebt(acc.totalBalance);
+        // O detalhe da conta traz saldo devedor (alerta "Dívida ativa") E crédito a favor (ADR-022).
+        const acc = await apiGet<{ totalBalance: number; creditBalance: number }>(
+          `/receivables/accounts/${customerId}`,
+        );
+        if (!cancelled) {
+          setCustomerDebt(acc.totalBalance);
+          setCustomerCredit(acc.creditBalance ?? 0);
+        }
       } catch {
-        if (!cancelled) setCustomerDebt(null);
+        if (!cancelled) {
+          setCustomerDebt(null);
+          setCustomerCredit(null);
+        }
       }
     })();
     return () => {
@@ -563,7 +597,18 @@ export default function VendaPage() {
     ? Math.min(Math.max(0, Number(creditInput) || 0), totals.total)
     : 0;
   const isCredit = creditValue > 0;
-  const payableNow = Number((totals.total - creditValue).toFixed(2));
+
+  // --- Crédito da loja usado (ADR-022, Fatia C) ---
+  // Espelha o fiado: reduz o "a pagar agora". Travado no máximo aplicável (saldo do cliente e o que
+  // resta a pagar = total − a prazo), com a mesma função pura do servidor. 0 quando o bloco está oculto.
+  const creditAvailable = customerCredit ?? 0;
+  const maxStoreCredit = maxStoreCreditForSale(totals.total, creditValue, creditAvailable);
+  const storeCreditUsed =
+    showStoreCredit && creditAvailable > 0
+      ? Math.min(Math.max(0, Number(storeCreditInput) || 0), maxStoreCredit)
+      : 0;
+
+  const payableNow = Number((totals.total - creditValue - storeCreditUsed).toFixed(2));
 
   // --- Retirada / entrega futura (ADR-020) ---
   // `isScheduled` liga o modo SCHEDULED do pedido (reserva agora, retira depois). Não altera o
@@ -1081,6 +1126,15 @@ export default function VendaPage() {
       setError('A venda a prazo exige conexão.');
       return;
     }
+    // Crédito da loja (ADR-022, Fatia C): exige cliente e conexão (online-only, como o fiado).
+    if (storeCreditUsed > 0 && !customerId) {
+      setError('Selecione o cliente para usar o crédito da loja.');
+      return;
+    }
+    if (storeCreditUsed > 0 && !online) {
+      setError('Usar crédito da loja exige conexão.');
+      return;
+    }
     // Retirada/entrega futura (ADR-020): online-only nesta fatia (reserva no servidor).
     if (isScheduled && !online) {
       setError('A venda com retirada/entrega futura exige conexão.');
@@ -1098,6 +1152,7 @@ export default function VendaPage() {
       items: pricedCart,
       date: new Date().toLocaleString('pt-BR'),
       ...(isCredit ? { credit: creditValue, customerName } : {}),
+      ...(storeCreditUsed > 0 ? { storeCredit: storeCreditUsed, customerName } : {}),
     };
 
     // --- Offline: enfileira a venda (só com o recurso OFFLINE_SALES ligado) ---
@@ -1164,6 +1219,8 @@ export default function VendaPage() {
       ...(isCredit
         ? { customerId, creditAmount: creditValue, ...(dueDate ? { dueDate } : {}) }
         : {}),
+      // Crédito da loja (ADR-022, Fatia C): valor usado + cliente (o servidor debita o livro-razão).
+      ...(storeCreditUsed > 0 ? { creditApplied: storeCreditUsed, customerId } : {}),
       // Cliente do pedido (ADR-020): na retirada futura o cliente é OPCIONAL, mas quando informado
       // é gravado p/ a Entrega sair com nome. (No fiado o `customerId` já entra acima.)
       ...(!isCredit && isScheduled && customerId ? { customerId } : {}),
@@ -1237,6 +1294,8 @@ export default function VendaPage() {
     setDiscount('');
     // Limpa a venda a prazo para a próxima venda nascer à vista.
     resetCredit();
+    // Limpa o uso de crédito da loja (ADR-022, Fatia C).
+    resetStoreCredit();
     // Limpa a retirada futura para a próxima venda nascer no ato (ADR-020).
     resetSchedule();
   }
@@ -1250,6 +1309,13 @@ export default function VendaPage() {
     setCustomerQuery('');
     setCustomerOptions([]);
     setDueDate('');
+  }
+
+  /** Esconde/limpa o uso de crédito da loja (ADR-022, Fatia C). Não mexe no cliente (compartilhado
+   *  com fiado/retirada) — só fecha o bloco e zera o valor. */
+  function resetStoreCredit() {
+    setShowStoreCredit(false);
+    setStoreCreditInput('');
   }
 
   /** Limpa/esconde a retirada futura (ADR-020) — usado ao remover a opção e ao iniciar nova venda. */
@@ -1407,7 +1473,13 @@ export default function VendaPage() {
             </p>
           )}
           <Summary items={view.items} total={view.total} discount={view.discount} />
-          {view.kind === 'done' && <PaymentsLines payments={view.payments} change={view.change} />}
+          {view.kind === 'done' && (
+            <PaymentsLines
+              payments={view.payments}
+              change={view.change}
+              storeCredit={view.storeCredit}
+            />
+          )}
           {view.kind === 'done' && view.credit && view.credit > 0 ? (
             <div className="flex items-center justify-between rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 ring-1 ring-amber-200">
               <span>A prazo{view.customerName ? ` — ${view.customerName}` : ''}</span>
@@ -1473,6 +1545,7 @@ export default function VendaPage() {
           payments={view.kind === 'done' ? view.payments : undefined}
           change={view.kind === 'done' ? view.change : undefined}
           creditAmount={view.kind === 'done' ? view.credit : undefined}
+          storeCreditAmount={view.kind === 'done' ? view.storeCredit : undefined}
           customerName={view.kind === 'done' ? view.customerName : undefined}
         />
       </div>
@@ -2045,6 +2118,83 @@ export default function VendaPage() {
             </div>
           )}
 
+          {/* Usar crédito da loja (ADR-022, Fatia C) — opt-in, escondido por padrão. Abate o
+              `creditBalance` do cliente; espelha o fiado (reduz o "a pagar agora"). */}
+          {!showStoreCredit ? (
+            <button
+              type="button"
+              onClick={() => setShowStoreCredit(true)}
+              className="mt-2 block text-sm font-medium text-blue-600 hover:text-blue-700"
+            >
+              + Usar crédito da loja
+            </button>
+          ) : (
+            <div className="space-y-3 rounded-xl border border-green-200 bg-green-50/60 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-semibold text-green-900">Crédito da loja</span>
+                <button
+                  type="button"
+                  onClick={resetStoreCredit}
+                  className="shrink-0 rounded-lg px-2 py-1 text-lg leading-none text-gray-500 hover:text-red-600"
+                  aria-label="Remover uso de crédito"
+                  title="Remover uso de crédito"
+                >
+                  ×
+                </button>
+              </div>
+              {/* Cliente dono do crédito — quando o fiado não está coletando o cliente. */}
+              {!showCredit && (
+                <div>
+                  <label className="mb-1 block text-sm text-gray-600">Cliente</label>
+                  {renderCustomerPicker('border-green-300')}
+                </div>
+              )}
+              {!customerId ? (
+                <p className="text-xs text-green-800">
+                  Selecione o cliente para ver o crédito disponível.
+                </p>
+              ) : creditAvailable <= 0 ? (
+                <p className="text-xs text-gray-600">Este cliente não tem crédito a favor.</p>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between rounded-lg bg-white px-3 py-1.5 text-sm ring-1 ring-green-200">
+                    <span className="text-gray-600">Crédito disponível</span>
+                    <span className="font-semibold tabular-nums text-green-700">
+                      {BRL(creditAvailable)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <label htmlFor="store-credit" className="text-sm text-gray-600">
+                      Usar
+                    </label>
+                    <div className="flex items-center gap-1">
+                      <MoneyInput
+                        id="store-credit"
+                        value={storeCreditInput}
+                        onChange={setStoreCreditInput}
+                        placeholder="0,00"
+                        className="w-28 rounded-lg border border-green-300 bg-white px-2 py-1 text-right"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setStoreCreditInput(String(maxStoreCredit))}
+                        className="shrink-0 rounded-lg px-2 py-1 text-xs font-medium text-blue-600 hover:underline"
+                        title={`Usar até ${BRL(maxStoreCredit)}`}
+                      >
+                        usar máx.
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg bg-white px-3 py-1.5 text-sm ring-1 ring-green-200">
+                    <span className="text-gray-600">A pagar agora</span>
+                    <span className="font-semibold tabular-nums">{BRL(payableNow)}</span>
+                  </div>
+                  {!online && <p className="text-xs text-red-600">Usar crédito exige conexão.</p>}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Retirada / entrega futura (ADR-020) — opt-in, escondida por padrão (PDV limpo). Reserva
               a mercadoria: o estoque só baixa na retirada (tela de Entregas). Compõe com o fiado. */}
           {!showSchedule ? (
@@ -2125,9 +2275,9 @@ export default function VendaPage() {
                 </div>
               )}
 
-              {/* Cliente (opcional) — para a Entrega sair com nome. Se o fiado já está ligado, ele
-                  coleta o cliente (mesmo estado), então aqui só aparece quando NÃO é a prazo. */}
-              {!showCredit && (
+              {/* Cliente (opcional) — para a Entrega sair com nome. Se o fiado ou o crédito da loja já
+                  coletam o cliente (mesmo estado), aqui não repete o seletor. */}
+              {!showCredit && !showStoreCredit && (
                 <div>
                   <label className="mb-1 block text-sm text-gray-600">Cliente (opcional)</label>
                   {renderCustomerPicker('border-indigo-300')}

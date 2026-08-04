@@ -12,6 +12,7 @@ import {
   isClosedPrimary,
   isValidMeterStep,
   isValidPartialReturn,
+  maxStoreCreditForSale,
   receivableBalance,
   returnableBaseQty,
   splitReturnValue,
@@ -22,6 +23,7 @@ import {
   createReturnSchema,
   createSaleSchema,
   returnOrderSchema,
+  STORE_CREDIT_METHOD,
 } from '@nexoloja/shared';
 import { type Env, getConnectionString, getTenantId } from '../lib/request';
 import { requireActiveTenant, requireAuth } from '../middleware/auth';
@@ -378,6 +380,34 @@ orders.post('/', requireActiveTenant, async (c) => {
     // cliente, é online-only nesta fatia, e a entrada paga agora + o valor a prazo devem fechar o
     // total exatamente (sem troco no fiado). Sem `creditAmount`, é a venda à vista de sempre.
     const credit = Number((sale.creditAmount ?? 0).toFixed(2));
+    // Crédito da loja usado nesta venda (ADR-022, Fatia C): abate o `Customer.creditBalance`. É
+    // "pago agora" (settla parte da venda), mas não é dinheiro na gaveta — o servidor grava uma
+    // parcela `STORE_CREDIT` e debita o livro-razão. Online-only e exige cliente (como o fiado).
+    const creditApplied = Number((sale.creditApplied ?? 0).toFixed(2));
+    if (creditApplied > 0) {
+      if (isOffline) {
+        return c.json({ ok: false, error: 'Usar crédito da loja não está disponível offline.' }, 400);
+      }
+      if (!sale.customerId) {
+        return c.json({ ok: false, error: 'Selecione o cliente para usar o crédito da loja.' }, 400);
+      }
+      const cust = await prisma.customer.findFirst({
+        where: { id: sale.customerId, tenantId },
+        select: { creditBalance: true },
+      });
+      if (!cust) {
+        return c.json({ ok: false, error: 'Cliente não encontrado.' }, 400);
+      }
+      const maxCredit = maxStoreCreditForSale(total, credit, Number(cust.creditBalance));
+      if (creditApplied > maxCredit + 0.005) {
+        return c.json(
+          { ok: false, error: `Crédito da loja não pode passar de ${maxCredit.toFixed(2)} nesta venda.` },
+          400,
+        );
+      }
+    }
+    // "Pago agora" para a cobertura = dinheiro/cartão + crédito da loja (ambos settlam na hora).
+    const paidNow = Number((paid + creditApplied).toFixed(2));
     if (credit > 0) {
       if (isOffline) {
         return c.json(
@@ -391,18 +421,18 @@ orders.post('/', requireActiveTenant, async (c) => {
           400,
         );
       }
-      if (!creditSaleBalances(total, paid, credit)) {
+      if (!creditSaleBalances(total, paidNow, credit)) {
         return c.json(
           {
             ok: false,
-            error: `Valores não fecham: total ${total.toFixed(2)}, pago agora ${paid.toFixed(2)} + a prazo ${credit.toFixed(2)}.`,
+            error: `Valores não fecham: total ${total.toFixed(2)}, pago agora ${paidNow.toFixed(2)} + a prazo ${credit.toFixed(2)}.`,
           },
           400,
         );
       }
-    } else if (paid + 1e-9 < total) {
+    } else if (paidNow + 1e-9 < total) {
       return c.json(
-        { ok: false, error: `Pagamento insuficiente: total ${total.toFixed(2)}, pago ${paid.toFixed(2)}.` },
+        { ok: false, error: `Pagamento insuficiente: total ${total.toFixed(2)}, pago ${paidNow.toFixed(2)}.` },
         400,
       );
     }
@@ -460,11 +490,18 @@ orders.post('/', requireActiveTenant, async (c) => {
             })),
           },
           payments: {
-            create: sale.payments.map((pmt) => ({
-              tenantId, // denormalizado (ADR-003)
-              method: pmt.method,
-              amount: pmt.amount,
-            })),
+            create: [
+              ...sale.payments.map((pmt) => ({
+                tenantId, // denormalizado (ADR-003)
+                method: pmt.method,
+                amount: pmt.amount,
+              })),
+              // Crédito da loja (ADR-022, Fatia C): parcela própria "STORE_CREDIT" — o comprovante e o
+              // relatório mostram a forma; o caixa a ignora (cashInflow filtra só CASH).
+              ...(creditApplied > 0
+                ? [{ tenantId, method: STORE_CREDIT_METHOD, amount: creditApplied }]
+                : []),
+            ],
           },
         },
         include: { items: true, payments: true },
@@ -519,6 +556,30 @@ orders.post('/', requireActiveTenant, async (c) => {
         });
       }
 
+      // Crédito da loja usado (ADR-022, Fatia C): debita o livro-razão (fonte de verdade auditável,
+      // append-only) e o cache `creditBalance`. O `updateMany` condicional (`gte`) é a trava contra
+      // corrida (duas vendas gastando o mesmo crédito) — se o saldo mudou, `count !== 1` ⇒ rollback.
+      if (creditApplied > 0) {
+        const upd = await tx.customer.updateMany({
+          where: { id: sale.customerId!, tenantId, creditBalance: { gte: creditApplied } },
+          data: { creditBalance: { decrement: creditApplied } },
+        });
+        if (upd.count !== 1) {
+          throw new Error('INSUFFICIENT_CREDIT');
+        }
+        await tx.customerCredit.create({
+          data: {
+            tenantId,
+            customerId: sale.customerId!,
+            amount: -creditApplied, // − ao usar numa venda (ADR-022)
+            origin: 'SALE_USE',
+            relatedOrderId: created.id,
+            createdById: userId, // autoria (ADR-010)
+            createdByName: c.get('userName'),
+          },
+        });
+      }
+
       // CS-4 (ADR-004/012 §b): marca de reconciliação quando a venda offline foi anexada a um caixa
       // JÁ FECHADO. Evento crítico auditável (não bloqueia a venda) — surge no relatório de fechamento.
       if (cashClosedAt) {
@@ -557,9 +618,11 @@ orders.post('/', requireActiveTenant, async (c) => {
         ok: true,
         data: {
           ...order,
-          // Fiado não tem troco (a entrada + o valor a prazo fecham o total exatamente).
-          change: credit > 0 ? 0 : Number((paid - total).toFixed(2)),
+          // Fiado não tem troco (a entrada + o valor a prazo fecham o total exatamente). O crédito da
+          // loja conta como pago agora (`paidNow`), então não infla o troco.
+          change: credit > 0 ? 0 : Number((paidNow - total).toFixed(2)),
           ...(credit > 0 ? { creditAmount: credit } : {}),
+          ...(creditApplied > 0 ? { creditApplied } : {}),
           // CS-4: sinaliza ao cliente que a venda foi anexada a um caixa já fechado (reconciliação).
           ...(cashClosedAt ? { syncedToClosedCash: true } : {}),
         },
@@ -570,6 +633,13 @@ orders.post('/', requireActiveTenant, async (c) => {
     // Corrida rara: dois syncs do mesmo `id` ao mesmo tempo → o 2º viola a PK. Trata como dedup.
     if (isOffline && err instanceof Error && (err as { code?: string }).code === 'P2002') {
       return c.json({ ok: true, data: { id: sale.id, deduped: true } }, 200);
+    }
+    // Crédito da loja: o saldo mudou entre a checagem e o débito (corrida) — pede para refazer.
+    if (err instanceof Error && err.message === 'INSUFFICIENT_CREDIT') {
+      return c.json(
+        { ok: false, error: 'Crédito da loja insuficiente (o saldo mudou). Refaça a venda.' },
+        409,
+      );
     }
     console.error('POST /orders falhou:', err);
     return c.json({ ok: false, error: 'Falha ao registrar a venda.' }, 500);
@@ -680,6 +750,31 @@ orders.post('/:id/cancel', async (c) => {
         include: { items: true, payments: true },
       });
 
+      // Crédito da loja (ADR-022, Fatia C): se a venda usou crédito, cancelar DEVOLVE o crédito ao
+      // cliente (a venda deixou de existir). Livro-razão (+X, reversão) + cache `creditBalance`.
+      const creditUsed = Number(
+        updated.payments
+          .reduce((acc, p) => acc + (p.method === STORE_CREDIT_METHOD ? Number(p.amount) : 0), 0)
+          .toFixed(2),
+      );
+      if (creditUsed > 0 && order.customerId) {
+        await tx.customer.update({
+          where: { id: order.customerId },
+          data: { creditBalance: { increment: creditUsed } },
+        });
+        await tx.customerCredit.create({
+          data: {
+            tenantId,
+            customerId: order.customerId,
+            amount: creditUsed, // + de volta (reversão do SALE_USE)
+            origin: 'SALE_REVERSAL',
+            relatedOrderId: order.id,
+            createdById: userId,
+            createdByName: c.get('userName'),
+          },
+        });
+      }
+
       // Evento crítico (ADR-004): cancelamento de venda.
       await tx.auditEvent.create({
         data: {
@@ -753,7 +848,7 @@ orders.post('/:id/return', async (c) => {
 
     const order = await prisma.order.findFirst({
       where: { id: orderId, tenantId },
-      include: { items: true },
+      include: { items: true, payments: true },
     });
     if (!order) {
       return c.json({ ok: false, error: 'Venda não encontrada.' }, 404);
@@ -784,6 +879,14 @@ orders.post('/:id/return', async (c) => {
     }
 
     const total = Number(order.total);
+    // Crédito da loja (ADR-022, Fatia C): a parte da venda paga com crédito não saiu do caixa, então
+    // não se devolve em dinheiro — restaura-se o crédito ao cliente. Só o restante vira saída de caixa.
+    const creditPaid = Number(
+      order.payments
+        .reduce((acc, p) => acc + (p.method === STORE_CREDIT_METHOD ? Number(p.amount) : 0), 0)
+        .toFixed(2),
+    );
+    const cashRefund = Number(Math.max(0, total - creditPaid).toFixed(2));
 
     const isScheduled = order.deliveryMode === 'SCHEDULED';
     const returned = await prisma.$transaction(async (tx) => {
@@ -820,21 +923,44 @@ orders.post('/:id/return', async (c) => {
         }
       }
 
-      // ADR-006: saída de dinheiro no caixa de HOJE (não no caixa original).
-      const movement = await tx.cashMovement.create({
-        data: {
-          tenantId,
-          cashSessionId: session.id,
-          userId,
-          type: 'EXPENSE',
-          kind: 'RETURN',
-          amount: total,
-          reason: reason,
-          relatedOrderId: order.id,
-          syncStatus: 'SYNCED',
-          registeredByName: c.get('userName'), // autoria (ADR-010)
-        },
-      });
+      // ADR-006: saída de dinheiro no caixa de HOJE (não no caixa original). Só o que foi pago em
+      // dinheiro/cartão volta pela gaveta; a parte em crédito da loja é restaurada abaixo.
+      const movement =
+        cashRefund > 0
+          ? await tx.cashMovement.create({
+              data: {
+                tenantId,
+                cashSessionId: session.id,
+                userId,
+                type: 'EXPENSE',
+                kind: 'RETURN',
+                amount: cashRefund,
+                reason: reason,
+                relatedOrderId: order.id,
+                syncStatus: 'SYNCED',
+                registeredByName: c.get('userName'), // autoria (ADR-010)
+              },
+            })
+          : null;
+
+      // Crédito da loja (ADR-022, Fatia C): devolve ao cliente a parte paga com crédito.
+      if (creditPaid > 0 && order.customerId) {
+        await tx.customer.update({
+          where: { id: order.customerId },
+          data: { creditBalance: { increment: creditPaid } },
+        });
+        await tx.customerCredit.create({
+          data: {
+            tenantId,
+            customerId: order.customerId,
+            amount: creditPaid, // + de volta (reversão do SALE_USE)
+            origin: 'SALE_REVERSAL',
+            relatedOrderId: order.id,
+            createdById: userId,
+            createdByName: c.get('userName'),
+          },
+        });
+      }
 
       const updated = await tx.order.update({
         where: { id: order.id },
@@ -853,10 +979,12 @@ orders.post('/:id/return', async (c) => {
           meta: {
             reason,
             total,
+            cashRefund,
+            creditRestored: creditPaid,
             itemsCount: order.items.length,
             originalCashSessionId: order.cashSessionId,
             refundCashSessionId: session.id,
-            cashMovementId: movement.id,
+            cashMovementId: movement?.id ?? null,
           },
         },
       });

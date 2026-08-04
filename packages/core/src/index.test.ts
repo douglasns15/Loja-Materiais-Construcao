@@ -23,6 +23,7 @@ import {
   isValidReceipt,
   applyReceivablePayment,
   creditSaleBalances,
+  maxStoreCreditForSale,
   customerAccountBalance,
   distributeAccountPayment,
   returnableBaseQty,
@@ -444,6 +445,26 @@ describe('creditSaleBalances (venda a prazo — ADR-019)', () => {
 
   it('tolera 1 centavo de arredondamento', () => {
     expect(creditSaleBalances(100, 33.33, 66.67)).toBe(true);
+  });
+});
+
+describe('maxStoreCreditForSale (usar crédito da loja — ADR-022, Fatia C)', () => {
+  it('limita ao saldo de crédito quando ele é o menor', () => {
+    expect(maxStoreCreditForSale(100, 0, 30)).toBe(30); // saldo 30 < total 100
+  });
+
+  it('limita ao que resta a pagar agora (total − a prazo) quando o crédito sobra', () => {
+    expect(maxStoreCreditForSale(100, 0, 500)).toBe(100); // não passa do total
+    expect(maxStoreCreditForSale(100, 40, 500)).toBe(60); // 40 a prazo ⇒ resta 60 a pagar
+  });
+
+  it('nunca negativo (a prazo ≥ total ⇒ 0)', () => {
+    expect(maxStoreCreditForSale(100, 100, 50)).toBe(0);
+    expect(maxStoreCreditForSale(100, 0, -5)).toBe(0);
+  });
+
+  it('sem erro de float (centavos)', () => {
+    expect(maxStoreCreditForSale(0.3, 0.1, 1)).toBe(0.2);
   });
 });
 

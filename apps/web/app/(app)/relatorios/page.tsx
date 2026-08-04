@@ -2,10 +2,9 @@
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
-  PAYMENT_METHOD_LABELS,
+  paymentMethodLabel,
   type CashMovementRow,
   type CashSessionReport,
-  type PaymentMethod,
   type SalesReport,
 } from '@nexoloja/shared';
 import { apiGet } from '@/lib/api';
@@ -19,9 +18,8 @@ const BRL = (v: number) =>
 const DATETIME = (iso: string) =>
   new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 
-/** Rótulo amigável da forma de pagamento (cai no código cru se vier algo novo). */
-const methodLabel = (m: string) =>
-  PAYMENT_METHOD_LABELS[m as PaymentMethod] ?? m;
+/** Rótulo amigável da forma de pagamento — inclui "Crédito da loja" (ADR-022, Fatia C). */
+const methodLabel = (m: string) => paymentMethodLabel(m);
 
 /** Data local no formato YYYY-MM-DD (para os inputs e a query da API). */
 function isoDay(d: Date): string {

@@ -12,6 +12,20 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
 };
 
 /**
+ * Forma de pagamento "Crédito da loja" (ADR-022, Fatia C). NÃO é selecionável (`paymentMethodSchema`
+ * tem só as 4 formas de balcão) — o servidor a grava como parcela quando a venda usa crédito do
+ * cliente (`creditApplied`), para o comprovante e o relatório mostrarem a forma. Não toca o caixa.
+ */
+export const STORE_CREDIT_METHOD = 'STORE_CREDIT';
+
+/** Rótulo de QUALQUER forma persistida em `Payment.method`, incluindo o "Crédito da loja" (que não
+ * está no enum). Use nas telas que exibem pagamentos já gravados (comprovante, relatório, histórico). */
+export function paymentMethodLabel(method: string): string {
+  if (method === STORE_CREDIT_METHOD) return 'Crédito da loja';
+  return PAYMENT_METHOD_LABELS[method as PaymentMethod] ?? method;
+}
+
+/**
  * Modo de venda do item (ADR-013 — EF-3): `BASE` = unidade-base (ex.: metro);
  * `ALT` = embalagem fechada (ex.: rolo), com preço próprio e baixa de estoque
  * convertida (`quantity × conversionFactor`). Ausente ⇒ `BASE` (venda de sempre).
@@ -97,6 +111,13 @@ export const createSaleSchema = z.object({
   creditAmount: z.number().nonnegative().optional(),
   /** Vencimento opcional do fiado (data `YYYY-MM-DD`). Só usado quando há `creditAmount`. */
   dueDate: z.string().optional(),
+  /**
+   * Crédito da loja usado nesta venda (ADR-022, Fatia C): valor abatido do `Customer.creditBalance`
+   * (sobra de devolução). `> 0` exige `customerId`, é online-only e ≤ saldo de crédito e ≤ o que
+   * resta a pagar agora (`total − a prazo`). O servidor grava uma parcela `STORE_CREDIT` (para
+   * comprovante/relatório) e debita o livro-razão. `Σ pagamentos + crédito usado + a prazo = total`.
+   */
+  creditApplied: z.number().nonnegative().optional(),
   /**
    * Retirada/entrega futura (ADR-020): `SCHEDULED` reserva a mercadoria (não baixa o estoque na
    * venda) — a baixa real ocorre, parcial, na retirada. Ausente/`IMMEDIATE` = venda de balcão de
