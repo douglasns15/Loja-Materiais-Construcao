@@ -4,16 +4,19 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   PAYMENT_METHOD_LABELS,
+  RETURN_TARGET_LABELS,
   type CustomerAccountDetail,
   type CustomerAccountRow,
   type PaymentMethod,
+  type ReturnTarget,
 } from '@nexoloja/shared';
 import { apiGet, apiPatch } from '@/lib/api';
 
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-/** Um evento do extrato da conta: uma venda a prazo (entra saldo) ou um recebimento (abate). */
+/** Um evento do extrato da conta: uma venda a prazo (entra saldo), um recebimento (abate) ou uma
+ * devolução (abate o que voltou; excedente vira crédito/dinheiro — evento próprio, ADR-022). */
 type TimelineEvent =
   | {
       kind: 'sale';
@@ -27,6 +30,16 @@ type TimelineEvent =
       amount: number; // valor recebido (− no saldo)
       method: string;
       by: string | null;
+    }
+  | {
+      kind: 'return';
+      at: string;
+      amount: number; // quanto abateu da dívida (− no saldo corrente da conta)
+      excess: number; // excedente que virou crédito/dinheiro (fora do saldo devedor)
+      target: ReturnTarget | null;
+      reason: string;
+      by: string | null;
+      items: { productName: string; quantity: string; total: string }[];
     };
 
 /**
@@ -124,8 +137,26 @@ export function CustomerAccountModal({
         });
       }
     }
+    // Devoluções: um evento por devolução (append-only — não muta a venda). Abate o saldo pelo que
+    // foi devolvido da DÍVIDA (`abatedAmount`); o excedente (crédito/dinheiro) fica fora do saldo.
+    for (const rt of detail.returns ?? []) {
+      events.push({
+        kind: 'return',
+        at: rt.createdAt,
+        amount: Number(rt.abatedAmount),
+        excess: Number(rt.excessAmount),
+        target: rt.target,
+        reason: rt.reason,
+        by: rt.createdByName,
+        items: rt.items.map((it) => ({
+          productName: it.productName,
+          quantity: it.quantity,
+          total: it.total,
+        })),
+      });
+    }
     events.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
-    // Saldo corrente em centavos (venda +, recebimento −).
+    // Saldo corrente em centavos (venda +, recebimento e devolução −).
     let cents = 0;
     return events.map((e) => {
       cents += Math.round(e.amount * 100) * (e.kind === 'sale' ? 1 : -1);
@@ -257,6 +288,14 @@ export function CustomerAccountModal({
                                   · {e.items.length} {e.items.length === 1 ? 'item' : 'itens'}
                                 </span>
                               </>
+                            ) : e.kind === 'return' ? (
+                              <>
+                                Devolução
+                                <span className="ml-1 font-normal text-gray-500">
+                                  · {e.items.length} {e.items.length === 1 ? 'item' : 'itens'}
+                                  {e.by ? ` · ${e.by}` : ''}
+                                </span>
+                              </>
                             ) : (
                               <>
                                 Recebimento
@@ -270,11 +309,23 @@ export function CustomerAccountModal({
                           <p className="text-xs text-gray-500">
                             {new Date(e.at).toLocaleString('pt-BR')}
                           </p>
+                          {e.kind === 'return' && (
+                            <p className="mt-0.5 text-xs text-gray-500">
+                              Motivo: {e.reason}
+                              {e.excess > 0 && e.target
+                                ? ` · excedente ${BRL(e.excess)} → ${RETURN_TARGET_LABELS[e.target]}`
+                                : ''}
+                            </p>
+                          )}
                         </div>
                         <div className="shrink-0 text-right">
                           <p
                             className={`font-semibold tabular-nums ${
-                              e.kind === 'sale' ? 'text-gray-800' : 'text-green-700'
+                              e.kind === 'sale'
+                                ? 'text-gray-800'
+                                : e.kind === 'return'
+                                  ? 'text-amber-700'
+                                  : 'text-green-700'
                             }`}
                           >
                             {e.kind === 'sale' ? '+' : '−'}
@@ -299,6 +350,25 @@ export function CustomerAccountModal({
                               </span>
                               <span className="shrink-0 tabular-nums text-gray-600">
                                 {BRL(it.total)}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+
+                      {/* Itens que voltaram na devolução (evento próprio — não muta a venda). */}
+                      {e.kind === 'return' && e.items.length > 0 && (
+                        <ul className="mt-2 divide-y divide-amber-100 rounded-lg bg-amber-50/60">
+                          {e.items.map((it, i) => (
+                            <li
+                              key={i}
+                              className="flex items-center justify-between px-3 py-1.5 text-sm"
+                            >
+                              <span className="min-w-0 truncate text-amber-800">
+                                {Number(it.quantity)}× {it.productName}
+                              </span>
+                              <span className="shrink-0 tabular-nums text-amber-700">
+                                −{BRL(it.total)}
                               </span>
                             </li>
                           ))}

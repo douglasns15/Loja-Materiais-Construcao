@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { paymentMethodSchema, type PaymentMethod } from './sale';
+import type { ReturnTarget } from './return';
 
 /**
  * Conta a receber / venda a prazo — o "fiado" (ADR-019). Tipos e schemas compartilhados entre
@@ -111,6 +112,32 @@ export type AccountReceivableDetail = {
   payments: ReceivablePaymentRow[];
 };
 
+/** Um item que voltou numa devolução (ADR-022, Fatia B), como aparece no extrato da conta:
+ * `quantity` já vem na UNIDADE VENDIDA (o servidor reconverte da unidade-base do estoque). */
+export type AccountReturnItem = {
+  productName: string;
+  quantity: string;
+  total: string; // valor devolvido daquele item
+};
+
+/**
+ * Uma DEVOLUÇÃO no extrato da conta (ADR-022, Fatia B) — um evento próprio (append-only), não uma
+ * mutação da venda original. `abatedAmount` é o quanto abateu da DÍVIDA (o efeito no saldo corrente
+ * da conta); `excessAmount` é o excedente que virou crédito/dinheiro (`target`), fora do saldo
+ * devedor. `items` lista o que voltou. Retornado por `GET /receivables/accounts/:customerId`.
+ */
+export type AccountReturnEvent = {
+  id: string;
+  createdAt: string;
+  totalValue: string;
+  abatedAmount: string;
+  excessAmount: string;
+  target: ReturnTarget | null;
+  reason: string;
+  createdByName: string | null;
+  items: AccountReturnItem[];
+};
+
 /** Detalhe da CONTA de um cliente — `GET /receivables/accounts/:customerId`. Reúne as vendas a
  * prazo (em aberto + quitadas) com itens e recebimentos; a UI monta o log cronológico. */
 export type CustomerAccountDetail = {
@@ -124,6 +151,8 @@ export type CustomerAccountDetail = {
   totalBalance: number;
   openCount: number;
   receivables: AccountReceivableDetail[];
+  /** Devoluções do cliente (ADR-022, Fatia B) — eventos próprios que a UI intercala na timeline. */
+  returns: AccountReturnEvent[];
 };
 
 /** Um item da venda que originou a dívida (para o detalhe da conta a receber). */

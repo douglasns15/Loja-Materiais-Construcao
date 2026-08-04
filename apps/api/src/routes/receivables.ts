@@ -424,6 +424,57 @@ receivables.get('/accounts/:customerId', async (c) => {
       payments: r.payments,
     }));
 
+    // Devoluções do cliente (ADR-022, Fatia B): eventos PRÓPRIOS do extrato (append-only — a venda
+    // original fica intacta). A UI os intercala na timeline. `abatedAmount` abate o saldo devedor;
+    // `excessAmount` virou crédito/dinheiro (`target`), fora do saldo. Cada linha (`OrderReturnItem`)
+    // guarda a quantidade em UNIDADE-BASE (estorno de estoque) — reconvertemos para a unidade VENDIDA
+    // pelo mesmo fator do PDV (`baseQty/soldQty`), para casar com o que a venda mostra.
+    const returnRows = await prisma.orderReturn.findMany({
+      where: { tenantId, customerId },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      take: 100,
+      select: {
+        id: true,
+        createdAt: true,
+        totalValue: true,
+        abatedAmount: true,
+        excessAmount: true,
+        target: true,
+        reason: true,
+        createdByName: true,
+        items: {
+          select: {
+            baseQty: true,
+            value: true,
+            orderItem: {
+              select: { productName: true, quantity: true, baseQuantity: true },
+            },
+          },
+        },
+      },
+    });
+    const returns = returnRows.map((rt) => ({
+      id: rt.id,
+      createdAt: rt.createdAt,
+      totalValue: rt.totalValue,
+      abatedAmount: rt.abatedAmount,
+      excessAmount: rt.excessAmount,
+      target: rt.target,
+      reason: rt.reason,
+      createdByName: rt.createdByName,
+      items: rt.items.map((li) => {
+        const soldQty = Number(li.orderItem.quantity);
+        const baseQty = Number(li.orderItem.baseQuantity ?? li.orderItem.quantity);
+        const basePerSold = soldQty > 0 ? baseQty / soldQty : 1;
+        const returnedSold = basePerSold > 0 ? Number(li.baseQty) / basePerSold : Number(li.baseQty);
+        return {
+          productName: li.orderItem.productName,
+          quantity: returnedSold.toFixed(4), // devolvido, na unidade vendida
+          total: li.value,
+        };
+      }),
+    }));
+
     const totalBalance = customerAccountBalance(
       receivables.filter((r) => r.status === 'OPEN').map((r) => ({ id: r.id, balance: r.balance })),
     );
@@ -439,6 +490,7 @@ receivables.get('/accounts/:customerId', async (c) => {
         totalBalance,
         openCount,
         receivables,
+        returns,
       },
     });
   } catch (err) {
