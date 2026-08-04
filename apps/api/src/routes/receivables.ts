@@ -491,8 +491,10 @@ receivables.get('/accounts/:customerId', async (c) => {
     }
 
     const list = await prisma.receivable.findMany({
-      // OPEN + PAID compõem o extrato; CANCELLED (venda caiu) fica de fora.
-      where: { tenantId, customerId, status: { in: ['OPEN', 'PAID'] } },
+      // ADR-022: o extrato é a CONTA ATUAL — só dívidas EM ABERTO. Uma vez QUITADA, a dívida sai do
+      // extrato (vira histórico, consultável no perfil do cliente por código). O crédito que sobrou
+      // segue visível pelo livro-razão (abaixo), independente da dívida.
+      where: { tenantId, customerId, status: 'OPEN' },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], // mais antiga primeiro (ordem do extrato)
       take: 100,
       select: {
@@ -588,12 +590,19 @@ receivables.get('/accounts/:customerId', async (c) => {
     // `excessAmount` virou crédito/dinheiro (`target`), fora do saldo. Cada linha (`OrderReturnItem`)
     // guarda a quantidade em UNIDADE-BASE (estorno de estoque) — reconvertemos para a unidade VENDIDA
     // pelo mesmo fator do PDV (`baseQty/soldQty`), para casar com o que a venda mostra.
-    const returnRows = await prisma.orderReturn.findMany({
-      where: { tenantId, customerId },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      take: 100,
-      select: RETURN_SELECT,
-    });
+    // Devoluções DAS dívidas ainda abertas (as de dívidas já quitadas saíram do extrato junto com
+    // elas; o crédito que geraram continua no livro-razão abaixo). Assim o abate na timeline sempre
+    // casa com uma dívida presente e o saldo corrente fecha.
+    const openReceivableIds = list.map((r) => r.id);
+    const returnRows =
+      openReceivableIds.length > 0
+        ? await prisma.orderReturn.findMany({
+            where: { tenantId, customerId, receivableId: { in: openReceivableIds } },
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            take: 100,
+            select: RETURN_SELECT,
+          })
+        : [];
     const returns = returnRows.map(mapReturnEvent);
 
     // Livro-razão do crédito (ADR-022, Fatia C): entradas/saídas do crédito a favor do cliente. A UI

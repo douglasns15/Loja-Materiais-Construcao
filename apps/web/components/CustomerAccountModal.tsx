@@ -170,11 +170,10 @@ export function CustomerAccountModal({
         })),
       });
     }
-    // Crédito da loja (ADR-022, Fatia C): usos/estornos entram na timeline (a GERAÇÃO já aparece no
-    // evento de devolução — origin RETURN é ignorada aqui para não duplicar). Não mexe no saldo
-    // DEVEDOR (o crédito é um saldo à parte, mostrado no topo).
+    // Crédito da loja (ADR-022, Fatia C): TODO o livro-razão entra na timeline — gerado (na
+    // devolução), usado (numa venda) e estornado. É o "crédito que sobrou" que segue visível mesmo
+    // depois de a dívida ser quitada. Não mexe no saldo DEVEDOR (é um saldo à parte, no topo).
     for (const cr of detail.credits ?? []) {
-      if (cr.origin === 'RETURN') continue;
       events.push({
         kind: 'credit',
         at: cr.createdAt,
@@ -359,7 +358,15 @@ export function CustomerAccountModal({
                               </>
                             ) : e.kind === 'credit' ? (
                               <>
-                                {e.amount < 0 ? 'Crédito usado' : 'Crédito estornado'}
+                                {e.origin === 'SALE_USE'
+                                  ? 'Crédito usado'
+                                  : e.origin === 'RETURN'
+                                    ? 'Crédito gerado'
+                                    : e.origin === 'SALE_REVERSAL'
+                                      ? 'Crédito estornado'
+                                      : e.amount < 0
+                                        ? 'Crédito usado'
+                                        : 'Crédito a favor'}
                                 <span className="ml-1 font-normal text-gray-500">
                                   {e.relatedOrderId ? ` · ${shortCode(e.relatedOrderId)}` : ''}
                                   {e.by ? ` · ${e.by}` : ''}
@@ -381,8 +388,10 @@ export function CustomerAccountModal({
                           {e.kind === 'return' && (
                             <p className="mt-0.5 text-xs text-gray-500">
                               Motivo: {e.reason}
-                              {e.excess > 0 && e.target
-                                ? ` · excedente ${BRL(e.excess)} → ${RETURN_TARGET_LABELS[e.target]}`
+                              {/* Crédito gerado vira evento próprio "Crédito gerado"; aqui só o troco
+                                  em dinheiro (que não entra no livro-razão do crédito). */}
+                              {e.excess > 0 && e.target === 'CASH'
+                                ? ` · excedente ${BRL(e.excess)} → ${RETURN_TARGET_LABELS.CASH}`
                                 : ''}
                             </p>
                           )}
