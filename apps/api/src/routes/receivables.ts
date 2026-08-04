@@ -392,6 +392,8 @@ receivables.get('/accounts/:customerId', async (c) => {
                 unitPrice: true,
                 total: true,
                 pairGroup: true,
+                baseQuantity: true, // p/ reconverter a devolução p/ a unidade vendida
+                returnedBaseQty: true, // quanto já voltou (ADR-022) — usado no resumo consolidado
               },
             },
           },
@@ -420,8 +422,42 @@ receivables.get('/accounts/:customerId', async (c) => {
       dueDate: r.dueDate,
       createdAt: r.createdAt,
       orderTotal: r.order?.total ?? null,
-      items: r.order?.items ?? [],
+      // A venda no extrato mostra os itens ORIGINAIS (a devolução é evento próprio); os campos
+      // base/devolvido só alimentam o resumo consolidado abaixo, não vão para a linha da venda.
+      items: (r.order?.items ?? []).map(({ baseQuantity: _b, returnedBaseQty: _r, ...rest }) => rest),
       payments: r.payments,
+    }));
+
+    // Resumo consolidado da situação atual (ADR-022): por produto, o que ainda está EM ABERTO,
+    // líquido de devoluções (vendido − devolvido). Só dívidas OPEN; item 100% devolvido some. A
+    // devolução é rastreada em unidade-base — reconvertemos p/ a unidade vendida (baseQty/soldQty).
+    const openAgg = new Map<
+      string,
+      { productName: string; unit: string; quantity: number; total: number }
+    >();
+    for (const r of list) {
+      if (r.status !== 'OPEN') continue;
+      for (const it of r.order?.items ?? []) {
+        const soldQty = Number(it.quantity);
+        const baseQty = Number(it.baseQuantity ?? it.quantity);
+        const basePerSold = soldQty > 0 ? baseQty / soldQty : 1;
+        const returnedSold = basePerSold > 0 ? Number(it.returnedBaseQty) / basePerSold : 0;
+        const netQty = soldQty - returnedSold;
+        if (netQty <= 0.0001) continue; // item totalmente devolvido não entra no resumo
+        const netTotal = soldQty > 0 ? Number(it.total) * (netQty / soldQty) : 0;
+        const key = `${it.productName}||${it.unit}`;
+        const cur =
+          openAgg.get(key) ?? { productName: it.productName, unit: it.unit, quantity: 0, total: 0 };
+        cur.quantity += netQty;
+        cur.total += netTotal;
+        openAgg.set(key, cur);
+      }
+    }
+    const openItems = [...openAgg.values()].map((a) => ({
+      productName: a.productName,
+      unit: a.unit,
+      quantity: a.quantity.toFixed(4),
+      total: a.total.toFixed(2),
     }));
 
     // Devoluções do cliente (ADR-022, Fatia B): eventos PRÓPRIOS do extrato (append-only — a venda
@@ -491,6 +527,7 @@ receivables.get('/accounts/:customerId', async (c) => {
         openCount,
         receivables,
         returns,
+        openItems,
       },
     });
   } catch (err) {

@@ -269,6 +269,30 @@ export function CustomerAccountModal({
               </div>
             </div>
 
+            {/* Resumo consolidado (situação atual): itens ainda em aberto, líquidos de devolução,
+                somados por produto. Fica ACIMA do extrato — que segue mostrando tudo em ordem. */}
+            {(detail.openItems ?? []).length > 0 && (
+              <div>
+                <h3 className="mb-2 text-sm font-semibold">Itens em aberto (consolidado)</h3>
+                <ul className="divide-y divide-gray-100 rounded-lg border border-gray-100">
+                  {(detail.openItems ?? []).map((it, i) => (
+                    <li
+                      key={i}
+                      className="flex items-center justify-between px-3 py-2 text-sm"
+                    >
+                      <span className="min-w-0 truncate text-gray-700">
+                        {Number(it.quantity)}× {it.productName}
+                      </span>
+                      <span className="shrink-0 tabular-nums text-gray-600">{BRL(it.total)}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-1 text-xs text-gray-500">
+                  Soma o que ainda está em aberto, já descontadas as devoluções.
+                </p>
+              </div>
+            )}
+
             {/* Extrato/timeline: vendas (com itens) e recebimentos, em ordem, com saldo corrente. */}
             <div>
               <h3 className="mb-2 text-sm font-semibold">Atividades</h3>

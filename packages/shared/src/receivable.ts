@@ -138,6 +138,15 @@ export type AccountReturnEvent = {
   items: AccountReturnItem[];
 };
 
+/** Um item CONSOLIDADO da situação atual da conta (ADR-022) — a soma, por produto, do que ainda
+ * está EM ABERTO, líquido de devoluções (`quantity` já na unidade vendida; `total` = valor líquido). */
+export type AccountOpenItem = {
+  productName: string;
+  unit: string;
+  quantity: string;
+  total: string;
+};
+
 /** Detalhe da CONTA de um cliente — `GET /receivables/accounts/:customerId`. Reúne as vendas a
  * prazo (em aberto + quitadas) com itens e recebimentos; a UI monta o log cronológico. */
 export type CustomerAccountDetail = {
@@ -153,6 +162,9 @@ export type CustomerAccountDetail = {
   receivables: AccountReceivableDetail[];
   /** Devoluções do cliente (ADR-022, Fatia B) — eventos próprios que a UI intercala na timeline. */
   returns: AccountReturnEvent[];
+  /** Resumo consolidado da situação atual (ADR-022): itens ainda em aberto (vendido − devolvido),
+   * somados por produto. Só dívidas OPEN entram; item totalmente devolvido some. */
+  openItems: AccountOpenItem[];
 };
 
 /** Um item da venda que originou a dívida (para o detalhe da conta a receber). */
