@@ -36,6 +36,66 @@ function decodeCursor(raw: string): Cursor | null {
   }
 }
 
+/** Seleção padrão de uma devolução (ADR-022, Fatia B) para o extrato/detalhe. */
+const RETURN_SELECT = {
+  id: true,
+  createdAt: true,
+  totalValue: true,
+  abatedAmount: true,
+  excessAmount: true,
+  target: true,
+  reason: true,
+  createdByName: true,
+  items: {
+    select: {
+      baseQty: true,
+      value: true,
+      orderItem: { select: { productName: true, quantity: true, baseQuantity: true } },
+    },
+  },
+};
+
+/** Mapeia uma devolução (RETURN_SELECT) para o evento do extrato/detalhe, reconvertendo a
+ * quantidade devolvida da UNIDADE-BASE (estoque) para a UNIDADE VENDIDA (o que a venda mostra),
+ * pelo mesmo fator do PDV (`baseQty/soldQty`). Reusado pelo extrato da conta e pelo detalhe. */
+function mapReturnEvent(rt: {
+  id: string;
+  createdAt: Date;
+  totalValue: unknown;
+  abatedAmount: unknown;
+  excessAmount: unknown;
+  target: string | null;
+  reason: string;
+  createdByName: string | null;
+  items: {
+    baseQty: unknown;
+    value: unknown;
+    orderItem: { productName: string; quantity: unknown; baseQuantity: unknown };
+  }[];
+}) {
+  return {
+    id: rt.id,
+    createdAt: rt.createdAt,
+    totalValue: rt.totalValue,
+    abatedAmount: rt.abatedAmount,
+    excessAmount: rt.excessAmount,
+    target: rt.target,
+    reason: rt.reason,
+    createdByName: rt.createdByName,
+    items: rt.items.map((li) => {
+      const soldQty = Number(li.orderItem.quantity);
+      const baseQty = Number(li.orderItem.baseQuantity ?? li.orderItem.quantity);
+      const basePerSold = soldQty > 0 ? baseQty / soldQty : 1;
+      const returnedSold = basePerSold > 0 ? Number(li.baseQty) / basePerSold : Number(li.baseQty);
+      return {
+        productName: li.orderItem.productName,
+        quantity: returnedSold.toFixed(4), // devolvido, na unidade vendida
+        total: li.value,
+      };
+    }),
+  };
+}
+
 /** Lista as contas a receber (venda a prazo — ADR-019), **paginada por cursor keyset** (como as
  * demais telas grandes) em `createdAt desc, id desc`. Filtros: `status` = `open` (default) /
  * `paid` (quitadas) / `all` (abertas + quitadas); `q` busca por nome do cliente; `limit`/`cursor`.
@@ -469,47 +529,9 @@ receivables.get('/accounts/:customerId', async (c) => {
       where: { tenantId, customerId },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       take: 100,
-      select: {
-        id: true,
-        createdAt: true,
-        totalValue: true,
-        abatedAmount: true,
-        excessAmount: true,
-        target: true,
-        reason: true,
-        createdByName: true,
-        items: {
-          select: {
-            baseQty: true,
-            value: true,
-            orderItem: {
-              select: { productName: true, quantity: true, baseQuantity: true },
-            },
-          },
-        },
-      },
+      select: RETURN_SELECT,
     });
-    const returns = returnRows.map((rt) => ({
-      id: rt.id,
-      createdAt: rt.createdAt,
-      totalValue: rt.totalValue,
-      abatedAmount: rt.abatedAmount,
-      excessAmount: rt.excessAmount,
-      target: rt.target,
-      reason: rt.reason,
-      createdByName: rt.createdByName,
-      items: rt.items.map((li) => {
-        const soldQty = Number(li.orderItem.quantity);
-        const baseQty = Number(li.orderItem.baseQuantity ?? li.orderItem.quantity);
-        const basePerSold = soldQty > 0 ? baseQty / soldQty : 1;
-        const returnedSold = basePerSold > 0 ? Number(li.baseQty) / basePerSold : Number(li.baseQty);
-        return {
-          productName: li.orderItem.productName,
-          quantity: returnedSold.toFixed(4), // devolvido, na unidade vendida
-          total: li.value,
-        };
-      }),
-    }));
+    const returns = returnRows.map(mapReturnEvent);
 
     const totalBalance = customerAccountBalance(
       receivables.filter((r) => r.status === 'OPEN').map((r) => ({ id: r.id, balance: r.balance })),
@@ -599,6 +621,13 @@ receivables.get('/:id', async (c) => {
     if (!r) {
       return c.json({ ok: false, error: 'Conta não encontrada.' }, 404);
     }
+    // Devoluções DESTA venda (ADR-022, Fatia B) — evento próprio no detalhe (a venda fica intacta).
+    const returnRows = await prisma.orderReturn.findMany({
+      where: { tenantId, orderId: r.orderId },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: RETURN_SELECT,
+    });
+    const returns = returnRows.map(mapReturnEvent);
     return c.json({
       ok: true,
       data: {
@@ -606,6 +635,8 @@ receivables.get('/:id', async (c) => {
         orderId: r.orderId,
         customerId: r.customerId,
         customerName: r.customer?.name ?? null,
+        returnedAmount: r.returnedAmount,
+        returns,
         // Observação da DÍVIDA/conta (separada do cadastro — ADR-022). É a que a UI edita nas duas
         // visões; `notes` (nota da venda, legado da 0015) segue no payload por compatibilidade.
         debtNotes: r.customer?.debtNotes ?? null,

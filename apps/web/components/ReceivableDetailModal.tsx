@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import {
   PAYMENT_METHOD_LABELS,
   RECEIVABLE_STATUS_LABELS,
+  RETURN_TARGET_LABELS,
   type PaymentMethod,
   type ReceivableDetail,
   type ReceivableRow,
@@ -116,8 +117,12 @@ export function ReceivableDetailModal({
 
             {error && <p className="text-sm text-red-600">{error}</p>}
 
-            {/* Situação da dívida. */}
-            <div className="grid grid-cols-3 gap-2 text-center">
+            {/* Situação da dívida. "Devolvido" só aparece quando houve devolução (ADR-022). */}
+            <div
+              className={`grid gap-2 text-center ${
+                Number(detail.returnedAmount ?? 0) > 0 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'
+              }`}
+            >
               <div className="rounded-lg bg-gray-50 p-2">
                 <p className="text-xs text-gray-600">Original</p>
                 <p className="font-semibold tabular-nums">{BRL(detail.originalAmount)}</p>
@@ -126,6 +131,14 @@ export function ReceivableDetailModal({
                 <p className="text-xs text-gray-600">Recebido</p>
                 <p className="font-semibold tabular-nums text-green-700">{BRL(detail.settledAmount)}</p>
               </div>
+              {Number(detail.returnedAmount ?? 0) > 0 && (
+                <div className="rounded-lg bg-gray-50 p-2">
+                  <p className="text-xs text-gray-600">Devolvido</p>
+                  <p className="font-semibold tabular-nums text-amber-700">
+                    {BRL(detail.returnedAmount)}
+                  </p>
+                </div>
+              )}
               <div className="rounded-lg bg-gray-50 p-2">
                 <p className="text-xs text-gray-600">Saldo</p>
                 <p className="font-semibold tabular-nums">{BRL(detail.balance)}</p>
@@ -195,6 +208,56 @@ export function ReceivableDetailModal({
                 </ul>
               )}
             </div>
+
+            {/* Devoluções desta venda (ADR-022, Fatia B) — evento próprio; a venda acima fica intacta. */}
+            {(detail.returns ?? []).length > 0 && (
+              <div>
+                <h3 className="mb-1 text-sm font-semibold">Devoluções</h3>
+                <ul className="space-y-2">
+                  {(detail.returns ?? []).map((rt) => (
+                    <li key={rt.id} className="rounded-lg border border-amber-100 bg-amber-50/40 p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-amber-800">
+                            Devolução
+                            <span className="ml-1 font-normal text-gray-500">
+                              {new Date(rt.createdAt).toLocaleString('pt-BR')}
+                              {rt.createdByName ? ` · ${rt.createdByName}` : ''}
+                            </span>
+                          </p>
+                          <p className="text-xs text-gray-500">Motivo: {rt.reason}</p>
+                        </div>
+                        <p className="shrink-0 font-semibold tabular-nums text-amber-700">
+                          −{BRL(rt.totalValue)}
+                        </p>
+                      </div>
+                      <ul className="mt-2 divide-y divide-amber-100 rounded-lg bg-white/60">
+                        {rt.items.map((it, i) => (
+                          <li
+                            key={i}
+                            className="flex items-center justify-between px-3 py-1.5 text-sm"
+                          >
+                            <span className="min-w-0 truncate text-amber-800">
+                              {Number(it.quantity)}× {it.productName}
+                            </span>
+                            <span className="shrink-0 tabular-nums text-amber-700">
+                              −{BRL(it.total)}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="mt-1 text-xs text-gray-600">
+                        Abateu {BRL(rt.abatedAmount)} da dívida
+                        {Number(rt.excessAmount) > 0 && rt.target
+                          ? ` · excedente ${BRL(rt.excessAmount)} → ${RETURN_TARGET_LABELS[rt.target]}`
+                          : ''}
+                        .
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             {/* Observação do CLIENTE (compartilhada por todas as vendas dele — ADR-022). */}
             <div>

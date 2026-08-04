@@ -189,4 +189,8 @@ export type ReceivableDetail = ReceivableRow & {
   items: ReceivableItem[];
   orderPayments: { method: string; amount: string }[];
   payments: ReceivablePaymentRow[];
+  /** Total devolvido desta venda (ADR-022, Fatia B) — soma dos abates+excedentes de devolução. */
+  returnedAmount: string;
+  /** Devoluções desta venda (ADR-022, Fatia B) — evento próprio (itens que voltaram + destino). */
+  returns: AccountReturnEvent[];
 };
