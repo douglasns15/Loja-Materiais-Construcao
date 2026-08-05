@@ -145,7 +145,17 @@ O schema **já nasce preparado** para offline (UUIDs no cliente, `syncStatus`, v
 
 ---
 
-## 7. Implantação (deploy)
+## 7. Convenções de persistência (custo-zero)
+
+Regras de modelagem para manter o banco enxuto dentro do free tier (500 MB). São de cumprimento obrigatório ao criar/alterar schema Prisma.
+
+- **Nunca** salvar binários (BLOB/Base64) no banco — só a URL do R2 ([ADR-007](./adr/ADR-007-armazenamento-de-midia-r2.md)).
+- **Tipos leves:** preferir `enum` nativo do Postgres a `Text`; usar `VarChar` com limite estrito em vez de `Text` livre; escolher sempre o tipo mais estreito que atende ao dado.
+- **Sem logs de navegação/cliques no Postgres.** Auditoria é seletiva via `AuditEvent` (só eventos críticos) — ver [ADR-004](./adr/ADR-004-soft-delete-e-auditoria.md). `StockMovement` já serve de auditoria natural do estoque.
+
+---
+
+## 8. Implantação (deploy)
 
 - **Web:** `apps/web` → Cloudflare Workers via **adaptador OpenNext** (`@opennextjs/cloudflare`).
   Config em `apps/web/wrangler.jsonc` (+ `open-next.config.ts`). Deploy: `npm run deploy` (roda
@@ -166,7 +176,7 @@ O schema **já nasce preparado** para offline (UUIDs no cliente, `syncStatus`, v
 
 ---
 
-## 8. Roadmap por fases
+## 9. Roadmap por fases
 
 | Fase | Entregáveis |
 |------|-------------|
@@ -178,7 +188,7 @@ O schema **já nasce preparado** para offline (UUIDs no cliente, `syncStatus`, v
 
 ---
 
-## 9. Decisões em aberto (a registrar como ADRs quando decididas)
+## 10. Decisões em aberto (a registrar como ADRs quando decididas)
 
 - Provedor de emissão fiscal (NFC-e/NF-e) — depende de integração de terceiros.
 - Ferramenta de observabilidade compatível com custo-zero (logs fora do Postgres, conforme `CLAUDE.md`).
