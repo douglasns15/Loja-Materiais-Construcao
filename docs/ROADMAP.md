@@ -3,7 +3,33 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-07-31 — **Conta do cliente (fiado acumulado) — ADR-022, Fatia A
+> **Última atualização:** 2026-08-05 — **ADR-022 Fatias B + C (devolução por item + crédito do
+> cliente) — NO AR e VALIDADAS pelo Owner.** **Fatia B (devolução/troca por item):** migration
+> **`0019`** (`order_returns`/`order_return_items`/`customer_credits` + `order_items.returnedBaseQty` +
+> `customers.creditBalance` + enum `ReturnTarget`). `POST /orders/:id/return-items` estorna estoque,
+> grava `returnedBaseQty`, abate a dívida (`Receivable.returnedAmount`); excedente → **crédito OU
+> dinheiro** (escolha). **Decisão de produto:** a devolução aparece como **evento próprio append-only**
+> (não muta a venda). Refinos: evento "− Devolução" na timeline; resumo consolidado "Itens em aberto";
+> devolução no detalhe por-venda (`GET /receivables/:id` → `returnedAmount`+`returns`). **Fatia C
+> (crédito):** **C.1** filtro "Com dívida / Com crédito / Todos" na visão Por cliente + `creditBalance`
+> por linha. **C.2** usar crédito no PDV = forma **"Crédito da loja"** (opt-in, espelha o fiado; campo
+> `creditApplied`; servidor grava parcela `STORE_CREDIT` + debita `CustomerCredit`/`creditBalance` com
+> `updateMany` condicional; cancelar/`return` estornam). **Achado:** persistir `Payment 'STORE_CREDIT'`
+> faz relatório e caixa (`cashInflow` só CASH) funcionarem sozinhos — só faltou `paymentMethodLabel`.
+> Core `maxStoreCreditForSale` (+4 → **231/231**). **Refinos do E2E:** Revisão do PDV mostra as formas;
+> aviso ao exceder crédito; uso do crédito no extrato ("Crédito gerado/usado/estornado"); **código
+> `#xxxx` + status por dívida** (extrato/Por venda/perfil, dívida quitada é **link** no perfil);
+> **extrato = só dívidas EM ABERTO** (quitada sai; crédito segue visível). **C.3 (acréscimo de cartão
+> ao Receber):** migration **`0020`** (aditiva `receivable_payments.surcharge`). Ao receber por
+> débito/crédito, se um item tiver acréscimo (ADR-016), avisa e libera **campo MANUAL** (operador
+> decide o valor — resolve o rateio no parcial); é receita a mais (não abate a dívida; soma no
+> relatório à forma). Vale nos dois recebimentos (uma dívida **e** conta inteira). Gates a cada fatia:
+> core 231/231, typecheck api/web, build web, dry-run api; migrations `0019`/`0020` sem drift. **NO AR:**
+> API `49b0f461` + web (deploys por fatia); smokes ✅. **E2E do Owner VALIDADO (2026-08-05):** B, C.1,
+> C.2, C.3 e todos os refinos ("tudo certo"). Commits `383e17f`…`3d73fb2`. **ADR-022 (A/B/C) COMPLETO.**
+> **Refino pendente:** busca por código (`orderId` é UUID → precisa cast no Postgres / query raw).
+>
+> **Antes:** 2026-07-31 — **Conta do cliente (fiado acumulado) — ADR-022, Fatia A
 > (+ A.2 + 2 refinos) — NO AR e VALIDADO pelo Owner.** Pedido do Owner: uma vez gerada uma venda a
 > prazo, não dava para **adicionar/remover/trocar** itens — mas o cliente **volta pegar mais** e
 > **paga no fim**. **ADR-022 escrito e aprovado ANTES de codar** (regras 1 e 4). **Decisões de

@@ -4068,3 +4068,26 @@ observação da dívida (separada do cadastro). ADR-022 escrito e aprovado antes
 > **Fatia A CONCLUÍDA** (A + A.2 + refino da observação). Próximo: **Fatia B** — devolução/troca por
 > item (migration `0019`), abatendo a dívida com excedente em crédito **ou** dinheiro (escolha do
 > operador). Ver ADR-022.
+
+### ADR-022 — Fatias B + C (devolução por item + crédito do cliente) (2026-08-05)
+
+NO AR e VALIDADO pelo Owner. Migrations `0019` (returns + customer_credit) e `0020`
+(`receivable_payments.surcharge`), ambas aditivas, aplicadas sem drift. Core 231/231.
+
+| O que foi testado | Resultado |
+|---|---|
+| **B:** devolução por item estorna estoque + abate dívida; excedente → crédito **ou** dinheiro | ✅ |
+| **B:** devolução como **evento próprio** no extrato (não muta a venda) + resumo "Itens em aberto" | ✅ |
+| **B:** devolução no detalhe por-venda ("Devolvido" + seção Devoluções) | ✅ |
+| **C.1:** filtro "Com dívida / Com crédito / Todos" (Por cliente) + coluna Crédito | ✅ |
+| **C.2:** usar crédito no PDV (forma "Crédito da loja"); saldo abate; comprovante mostra a forma | ✅ |
+| **C.2:** crédito não toca o caixa; aparece como forma própria no Relatório | ✅ |
+| **C.2:** cancelar/devolver venda que usou crédito **estorna** o crédito | ✅ |
+| **C.2 refinos:** Revisão mostra as formas; aviso ao exceder; extrato "Crédito gerado/usado/estornado" | ✅ |
+| **Código:** `#xxxx` + status por dívida (extrato/Por venda/perfil); dívida quitada = link no perfil | ✅ |
+| **Extrato = só dívidas EM ABERTO** (quitada sai; crédito segue visível) | ✅ |
+| **C.3:** acréscimo de cartão ao Receber (aviso + campo MANUAL) — receita a mais, não abate dívida | ✅ |
+| **C.3:** vale no "Receber" de uma dívida **e** da conta inteira (Por cliente) | ✅ |
+
+> **E2E do Owner VALIDADO (2026-08-05):** "tudo certo". Commits `383e17f`…`3d73fb2`. **ADR-022 (A/B/C)
+> COMPLETO.** Refino pendente: **busca por código** (`orderId` é UUID → cast no Postgres / query raw).
