@@ -56,7 +56,7 @@ http://localhost:3000/
 
 <> Tela de Estoque, a Entrada de Estoque precisa ser mais clara quanto aos dados que precisam ser digitados, o custo unitário não deveria atualizar o valor de custo no cadastro do produto, qual deveria ser o comportamento?
 
-
+<> Em Relatórios, na sessão "Por forma de pagamento" ter como clicar em detalhes e também como exportar excel, mostrando o detalhe de todas as vendas, mostrando as vendas por cada forma de pagamento.
 
 ## Subir servidor
 
