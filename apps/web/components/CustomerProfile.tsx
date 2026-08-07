@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import {
+  formatOrderNumber,
   RECEIVABLE_STATUS_LABELS,
   updateCustomerSchema,
   type CustomerHistory,
@@ -212,7 +213,7 @@ export function CustomerProfile({
                             onClick={() => setReceivableId(r.id)}
                             className="font-medium text-blue-700 hover:underline"
                           >
-                            #{r.orderId.slice(0, 8)}
+                            {formatOrderNumber(r.orderNumber) || `#${r.orderId.slice(0, 8)}`}
                           </button>{' '}
                           · {new Date(r.createdAt).toLocaleDateString('pt-BR')} ·{' '}
                           {BRL(r.originalAmount)}

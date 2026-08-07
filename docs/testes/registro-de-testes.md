@@ -4091,3 +4091,58 @@ NO AR e VALIDADO pelo Owner. Migrations `0019` (returns + customer_credit) e `00
 
 > **E2E do Owner VALIDADO (2026-08-05):** "tudo certo". Commits `383e17f`…`3d73fb2`. **ADR-022 (A/B/C)
 > COMPLETO.** Refino pendente: **busca por código** (`orderId` é UUID → cast no Postgres / query raw).
+
+---
+
+## ADR-023 — Numeração sequencial de vendas por loja (código V-000128) — Fatia 1 (2026-08-07)
+
+Fecha o refino do ADR-022 (busca por código) + pedido do Owner de um identificador humano nas vendas/
+notas. Número **sequencial por loja** (`orders.orderNumber`), formato **`V-000128`**, atribuído no
+servidor de forma atômica. ADR escrito e migration aprovada ANTES de codar (regras 1 e 4). Orçamento
+salvo fica para a Fatia 2.
+
+**Migration `0021_order_sequential_number` (aditiva, sem drift)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| `orders.orderNumber INT` + `@@unique([tenantId, orderNumber])` | aplicada | ✅ |
+| Backfill 1..N por loja (`ROW_NUMBER OVER (PARTITION BY tenantId ORDER BY createdAt, id)`) | numera existentes | ✅ |
+| `tenants.lastOrderNumber INT DEFAULT 0` acertado pro maior nº por loja | contador pronto | ✅ |
+| `prisma migrate deploy` (Supabase, diff+deploy) | aplicada | ✅ "successfully applied" |
+| Drift schema × banco (`migrate diff --exit-code`) | sem drift | ✅ "No difference detected" |
+
+**Core / shared (Vitest) — helpers puros de código/busca**
+
+| Teste | Resultado |
+|---|---|
+| `formatOrderNumber` (V-000128, padding, >999999, fração, nulo/≤0 → vazio) | ✅ |
+| `parseOrderNumberQuery` (V-000128/000128/128, ida-e-volta, sem dígito/zero → null) | ✅ |
+| **Total shared** (novo runner Vitest em `packages/shared`) | ✅ **7/7** |
+| **Total core** (regressão — nada quebrou) | ✅ **231/231** |
+
+**Atribuição atômica (código) + superfícies**
+
+| Item | Resultado |
+|---|---|
+| `POST /orders`: `UPDATE tenants SET lastOrderNumber+1 RETURNING` sob lock da linha (dentro da tx da venda) | ✅ à prova de corrida |
+| Offline: nº só no sync (nota offline = "código pendente"); idempotência = 1 nº por venda | ✅ (desenho) |
+| Nota (`ReceiptPrint`): "Venda V-000128" abaixo do título (só venda; orçamento sem nº) | ✅ |
+| Histórico de Vendas: código por linha + **busca por código** no servidor (`?number=`, todo o histórico) | ✅ |
+| Contas a Receber (Por venda + extrato), perfil e movimentações de estoque: `#slice(0,8)` → `V-000128` | ✅ |
+| Descrições do ledger de estoque (venda/cancelamento/devolução) usam `V-000128` | ✅ |
+
+**Gates + deploy (2026-08-07)**
+
+| Passo | Resultado |
+|---|---|
+| Typecheck `apps/api` + `apps/web` (`tsc --noEmit`) | ✅ |
+| Build web (`next build`) | ✅ 20 rotas (`/vendas` 7.37 kB, `/venda` 15.4 kB, `/contas-a-receber` 6.71 kB) |
+| Dry-run do worker (`wrangler deploy --dry-run`) | ✅ |
+| Deploy API (`wrangler deploy`) — alocação do nº vive no `POST /orders` | ✅ versão `c2336501` |
+| Deploy web (`npm run deploy`) + `postdeploy` | ✅ versão `de6715b8` (HTML no-store + CSS 200) |
+| Smoke API: health 200 · `/orders?scope=all&number=1` sem token 401 | ✅ |
+
+> ⚠️ **Deploy de API obrigatório** — a migration tornou `orderNumber` NOT NULL; o worker antigo (sem a
+> alocação) quebraria toda venda até subir a API nova. **Falta:** E2E do Owner. **Fatia 1 de 2** — a
+> Fatia 2 (orçamentos salvos `O-000045`, tela "Orçamentos") reusa o motor de numeração por loja. Ver
+> ADR-023.

@@ -40,6 +40,8 @@ Um *Architecture Decision Record* é um documento curto e versionado que captura
 | [ADR-019](./ADR-019-venda-a-prazo-contas-a-receber.md) | Venda a prazo / Contas a receber (o "fiado") | Aceito — implementado/validado |
 | [ADR-020](./ADR-020-retirada-entrega-futura.md) | Retirada / entrega futura (adiar a saída de estoque) | Direção aprovada — pendente migration + implementação |
 | [ADR-021](./ADR-021-cesta-persistente-sincronizada.md) | Cesta persistente sincronizada (carrinho do PDV entre dispositivos) | Aceito — implementado/validado |
+| [ADR-022](./ADR-022-conta-do-cliente-fiado-acumulado.md) | Conta do cliente (fiado acumulado): conta que soma + devolução por item + crédito | Aceito — implementado/validado |
+| [ADR-023](./ADR-023-numeracao-sequencial-de-vendas.md) | Numeração sequencial de vendas por loja (código `V-000128`) | Aceito — NO AR, aguardando E2E |
 
 > O detalhamento da arquitetura (diagrama, estrutura do monorepo, segurança/RLS, offline, deploy e roadmap) está em [`../ARCHITECTURE.md`](../ARCHITECTURE.md).
 

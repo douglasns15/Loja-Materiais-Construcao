@@ -154,6 +154,9 @@ type View =
       date: string;
       /** `true` quando a venda foi salva na fila offline (pendente de sincronização), ADR-011. */
       pending?: boolean;
+      /** Código sequencial da venda (ADR-023) — V-000128. Ausente na venda offline até sincronizar
+       *  (o comprovante imprime "código pendente"). */
+      orderNumber?: number | null;
       /** Venda a prazo (fiado — ADR-019): valor deixado a prazo + cliente devedor. */
       credit?: number;
       /** Crédito da loja usado nesta venda (ADR-022, Fatia C) — mostrado como forma no comprovante. */
@@ -1243,9 +1246,10 @@ export default function VendaPage() {
     setBusy(true);
     try {
       // A API devolve `change` = pago − total = 0 (as parcelas fecham o total); o troco de exibição
-      // é o `change` local, do dinheiro recebido a mais.
-      await apiPost<{ change: number }>('/orders', parsed.data);
-      setView({ ...doneBase, change });
+      // é o `change` local, do dinheiro recebido a mais. `orderNumber` (ADR-023) vem no online; no
+      // offline a resposta é um stub sem número → comprovante imprime "código pendente".
+      const res = await apiPost<{ change: number; orderNumber?: number | null }>('/orders', parsed.data);
+      setView({ ...doneBase, change, orderNumber: res?.orderNumber ?? null });
       // Cesta persistente (ADR-021): venda registrada — esvazia a cesta em todos os aparelhos (o
       // comprovante usa o snapshot em `doneBase.items`). Evita reabrir um carrinho já vendido.
       clearCart();
@@ -1557,6 +1561,7 @@ export default function VendaPage() {
           creditAmount={view.kind === 'done' ? view.credit : undefined}
           storeCreditAmount={view.kind === 'done' ? view.storeCredit : undefined}
           customerName={view.kind === 'done' ? view.customerName : undefined}
+          orderNumber={view.kind === 'done' ? view.orderNumber : undefined} // ADR-023
         />
       </div>
     );

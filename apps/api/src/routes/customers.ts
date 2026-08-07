@@ -175,6 +175,7 @@ customers.get('/:id/history', async (c) => {
           status: true,
           dueDate: true,
           createdAt: true,
+          order: { select: { orderNumber: true } }, // ADR-023: código humano da venda (V-000128)
         },
       }),
     ]);
@@ -193,6 +194,7 @@ customers.get('/:id/history', async (c) => {
         receivables: receivables.map((r) => ({
           id: r.id,
           orderId: r.orderId,
+          orderNumber: r.order?.orderNumber ?? null, // ADR-023
           originalAmount: r.originalAmount,
           settledAmount: r.settledAmount,
           balance: receivableBalance(Number(r.originalAmount), Number(r.settledAmount), Number(r.returnedAmount)),

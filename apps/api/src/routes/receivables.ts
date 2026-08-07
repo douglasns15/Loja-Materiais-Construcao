@@ -152,6 +152,7 @@ receivables.get('/', async (c) => {
         createdAt: true,
         createdByName: true,
         customer: { select: { name: true } },
+        order: { select: { orderNumber: true } }, // ADR-023: código humano da venda (V-000128)
       },
     });
     const hasMore = list.length > limit;
@@ -159,6 +160,7 @@ receivables.get('/', async (c) => {
     const rows = page.map((r) => ({
       id: r.id,
       orderId: r.orderId,
+      orderNumber: r.order?.orderNumber ?? null, // ADR-023
       customerId: r.customerId,
       customerName: r.customer?.name ?? null,
       originalAmount: r.originalAmount,
@@ -517,6 +519,7 @@ receivables.get('/accounts/:customerId', async (c) => {
         order: {
           select: {
             total: true,
+            orderNumber: true, // ADR-023: código humano da venda (V-000128)
             items: {
               select: {
                 productName: true,
@@ -550,6 +553,7 @@ receivables.get('/accounts/:customerId', async (c) => {
     const receivables = list.map((r) => ({
       id: r.id,
       orderId: r.orderId,
+      orderNumber: r.order?.orderNumber ?? null, // ADR-023
       originalAmount: r.originalAmount,
       settledAmount: r.settledAmount,
       balance: receivableBalance(Number(r.originalAmount), Number(r.settledAmount), Number(r.returnedAmount)),
@@ -639,6 +643,26 @@ receivables.get('/accounts/:customerId', async (c) => {
       },
     });
 
+    // ADR-023: resolve o código (V-000128) das vendas referenciadas pelos créditos. `relatedOrderId`
+    // é referência solta (sem relação Prisma no `CustomerCredit`), então uma query e um mapa.
+    const creditOrderIds = [
+      ...new Set(credits.map((cr) => cr.relatedOrderId).filter((x): x is string => !!x)),
+    ];
+    const orderNumberById = creditOrderIds.length
+      ? new Map(
+          (
+            await prisma.order.findMany({
+              where: { tenantId, id: { in: creditOrderIds } },
+              select: { id: true, orderNumber: true },
+            })
+          ).map((o) => [o.id, o.orderNumber]),
+        )
+      : new Map<string, number>();
+    const creditsOut = credits.map((cr) => ({
+      ...cr,
+      relatedOrderNumber: cr.relatedOrderId ? orderNumberById.get(cr.relatedOrderId) ?? null : null,
+    }));
+
     const totalBalance = customerAccountBalance(
       receivables.filter((r) => r.status === 'OPEN').map((r) => ({ id: r.id, balance: r.balance })),
     );
@@ -656,7 +680,7 @@ receivables.get('/accounts/:customerId', async (c) => {
         receivables,
         returns,
         openItems,
-        credits,
+        credits: creditsOut,
       },
     });
   } catch (err) {
@@ -698,6 +722,7 @@ receivables.get('/:id', async (c) => {
         order: {
           select: {
             total: true,
+            orderNumber: true, // ADR-023: código humano da venda (V-000128)
             createdAt: true,
             items: {
               select: {
@@ -743,6 +768,7 @@ receivables.get('/:id', async (c) => {
       data: {
         id: r.id,
         orderId: r.orderId,
+        orderNumber: r.order?.orderNumber ?? null, // ADR-023
         customerId: r.customerId,
         customerName: r.customer?.name ?? null,
         returnedAmount: r.returnedAmount,

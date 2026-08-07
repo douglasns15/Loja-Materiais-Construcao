@@ -22,6 +22,8 @@ import {
   cancelOrderSchema,
   createReturnSchema,
   createSaleSchema,
+  formatOrderNumber,
+  parseOrderNumberQuery,
   returnOrderSchema,
   STORE_CREDIT_METHOD,
 } from '@nexoloja/shared';
@@ -151,6 +153,9 @@ orders.get('/', async (c) => {
           : ORDERS_PAGE_DEFAULT;
 
       const dateFilter = buildDateFilter(c.req.query('from'), c.req.query('to'));
+      // ADR-023: busca por código de venda (V-000128). Aceita o código em qualquer forma; casa o
+      // inteiro `orderNumber` (comparação indexada, sem cast de UUID). Exato ⇒ 0 ou 1 linha.
+      const orderNumber = parseOrderNumberQuery(c.req.query('number'));
       const { field, dir } = sortConfig(c.req.query('sort'));
       const cursorParam = c.req.query('cursor');
       const cursor = cursorParam ? decodeCursor(cursorParam) : null;
@@ -161,7 +166,12 @@ orders.get('/', async (c) => {
 
       // `take: limit + 1`: a linha extra só serve para saber se há próxima página.
       const list = await prisma.order.findMany({
-        where: { tenantId, ...(dateFilter ? { createdAt: dateFilter } : {}), ...keyset },
+        where: {
+          tenantId,
+          ...(dateFilter ? { createdAt: dateFilter } : {}),
+          ...(orderNumber ? { orderNumber } : {}),
+          ...keyset,
+        },
         orderBy: [{ [field]: dir }, { id: dir }],
         take: limit + 1,
         include: {
@@ -438,11 +448,24 @@ orders.post('/', requireActiveTenant, async (c) => {
     }
 
     const order = await prisma.$transaction(async (tx) => {
+      // ADR-023: aloca o número sequencial da loja de forma ATÔMICA. O `UPDATE ... RETURNING` sob o
+      // lock da linha do tenant garante que duas vendas simultâneas recebam números distintos; como
+      // é a 1ª escrita da transação e ela é curta, o lock some no commit. Rollback devolve o número
+      // (sem furo). `lastOrderNumber` retornado já É o número desta venda (contador começa em 0).
+      const { lastOrderNumber } = await tx.tenant.update({
+        where: { id: tenantId },
+        data: { lastOrderNumber: { increment: 1 } },
+        select: { lastOrderNumber: true },
+      });
+      const orderNumber = lastOrderNumber;
+      const orderCode = formatOrderNumber(orderNumber); // "V-000128" p/ as descrições do ledger
+
       const created = await tx.order.create({
         data: {
           // Offline: usa a PK gerada no cliente (idempotência). Online: deixa o @default(uuid).
           ...(sale.id ? { id: sale.id } : {}),
           tenantId,
+          orderNumber, // ADR-023: código sequencial por loja (V-000128)
           userId,
           // Autoria (ADR-010): snapshot do nome de quem registrou a venda.
           registeredByName: c.get('userName'),
@@ -527,7 +550,7 @@ orders.post('/', requireActiveTenant, async (c) => {
             productId: item.productId,
             type: 'EXPENSE',
             quantity: baseQty,
-            reason: `Venda ${created.id}`,
+            reason: `Venda ${orderCode}`,
             syncStatus: 'SYNCED',
             userId, // autoria (ADR-010)
             registeredByName: c.get('userName'),
@@ -726,7 +749,7 @@ orders.post('/:id/cancel', async (c) => {
               productId: item.productId,
               type: 'INCOME',
               quantity: returnToStock,
-              reason: `Cancelamento da venda ${order.id}`,
+              reason: `Cancelamento da venda ${formatOrderNumber(order.orderNumber)}`,
               syncStatus: 'SYNCED',
               userId, // autoria (ADR-010): quem cancelou/estornou
               registeredByName: c.get('userName'),
@@ -905,7 +928,7 @@ orders.post('/:id/return', async (c) => {
               productId: item.productId,
               type: 'INCOME',
               quantity: returnToStock,
-              reason: `Devolução da venda ${order.id}`,
+              reason: `Devolução da venda ${formatOrderNumber(order.orderNumber)}`,
               syncStatus: 'SYNCED',
               userId, // autoria (ADR-010): quem devolveu/estornou
               registeredByName: c.get('userName'),
@@ -1123,7 +1146,7 @@ orders.post('/:id/return-items', async (c) => {
             productId: p.item.productId,
             type: 'INCOME',
             quantity: p.requestedBase,
-            reason: `Devolução parcial da venda ${order.id}`,
+            reason: `Devolução parcial da venda ${formatOrderNumber(order.orderNumber)}`,
             syncStatus: 'SYNCED',
             userId, // autoria (ADR-010)
             registeredByName: userName,
@@ -1177,7 +1200,7 @@ orders.post('/:id/return-items', async (c) => {
             type: 'EXPENSE',
             kind: 'RETURN',
             amount: excess,
-            reason: `Devolução (troco) — venda ${order.id}`,
+            reason: `Devolução (troco) — venda ${formatOrderNumber(order.orderNumber)}`,
             relatedOrderId: order.id,
             syncStatus: 'SYNCED',
             registeredByName: userName,

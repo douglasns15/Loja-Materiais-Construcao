@@ -298,6 +298,7 @@ export function ReceivableDetailModal({
                   onReceive({
                     id: detail.id,
                     orderId: detail.orderId,
+                    orderNumber: detail.orderNumber, // ADR-023
                     customerId: detail.customerId,
                     customerName: detail.customerName,
                     originalAmount: detail.originalAmount,

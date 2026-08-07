@@ -3,7 +3,38 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-05 — **ADR-022 Fatias B + C (devolução por item + crédito do
+> **Última atualização:** 2026-08-07 — **ADR-023 (numeração sequencial de vendas — código
+> `V-000128`) — Fatia 1 de 2 — NO AR, aguardando E2E do Owner.** Fecha o **refino pendente do
+> ADR-022** ("busca por código") **e** o pedido do Owner de um identificador humano nas vendas/notas.
+> **Problema:** o `Order` só tinha `id` UUID; o "código" mostrado nas dívidas era `#slice(0,8)` do UUID
+> — **aleatório, não memorável, ausente na nota, e não pesquisável sem cast de UUID**. **Decisão do
+> Owner (perguntas de produto ANTES de codar):** número **sequencial por loja**, formato **`V-000128`**
+> (prefixo `V-` + zeros); orçamento fica para a **Fatia 2** (hoje não é salvo → sem número; a busca de
+> orçamento nascerá numa tela "Orçamentos" própria com código `O-000045`, reusando o mesmo motor). **ADR
+> escrito e migration aprovada ANTES de codar (regras 1 e 4).** **Migration `0021_order_sequential_number`
+> (aditiva, sem tabela nova, RLS intacta, aplicada sem drift):** `orders.orderNumber INT` +
+> `@@unique([tenantId, orderNumber])`; **backfill** dos pedidos existentes por loja
+> (`ROW_NUMBER() OVER (PARTITION BY tenantId ORDER BY createdAt, id)`); contador `tenants.lastOrderNumber
+> INT DEFAULT 0` acertado pro maior nº. **Atribuição atômica** no `POST /orders`: `UPDATE tenants
+> SET lastOrderNumber = lastOrderNumber+1 RETURNING` **sob lock da linha do tenant**, dentro da transação
+> da venda (à prova de corrida; rollback devolve o nº). **Offline:** nº é autoridade do servidor → a nota
+> offline sai "código pendente de sincronização"; a reimpressão pelo Histórico traz o `V-000128`
+> (idempotência garante 1 nº por venda). **Helpers puros (`packages/shared/format.ts`):**
+> `formatOrderNumber` (V-000128) + `parseOrderNumberQuery` (aceita `V-000128`/`000128`/`128`) — **+7
+> testes** (Vitest ligado ao `packages/shared`). **Superfícies:** nota (`ReceiptPrint`), **Histórico de
+> Vendas** (código por linha + **busca por código** no servidor, `?number=`, em todo o histórico), Contas
+> a Receber (Por venda + extrato), perfil do cliente e descrições de movimentação de estoque — os três
+> `#slice(0,8)` substituídos por `V-000128` (payloads de `/receivables`, extrato, `/customers/:id/history`
+> ganharam `orderNumber`; crédito resolve `relatedOrderNumber`). Gates: core **231/231**, shared **7/7**,
+> typecheck api/web ✅, build web (20 rotas, `/vendas` 7.37 kB, `/venda` 15.4 kB) ✅, dry-run api ✅;
+> migration `0021` sem drift. ⚠️ **Deploy de API obrigatório** (a alocação vive no `POST /orders`; e a
+> migration NOT NULL exige a API nova). **NO AR:** API `c2336501` + web `de6715b8`; smokes ✅ (health 200,
+> `/orders?number=` sem token 401; web HTML no-store + CSS 200). **Falta:** E2E do Owner. Ver ADR-023 e
+> "ADR-023" no registro. **Próximo passo combinado:** **Fatia 2 — orçamentos salvos (`O-000045`)** — ADR
+> próprio (salvar por ação explícita ao imprimir/enviar; tela "Orçamentos" com busca; converter em venda;
+> futuro envio por WhatsApp/e-mail).
+>
+> **Antes:** 2026-08-05 — **ADR-022 Fatias B + C (devolução por item + crédito do
 > cliente) — NO AR e VALIDADAS pelo Owner.** **Fatia B (devolução/troca por item):** migration
 > **`0019`** (`order_returns`/`order_return_items`/`customer_credits` + `order_items.returnedBaseQty` +
 > `customers.creditBalance` + enum `ReturnTarget`). `POST /orders/:id/return-items` estorna estoque,

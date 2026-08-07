@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
+  formatOrderNumber,
   PAYMENT_METHOD_LABELS,
   RETURN_TARGET_LABELS,
   type CustomerAccountDetail,
@@ -22,7 +23,8 @@ type TimelineEvent =
       kind: 'sale';
       at: string;
       amount: number; // valor a prazo daquela venda (+ no saldo)
-      orderId: string; // p/ mostrar o código da venda (#xxxxxxxx)
+      orderId: string; // fallback p/ o código curto (vendas antes do backfill)
+      orderNumber: number | null; // código sequencial da venda (ADR-023) → V-000128
       paid: boolean; // dívida já quitada → selo "Quitada"
       items: { productName: string; quantity: string; total: string }[];
     }
@@ -49,11 +51,14 @@ type TimelineEvent =
       amount: number; // ASSINADO: − usado numa venda, + estornado (não mexe no saldo DEVEDOR)
       origin: string; // SALE_USE | SALE_REVERSAL | MANUAL
       relatedOrderId: string | null;
+      relatedOrderNumber: number | null; // código sequencial da venda relacionada (ADR-023)
       by: string | null;
     };
 
-/** Código curto da venda (8 primeiros do UUID) — para identificar/consultar a dívida em tela. */
-const shortCode = (id: string) => `#${id.slice(0, 8)}`;
+/** Código da venda para a tela (ADR-023): o sequencial `V-000128` quando existe; senão, os 8
+ * primeiros do UUID (fallback p/ vendas anteriores ao backfill — não deve ocorrer na prática). */
+const saleCode = (orderNumber: number | null, orderId: string) =>
+  formatOrderNumber(orderNumber) || `#${orderId.slice(0, 8)}`;
 
 /**
  * Extrato consolidado da CONTA de um cliente (ADR-022, Fatia A.2). Junta todas as vendas a prazo
@@ -135,6 +140,7 @@ export function CustomerAccountModal({
         at: r.createdAt,
         amount: Number(r.originalAmount),
         orderId: r.orderId,
+        orderNumber: r.orderNumber,
         paid: r.status === 'PAID',
         items: r.items.map((it) => ({
           productName: it.productName,
@@ -180,6 +186,7 @@ export function CustomerAccountModal({
         amount: Number(cr.amount), // assinado (− usado, + estornado)
         origin: cr.origin,
         relatedOrderId: cr.relatedOrderId,
+        relatedOrderNumber: cr.relatedOrderNumber,
         by: cr.createdByName,
       });
     }
@@ -340,7 +347,7 @@ export function CustomerAccountModal({
                                 Venda a prazo
                                 <span className="ml-1 font-normal text-gray-500">
                                   · {e.items.length} {e.items.length === 1 ? 'item' : 'itens'} ·{' '}
-                                  {shortCode(e.orderId)}
+                                  {saleCode(e.orderNumber, e.orderId)}
                                 </span>
                                 {e.paid && (
                                   <span className="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
@@ -368,7 +375,9 @@ export function CustomerAccountModal({
                                         ? 'Crédito usado'
                                         : 'Crédito a favor'}
                                 <span className="ml-1 font-normal text-gray-500">
-                                  {e.relatedOrderId ? ` · ${shortCode(e.relatedOrderId)}` : ''}
+                                  {e.relatedOrderId
+                                    ? ` · ${saleCode(e.relatedOrderNumber, e.relatedOrderId)}`
+                                    : ''}
                                   {e.by ? ` · ${e.by}` : ''}
                                 </span>
                               </>

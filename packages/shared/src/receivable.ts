@@ -59,6 +59,8 @@ export type ReceivablePaymentRow = {
 export type ReceivableRow = {
   id: string;
   orderId: string;
+  /** Código sequencial da venda de origem (ADR-023) — exibido como `V-000128`. */
+  orderNumber: number | null;
   customerId: string;
   customerName: string | null;
   originalAmount: string;
@@ -112,6 +114,8 @@ export type ReceiveAccountResult = {
 export type AccountReceivableDetail = {
   id: string;
   orderId: string;
+  /** Código sequencial da venda (ADR-023) — exibido como `V-000128` no extrato. */
+  orderNumber: number | null;
   originalAmount: string;
   settledAmount: string;
   balance: number;
@@ -167,6 +171,8 @@ export type AccountCreditEvent = {
   /** "RETURN" (gerado na devolução) · "SALE_USE" (usado numa venda) · "SALE_REVERSAL" (estornado). */
   origin: string;
   relatedOrderId: string | null;
+  /** Código sequencial da venda relacionada (ADR-023) — `V-000128` no extrato do crédito. */
+  relatedOrderNumber: number | null;
   createdByName: string | null;
 };
 

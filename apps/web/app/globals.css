@@ -73,6 +73,13 @@
   font-size: 0.85em;
   margin-bottom: 8px;
 }
+/* Código sequencial da venda (ADR-023) — V-000128, logo abaixo do título. */
+#print-area .rc-code {
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.95em;
+  margin-bottom: 2px;
+}
 #print-area .rc-table {
   width: 100%;
   border-collapse: collapse;

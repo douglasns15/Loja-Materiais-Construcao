@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
+  formatOrderNumber,
   paymentMethodLabel,
   cancelOrderSchema,
   returnOrderSchema,
@@ -31,6 +32,7 @@ type Payment = { id: string; method: string; amount: string };
 type OrderStatus = 'DRAFT' | 'CONFIRMED' | 'INVOICED' | 'CANCELLED' | 'RETURNED';
 type Order = {
   id: string;
+  orderNumber: number; // ADR-023: código sequencial da venda (V-000128)
   status: OrderStatus;
   subtotal: string;
   discountAmount: string;
@@ -83,12 +85,19 @@ const BRL = (v: string | number) =>
 function ymd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
-/** Monta a query de `GET /orders?scope=all` com cursor, período e ordenação. */
-function ordersQuery(cursor: string | null, r: Range, sort: Sort): string {
+/** Monta a query de `GET /orders?scope=all` com cursor, período, ordenação e busca por código.
+ *  ADR-023: quando há `code` (busca por V-000128), procura em TODO o histórico — o período é
+ *  ignorado (o servidor casa o inteiro `orderNumber`, exato ⇒ 0 ou 1 venda). */
+function ordersQuery(cursor: string | null, r: Range, sort: Sort, code = ''): string {
   const p = new URLSearchParams({ scope: 'all', limit: String(PAGE_SIZE) });
   if (cursor) p.set('cursor', cursor);
-  if (r.from) p.set('from', r.from);
-  if (r.to) p.set('to', r.to);
+  const codeTrim = code.trim();
+  if (codeTrim) {
+    p.set('number', codeTrim);
+  } else {
+    if (r.from) p.set('from', r.from);
+    if (r.to) p.set('to', r.to);
+  }
   if (sort !== 'recent') p.set('sort', sort); // `recent` é o default do servidor.
   return `/orders?${p.toString()}`;
 }
@@ -113,6 +122,10 @@ export default function VendasPage() {
   const [activePreset, setActivePreset] = useState<Preset | null>(null);
   // Ordenação aplicada no servidor (default = mais recentes primeiro).
   const [sort, setSort] = useState<Sort>('recent');
+  // Busca por código da venda (ADR-023). `codeInput` = o que está no campo; `codeSearch` = o
+  // código aplicado (o que a lista está mostrando). Busca no servidor, em todo o histórico.
+  const [codeInput, setCodeInput] = useState('');
+  const [codeSearch, setCodeSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
   // Modal de ação: qual venda e se é cancelamento ou devolução.
   const [action, setAction] = useState<{ id: string; mode: ActionMode } | null>(null);
@@ -147,8 +160,8 @@ export default function VendasPage() {
   // scope=all: histórico completo (inclui vendas de caixas já fechados), para
   // permitir a devolução de vendas fora do caixa aberto. Paginado por cursor: a 1ª
   // página substitui a lista; "Mostrar mais" anexa as seguintes.
-  async function loadOrders(r: Range = range, s: Sort = sort) {
-    const page = await apiGet<OrdersPage>(ordersQuery(null, r, s));
+  async function loadOrders(r: Range = range, s: Sort = sort, code: string = codeSearch) {
+    const page = await apiGet<OrdersPage>(ordersQuery(null, r, s, code));
     setOrders(page.rows);
     setNextCursor(page.nextCursor);
   }
@@ -158,7 +171,7 @@ export default function VendasPage() {
     setLoadingMore(true);
     setError(null);
     try {
-      const page = await apiGet<OrdersPage>(ordersQuery(nextCursor, range, sort));
+      const page = await apiGet<OrdersPage>(ordersQuery(nextCursor, range, sort, codeSearch));
       setOrders((prev) => [...prev, ...page.rows]);
       setNextCursor(page.nextCursor);
     } catch (e) {
@@ -205,6 +218,23 @@ export default function VendasPage() {
         ? 'bg-gray-900 text-white'
         : 'border border-gray-300 text-gray-700 hover:bg-gray-100'
     }`;
+  }
+
+  /** Busca por código da venda (ADR-023): recarrega do início mostrando só a venda do código
+   *  (V-000128, 000128 ou 128 — todos casam). Procura em todo o histórico, ignorando o período. */
+  function buscarCodigo(e: React.FormEvent) {
+    e.preventDefault();
+    const code = codeInput.trim();
+    setCodeSearch(code);
+    setError(null);
+    loadOrders(range, sort, code).catch((err) => setError((err as Error).message));
+  }
+  /** Limpa a busca por código e volta à lista normal (com o período/ordenação em vigor). */
+  function limparBusca() {
+    setCodeInput('');
+    setCodeSearch('');
+    setError(null);
+    loadOrders(range, sort, '').catch((err) => setError((err as Error).message));
   }
 
   useEffect(() => {
@@ -386,11 +416,46 @@ export default function VendasPage() {
             </select>
           </label>
         </div>
-        {(range.from || range.to) && (
+        {/* Busca por código da venda (ADR-023): V-000128 / 000128 / 128. Procura todo o histórico. */}
+        <form onSubmit={buscarCodigo} className="mt-2 flex flex-wrap items-end gap-2 border-t border-gray-100 pt-2">
+          <label className="flex flex-col text-xs text-gray-600">
+            Buscar por código
+            <input
+              type="text"
+              inputMode="numeric"
+              value={codeInput}
+              onChange={(e) => setCodeInput(e.target.value)}
+              placeholder="Ex.: V-000128 ou 128"
+              className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
+            />
+          </label>
+          <button
+            type="submit"
+            className="rounded-lg bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800"
+          >
+            Buscar
+          </button>
+          {codeSearch && (
+            <button
+              type="button"
+              onClick={limparBusca}
+              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
+            >
+              Limpar busca
+            </button>
+          )}
+        </form>
+        {codeSearch ? (
           <p className="mt-2 text-xs text-gray-600">
-            Mostrando {range.from ? `de ${range.from}` : 'desde o início'}{' '}
-            {range.to ? `até ${range.to}` : 'até hoje'}.
+            Buscando pela venda <strong>{codeSearch}</strong> (em todo o histórico).
           </p>
+        ) : (
+          (range.from || range.to) && (
+            <p className="mt-2 text-xs text-gray-600">
+              Mostrando {range.from ? `de ${range.from}` : 'desde o início'}{' '}
+              {range.to ? `até ${range.to}` : 'até hoje'}.
+            </p>
+          )
         )}
       </div>
 
@@ -434,7 +499,9 @@ export default function VendasPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs text-gray-500">#{o.id.slice(0, 8)}</span>
+                      <span className="font-mono text-xs text-gray-500">
+                        {formatOrderNumber(o.orderNumber) || `#${o.id.slice(0, 8)}`}
+                      </span>
                       {cancelled ? (
                         <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
                           Cancelada
@@ -609,6 +676,7 @@ export default function VendasPage() {
           total={Number(printJob.order.total)}
           discount={Number(printJob.order.discountAmount)}
           date={new Date(printJob.order.createdAt).toLocaleString('pt-BR')}
+          orderNumber={printJob.order.orderNumber} // ADR-023: reimpressão traz o código V-000128
           // Pagamento dividido: reimprime TODAS as formas da venda (não só a primeira).
           payments={printJob.order.payments.map((p) => ({
             method: p.method, // string livre — inclui "STORE_CREDIT" (ADR-022, Fatia C)

@@ -2,6 +2,7 @@
 
 import {
   formatCnpj,
+  formatOrderNumber,
   formatPhoneBr,
   paymentMethodLabel,
   type PaymentMethod,
@@ -39,6 +40,9 @@ type Props = {
   storeCreditAmount?: number;
   /** Nome do cliente devedor (venda a prazo) — impresso junto da linha "A prazo". */
   customerName?: string | null;
+  /** Código sequencial da venda (ADR-023): impresso como "Venda V-000128" abaixo do título. Só em
+   *  vendas. Ausente/0 (venda offline ainda não sincronizada) imprime "código pendente". */
+  orderNumber?: number | null;
 };
 
 const BRL = (v: number) =>
@@ -49,7 +53,7 @@ const BRL = (v: number) =>
  * e só aparece na impressão (ver regras @media print em globals.css). O modelo
  * (80mm / A4) é controlado pelo atributo data-model, definido antes de imprimir.
  */
-export function ReceiptPrint({ kind, store, items, total, date, discount, payments, method, change, creditAmount, storeCreditAmount, customerName }: Props) {
+export function ReceiptPrint({ kind, store, items, total, date, discount, payments, method, change, creditAmount, storeCreditAmount, customerName, orderNumber }: Props) {
   const isQuote = kind === 'quote';
   const subtotal = items.reduce((acc, i) => acc + i.unitPrice * i.quantity, 0);
   const hasDiscount = (discount ?? 0) > 0;
@@ -75,6 +79,12 @@ export function ReceiptPrint({ kind, store, items, total, date, discount, paymen
       <div className={`rc-title ${isQuote ? 'quote' : ''}`}>
         {isQuote ? 'ORÇAMENTO' : 'COMPROVANTE DE VENDA'}
       </div>
+      {/* Código da venda (ADR-023): só em vendas. Offline sem número ⇒ "código pendente". */}
+      {!isQuote ? (
+        <div className="rc-code">
+          {formatOrderNumber(orderNumber) || 'Código pendente de sincronização'}
+        </div>
+      ) : null}
       <div className="rc-date">{date}</div>
 
       <table className="rc-table">
