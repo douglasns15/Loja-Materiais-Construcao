@@ -4,6 +4,7 @@ import {
   formatCnpj,
   formatOrderNumber,
   formatPhoneBr,
+  formatQuoteNumber,
   paymentMethodLabel,
   type PaymentMethod,
 } from '@nexoloja/shared';
@@ -43,6 +44,11 @@ type Props = {
   /** Código sequencial da venda (ADR-023): impresso como "Venda V-000128" abaixo do título. Só em
    *  vendas. Ausente/0 (venda offline ainda não sincronizada) imprime "código pendente". */
   orderNumber?: number | null;
+  /** Código do orçamento salvo (ADR-024): impresso como "O-000045" abaixo do título. Só em orçamentos
+   *  SALVOS; a cotação efêmera (não salva) não tem número. */
+  quoteNumber?: number | null;
+  /** Validade do orçamento (ADR-024), já formatada (ex.: "07/08/2026"). Imprime "Válido até …". */
+  validUntil?: string | null;
 };
 
 const BRL = (v: number) =>
@@ -53,7 +59,7 @@ const BRL = (v: number) =>
  * e só aparece na impressão (ver regras @media print em globals.css). O modelo
  * (80mm / A4) é controlado pelo atributo data-model, definido antes de imprimir.
  */
-export function ReceiptPrint({ kind, store, items, total, date, discount, payments, method, change, creditAmount, storeCreditAmount, customerName, orderNumber }: Props) {
+export function ReceiptPrint({ kind, store, items, total, date, discount, payments, method, change, creditAmount, storeCreditAmount, customerName, orderNumber, quoteNumber, validUntil }: Props) {
   const isQuote = kind === 'quote';
   const subtotal = items.reduce((acc, i) => acc + i.unitPrice * i.quantity, 0);
   const hasDiscount = (discount ?? 0) > 0;
@@ -79,13 +85,17 @@ export function ReceiptPrint({ kind, store, items, total, date, discount, paymen
       <div className={`rc-title ${isQuote ? 'quote' : ''}`}>
         {isQuote ? 'ORÇAMENTO' : 'COMPROVANTE DE VENDA'}
       </div>
-      {/* Código da venda (ADR-023): só em vendas. Offline sem número ⇒ "código pendente". */}
-      {!isQuote ? (
+      {/* Código do documento. Venda (ADR-023): sempre — offline sem número ⇒ "código pendente".
+          Orçamento (ADR-024): só quando SALVO (tem número); a cotação efêmera não tem código. */}
+      {isQuote ? (
+        quoteNumber ? <div className="rc-code">{formatQuoteNumber(quoteNumber)}</div> : null
+      ) : (
         <div className="rc-code">
           {formatOrderNumber(orderNumber) || 'Código pendente de sincronização'}
         </div>
-      ) : null}
+      )}
       <div className="rc-date">{date}</div>
+      {isQuote && validUntil ? <div className="rc-date">Válido até {validUntil}</div> : null}
 
       <table className="rc-table">
         <thead>

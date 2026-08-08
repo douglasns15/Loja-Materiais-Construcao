@@ -70,6 +70,17 @@ enum ReturnTarget {
   CASH // Devolução em dinheiro no caixa de hoje (CashMovement RETURN — exige caixa aberto)
 }
 
+/// Ciclo de vida do ORÇAMENTO (ADR-024). "Expirado" NÃO entra aqui: é DERIVADO de `validUntil` na
+/// exibição/busca (evita depender de um agendador — custo-zero). Enviado/Aceito/Recusado são marcados
+/// manualmente pelo operador enquanto não houver envio por WhatsApp/e-mail.
+enum QuoteStatus {
+  DRAFT // Rascunho (editável, reabrindo no PDV)
+  SENT // Enviado ao cliente (a partir daqui o conteúdo trava — para mudar, duplica)
+  ACCEPTED // Aceito pelo cliente
+  REJECTED // Recusado (terminal)
+  CONVERTED // Convertido em venda (terminal; ver `convertedOrderId`)
+}
+
 /// Tipo de unidade de medida — relevante para módulo Material de Construção
 enum UnitType {
   UNIT // Unidade (un)
@@ -136,6 +147,10 @@ model Tenant {
   // incremento atômico (UPDATE ... RETURNING) dentro da transação — à prova de corrida, sem furo em
   // rollback. Backfill na migration 0021 acertou cada loja para o maior nº já emitido (0 se sem vendas).
   lastOrderNumber      Int      @default(0)
+  // Contador de ORÇAMENTOS da loja (ADR-024): último nº emitido, exibido como "O-000045". Mesma
+  // mecânica atômica do `lastOrderNumber`; sequência SEPARADA (o prefixo O-/V- distingue). 0 = sem
+  // orçamentos ainda (migration 0022 nasce assim para todas as lojas — sem backfill, tabelas vazias).
+  lastQuoteNumber      Int      @default(0)
   isActive             Boolean  @default(true)
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
@@ -161,6 +176,8 @@ model Tenant {
   orderReturns        OrderReturn[]
   orderReturnItems    OrderReturnItem[]
   customerCredits     CustomerCredit[]
+  quotes              Quote[]
+  quoteItems          QuoteItem[]
 
   @@map("tenants")
 }
@@ -313,6 +330,7 @@ model Product {
   tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   category       Category?       @relation(fields: [categoryId], references: [id])
   orderItems     OrderItem[]
+  quoteItems     QuoteItem[]
   stockMovements StockMovement[]
   // Auto-relação do par (ADR-015). `SetNull`: se o agregado for apagado de vez, o par
   // simplesmente deixa de existir e o produto principal segue vendendo avulso.
@@ -369,6 +387,7 @@ model Customer {
   receivables Receivable[]
   returns     OrderReturn[]
   credits     CustomerCredit[]
+  quotes      Quote[]
 
   @@unique([tenantId, cpfCnpj])
   @@index([tenantId, name])
@@ -467,6 +486,10 @@ model Order {
   receivable     Receivable?
   itemDeliveries OrderItemDelivery[]
   returns        OrderReturn[]
+  // ADR-024: orçamento(s) que apontam para esta venda como conversão (elo em quotes.convertedOrderId).
+  // Modelado como lista (1:N) só para satisfazer o Prisma sem exigir índice único no FK — na prática é
+  // 0..1 (uma venda nasce de no máximo um orçamento). Acesso natural é pelo lado do Quote.
+  convertedFromQuotes Quote[]
 
   @@unique([tenantId, orderNumber]) // Código sequencial por loja (ADR-023); também indexa a busca por nº
   @@index([tenantId, createdAt])
@@ -703,6 +726,66 @@ model CustomerCredit {
   @@index([tenantId, customerId])
   @@index([customerId])
   @@map("customer_credits")
+}
+
+/// ORÇAMENTO salvo (ADR-024) — proposta guardada, com código humano `O-000045` (sequencial por loja,
+/// mesmo motor do ADR-023). NÃO tem efeito de estoque (proposta, não compromisso): o ADR-001 não é
+/// tocado; a baixa real só acontece na venda, se o orçamento for convertido (reusa o PDV/`POST /orders`).
+/// Snapshot de apresentação (itens em `QuoteItem`). "Expirado" é derivado de `validUntil` (não é status
+/// gravado). Conteúdo editável só em DRAFT; a partir de SENT trava (para mudar, duplica).
+model Quote {
+  id               String      @id @default(uuid()) @db.Uuid
+  tenantId         String      @db.Uuid
+  quoteNumber      Int // Código sequencial POR LOJA (ADR-024). Exibido como "O-000045".
+  customerId       String?     @db.Uuid // Opcional (cliente de balcão sem cadastro)
+  status           QuoteStatus @default(DRAFT)
+  subtotal         Decimal     @db.Decimal(12, 2)
+  discountAmount   Decimal     @default(0) @db.Decimal(12, 2)
+  total            Decimal     @db.Decimal(12, 2)
+  validUntil       DateTime? // Validade ("válido até"); passou a data ⇒ exibido como Expirado
+  notes            String?     @db.VarChar(500)
+  convertedOrderId String?     @db.Uuid // A venda gerada na conversão (referência com FK SET NULL)
+  // Autoria (ADR-010): quem criou. Referência solta; snapshot do nome.
+  createdById      String?     @db.Uuid
+  createdByName    String?     @db.VarChar(100)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  deletedAt        DateTime? // Soft-delete de rascunho criado por engano (ADR-004)
+
+  tenant         Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer       Customer?   @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  convertedOrder Order?      @relation(fields: [convertedOrderId], references: [id], onDelete: SetNull)
+  items          QuoteItem[]
+
+  @@unique([tenantId, quoteNumber]) // Código sequencial por loja; também indexa a busca por nº
+  @@index([tenantId, createdAt])
+  @@index([tenantId, status])
+  @@map("quotes")
+}
+
+/// Uma linha do orçamento (ADR-024) — snapshot de apresentação. Guarda `saleMode` (BASE/ALT) e
+/// `pairGroup` para RECONSTRUIR a linha no PDV ao editar/converter (EF-3/ADR-013, par/ADR-015).
+/// `productId` é referência (SET NULL): se o produto for apagado, o snapshot ainda imprime.
+model QuoteItem {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid // Denormalizado para RLS (ADR-003)
+  quoteId     String   @db.Uuid
+  productId   String?  @db.Uuid
+  productName String   @db.VarChar(150) // Snapshot do nome
+  unit        UnitType // Snapshot da unidade vendida (base OU embalagem — ADR-013)
+  saleMode    String?  @db.VarChar(4) // "BASE" | "ALT" — p/ reconstruir a linha no PDV ao converter
+  quantity    Decimal  @db.Decimal(12, 4) // Quantidade na unidade vendida
+  unitPrice   Decimal  @db.Decimal(12, 4) // Preço na unidade vendida
+  discount    Decimal  @default(0) @db.Decimal(12, 4)
+  total       Decimal  @db.Decimal(12, 2)
+  pairGroup   Int?     @db.SmallInt // Agrupamento do par (ADR-015)
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  quote   Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([quoteId])
+  @@map("quote_items")
 }
 
 /// Cesta persistente do PDV (ADR-021): o carrinho-rascunho de um usuário, sincronizado entre

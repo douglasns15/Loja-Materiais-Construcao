@@ -31,32 +31,55 @@ export function formatPhoneBr(value: string | null | undefined): string {
   return d;
 }
 
-/** Prefixo do código humano da venda (ADR-023). O orçamento usará "O-" na Fatia 2. */
+/** Prefixo do código humano da venda (ADR-023) e do orçamento (ADR-024). O prefixo separa as duas
+ *  sequências sequenciais por loja (venda `V-000128`, orçamento `O-000045`). */
 export const ORDER_CODE_PREFIX = 'V-';
+export const QUOTE_CODE_PREFIX = 'O-';
 
-/**
- * Formata o número sequencial da venda (ADR-023) como `V-000128`: prefixo + o inteiro preenchido
- * com zeros à esquerda até 6 dígitos. Números acima de 999999 só crescem (nunca trunca). É
- * APRESENTAÇÃO — o banco guarda o inteiro (`orders.orderNumber`). Entrada nula/≤0 (ex.: venda ainda
- * não sincronizada, sem número) volta string vazia, para o chamador decidir o rótulo "pendente".
- */
-export function formatOrderNumber(n: number | null | undefined): string {
+/** Formata um número sequencial como `<prefixo>000128`: prefixo + inteiro com zeros à esquerda até 6
+ *  dígitos (acima de 999999 só cresce, nunca trunca). Nula/≤0 volta string vazia. Base de
+ *  `formatOrderNumber` (ADR-023) e `formatQuoteNumber` (ADR-024). */
+function formatSeqCode(prefix: string, n: number | null | undefined): string {
   const num = Number(n);
   if (!Number.isFinite(num) || num <= 0) return '';
-  return `${ORDER_CODE_PREFIX}${String(Math.floor(num)).padStart(6, '0')}`;
+  return `${prefix}${String(Math.floor(num)).padStart(6, '0')}`;
 }
 
-/**
- * Interpreta a busca por código de venda (ADR-023): extrai os dígitos e devolve o inteiro, ou `null`
- * se não houver dígito válido. Aceita `V-000128`, `000128`, `128`, `v 128` — todos casam a venda 128
- * (zeros à esquerda são ignorados). Assim a busca por código vira comparação de inteiro indexada
- * (`where.orderNumber`), sem cast de UUID. Função PURA.
- */
-export function parseOrderNumberQuery(query: string | null | undefined): number | null {
+/** Extrai os dígitos de uma busca por código e devolve o inteiro, ou `null` se não houver dígito
+ *  válido (ou for 0). Prefixo-agnóstico: aceita `V-000128`/`O-000045`/`128`/`v 128`. Base das buscas
+ *  por código (comparação de inteiro indexada, sem cast de UUID). Função PURA. */
+export function parseSeqNumberQuery(query: string | null | undefined): number | null {
   const digits = onlyDigits(query);
   if (!digits) return null;
   const n = Number.parseInt(digits, 10);
   return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * Formata o número sequencial da venda (ADR-023) como `V-000128`. É APRESENTAÇÃO — o banco guarda o
+ * inteiro (`orders.orderNumber`). Entrada nula/≤0 (ex.: venda offline ainda não sincronizada) volta
+ * string vazia, para o chamador decidir o rótulo "pendente".
+ */
+export function formatOrderNumber(n: number | null | undefined): string {
+  return formatSeqCode(ORDER_CODE_PREFIX, n);
+}
+
+/** Busca por código de venda (ADR-023): `V-000128`/`000128`/`128` → 128. Alias de `parseSeqNumberQuery`. */
+export function parseOrderNumberQuery(query: string | null | undefined): number | null {
+  return parseSeqNumberQuery(query);
+}
+
+/**
+ * Formata o número sequencial do orçamento (ADR-024) como `O-000045`. É APRESENTAÇÃO — o banco guarda
+ * o inteiro (`quotes.quoteNumber`).
+ */
+export function formatQuoteNumber(n: number | null | undefined): string {
+  return formatSeqCode(QUOTE_CODE_PREFIX, n);
+}
+
+/** Busca por código de orçamento (ADR-024): `O-000045`/`000045`/`45` → 45. Alias de `parseSeqNumberQuery`. */
+export function parseQuoteNumberQuery(query: string | null | undefined): number | null {
+  return parseSeqNumberQuery(query);
 }
 
 /**

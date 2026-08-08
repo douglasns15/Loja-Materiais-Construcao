@@ -4146,3 +4146,69 @@ salvo fica para a Fatia 2.
 > alocação) quebraria toda venda até subir a API nova. **Falta:** E2E do Owner. **Fatia 1 de 2** — a
 > Fatia 2 (orçamentos salvos `O-000045`, tela "Orçamentos") reusa o motor de numeração por loja. Ver
 > ADR-023.
+
+---
+
+## ADR-024 — Orçamentos salvos (documento O-000045) — Sub-fatia 2.A (2026-08-07)
+
+Orçamento vira DOCUMENTO guardado, com código `O-000045` (reusa o motor de numeração por loja do
+ADR-023). Salvar por ação explícita; ciclo de vida completo; com validade. ADR + migration aprovados
+antes de codar. 2.A = motor + CRUD + tela; 2.B (converter + editar rascunho) pendente.
+
+**Migration `0022_quotes` (aditiva, sem drift)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| enum `QuoteStatus` + tabelas `quotes`/`quote_items` + `tenants.lastQuoteNumber` DEFAULT 0 | aplicada | ✅ |
+| RLS SELECT por tenant nas 2 tabelas (padrão 0019) | criada | ✅ |
+| `prisma migrate deploy` (Supabase) | aplicada | ✅ "successfully applied" |
+| Drift schema × banco (`migrate diff --exit-code`) | sem drift | ✅ "No difference detected" |
+| Tabelas nascem VAZIAS ⇒ SEM janela quebrada (nada existente depende delas) | ok | ✅ |
+
+**Shared (Vitest) — código/busca do orçamento**
+
+| Teste | Resultado |
+|---|---|
+| `formatQuoteNumber` (O-000045, padding, nulo/0 → vazio) | ✅ |
+| `parseQuoteNumberQuery` (O-000045/000045/45; O-/O-000000 → null) | ✅ |
+| `formatOrderNumber` refatorado sobre base comum (regressão) | ✅ |
+| **Total shared** | ✅ **9/9** |
+| **Core** (regressão) | ✅ **231/231** |
+
+**API + UI (2.A)**
+
+| Item | Resultado |
+|---|---|
+| `POST /quotes`: salva DRAFT, aloca o nº atômico (UPDATE tenants ... RETURNING sob lock), SEM efeito de estoque | ✅ |
+| `GET /quotes`: lista keyset + busca por código (`?number`), cliente (`?q`) e status (inclui EXPIRED derivado) | ✅ |
+| `GET /quotes/:id` (detalhe + itens) · `PATCH` (status/validade/observação) · `DELETE` (soft-delete rascunho) | ✅ |
+| "Expirado" DERIVADO de `validUntil` (sem cron); imutável se CONVERTED; PATCH não seta CONVERTED | ✅ |
+| Menu "Orçamentos" + tela `/orcamentos` (lista/busca/selo/detalhe/reimpressão/exclusão) | ✅ |
+| PDV: "Salvar orçamento" (validade default +7d) + confirmação com O-000045 + atalho p/ Orçamentos | ✅ |
+| `ReceiptPrint` do orçamento imprime `O-000045` + "Válido até" (cotação efêmera segue sem código) | ✅ |
+
+**Gates + deploy (2026-08-07)**
+
+| Passo | Resultado |
+|---|---|
+| Typecheck api/web (`tsc --noEmit`) · build web (`next build`) | ✅ 21 rotas (`/orcamentos` 4.76 kB, `/venda` 15.9 kB) |
+| Dry-run do worker | ✅ |
+| Deploy API (`wrangler deploy`) — rotas `/quotes` | ✅ versão `83c465f2` |
+| Deploy web (`npm run deploy`) + `postdeploy` | ✅ versão `0e0465dd` (HTML no-store + CSS 200) |
+| Smoke API: health 200 · `/quotes` sem token 401 | ✅ |
+
+**E2E do Owner — VALIDADO (2026-08-07)**
+
+| Teste | Resultado |
+|---|---|
+| PDV → "Salvar orçamento" → confirmação com O-000045 + nota com código e "Válido até" | ✅ |
+| Tela Orçamentos: busca por código, por cliente e filtro por status | ✅ |
+| Detalhe: mudar status, editar validade/observação, reimprimir, excluir rascunho | ✅ |
+| Validade no passado ⇒ selo "Expirado" (derivado) | ✅ |
+
+> **E2E do Owner VALIDADO (2026-08-07):** os 4 testes "passaram com sucesso". **Refino de UX pedido no
+> E2E (planejado, NÃO implementado):** o botão "Orçamento" + o bloco "Válido até/Salvar orçamento" no
+> carrinho ficaram redundantes → mover a **validade + "Salvar orçamento"** para a **tela de prévia** do
+> botão "Orçamento" (que passa a ser único), junto do Imprimir; só UI, sem migration/API. **Sub-fatia 2.B
+> (próximo):** editar rascunho reabrindo no PDV + **converter em venda** (`quoteId` no `POST /orders` marca
+> `CONVERTED` + `convertedOrderId`). Ver ADR-024.

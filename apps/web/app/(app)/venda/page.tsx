@@ -6,8 +6,10 @@ import {
   PAYMENT_METHOD_LABELS,
   buildSaleMutation,
   createSaleSchema,
+  formatQuoteNumber,
   paymentMethodLabel,
   unitTypeLabels,
+  type CreateQuoteResult,
   type PaymentMethod,
   type SaleUnitMode,
   type UnitType,
@@ -163,7 +165,18 @@ type View =
       storeCredit?: number;
       customerName?: string | null;
     }
-  | { kind: 'quote'; total: number; discount: number; items: CartItem[]; date: string };
+  | {
+      kind: 'quote';
+      total: number;
+      discount: number;
+      items: CartItem[];
+      date: string;
+      // ADR-024: preenchidos quando o orçamento foi SALVO (não a cotação efêmera). `quoteNumber`
+      // imprime "O-000045"; `validUntil` (pt-BR) imprime "Válido até …"; `saved` mostra o aviso.
+      quoteNumber?: number | null;
+      validUntil?: string | null;
+      saved?: boolean;
+    };
 
 /**
  * Resolve as parcelas digitadas em valores numéricos, na ordem da tela. Uma parcela com valor
@@ -353,6 +366,13 @@ export default function VendaPage() {
     cardFeeCreditPercent: number | null;
   } | null>(null);
   const [printModel, setPrintModel] = useState<'80mm' | 'A4'>('80mm');
+  // Salvar orçamento (ADR-024): validade default = +7 dias (editável antes de salvar) + estado de save.
+  const [quoteValidity, setQuoteValidity] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
+  const [savingQuote, setSavingQuote] = useState(false);
   // Venda a prazo (ADR-019): valor deixado a prazo, cliente devedor e vencimento opcional.
   // `creditInput` vazio/0 = venda à vista comum (nenhuma regressão). Online-only nesta fatia.
   // `showCredit` mantém a opção ESCONDIDA por padrão (PDV limpo) — só aparece quando o operador
@@ -1282,6 +1302,69 @@ export default function VendaPage() {
     });
   }
 
+  /** Monta os itens do orçamento salvo (ADR-024) a partir do carrinho já reprecificado — UMA linha
+   *  por linha de exibição (o par vira "… (par)"; o modo por metro decora a unidade), igual ao
+   *  comprovante. O servidor recalcula os totais (fonte única do core). */
+  function cartToQuoteItems() {
+    return pricedCart.map((c) => {
+      const name = c.pair
+        ? `${c.name} (par)`
+        : c.saleMode === 'ALT'
+          ? `${c.name} — ${unitShort(c.unitType)} (${c.conversionFactor} ${unitShort(c.baseUnitType)})`
+          : c.name;
+      return {
+        productId: c.productId,
+        productName: name,
+        unit: c.unitType,
+        saleMode: c.saleMode,
+        quantity: c.quantity,
+        unitPrice: c.unitPrice,
+        total: Number((c.unitPrice * c.quantity).toFixed(2)),
+      };
+    });
+  }
+
+  /** Salva o orçamento no servidor (ADR-024) — ação EXPLÍCITA (só o que se guarda/encaminha vira
+   *  documento O-000045). Mostra a confirmação com o código; a validade/status ajustam-se depois na
+   *  tela Orçamentos. Anexa o cliente se um estiver selecionado (fiado/retirada compartilham o campo). */
+  async function onSalvarOrcamento() {
+    setError(null);
+    if (cart.length === 0) {
+      setError('Adicione itens para salvar um orçamento.');
+      return;
+    }
+    if (discountTooHigh) {
+      setError('O desconto não pode ser maior que o subtotal.');
+      return;
+    }
+    setSavingQuote(true);
+    try {
+      const payload = {
+        items: cartToQuoteItems(),
+        ...(discountValue > 0 ? { discountAmount: discountValue } : {}),
+        ...(quoteValidity ? { validUntil: quoteValidity } : {}),
+        ...(customerId ? { customerId } : {}),
+      };
+      const res = await apiPost<CreateQuoteResult>('/quotes', payload);
+      setView({
+        kind: 'quote',
+        total: totals.total,
+        discount: discountValue,
+        items: pricedCart,
+        date: new Date().toLocaleString('pt-BR'),
+        quoteNumber: res.quoteNumber,
+        validUntil: quoteValidity
+          ? new Date(`${quoteValidity}T12:00:00`).toLocaleDateString('pt-BR')
+          : null,
+        saved: true,
+      });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSavingQuote(false);
+    }
+  }
+
   /** Volta ao PDV mantendo o carrinho (revisão e orçamento não gravam nada). */
   function voltar() {
     setView(null);
@@ -1474,9 +1557,21 @@ export default function VendaPage() {
         </h1>
         <div className="space-y-3 rounded-2xl bg-white p-6 shadow-sm">
           {isQuote ? (
-            <p className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-sm font-medium text-amber-700">
-              Orçamento (não é venda)
-            </p>
+            view.kind === 'quote' && view.saved ? (
+              // ADR-024: orçamento SALVO — mostra o código O-000045 e o atalho para a tela Orçamentos.
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-2 rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-700">
+                  Orçamento salvo ✅ {view.quoteNumber ? formatQuoteNumber(view.quoteNumber) : ''}
+                </span>
+                <Link href="/orcamentos" className="text-sm font-medium text-blue-700 hover:underline">
+                  ver em Orçamentos
+                </Link>
+              </div>
+            ) : (
+              <p className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-sm font-medium text-amber-700">
+                Orçamento (não é venda)
+              </p>
+            )
           ) : view.kind === 'done' && view.pending ? (
             <p className="inline-flex items-center gap-2 rounded-full bg-indigo-100 px-3 py-1 text-sm font-medium text-indigo-700">
               Salva offline — pendente de sincronização
@@ -1562,6 +1657,8 @@ export default function VendaPage() {
           storeCreditAmount={view.kind === 'done' ? view.storeCredit : undefined}
           customerName={view.kind === 'done' ? view.customerName : undefined}
           orderNumber={view.kind === 'done' ? view.orderNumber : undefined} // ADR-023
+          quoteNumber={view.kind === 'quote' ? view.quoteNumber : undefined} // ADR-024
+          validUntil={view.kind === 'quote' ? view.validUntil : undefined} // ADR-024
         />
       </div>
     );
@@ -2380,6 +2477,26 @@ export default function VendaPage() {
               className="rounded-lg border border-gray-300 py-2 font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
             >
               Orçamento
+            </button>
+          </div>
+          {/* Salvar orçamento (ADR-024): vira documento localizável O-000045. A cotação acima é
+              efêmera; só o que se salva/encaminha é guardado (validade editável, ajustável depois). */}
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-2">
+            <label className="flex items-center gap-2 text-sm text-gray-600">
+              Válido até
+              <input
+                type="date"
+                value={quoteValidity}
+                onChange={(e) => setQuoteValidity(e.target.value)}
+                className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
+              />
+            </label>
+            <button
+              onClick={onSalvarOrcamento}
+              disabled={cart.length === 0 || discountTooHigh || savingQuote}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+            >
+              {savingQuote ? 'Salvando…' : 'Salvar orçamento'}
             </button>
           </div>
         </div>

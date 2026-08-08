@@ -18,6 +18,7 @@ import { OfflineNav } from './OfflineNav';
 const NAV = [
   { href: '/venda', label: 'Nova Venda' },
   { href: '/vendas', label: 'Histórico de Vendas' },
+  { href: '/orcamentos', label: 'Orçamentos' },
   { href: '/caixa', label: 'Caixa' },
   { href: '/contas-a-receber', label: 'Contas a Receber' },
   { href: '/entregas', label: 'Entregas' },
@@ -40,6 +41,7 @@ const COLLAPSE_KEY = 'nexoloja:sidebar-collapsed';
 const WARM_ROUTES = [
   '/venda',
   '/vendas',
+  '/orcamentos',
   '/caixa',
   '/contas-a-receber',
   '/entregas',

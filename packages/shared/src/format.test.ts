@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { formatOrderNumber, parseOrderNumberQuery } from './format';
+import {
+  formatOrderNumber,
+  formatQuoteNumber,
+  parseOrderNumberQuery,
+  parseQuoteNumberQuery,
+} from './format';
 
 // ADR-023 — código humano da venda (V-000128). Funções puras de apresentação/busca.
 describe('formatOrderNumber', () => {
@@ -45,5 +50,24 @@ describe('parseOrderNumberQuery', () => {
     expect(parseOrderNumberQuery('abc')).toBeNull();
     expect(parseOrderNumberQuery(null)).toBeNull();
     expect(parseOrderNumberQuery('V-000000')).toBeNull();
+  });
+});
+
+// ADR-024 — código humano do orçamento (O-000045). Mesmo motor, prefixo O-.
+describe('formatQuoteNumber / parseQuoteNumberQuery', () => {
+  it('formata com prefixo O- e 6 dígitos', () => {
+    expect(formatQuoteNumber(45)).toBe('O-000045');
+    expect(formatQuoteNumber(1)).toBe('O-000001');
+    expect(formatQuoteNumber(0)).toBe('');
+    expect(formatQuoteNumber(null)).toBe('');
+  });
+
+  it('interpreta a busca em qualquer forma e faz ida-e-volta', () => {
+    expect(parseQuoteNumberQuery('O-000045')).toBe(45);
+    expect(parseQuoteNumberQuery('000045')).toBe(45);
+    expect(parseQuoteNumberQuery('45')).toBe(45);
+    expect(parseQuoteNumberQuery(parseQuoteNumberQuery('O-000045') === 45 ? formatQuoteNumber(45) : '')).toBe(45);
+    expect(parseQuoteNumberQuery('O-')).toBeNull();
+    expect(parseQuoteNumberQuery('O-000000')).toBeNull();
   });
 });

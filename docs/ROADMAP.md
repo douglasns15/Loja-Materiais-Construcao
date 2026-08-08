@@ -3,7 +3,37 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-07 — **ADR-023 (numeração sequencial de vendas — código
+> **Última atualização:** 2026-08-07 — **ADR-024 (orçamentos salvos — documento `O-000045`) —
+> Sub-fatia 2.A NO AR, aguardando E2E do Owner.** Fatia 2 do par do ADR-023: o orçamento vira
+> **documento guardado e localizável**, com código próprio `O-000045` (reusa o motor de numeração por
+> loja do ADR-023). **Decisões do Owner (antes de codar):** salvar por **ação explícita** ("Salvar
+> orçamento" no PDV — a cotação efêmera continua, custo-zero); **ciclo de vida completo**
+> (Rascunho/Enviado/Aceito/Recusado/Convertido); **com validade**; **converter em venda** (na 2.B).
+> **ADR-024 escrito e migration `0022` aprovada ANTES de codar (regras 1 e 4).** **Migration `0022_quotes`
+> (aditiva, tabelas VAZIAS ⇒ sem janela quebrada; RLS por tenant padrão 0019; sem drift):** enum
+> `QuoteStatus`; tabelas `quotes` + `quote_items` (snapshot, SEM efeito de estoque); `tenants.lastQuoteNumber`
+> (contador). **"Expirado" é DERIVADO** de `validUntil` (sem cron — custo-zero). **Sub-fatia 2.A:** motor +
+> CRUD + tela. `formatQuoteNumber`/`parseQuoteNumberQuery` (shared, +2 testes → **9/9**; `formatOrderNumber`
+> refatorado sobre base comum). API `quotes.ts`: `POST /quotes` (salva, aloca o nº atômico como o ADR-023),
+> `GET /quotes` (lista/busca por código/cliente/status/período, keyset), `GET /quotes/:id`, `PATCH
+> /quotes/:id` (status/validade/observação; imutável se convertido/enviado), `DELETE` (soft-delete de
+> rascunho). Web: **menu "Orçamentos"** + tela `/orcamentos` (lista + busca + selo por status efetivo +
+> detalhe com ciclo de vida + reimpressão + exclusão); PDV ganhou **"Salvar orçamento"** (validade default
+> +7d) + confirmação com o código; `ReceiptPrint` do orçamento imprime `O-000045` + "Válido até". Gates:
+> core **231/231**, shared **9/9**, typecheck api/web ✅, build web (**21 rotas**, `/orcamentos` 4.76 kB,
+> `/venda` 15.9 kB) ✅, dry-run api ✅; migration `0022` sem drift. ⚠️ **Deploy de API obrigatório** (rotas
+> novas). **NO AR:** API `83c465f2` + web `0e0465dd`; smokes ✅ (health 200, `/quotes` sem token 401; web
+> HTML no-store + CSS 200). **E2E do Owner VALIDADO (2026-08-07):** os 4 testes "passaram com sucesso"
+> (salvar no PDV → O-000045 na nota; busca por código/cliente/status; ciclo de vida + validade +
+> reimpressão + exclusão; "Expirado" derivado). **Refino de UX pedido no E2E (planejado, ainda NÃO
+> implementado):** o Owner notou que o botão "Orçamento" + o bloco "Válido até/Salvar orçamento" ficaram
+> **redundantes** no carrinho → **"Orçamento" vira botão único** (gera a prévia) e **validade + "Salvar
+> orçamento" migram para a tela de prévia** (junto do Imprimir), onde se decide imprimir (efêmero) ou
+> salvar; só UI, sem migration/API. **Sub-fatia 2.B (próximo passo combinado):** editar rascunho reabrindo
+> no PDV + **converter em venda** (`quoteId` no `POST /orders` marca `CONVERTED`) — fazer o refino de UX
+> antes ou junto. Ver ADR-024 e "ADR-024" no registro.
+>
+> **Antes:** 2026-08-07 — **ADR-023 (numeração sequencial de vendas — código
 > `V-000128`) — Fatia 1 de 2 — NO AR, aguardando E2E do Owner.** Fecha o **refino pendente do
 > ADR-022** ("busca por código") **e** o pedido do Owner de um identificador humano nas vendas/notas.
 > **Problema:** o `Order` só tinha `id` UUID; o "código" mostrado nas dívidas era `#slice(0,8)` do UUID
