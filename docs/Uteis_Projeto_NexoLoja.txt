@@ -36,8 +36,6 @@ http://localhost:3000/
 
 <> Em relatórios, no botão Hoje ter nele algo assim "< Hoje >" se clicar na seta "<" pra esquerda volta pros dias anteriores e a seta para direita ">" a partir do momento que vc volta para o dia anterior, ele libera pra ser clicada e voltar até no máximo o dia de Hoje.
 
-<> Filtro por motivo e data em Estoque não estão funcionando
-
 <> Os filtros devem desconsiderar acentos
 
 <> Em cadastros, tipo produto, quando estiver digitando o nome de um Fabricante, sugerir nome já existente na base e autocompletar com tab.
@@ -57,6 +55,12 @@ http://localhost:3000/
 <> Tela de Estoque, a Entrada de Estoque precisa ser mais clara quanto aos dados que precisam ser digitados, o custo unitário não deveria atualizar o valor de custo no cadastro do produto, qual deveria ser o comportamento?
 
 <> Em Relatórios, na sessão "Por forma de pagamento" ter como clicar em detalhes e também como exportar excel, mostrando o detalhe de todas as vendas, mostrando as vendas por cada forma de pagamento.
+
+<> Nova ideia de tela de Venda com campo buscar no topo da tela, de ponta a ponta, com tudo abaixo.. E campos de pesquisa, ao aparecerem resultados, permitir acionar o seta pra baixo, pra cima.
+
+<> Nome dos arquivos precisam constar os códigos das notas ou orçamentos ou o nome do que está sendo exportado.
+
+<> Contador do Caixa, ele só apagar os valores digitados quando eu abrir o caixa, até lá, fica em memória, e no fechamento a mesma coisa, só apaga depois de eu fechar o caixa e tmbm ter um botão dentro do contador, chamado zerar contador.
 
 ## Subir servidor
 
