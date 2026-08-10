@@ -3,7 +3,15 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-07 — **ADR-024 (orçamentos salvos — documento `O-000045`) —
+> **Última atualização:** 2026-08-10 — **ADR-024 (orçamentos salvos — documento `O-000045`) —
+> refino de UX do PDV NO AR (web `10389bcb`), aguardando E2E do Owner.** O refino pedido no E2E de 2.A:
+> **"Orçamento" virou botão único** (gera a prévia) e **"Válido até" + "Salvar orçamento" migraram para a
+> tela de prévia** (junto do "Imprimir") — o bloco redundante do carrinho foi removido. **Só UI, sem
+> migration/API** (typecheck + build web ✅, 21 rotas, `/venda` 15.9 kB; deploy web-only, smoke ✅). **Próximo:
+> Sub-fatia 2.B** — editar rascunho no PDV (`?quoteId=`) + converter em venda (`quoteId` no `POST /orders`
+> marca `CONVERTED`). Ver ADR-024 e "ADR-024" no registro.
+>
+> **Antes:** 2026-08-07 — **ADR-024 (orçamentos salvos — documento `O-000045`) —
 > Sub-fatia 2.A NO AR, aguardando E2E do Owner.** Fatia 2 do par do ADR-023: o orçamento vira
 > **documento guardado e localizável**, com código próprio `O-000045` (reusa o motor de numeração por
 > loja do ADR-023). **Decisões do Owner (antes de codar):** salvar por **ação explícita** ("Salvar

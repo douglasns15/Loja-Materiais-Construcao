@@ -4212,3 +4212,24 @@ antes de codar. 2.A = motor + CRUD + tela; 2.B (converter + editar rascunho) pen
 > botão "Orçamento" (que passa a ser único), junto do Imprimir; só UI, sem migration/API. **Sub-fatia 2.B
 > (próximo):** editar rascunho reabrindo no PDV + **converter em venda** (`quoteId` no `POST /orders` marca
 > `CONVERTED` + `convertedOrderId`). Ver ADR-024.
+
+### ADR-024 — Refino de UX do PDV (orçamento: botão único + salvar na prévia) (2026-08-10)
+
+Refino pedido pelo Owner no E2E de 2.A. **Só UI, sem migration/API.** No carrinho, o botão **"Orçamento"** e
+o bloco **"Válido até" + "Salvar orçamento"** ficaram redundantes lado a lado. Agora **"Orçamento" é o botão
+único** (gera a prévia efêmera) e a **validade + "Salvar orçamento"** vivem na **tela de prévia**, logo abaixo
+do "Imprimir", visíveis só enquanto a cotação não foi salva (`!view.saved`); ao salvar, o bloco some e vira o
+aviso "Orçamento salvo ✅ O-000045" que já existia. Fluxo: carrinho → **Orçamento** → prévia (Imprimir =
+efêmero · Válido até + Salvar = documento `O-000045`).
+
+**Build / typecheck / deploy**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Typecheck `apps/web` (`tsc --noEmit`) | sem erros | ✅ |
+| Build de produção (`next build`) | 21 rotas, `/venda` gerada | ✅ 21 rotas (`/venda` 15.9 kB) |
+| `npm run deploy` (web-only) + `postdeploy` smoke | publicado, HTML no-store + CSS 200 | ✅ web `10389bcb` |
+
+> **Falta:** E2E do Owner no navegador (login + caixa aberto → carrinho → "Orçamento" → prévia com "Válido
+> até"/"Salvar orçamento" → confirma o `O-000045`). **Próximo:** Sub-fatia 2.B (editar rascunho + converter
+> em venda). Ver ADR-024.

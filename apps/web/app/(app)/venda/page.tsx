@@ -1614,6 +1614,30 @@ export default function VendaPage() {
             </button>
           </div>
 
+          {/* ADR-024 (refino de UX): validade + "Salvar orçamento" na prévia. Só enquanto a cotação é
+              efêmera (`!saved`); ao salvar, o bloco some e vira o aviso "Orçamento salvo ✅ O-000045".
+              Imprimir acima = encaminhar sem guardar; salvar aqui = vira documento localizável. */}
+          {isQuote && view.kind === 'quote' && !view.saved && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-2">
+              <label className="flex items-center gap-2 text-sm text-gray-600">
+                Válido até
+                <input
+                  type="date"
+                  value={quoteValidity}
+                  onChange={(e) => setQuoteValidity(e.target.value)}
+                  className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
+                />
+              </label>
+              <button
+                onClick={onSalvarOrcamento}
+                disabled={savingQuote}
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+              >
+                {savingQuote ? 'Salvando…' : 'Salvar orçamento'}
+              </button>
+            </div>
+          )}
+
           {isQuote ? (
             <div className="grid grid-cols-2 gap-2">
               <button
@@ -2479,26 +2503,9 @@ export default function VendaPage() {
               Orçamento
             </button>
           </div>
-          {/* Salvar orçamento (ADR-024): vira documento localizável O-000045. A cotação acima é
-              efêmera; só o que se salva/encaminha é guardado (validade editável, ajustável depois). */}
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-2">
-            <label className="flex items-center gap-2 text-sm text-gray-600">
-              Válido até
-              <input
-                type="date"
-                value={quoteValidity}
-                onChange={(e) => setQuoteValidity(e.target.value)}
-                className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
-              />
-            </label>
-            <button
-              onClick={onSalvarOrcamento}
-              disabled={cart.length === 0 || discountTooHigh || savingQuote}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
-            >
-              {savingQuote ? 'Salvando…' : 'Salvar orçamento'}
-            </button>
-          </div>
+          {/* ADR-024 (refino de UX): "Orçamento" é o botão único — gera a prévia. A validade e o
+              "Salvar orçamento" vivem na tela de prévia (junto do "Imprimir"), onde o operador decide
+              imprimir (efêmero) OU salvar (vira o documento O-000045). Sem bloco extra no carrinho. */}
         </div>
       </div>
 
