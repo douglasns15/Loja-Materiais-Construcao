@@ -3,7 +3,24 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-10 — **Valor recebido e troco por venda (Histórico + comprovante) —
+> **Última atualização:** 2026-08-10 — **Navegação ‹ Hoje › + default "Hoje" nos filtros por data —
+> NO AR e VALIDADO pelo Owner.** Pedido do Owner (Horizonte 1): navegar dia a dia sem digitar datas, em
+> **todas** as telas com filtro por período, e abrir sempre em **Hoje**. **Só UI, sem API/migration.** Novo
+> componente reutilizável **`apps/web/components/PeriodFilter.tsx`** (controlado por `{ from, to }` local):
+> barra **‹ Hoje ›** (as setas deslocam a **janela inteira** em 1 dia — num período de 7/30 dias vira
+> período anterior/seguinte; no default de 1 dia é navegação dia a dia), rótulo central **Hoje/Ontem/data**
+> (clicável → volta pra hoje), **"próximo" travado no futuro**, + os atalhos **Hoje/7d/30d** e **De/Até**.
+> Datas no fuso LOCAL (parse manual, sem passar por UTC). Prop `bare` para embutir numa barra de filtros
+> existente. **Aplicado em 3 telas, todas abrindo em Hoje:** (a) **Relatórios** (era 30d) — troca o filtro
+> inline pelo componente; (b) **Histórico de Vendas** (era "tudo") — filtro ficou **ao vivo** (removido o
+> botão "Aplicar"; ordenação e busca por código intactas); (c) **Estoque › Movimentações** (era sem borda) —
+> período embutido (`bare`) na barra com Produto/Tipo/Motivo; **"Limpar" mostra todo o histórico** (escape
+> hatch). Fora de escopo: Orçamentos (o date input ali é "Válido até"), Contas a Receber e Entregas (sem
+> filtro por data). Gates: web typecheck + build (**21 rotas**, `/relatorios` 4.83 kB, `/vendas` 8.15 kB) ✅.
+> **NO AR:** web `c0a8b9d0`; smoke ✅ (HTML no-store + CSS 200). **E2E do Owner VALIDADO (2026-08-10):**
+> "tudo validado". Ver "UI.Filtro.Periodo" no registro.
+>
+> **Antes:** 2026-08-10 — **Valor recebido e troco por venda (Histórico + comprovante) —
 > NO AR e VALIDADO pelo Owner.** Pedido do Owner (Horizonte 1 do roadmap funcional): o Histórico listava as
 > formas de pagamento mas **não** o valor recebido nem o troco (que o comprovante imprime). **Achado:** o
 > troco **não era persistido** — `buildPersistedPayments()` grava o dinheiro que **fecha o total** (invariante

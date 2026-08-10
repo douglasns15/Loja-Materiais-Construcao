@@ -28,7 +28,6 @@ Foco: **tornar o dia a dia do balcão impecável**. Origem: pedidos do Owner em 
 | **Modernização visual** | Percepção de produto profissional; legibilidade no balcão |
 | **Numeração de nota** | Número da venda no comprovante e no histórico — referência ao falar com o cliente. *Não existe hoje: pedidos são identificados por UUID.* |
 | **Busca e filtro no histórico de vendas** | Localizar uma venda específica (por nota, cliente, valor) e filtrar por coluna. *Hoje há período, ordenação e busca por código (V-000128); falta busca por cliente/valor.* |
-| **Navegação dia a dia nos relatórios** | Percorrer dias com `< Hoje >` sem digitar datas. *Hoje só há os atalhos Hoje/7d/30d e intervalo manual.* |
 | **Gestão de senha pelo Super Usuário** | Destravar lojista que esqueceu a senha, sem depender de e-mail. *Não implementado no painel de plataforma.* |
 | **Ver usuários de cada loja no painel** | Clicar no número de usuários e listar quem são |
 | **Crédito parcelado** | Parcelamento sobre o total, com campo para valor extra |
@@ -36,7 +35,7 @@ Foco: **tornar o dia a dia do balcão impecável**. Origem: pedidos do Owner em 
 
 ### Entregues recentemente (não repetir aqui)
 
-Pagamento dividido · paginação por cursor + filtro de período no histórico · ordenação (maior/menor valor, data) · botão "voltar ao topo" · sangria/suprimento e extrato do caixa · contador de cédulas e mini-DRE · troco e formas no comprovante · busca no servidor em Clientes/Produtos · numeração sequencial de vendas (`V-000128`) e busca por código · orçamentos salvos (`O-000045`, ciclo de vida, converter em venda) · correção do logo que sumia do comprovante ao ser trocado · valor recebido e troco por venda (Histórico + comprovante).
+Pagamento dividido · paginação por cursor + filtro de período no histórico · ordenação (maior/menor valor, data) · botão "voltar ao topo" · sangria/suprimento e extrato do caixa · contador de cédulas e mini-DRE · troco e formas no comprovante · busca no servidor em Clientes/Produtos · numeração sequencial de vendas (`V-000128`) e busca por código · orçamentos salvos (`O-000045`, ciclo de vida, converter em venda) · correção do logo que sumia do comprovante ao ser trocado · valor recebido e troco por venda (Histórico + comprovante) · navegação ‹ Hoje › + default "Hoje" nos filtros por data (Relatórios/Vendas/Movimentações).
 
 ---
 

@@ -13,6 +13,7 @@ import { groupPairedItems } from '@nexoloja/core';
 import { apiGet, apiPost } from '@/lib/api';
 import { useOnline } from '@/lib/useOnline';
 import { ensureImageLoaded } from '@/lib/print';
+import { PeriodFilter, defaultRange } from '@/components/PeriodFilter';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { ReceiptPrint, type Store } from '@/components/ReceiptPrint';
 import { ReturnItemsModal } from '@/components/ReturnItemsModal';
@@ -64,8 +65,6 @@ type ActionMode = 'cancel' | 'return';
 type OrdersPage = { rows: Order[]; nextCursor: string | null };
 /** Período aplicado à lista (AAAA-MM-DD; vazio = sem borda). */
 type Range = { from: string; to: string };
-/** Atalho de período atualmente selecionado (destaca o botão). */
-type Preset = 'today' | '7d' | '30d';
 /**
  * Ordenação do Histórico (aplicada no SERVIDOR pelo keyset — não só nas páginas já
  * carregadas). Trocar recarrega da 1ª página.
@@ -83,11 +82,6 @@ const PAGE_SIZE = 20;
 
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-
-/** Data local no formato AAAA-MM-DD (para os atalhos de período). */
-function ymd(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 /** Monta a query de `GET /orders?scope=all` com cursor, período, ordenação e busca por código.
  *  ADR-023: quando há `code` (busca por V-000128), procura em TODO o histórico — o período é
  *  ignorado (o servidor casa o inteiro `orderNumber`, exato ⇒ 0 ou 1 venda). */
@@ -117,12 +111,9 @@ export default function VendasPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
-  // Período aplicado à lista + campos do formulário (só entram em vigor no "Aplicar").
-  const [range, setRange] = useState<Range>({ from: '', to: '' });
-  const [fromInput, setFromInput] = useState('');
-  const [toInput, setToInput] = useState('');
-  // Atalho ativo (Hoje/7d/30d): destaca o botão em preto. `null` = período manual ou sem filtro.
-  const [activePreset, setActivePreset] = useState<Preset | null>(null);
+  // Período aplicado à lista. Abre em "Hoje" (default das telas com filtro por data); a navegação
+  // ‹ › do PeriodFilter percorre os dias e recarrega ao vivo.
+  const [range, setRange] = useState<Range>(() => defaultRange());
   // Ordenação aplicada no servidor (default = mais recentes primeiro).
   const [sort, setSort] = useState<Sort>('recent');
   // Busca por código da venda (ADR-023). `codeInput` = o que está no campo; `codeSearch` = o
@@ -195,32 +186,11 @@ export default function VendasPage() {
     loadOrders(range, s).catch((e) => setError((e as Error).message));
   }
 
-  /**
-   * Aplica um período e recarrega do início. `preset` marca o atalho selecionado
-   * (destaque em preto); `null` = intervalo manual (De/Até) ou "Limpar".
-   */
-  function aplicarPeriodo(r: Range, preset: Preset | null = null) {
+  /** Troca o período (PeriodFilter) e recarrega a lista do início, mantendo ordenação e busca. */
+  function onRangeChange(r: Range) {
     setRange(r);
-    setFromInput(r.from);
-    setToInput(r.to);
-    setActivePreset(preset);
     setError(null);
     loadOrders(r).catch((e) => setError((e as Error).message));
-  }
-  /** Atalho de período: últimos `days` dias (0 = hoje) até hoje. */
-  function atalho(days: number, preset: Preset) {
-    const to = new Date();
-    const from = new Date();
-    from.setDate(from.getDate() - days);
-    aplicarPeriodo({ from: ymd(from), to: ymd(to) }, preset);
-  }
-  /** Classe do botão de atalho — preto quando selecionado, branco caso contrário. */
-  function presetCls(p: Preset): string {
-    return `rounded-lg px-2.5 py-1.5 text-xs font-medium ${
-      activePreset === p
-        ? 'bg-gray-900 text-white'
-        : 'border border-gray-300 text-gray-700 hover:bg-gray-100'
-    }`;
   }
 
   /** Busca por código da venda (ADR-023): recarrega do início mostrando só a venda do código
@@ -352,75 +322,27 @@ export default function VendasPage() {
       {/* Tela online-only (ADR-012 (c)): offline mostra o aviso de rede, não o erro cru. */}
       <OfflineNotice />
 
-      {/* Filtro de período — bordas no fuso da loja (UTC-3), igual ao relatório. */}
+      {/* Filtro de período (‹ Hoje › + atalhos + De/Até) — componente compartilhado. Abre em Hoje;
+          a navegação percorre os dias. Bordas no fuso da loja (UTC-3), igual ao relatório. */}
+      <PeriodFilter value={range} onChange={onRangeChange} className="mb-4" />
+
+      {/* Ordenação + busca por código */}
       <div className="mb-4 rounded-2xl bg-white p-3 shadow-sm">
-        <div className="flex flex-wrap items-end gap-2">
-          <div className="flex gap-1">
-            <button onClick={() => atalho(0, 'today')} className={presetCls('today')}>
-              Hoje
-            </button>
-            <button onClick={() => atalho(6, '7d')} className={presetCls('7d')}>
-              7 dias
-            </button>
-            <button onClick={() => atalho(29, '30d')} className={presetCls('30d')}>
-              30 dias
-            </button>
-          </div>
-          <label className="flex flex-col text-xs text-gray-600">
-            De
-            <input
-              type="date"
-              value={fromInput}
-              // Editar manualmente sai do atalho: desmarca o botão em destaque.
-              onChange={(e) => {
-                setFromInput(e.target.value);
-                setActivePreset(null);
-              }}
-              className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
-            />
-          </label>
-          <label className="flex flex-col text-xs text-gray-600">
-            Até
-            <input
-              type="date"
-              value={toInput}
-              onChange={(e) => {
-                setToInput(e.target.value);
-                setActivePreset(null);
-              }}
-              className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
-            />
-          </label>
-          <button
-            onClick={() => aplicarPeriodo({ from: fromInput, to: toInput })}
-            className="rounded-lg bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800"
+        {/* Ordenação — aplicada no servidor (não só nas páginas carregadas). */}
+        <label className="flex flex-col text-xs text-gray-600">
+          Ordenar por
+          <select
+            value={sort}
+            onChange={(e) => mudarOrdenacao(e.target.value as Sort)}
+            className="mt-1 w-full rounded-lg border border-gray-300 px-2 py-1 text-sm sm:w-auto"
           >
-            Aplicar
-          </button>
-          {(range.from || range.to) && (
-            <button
-              onClick={() => aplicarPeriodo({ from: '', to: '' })}
-              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
-            >
-              Limpar
-            </button>
-          )}
-          {/* Ordenação — aplicada no servidor (não só nas páginas carregadas). */}
-          <label className="flex flex-col text-xs text-gray-600 sm:ml-auto">
-            Ordenar por
-            <select
-              value={sort}
-              onChange={(e) => mudarOrdenacao(e.target.value as Sort)}
-              className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
-            >
-              {(Object.keys(SORT_LABELS) as Sort[]).map((s) => (
-                <option key={s} value={s}>
-                  {SORT_LABELS[s]}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
+            {(Object.keys(SORT_LABELS) as Sort[]).map((s) => (
+              <option key={s} value={s}>
+                {SORT_LABELS[s]}
+              </option>
+            ))}
+          </select>
+        </label>
         {/* Busca por código da venda (ADR-023): V-000128 / 000128 / 128. Procura todo o histórico. */}
         <form onSubmit={buscarCodigo} className="mt-2 flex flex-wrap items-end gap-2 border-t border-gray-100 pt-2">
           <label className="flex flex-col text-xs text-gray-600">
@@ -450,17 +372,10 @@ export default function VendasPage() {
             </button>
           )}
         </form>
-        {codeSearch ? (
+        {codeSearch && (
           <p className="mt-2 text-xs text-gray-600">
             Buscando pela venda <strong>{codeSearch}</strong> (em todo o histórico).
           </p>
-        ) : (
-          (range.from || range.to) && (
-            <p className="mt-2 text-xs text-gray-600">
-              Mostrando {range.from ? `de ${range.from}` : 'desde o início'}{' '}
-              {range.to ? `até ${range.to}` : 'até hoje'}.
-            </p>
-          )
         )}
       </div>
 

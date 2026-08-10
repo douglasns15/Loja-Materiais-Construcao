@@ -23,6 +23,7 @@ import { StoreDisabledNotice } from '@/components/StoreDisabledNotice';
 import { StockDetail, type StockProduct } from '@/components/StockDetail';
 import { MoneyInput } from '@/components/MoneyInput';
 import { ProductPicker } from '@/components/ProductPicker';
+import { PeriodFilter, defaultRange } from '@/components/PeriodFilter';
 
 // `GET /products` devolve a linha completa do produto; o detalhe de estoque (StockDetail)
 // usa esses campos extras (custo/venda, peso, descrição…), então o tipo espelha o StockProduct.
@@ -132,7 +133,12 @@ export default function EstoquePage() {
 
   // Filtros das movimentações. `productId` é resolvido no servidor (?productId=);
   // os demais são aplicados no cliente sobre a lista carregada.
-  const [filters, setFilters] = useState(EMPTY_FILTERS);
+  // Abre em "Hoje" (default das telas com filtro por data); "Limpar" volta a EMPTY_FILTERS (todo o
+  // histórico). A navegação ‹ › do PeriodFilter percorre os dias.
+  const [filters, setFilters] = useState(() => {
+    const d = defaultRange();
+    return { ...EMPTY_FILTERS, dateFrom: d.from, dateTo: d.to };
+  });
 
   // Seções colapsáveis (minimizáveis) — cada uma lembra o próprio estado entre sessões, para
   // o operador deixar visível só o que quer ver naquele momento.
@@ -822,24 +828,12 @@ export default function EstoquePage() {
               className="mt-1 rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-gray-900"
             />
           </label>
-          <label className="flex flex-col text-xs text-gray-600">
-            De
-            <input
-              type="date"
-              value={filters.dateFrom}
-              onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
-              className="mt-1 rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-gray-900"
-            />
-          </label>
-          <label className="flex flex-col text-xs text-gray-600">
-            Até
-            <input
-              type="date"
-              value={filters.dateTo}
-              onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
-              className="mt-1 rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-gray-900"
-            />
-          </label>
+          {/* Período (‹ Hoje › + atalhos + De/Até) — componente compartilhado, embutido na barra. */}
+          <PeriodFilter
+            bare
+            value={{ from: filters.dateFrom, to: filters.dateTo }}
+            onChange={(r) => setFilters({ ...filters, dateFrom: r.from, dateTo: r.to })}
+          />
           {filtersActive && (
             <button
               type="button"

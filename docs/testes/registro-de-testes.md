@@ -4358,3 +4358,42 @@ Pedido do Owner (Horizonte 1). O Histórico listava as formas de pagamento mas n
 
 > **E2E do Owner VALIDADO (2026-08-10):** "validado com sucesso" na fatia; e "agora sim, validado com sucesso"
 > após o refino do "Dinheiro recebido" na nota impressa. Ver "UI.Vendas.RecebidoTroco" no ROADMAP.
+
+---
+
+## UI.Filtro.Periodo — Navegação ‹ Hoje › + default "Hoje" nos filtros por data (2026-08-10)
+
+Pedido do Owner (Horizonte 1): navegar dia a dia sem digitar datas, em **todas** as telas com filtro por
+período, abrindo sempre em **Hoje**. **Só UI, sem API/migration.** Novo componente reutilizável
+`apps/web/components/PeriodFilter.tsx` (controlado por `{ from, to }` local): barra ‹ Hoje › (setas deslocam
+a **janela inteira** em 1 dia), rótulo central Hoje/Ontem/data (clicável → hoje), "próximo" travado no
+futuro, + atalhos Hoje/7d/30d e De/Até. Datas no fuso LOCAL (parse manual, sem UTC). Prop `bare` para
+embutir numa barra existente.
+
+**Telas (todas abrindo em Hoje)**
+
+| Tela | Antes | Depois | Resultado |
+|---|---|---|---|
+| Relatórios | default 30d, filtro inline | `PeriodFilter` (card) | ✅ |
+| Histórico de Vendas | default "tudo", botão "Aplicar" | `PeriodFilter` ao vivo (sem "Aplicar"); ordenação + busca por código intactas | ✅ |
+| Estoque › Movimentações | sem borda de data | `PeriodFilter` `bare` na barra (Produto/Tipo/Motivo); "Limpar" = todo o histórico | ✅ |
+
+Fora de escopo: Orçamentos (date input é "Válido até"), Contas a Receber e Entregas (sem filtro por data).
+
+**Build / typecheck / deploy**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Typecheck `apps/web` (`tsc --noEmit`) | sem erros | ✅ (corrigido parse de índice sob `noUncheckedIndexedAccess`) |
+| Build de produção (`next build`) | 21 rotas | ✅ (`/relatorios` 4.83 kB, `/vendas` 8.15 kB) |
+| `npm run deploy` (web-only) + `postdeploy` smoke | publicado; HTML no-store + CSS 200 | ✅ web `c0a8b9d0` |
+
+**E2E do Owner — VALIDADO (2026-08-10)**
+
+| Teste | Resultado |
+|---|---|
+| Relatórios/Vendas/Movimentações abrem em Hoje | ✅ |
+| ‹ › navega os dias (janela inteira); "próximo" travado no futuro; rótulo Hoje/Ontem/data volta a hoje | ✅ |
+| Atalhos 7d/30d + De/Até; Vendas (busca por código/ordenação) e Movimentações (Produto/Tipo/Motivo, Limpar) intactos | ✅ |
+
+> **E2E do Owner VALIDADO (2026-08-10):** "tudo validado". Ver "UI.Filtro.Periodo" no ROADMAP.

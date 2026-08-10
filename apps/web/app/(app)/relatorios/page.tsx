@@ -11,6 +11,7 @@ import { apiGet } from '@/lib/api';
 import { useOnline } from '@/lib/useOnline';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { CashMovementsList } from '@/components/CashMovementsList';
+import { PeriodFilter, defaultRange } from '@/components/PeriodFilter';
 
 const BRL = (v: number) =>
   v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -20,22 +21,6 @@ const DATETIME = (iso: string) =>
 
 /** Rótulo amigável da forma de pagamento — inclui "Crédito da loja" (ADR-022, Fatia C). */
 const methodLabel = (m: string) => paymentMethodLabel(m);
-
-/** Data local no formato YYYY-MM-DD (para os inputs e a query da API). */
-function isoDay(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
-    d.getDate(),
-  ).padStart(2, '0')}`;
-}
-
-/** Atalhos de período: retornam { from, to } em YYYY-MM-DD. */
-function presetRange(preset: 'today' | '7d' | '30d'): { from: string; to: string } {
-  const to = new Date();
-  const from = new Date();
-  if (preset === '7d') from.setDate(from.getDate() - 6);
-  if (preset === '30d') from.setDate(from.getDate() - 29);
-  return { from: isoDay(from), to: isoDay(to) };
-}
 
 /**
  * Célula "Fechado em" com popover do turno (ADR-010): abertura/fechamento + quem abriu/fechou.
@@ -189,7 +174,8 @@ function CashSessionSummary({
 
 export default function RelatoriosPage() {
   const online = useOnline();
-  const [range, setRange] = useState(() => presetRange('30d'));
+  // Abre em "Hoje" (default das telas com filtro por data). A navegação ‹ › percorre os dias.
+  const [range, setRange] = useState(() => defaultRange());
   const [sales, setSales] = useState<SalesReport | null>(null);
   const [sessions, setSessions] = useState<CashSessionReport[]>([]);
   const [loading, setLoading] = useState(false);
@@ -260,53 +246,10 @@ export default function RelatoriosPage() {
       {/* Tela online-only (ADR-012 (c)): offline mostra o aviso de rede, não o erro cru. */}
       <OfflineNotice />
 
-      {/* Seletor de período */}
-      <div className="mb-6 flex flex-wrap items-end gap-2 rounded-2xl bg-white p-4 shadow-sm">
-        <div className="flex gap-1">
-          {(
-            [
-              ['today', 'Hoje'],
-              ['7d', '7 dias'],
-              ['30d', '30 dias'],
-            ] as const
-          ).map(([preset, label]) => {
-            const r = presetRange(preset);
-            const active = range.from === r.from && range.to === r.to;
-            return (
-              <button
-                key={preset}
-                type="button"
-                onClick={() => setRange(r)}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-                  active ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-        <label className="flex flex-col text-xs text-gray-600">
-          De
-          <input
-            type="date"
-            value={range.from}
-            max={range.to || undefined}
-            onChange={(e) => setRange({ ...range, from: e.target.value })}
-            className="mt-1 rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-gray-900"
-          />
-        </label>
-        <label className="flex flex-col text-xs text-gray-600">
-          Até
-          <input
-            type="date"
-            value={range.to}
-            min={range.from || undefined}
-            onChange={(e) => setRange({ ...range, to: e.target.value })}
-            className="mt-1 rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-gray-900"
-          />
-        </label>
-        {loading && <span className="pb-2 text-sm text-gray-500">Carregando…</span>}
+      {/* Seletor de período (‹ Hoje › + atalhos + De/Até) — componente compartilhado. */}
+      <div className="mb-6">
+        <PeriodFilter value={range} onChange={setRange} />
+        {loading && <span className="mt-2 block text-sm text-gray-500">Carregando…</span>}
       </div>
 
       {error && online && <p className="mb-4 text-sm text-red-600">{error}</p>}
