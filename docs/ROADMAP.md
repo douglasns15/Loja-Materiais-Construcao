@@ -4,7 +4,9 @@
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
 > **Última atualização:** 2026-08-10 — **ADR-024 (orçamentos salvos — documento `O-000045`) —
-> Sub-fatia 2.B COMPLETA (Opção 2) NO AR, aguardando E2E do Owner.** Fecha o ADR-024. **Migration `0023`
+> Sub-fatia 2.B COMPLETA (Opção 2) NO AR e VALIDADA pelo Owner. ADR-024 (par ADR-023/024) COMPLETO.**
+> **E2E do Owner VALIDADO (2026-08-10):** "tudo validado com sucesso" — nome livre (salvar + busca), gerar
+> venda (orçamento → V-… CONVERTED), editar rascunho (mesmo O-…) e fidelidade de par. Commit `43bf9f8`. **Migration `0023`
 > (`quotes.customerName`, aditiva, aplicada sem drift — aprovada antes de codar, regra 1).** Quatro entregas:
 > **(a) nome livre de balcão** — campo opcional para identificar de quem é o orçamento SEM criar cadastro
 > (a pessoa pode não voltar); aparece em salvar/editar/listar/detalhe e entra na busca "por cliente".

@@ -1,6 +1,7 @@
 # ADR-024 — Orçamentos salvos (documento `O-000045`, ciclo de vida, validade e conversão em venda)
 
-- **Status:** **Aceito — Sub-fatia 2.A NO AR e VALIDADA pelo Owner (E2E 4/4, 2026-08-07).** Migration
+- **Status:** **Aceito — COMPLETO (2.A + refino de UX + 2.B) NO AR e VALIDADO pelo Owner (2026-08-10). Fecha o
+  par ADR-023/024.** Sub-fatia 2.A NO AR e VALIDADA pelo Owner (E2E 4/4, 2026-08-07). Migration
   `0022` aplicada (sem drift). **2.A (motor + CRUD + tela + salvar + status/validade + reimprimir):** core
   231/231 + shared 9/9; typecheck api/web ✅; build web ✅; dry-run api ✅. Deploy: API `83c465f2` + web
   `0e0465dd` (smokes ✅). **Refino de UX do PDV NO AR e VALIDADO pelo Owner (2026-08-10, web `10389bcb`, commit `34b6611`):** "Orçamento" virou
@@ -15,7 +16,9 @@
   não libera PUT; só DRAFT); **(d) fidelidade de par** — o orçamento agora SALVA o par expandido em 2 itens
   com `pairGroup` (mesmo motor da venda), e a exibição/nota reagrupa via `groupPairedItems` (core). Gates:
   core 231/231, shared 9/9, typecheck api/web ✅, build web (21 rotas, `/venda` 17 kB) ✅, dry-run api ✅.
-  Deploy: API `c5980090` + web `ea0b2614` (smokes ✅).
+  Deploy: API `c5980090` + web `ea0b2614` (smokes ✅). **E2E do Owner VALIDADO (2026-08-10): "tudo validado
+  com sucesso"** — nome livre (salvar + busca), gerar venda (CONVERTED → V-…), editar rascunho (mesmo O-…) e
+  fidelidade de par. Commit `43bf9f8`. **ADR-024 COMPLETO.**
 - **Data:** 2026-08-07
 
 > **Refino de UX do PDV (planejado, pós-2.A — observação do Owner no E2E de 2026-08-07):** na 2.A o PDV

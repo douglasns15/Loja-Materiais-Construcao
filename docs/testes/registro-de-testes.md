@@ -4269,6 +4269,6 @@ VARCHAR(120)`, aditiva/nullable, aprovada antes de codar — regra 1) aplicada n
 | Deploy API + web + smokes | 401 sem token / HTML no-store + CSS 200 | ✅ API `c5980090` + web `ea0b2614` |
 
 > Smokes: health 200; `GET /quotes`, `PATCH /quotes/:id`, `POST /orders` sem token → 401; postdeploy do web OK.
-> **Falta:** E2E do Owner (salvar com nome livre; buscar por nome livre; "Gerar venda" → V-… + orçamento
-> CONVERTED; editar rascunho salvando no mesmo O-…; par salvo e reaberto com fidelidade; orçamento antigo cai
-> na lista de revisão). **Fecha o ADR-024 (par ADR-023/024) após o E2E.** Ver ADR-024.
+> **E2E do Owner VALIDADO (2026-08-10):** "tudo validado com sucesso" — salvar com nome livre + buscar por
+> nome livre; "Gerar venda" → orçamento CONVERTED + `V-…`; editar rascunho salvando no mesmo `O-…`; par salvo
+> e reaberto com fidelidade. Commit `43bf9f8`. **ADR-024 (par ADR-023/024) COMPLETO.** Ver ADR-024.
