@@ -4305,3 +4305,56 @@ para nunca travar a impressão. Aplicado no PDV (`/venda`), Histórico (`/vendas
 > **E2E do Owner VALIDADO (2026-08-10):** "tudo testado e validado com sucesso". **Plano B guardado** (se
 > reaparecer em algum aparelho): embutir a logo como data-URI no print, sem dependência de rede ao imprimir.
 > Ver "UI.Comprovante.Logo" no ROADMAP.
+
+---
+
+## UI.Vendas.RecebidoTroco — Valor recebido e troco por venda (Histórico + comprovante) (2026-08-10)
+
+Pedido do Owner (Horizonte 1). O Histórico listava as formas de pagamento mas não o **valor recebido** nem o
+**troco**. **Achado:** o troco não era persistido — as parcelas gravam o dinheiro que **fecha o total**
+(invariante do Caixa, ADR-016), então o valor entregue só existia na UI do PDV. Solução: persistir o troco.
+
+**Migration `0024_order_change_amount` (aprovada antes de codar — regra 1; aditiva, sem drift)**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| `orders.changeAmount Decimal(12,2)` **nullable** (sem DEFAULT/backfill) | aplicada | ✅ |
+| `prisma migrate deploy` (Supabase) | aplicada | ✅ "successfully applied" |
+| Drift schema × banco (`migrate diff --exit-code`) | sem drift | ✅ "No difference detected" |
+| RLS: coberta pelas políticas de `orders` já existentes; sem efeito de caixa (informativo) | ok | ✅ |
+
+**Código (shared + API + web)**
+
+| Item | Resultado |
+|---|---|
+| `createSaleSchema.changeAmount` opcional (≥ 0) | ✅ |
+| `POST /orders` grava `changeAmount ?? 0`; parcelas seguem somando o total (caixa intacto) | ✅ |
+| PDV envia o troco online **e** offline (fila); omitido quando 0 | ✅ |
+| Histórico (`/vendas`): formas com valores + "Dinheiro recebido"/"Troco" (só quando > 0) | ✅ |
+| Reimpressão pelo Histórico sai com o troco (`changeAmount`) | ✅ |
+| **Refino pós-E2E (web-only):** `ReceiptPrint` ganha "Dinheiro recebido" (= aplicado + troco) na nota | ✅ |
+| NULL (venda antiga) ⇒ sem linha de troco ("não registrado"); vendas novas sem troco ⇒ sem linha | ✅ |
+
+**Gates + deploy (2026-08-10)**
+
+| Passo | Resultado |
+|---|---|
+| Core / shared (Vitest) — regressão | ✅ 231/231 · 9/9 |
+| API `tsc --noEmit` + dry-run (`wrangler --dry-run`) | ✅ |
+| Web typecheck + build (`next build`) | ✅ 21 rotas (`/vendas` 7.73 kB) |
+| Deploy API (`wrangler deploy`) | ✅ `31046990` |
+| Deploy web (`npm run deploy`) + `postdeploy` | ✅ `64a784c4` → `a52b328c` (refino da nota) |
+| Smokes | ✅ health 200 · `/orders` sem token 401 · web HTML no-store + CSS 200 |
+
+**E2E do Owner — VALIDADO (2026-08-10)**
+
+| Teste | Resultado |
+|---|---|
+| Venda em dinheiro com troco → nota mostra Troco; Histórico mostra "Dinheiro recebido" + "Troco" | ✅ |
+| Reimprimir a nota → troco presente | ✅ |
+| Venda sem troco (exato/cartão) → sem linha de troco | ✅ |
+| Venda antiga (pré-0024) → "não registrado" (sem linha) | ✅ |
+| **Nota impressa** mostra "Dinheiro recebido" (refino pós-E2E) | ✅ |
+
+> **E2E do Owner VALIDADO (2026-08-10):** "validado com sucesso" na fatia; e "agora sim, validado com sucesso"
+> após o refino do "Dinheiro recebido" na nota impressa. Ver "UI.Vendas.RecebidoTroco" no ROADMAP.

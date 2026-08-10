@@ -462,6 +462,11 @@ model Order {
   discountAmount    Decimal            @default(0) @db.Decimal(12, 2)
   freightAmount     Decimal            @default(0) @db.Decimal(12, 2) // Frete pesado (módulo Material de Construção)
   total             Decimal            @db.Decimal(12, 2)
+  // Troco devolvido ao cliente (informativo — NÃO entra no caixa; a invariante do ADR-016 é que as
+  // parcelas somam exatamente o total e o dinheiro do caixa é líquido). NULL = venda antiga sem o dado
+  // registrado (migration 0024, aditiva); vendas novas gravam 0 quando não há troco. Usado para exibir
+  // "Dinheiro recebido" e "Troco" no Histórico e na reimpressão.
+  changeAmount      Decimal?           @db.Decimal(12, 2)
   notes             String?            @db.VarChar(500)
   // Retirada/entrega futura (ADR-020). Em pedidos IMMEDIATE (padrão) estes campos ficam
   // inertes e o comportamento é o de sempre (baixa no ato).

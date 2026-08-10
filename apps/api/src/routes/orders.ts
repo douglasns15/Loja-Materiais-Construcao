@@ -495,6 +495,9 @@ orders.post('/', requireActiveTenant, async (c) => {
           discountAmount: sale.discountAmount ?? 0,
           freightAmount: sale.freightAmount ?? 0,
           total,
+          // Troco (informativo — não entra no caixa; ver ADR-016). Vendas novas gravam 0 quando não há
+          // troco; o NULL fica reservado às vendas antigas (pré-migration 0024, sem o dado).
+          changeAmount: sale.changeAmount ?? 0,
           notes: sale.notes,
           syncStatus: 'SYNCED',
           // Retirada/entrega futura (ADR-020). Em IMMEDIATE (padrão) estes campos ficam inertes.

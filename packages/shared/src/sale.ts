@@ -102,6 +102,12 @@ export const createSaleSchema = z.object({
   payments: z.array(salePaymentSchema),
   discountAmount: z.number().nonnegative().optional(),
   freightAmount: z.number().nonnegative().optional(),
+  /**
+   * Troco devolvido ao cliente (informativo). NÃO altera o caixa: a invariante do ADR-016 é que as
+   * parcelas somam exatamente o total e o caixa recebe o dinheiro LÍQUIDO. Persistido só para exibir
+   * "Dinheiro recebido"/"Troco" no Histórico e na reimpressão. Ausente = sem troco (o servidor grava 0).
+   */
+  changeAmount: z.number().nonnegative().optional(),
   notes: z.string().max(500).optional(),
   /**
    * Venda a prazo (fiado — ADR-019): valor deixado **a prazo** (o que o cliente pagará depois).

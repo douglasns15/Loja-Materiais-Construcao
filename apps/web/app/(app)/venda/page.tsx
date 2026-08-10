@@ -1257,6 +1257,8 @@ export default function VendaPage() {
         items: cartToSaleItems(),
         payments: persistedPayments,
         ...(discountValue > 0 ? { discountAmount: discountValue } : {}),
+        // Troco (informativo): viaja na fila e é gravado no sync. Omitido quando 0 (servidor grava 0).
+        ...(change > 0 ? { changeAmount: change } : {}),
       };
       const parsed = createSaleSchema.safeParse(sale);
       if (!parsed.success) {
@@ -1299,6 +1301,8 @@ export default function VendaPage() {
       items: cartToSaleItems(),
       payments: persistedPayments,
       ...(discountValue > 0 ? { discountAmount: discountValue } : {}),
+      // Troco (informativo — não entra no caixa). Omitido quando 0: o servidor grava 0 por default.
+      ...(change > 0 ? { changeAmount: change } : {}),
       // Venda a prazo (fiado — ADR-019): cliente + valor a prazo + vencimento opcional.
       ...(isCredit
         ? { customerId, creditAmount: creditValue, ...(dueDate ? { dueDate } : {}) }

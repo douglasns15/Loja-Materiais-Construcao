@@ -38,6 +38,8 @@ type Order = {
   subtotal: string;
   discountAmount: string;
   total: string;
+  // Troco (migration 0024). `null` = venda antiga sem o dado; vendas novas gravam 0 quando não há troco.
+  changeAmount?: string | null;
   createdAt: string;
   registeredByName: string | null;
   customerId?: string | null;
@@ -553,6 +555,40 @@ export default function VendasPage() {
                   ))}
                 </ul>
 
+                {/* Pagamento: formas com valores + "Dinheiro recebido"/"Troco" (migration 0024). O troco
+                    é informativo (não entra no caixa; ADR-016). `changeAmount` null = venda antiga sem o
+                    dado ⇒ sem as linhas de recebido/troco. */}
+                {o.payments.length > 0 &&
+                  (() => {
+                    const troco = o.changeAmount == null ? null : Number(o.changeAmount);
+                    const cashApplied = o.payments
+                      .filter((p) => p.method === 'CASH')
+                      .reduce((acc, p) => acc + Number(p.amount), 0);
+                    const showChange = troco != null && troco > 0;
+                    return (
+                      <div className="mt-2 space-y-0.5 border-t border-gray-100 pt-2 text-sm">
+                        {o.payments.map((p) => (
+                          <div key={p.id} className="flex justify-between text-gray-600">
+                            <span>{methodLabel(p.method)}</span>
+                            <span>{BRL(p.amount)}</span>
+                          </div>
+                        ))}
+                        {showChange && (
+                          <>
+                            <div className="flex justify-between text-gray-600">
+                              <span>Dinheiro recebido</span>
+                              <span>{BRL(cashApplied + troco)}</span>
+                            </div>
+                            <div className="flex justify-between font-medium text-red-600">
+                              <span>Troco</span>
+                              <span>{BRL(troco)}</span>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })()}
+
                 {editing ? (
                   <div
                     className={`mt-3 space-y-2 rounded-lg p-3 ring-1 ${
@@ -685,6 +721,13 @@ export default function VendasPage() {
             method: p.method, // string livre — inclui "STORE_CREDIT" (ADR-022, Fatia C)
             amount: Number(p.amount),
           }))}
+          // Troco (migration 0024): reimprime a linha "Troco" quando registrado (>0). Vendas antigas
+          // (changeAmount null) ou sem troco não imprimem a linha — igual ao comprovante original.
+          change={
+            printJob.order.changeAmount != null && Number(printJob.order.changeAmount) > 0
+              ? Number(printJob.order.changeAmount)
+              : undefined
+          }
         />
       )}
 

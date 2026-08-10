@@ -3,7 +3,30 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-10 — **🐞 Bug do logo no comprovante (some ao ser trocado) —
+> **Última atualização:** 2026-08-10 — **Valor recebido e troco por venda (Histórico + comprovante) —
+> NO AR e VALIDADO pelo Owner.** Pedido do Owner (Horizonte 1 do roadmap funcional): o Histórico listava as
+> formas de pagamento mas **não** o valor recebido nem o troco (que o comprovante imprime). **Achado:** o
+> troco **não era persistido** — `buildPersistedPayments()` grava o dinheiro que **fecha o total** (invariante
+> do Caixa, ADR-016: "o troco fica fora do caixa"), então o valor entregue pelo cliente só existia na UI do
+> PDV e se perdia após a venda. **Migration `0024_order_change_amount` aprovada ANTES de codar (regra 1) e
+> aplicada sem drift:** `orders.changeAmount Decimal(12,2)` **nullable**, 100% aditiva (sem DEFAULT/backfill;
+> RLS intacta). **NULL = venda antiga** sem o dado; vendas novas gravam **0** quando não há troco (informativo
+> — NÃO entra no caixa; as parcelas seguem somando o total). **shared:** `createSaleSchema` ganhou
+> `changeAmount` opcional. **API `POST /orders`:** grava `changeAmount ?? 0` (a lista `GET /orders` usa
+> `include`, então o campo já viaja). **PDV:** envia o troco online **e** offline (via fila; omitido quando 0).
+> **Histórico (`/vendas`):** cada venda passou a mostrar as **formas com valores** + **"Dinheiro recebido"** e
+> **"Troco"** (só quando registrado e > 0); a reimpressão sai com o troco. **Refino pós-E2E (web-only):** na
+> **nota impressa** faltava o "Dinheiro recebido" (mostrava só cobrado + troco) → o `ReceiptPrint` ganhou a
+> linha **"Dinheiro recebido"** (= dinheiro aplicado + troco), antes do "Troco", quando há troco. Gates: core
+> **231/231**, shared **9/9**, API tsc + dry-run ✅, web typecheck + build (**21 rotas**, `/vendas` 7.73 kB) ✅;
+> migration `0024` sem drift. ⚠️ **Deploy de API obrigatório** (grava o campo + migration). **NO AR:** API
+> `31046990` + web `64a784c4` → `a52b328c` (refino da nota); smokes ✅ (health 200, `/orders` sem token 401;
+> web HTML no-store + CSS 200). **E2E do Owner VALIDADO (2026-08-10):** "validado com sucesso" (troco na nota,
+> Dinheiro recebido/Troco no Histórico e na reimpressão, venda sem troco sem a linha, venda antiga "não
+> registrado") + o refino do "Dinheiro recebido" na nota ("agora sim, validado com sucesso"). Ver
+> "UI.Vendas.RecebidoTroco" no registro.
+>
+> **Antes:** 2026-08-10 — **🐞 Bug do logo no comprovante (some ao ser trocado) —
 > CORRIGIDO, NO AR e VALIDADO pelo Owner.** Pedido do Owner (Horizonte 1 do roadmap funcional). **Sintoma:**
 > ao **trocar** a logo da loja, ela **sumia do comprovante impresso** (quebrava a identidade da loja).
 > **Causa raiz:** o `#print-area` fica `display:none` na tela (`globals.css`) e só aparece na impressão;

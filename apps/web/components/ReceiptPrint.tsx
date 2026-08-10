@@ -70,6 +70,11 @@ export function ReceiptPrint({ kind, store, items, total, date, discount, paymen
   // "Dividido" quando há mais de uma forma somando o pagamento (incluindo o crédito da loja).
   const multiPay = pays.length + (storeCredit > 0 ? 1 : 0) > 1;
   const hasPayBlock = pays.length > 0 || storeCredit > 0 || (creditAmount ?? 0) > 0;
+  // Dinheiro recebido (só quando houve troco): as parcelas guardam o dinheiro APLICADO (que fecha o
+  // total); o recebido = aplicado + troco. Mostrar o quanto o cliente entregou, além do troco.
+  const hasChange = (change ?? 0) > 0;
+  const cashApplied = pays.reduce((acc, p) => (p.method === 'CASH' ? acc + p.amount : acc), 0);
+  const cashReceived = cashApplied + (change ?? 0);
   return (
     <div id="print-area" data-model="80mm">
       <header className="rc-head">
@@ -151,10 +156,16 @@ export function ReceiptPrint({ kind, store, items, total, date, discount, paymen
               <span>{BRL(storeCredit)}</span>
             </div>
           ) : null}
-          {change && change > 0 ? (
+          {hasChange ? (
+            <div>
+              <span>Dinheiro recebido</span>
+              <span>{BRL(cashReceived)}</span>
+            </div>
+          ) : null}
+          {hasChange ? (
             <div>
               <span>Troco</span>
-              <span>{BRL(change)}</span>
+              <span>{BRL(change as number)}</span>
             </div>
           ) : null}
           {creditAmount && creditAmount > 0 ? (
