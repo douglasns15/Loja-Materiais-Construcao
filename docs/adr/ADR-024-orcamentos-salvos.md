@@ -3,7 +3,7 @@
 - **Status:** **Aceito — Sub-fatia 2.A NO AR e VALIDADA pelo Owner (E2E 4/4, 2026-08-07).** Migration
   `0022` aplicada (sem drift). **2.A (motor + CRUD + tela + salvar + status/validade + reimprimir):** core
   231/231 + shared 9/9; typecheck api/web ✅; build web ✅; dry-run api ✅. Deploy: API `83c465f2` + web
-  `0e0465dd` (smokes ✅). **Refino de UX do PDV NO AR (2026-08-10, web `10389bcb`, aguardando E2E do Owner):** "Orçamento" virou
+  `0e0465dd` (smokes ✅). **Refino de UX do PDV NO AR e VALIDADO pelo Owner (2026-08-10, web `10389bcb`, commit `34b6611`):** "Orçamento" virou
   botão único (gera a prévia); "Válido até" + "Salvar orçamento" migraram para a tela de prévia (junto do
   "Imprimir") — bloco redundante do carrinho removido; só UI (typecheck + build ✅). **Pendência:**
   **Sub-fatia 2.B** — editar rascunho no PDV + converter em venda (`quoteId` no `POST /orders`).

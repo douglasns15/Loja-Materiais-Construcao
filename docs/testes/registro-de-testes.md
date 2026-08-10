@@ -4230,6 +4230,6 @@ efêmero · Válido até + Salvar = documento `O-000045`).
 | Build de produção (`next build`) | 21 rotas, `/venda` gerada | ✅ 21 rotas (`/venda` 15.9 kB) |
 | `npm run deploy` (web-only) + `postdeploy` smoke | publicado, HTML no-store + CSS 200 | ✅ web `10389bcb` |
 
-> **Falta:** E2E do Owner no navegador (login + caixa aberto → carrinho → "Orçamento" → prévia com "Válido
-> até"/"Salvar orçamento" → confirma o `O-000045`). **Próximo:** Sub-fatia 2.B (editar rascunho + converter
-> em venda). Ver ADR-024.
+> **E2E do Owner VALIDADO (2026-08-10):** "validado com sucesso" — carrinho com "Orçamento" único → prévia
+> com "Válido até"/"Salvar orçamento" → `O-000045` salvo. Commit `34b6611`. **Próximo:** Sub-fatia 2.B
+> (editar rascunho + converter em venda). Ver ADR-024.
