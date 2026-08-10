@@ -4272,3 +4272,36 @@ VARCHAR(120)`, aditiva/nullable, aprovada antes de codar — regra 1) aplicada n
 > **E2E do Owner VALIDADO (2026-08-10):** "tudo validado com sucesso" — salvar com nome livre + buscar por
 > nome livre; "Gerar venda" → orçamento CONVERTED + `V-…`; editar rascunho salvando no mesmo `O-…`; par salvo
 > e reaberto com fidelidade. Commit `43bf9f8`. **ADR-024 (par ADR-023/024) COMPLETO.** Ver ADR-024.
+
+---
+
+## UI.Comprovante.Logo — 🐞 Bug do logo que some do comprovante ao ser trocado (2026-08-10)
+
+Pedido do Owner (Horizonte 1 do roadmap funcional). Ao **trocar** a logo da loja, ela **sumia do comprovante
+impresso**. **Causa raiz:** o `#print-area` fica `display:none` na tela (`globals.css`) e só aparece na
+impressão; o navegador não garante o download de um `<img>` em subárvore oculta, e `imprimir()` chamava
+`window.print()` de forma **síncrona** ⇒ o snapshot saía antes de a logo baixar. Pior **ao trocar**: a URL
+nova traz cache-bust (`/public/logo/:tenantId?v=<ts>`) e nunca tinha sido buscada (a anterior já estava em
+cache). **Correção (web-only, sem migration/API):** helper `apps/web/lib/print.ts` `ensureImageLoaded(url)`
+pré-carrega a logo (mesma URL do `<img>` ⇒ cai no cache) **antes** de `window.print()`, com teto de 2,5 s
+para nunca travar a impressão. Aplicado no PDV (`/venda`), Histórico (`/vendas`) e Orçamentos (`/orcamentos`).
+
+**Build / typecheck / deploy**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Typecheck `apps/web` (`tsc --noEmit`) | sem erros | ✅ |
+| Build de produção (`next build`) | 21 rotas, `/venda` gerada | ✅ 21 rotas (`/venda` 17.1 kB) |
+| `npm run deploy` (web-only) + `postdeploy` smoke | publicado; HTML no-store + CSS 200 | ✅ web `3ddcc237` (só `venda`/`vendas`/`orcamentos` mudaram) |
+
+**E2E do Owner — VALIDADO (2026-08-10)**
+
+| Teste | Resultado |
+|---|---|
+| Enviar logo → vender → imprimir (80mm e A4): logo no comprovante | ✅ |
+| **Trocar** a logo → nova venda → imprimir: **logo nova** aparece (antes sumia) | ✅ |
+| Reimpressão em Histórico de Vendas e em Orçamentos: logo presente | ✅ |
+
+> **E2E do Owner VALIDADO (2026-08-10):** "tudo testado e validado com sucesso". **Plano B guardado** (se
+> reaparecer em algum aparelho): embutir a logo como data-URI no print, sem dependência de rede ao imprimir.
+> Ver "UI.Comprovante.Logo" no ROADMAP.

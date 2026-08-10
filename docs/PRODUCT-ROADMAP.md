@@ -32,13 +32,12 @@ Foco: **tornar o dia a dia do balcão impecável**. Origem: pedidos do Owner em 
 | **Navegação dia a dia nos relatórios** | Percorrer dias com `< Hoje >` sem digitar datas. *Hoje só há os atalhos Hoje/7d/30d e intervalo manual.* |
 | **Gestão de senha pelo Super Usuário** | Destravar lojista que esqueceu a senha, sem depender de e-mail. *Não implementado no painel de plataforma.* |
 | **Ver usuários de cada loja no painel** | Clicar no número de usuários e listar quem são |
-| **Correção do logo** | Logo some do comprovante ao ser trocado — quebra a identidade da loja (**bug**) |
 | **Crédito parcelado** | Parcelamento sobre o total, com campo para valor extra |
 | **Documentação de origem dos dados** | Cada número em tela deve ter explicado de onde vem e como é calculado |
 
 ### Entregues recentemente (não repetir aqui)
 
-Pagamento dividido · paginação por cursor + filtro de período no histórico · ordenação (maior/menor valor, data) · botão "voltar ao topo" · sangria/suprimento e extrato do caixa · contador de cédulas e mini-DRE · troco e formas no comprovante · busca no servidor em Clientes/Produtos.
+Pagamento dividido · paginação por cursor + filtro de período no histórico · ordenação (maior/menor valor, data) · botão "voltar ao topo" · sangria/suprimento e extrato do caixa · contador de cédulas e mini-DRE · troco e formas no comprovante · busca no servidor em Clientes/Produtos · numeração sequencial de vendas (`V-000128`) e busca por código · orçamentos salvos (`O-000045`, ciclo de vida, converter em venda) · correção do logo que sumia do comprovante ao ser trocado.
 
 ---
 

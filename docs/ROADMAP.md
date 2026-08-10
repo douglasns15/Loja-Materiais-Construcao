@@ -3,7 +3,27 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-10 — **ADR-024 (orçamentos salvos — documento `O-000045`) —
+> **Última atualização:** 2026-08-10 — **🐞 Bug do logo no comprovante (some ao ser trocado) —
+> CORRIGIDO, NO AR e VALIDADO pelo Owner.** Pedido do Owner (Horizonte 1 do roadmap funcional). **Sintoma:**
+> ao **trocar** a logo da loja, ela **sumia do comprovante impresso** (quebrava a identidade da loja).
+> **Causa raiz:** o `#print-area` fica `display:none` na tela (`globals.css`) e só aparece na impressão;
+> o navegador **não garante o download** de um `<img>` em subárvore oculta (às vezes nem inicia até ficar
+> visível). Como `imprimir()` chamava `window.print()` **de forma síncrona**, o snapshot saía antes de a
+> logo baixar. Aparecia sobretudo **ao trocar** porque a URL nova carrega cache-bust
+> (`/public/logo/:tenantId?v=<ts>`) e **nunca tinha sido buscada** — a anterior já estava no cache do
+> navegador. Confirmado que no PDV a logo existe **só** no print-area (a prévia na tela não a renderiza),
+> então nada aquecia o cache. **Correção (web-only, sem migration/API):** novo helper
+> `apps/web/lib/print.ts` `ensureImageLoaded(url)` que **pré-carrega a logo** (mesma URL do `<img>` ⇒ cai
+> no cache) **antes** de `window.print()`, com **teto de 2,5 s** para nunca travar a impressão se a rede/
+> imagem falhar. Aplicado nas **três** telas que imprimem (PDV `/venda`, Histórico `/vendas`, Orçamentos
+> `/orcamentos`) — também corrige a 1ª impressão logo após abrir a tela. Gates: typecheck web ✅, build web
+> (**21 rotas**, `/venda` 17.1 kB) ✅. **NO AR:** web `3ddcc237` (só os 3 assets `venda`/`vendas`/`orcamentos`
+> mudaram); smoke pós-deploy ✅ (HTML no-store + CSS 200). **E2E do Owner VALIDADO (2026-08-10):** "tudo
+> testado e validado com sucesso" — logo aparece após trocar, no PDV/Histórico/Orçamentos, 80mm e A4. Ver
+> "UI.Comprovante.Logo" no registro. **Plano B guardado** (se reaparecer em algum aparelho): embutir a logo
+> como data-URI no print, eliminando qualquer dependência de rede na hora de imprimir.
+>
+> **Antes:** 2026-08-10 — **ADR-024 (orçamentos salvos — documento `O-000045`) —
 > Sub-fatia 2.B COMPLETA (Opção 2) NO AR e VALIDADA pelo Owner. ADR-024 (par ADR-023/024) COMPLETO.**
 > **E2E do Owner VALIDADO (2026-08-10):** "tudo validado com sucesso" — nome livre (salvar + busca), gerar
 > venda (orçamento → V-… CONVERTED), editar rascunho (mesmo O-…) e fidelidade de par. Commit `43bf9f8`. **Migration `0023`

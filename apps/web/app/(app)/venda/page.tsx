@@ -46,6 +46,7 @@ import { useOutboxSyncContext } from '@/lib/outboxSync';
 import { useMe } from '@/lib/useMe';
 import { useOnline } from '@/lib/useOnline';
 import { useCart } from '@/lib/cartStore';
+import { ensureImageLoaded } from '@/lib/print';
 import { ReceiptPrint, type Store } from '@/components/ReceiptPrint';
 import { CartItemInfo } from '@/components/CartItemInfo';
 import { StoreDisabledNotice } from '@/components/StoreDisabledNotice';
@@ -574,7 +575,7 @@ export default function VendaPage() {
   }, [products]);
 
   /** Define o modelo (80mm/A4), injeta a regra @page e abre o diálogo de impressão. */
-  function imprimir() {
+  async function imprimir() {
     const area = document.getElementById('print-area');
     if (area) area.setAttribute('data-model', printModel);
     let style = document.getElementById('print-page-style') as HTMLStyleElement | null;
@@ -587,6 +588,8 @@ export default function VendaPage() {
       printModel === '80mm'
         ? '@media print { @page { size: 80mm auto; margin: 4mm; } }'
         : '@media print { @page { size: A4; margin: 14mm; } }';
+    // Garante a logo baixada antes de imprimir (some do papel se trocada agora). Ver lib/print.ts.
+    await ensureImageLoaded(store?.logoUrl);
     window.print();
   }
 

@@ -14,6 +14,7 @@ import {
   type QuotesPage,
 } from '@nexoloja/shared';
 import { apiDelete, apiGet, apiPatch } from '@/lib/api';
+import { ensureImageLoaded } from '@/lib/print';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { ReceiptPrint, type Store } from '@/components/ReceiptPrint';
 
@@ -339,7 +340,7 @@ function QuoteDetailModal({
   }
 
   /** Injeta a regra @page do modelo e abre o diálogo de impressão (mesmo padrão do PDV/Histórico). */
-  function imprimir() {
+  async function imprimir() {
     const area = document.getElementById('print-area');
     if (area) area.setAttribute('data-model', printModel);
     let style = document.getElementById('print-page-style') as HTMLStyleElement | null;
@@ -352,6 +353,8 @@ function QuoteDetailModal({
       printModel === '80mm'
         ? '@media print { @page { size: 80mm auto; margin: 4mm; } }'
         : '@media print { @page { size: A4; margin: 14mm; } }';
+    // Garante a logo baixada antes de imprimir (some do papel se trocada agora). Ver lib/print.ts.
+    await ensureImageLoaded(store?.logoUrl);
     window.print();
   }
 

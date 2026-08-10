@@ -38,11 +38,11 @@ Um *Architecture Decision Record* é um documento curto e versionado que captura
 | [ADR-017](./ADR-017-unidade-fechada-como-principal-barra.md) | Unidade fechada como principal (barra/rolo) + venda por metro | Aceito — implementado/validado |
 | [ADR-018](./ADR-018-caixa-compartilhado-por-loja.md) | Caixa compartilhado por loja (quem abre, abre para todos) | Aceito — implementado/validado |
 | [ADR-019](./ADR-019-venda-a-prazo-contas-a-receber.md) | Venda a prazo / Contas a receber (o "fiado") | Aceito — implementado/validado |
-| [ADR-020](./ADR-020-retirada-entrega-futura.md) | Retirada / entrega futura (adiar a saída de estoque) | Direção aprovada — pendente migration + implementação |
+| [ADR-020](./ADR-020-retirada-entrega-futura.md) | Retirada / entrega futura (adiar a saída de estoque) | Aceito — implementado/validado |
 | [ADR-021](./ADR-021-cesta-persistente-sincronizada.md) | Cesta persistente sincronizada (carrinho do PDV entre dispositivos) | Aceito — implementado/validado |
 | [ADR-022](./ADR-022-conta-do-cliente-fiado-acumulado.md) | Conta do cliente (fiado acumulado): conta que soma + devolução por item + crédito | Aceito — implementado/validado |
-| [ADR-023](./ADR-023-numeracao-sequencial-de-vendas.md) | Numeração sequencial de vendas por loja (código `V-000128`) | Aceito — NO AR, aguardando E2E |
-| [ADR-024](./ADR-024-orcamentos-salvos.md) | Orçamentos salvos (documento `O-000045`, ciclo de vida, validade, conversão) | Aceito — 2.A NO AR; 2.B pendente |
+| [ADR-023](./ADR-023-numeracao-sequencial-de-vendas.md) | Numeração sequencial de vendas por loja (código `V-000128`) | Aceito — implementado/validado |
+| [ADR-024](./ADR-024-orcamentos-salvos.md) | Orçamentos salvos (documento `O-000045`, ciclo de vida, validade, conversão) | Aceito — implementado/validado (2.A + 2.B) |
 
 > O detalhamento da arquitetura (diagrama, estrutura do monorepo, segurança/RLS, offline, deploy e roadmap) está em [`../ARCHITECTURE.md`](../ARCHITECTURE.md).
 
