@@ -18,25 +18,15 @@ http://localhost:3000/
 
 <> Ah, e na coluna de usuários, no painel do super usuário, ter como clicar no número de usuários e ver quais são, inclusive, ter alguma opção de gerar nova senha, tanto para o super usuário quanto para o admin de cada loja, para aqueles casos em que um usuário, por ventura esqueça sua senha
 
-<> ah.4, no histórico de vendas, caso tenha sido pago em dinheiro, mostrar tmbm o valor recebido e o troco!
-
 <> Design geral do app, modernizar!!
 
 <> Na documentação, tudo que faz consulta para mostrar algo tela, também deve ser explicado de onde vem a info e qual a lógica pra de determinada informação
-
-***<> Ao remover um logo e subir um novo, as impressões estão sendo feitas sem o logo, parece estar se perdendo.
 
 <> crédito parcelado no valor total da compra, liberar campo para adicionar valor extra
 
 <> filtrar por campo, em cada cabeçalho ter opção de filtrar 
 
-<> Logo hora aparece , hora não aparece
-
-<> tela de histórico de vendas, precisa agrupar os pedidos e ter como filtrar assim como ter opção de pesquisar por notas, na nota impressa também tem que sair um número de nota.. e no histórico de vendas, tem q mostrar literalmente tudo da venda, se foi em dinheiro, mostrar quando foi recebido, se teve troco mostrar troco.
-
 <> Em relatórios, no botão Hoje ter nele algo assim "< Hoje >" se clicar na seta "<" pra esquerda volta pros dias anteriores e a seta para direita ">" a partir do momento que vc volta para o dia anterior, ele libera pra ser clicada e voltar até no máximo o dia de Hoje.
-
-<> Os filtros devem desconsiderar acentos
 
 <> Em cadastros, tipo produto, quando estiver digitando o nome de um Fabricante, sugerir nome já existente na base e autocompletar com tab.
 
