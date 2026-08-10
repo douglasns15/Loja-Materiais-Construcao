@@ -46,6 +46,9 @@ export type QuoteItemInput = z.infer<typeof quoteItemInputSchema>;
  *  `validUntil` é `YYYY-MM-DD` (validade — opcional). Cliente opcional (balcão sem cadastro). */
 export const createQuoteSchema = z.object({
   customerId: z.string().uuid().optional(),
+  /** Nome LIVRE de quem é o orçamento (ADR-024, 2.B) — identificação de balcão sem criar cadastro.
+   *  Opcional; string vazia é normalizada para `null` no servidor. */
+  customerName: z.string().max(120).optional(),
   items: z.array(quoteItemInputSchema).min(1),
   discountAmount: z.number().nonnegative().optional(),
   validUntil: z.string().optional(),
@@ -60,11 +63,32 @@ export const updateQuoteSchema = z
     status: z.enum(['DRAFT', 'SENT', 'ACCEPTED', 'REJECTED']).optional(),
     validUntil: z.string().nullable().optional(),
     notes: z.string().max(500).nullable().optional(),
+    // Nome livre editável (ADR-024, 2.B) — é rótulo de identificação, não "conteúdo" travado da proposta.
+    customerName: z.string().max(120).nullable().optional(),
   })
-  .refine((v) => v.status !== undefined || v.validUntil !== undefined || v.notes !== undefined, {
-    message: 'Nada para atualizar.',
-  });
+  .refine(
+    (v) =>
+      v.status !== undefined ||
+      v.validUntil !== undefined ||
+      v.notes !== undefined ||
+      v.customerName !== undefined,
+    { message: 'Nada para atualizar.' },
+  );
 export type UpdateQuoteInput = z.infer<typeof updateQuoteSchema>;
+
+/** Payload para REVISAR o conteúdo de um orçamento em RASCUNHO (ADR-024, 2.B) — reabre no PDV, mexe
+ *  nos itens e salva por cima do MESMO `O-…`. Distingue-se do `updateQuoteSchema` (ciclo de vida) por
+ *  trazer `items`; só é aceito enquanto `DRAFT` (a partir de `SENT` o conteúdo trava — o cliente já viu
+ *  a proposta). Vai pela MESMA rota `PATCH /quotes/:id` (o CORS não libera PUT), discriminado por `items`. */
+export const reviseQuoteSchema = z.object({
+  customerId: z.string().uuid().nullable().optional(),
+  customerName: z.string().max(120).nullable().optional(),
+  items: z.array(quoteItemInputSchema).min(1),
+  discountAmount: z.number().nonnegative().optional(),
+  validUntil: z.string().nullable().optional(),
+  notes: z.string().max(500).nullable().optional(),
+});
+export type ReviseQuoteInput = z.infer<typeof reviseQuoteSchema>;
 
 /** Uma linha do orçamento como o servidor DEVOLVE (snapshot gravado). */
 export type QuoteItem = {
@@ -85,6 +109,9 @@ export type QuoteRow = {
   id: string;
   quoteNumber: number;
   customerId: string | null;
+  /** Nome de EXIBIÇÃO: o do cadastro quando vinculado (`customerId`), senão o nome livre de balcão
+   *  (ADR-024, 2.B). Como `customerId` diz se há cadastro, o front usa este campo p/ prefill do input
+   *  livre só quando `customerId` é `null`. */
   customerName: string | null;
   status: QuoteStatus;
   effectiveStatus: QuoteEffectiveStatus;

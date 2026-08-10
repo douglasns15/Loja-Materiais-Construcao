@@ -447,6 +447,25 @@ orders.post('/', requireActiveTenant, async (c) => {
       );
     }
 
+    // ADR-024 (2.B): conversão de orçamento em venda. Online-only (retaguarda). Valida ANTES da
+    // transação (mensagem amigável); a marcação CONVERTED acontece DENTRO da transação, à prova de
+    // corrida. Não copia dados do orçamento: a venda é a autoridade (o operador pode ter ajustado).
+    if (sale.quoteId) {
+      if (isOffline) {
+        return c.json({ ok: false, error: 'Converter orçamento não está disponível offline.' }, 400);
+      }
+      const quote = await prisma.quote.findFirst({
+        where: { id: sale.quoteId, tenantId, deletedAt: null },
+        select: { status: true },
+      });
+      if (!quote) {
+        return c.json({ ok: false, error: 'Orçamento não encontrado.' }, 400);
+      }
+      if (quote.status === 'CONVERTED') {
+        return c.json({ ok: false, error: 'Este orçamento já foi convertido em venda.' }, 409);
+      }
+    }
+
     const order = await prisma.$transaction(async (tx) => {
       // ADR-023: aloca o número sequencial da loja de forma ATÔMICA. O `UPDATE ... RETURNING` sob o
       // lock da linha do tenant garante que duas vendas simultâneas recebam números distintos; como
@@ -633,6 +652,19 @@ orders.post('/', requireActiveTenant, async (c) => {
         });
       }
 
+      // ADR-024 (2.B): marca o orçamento de origem como CONVERTED na MESMA transação da venda.
+      // `updateMany` condicional (status ≠ CONVERTED) é à prova de corrida: se outra venda converteu
+      // no meio, `count` é 0 e abortamos — a venda inteira faz rollback (devolve o número do pedido).
+      if (sale.quoteId) {
+        const marked = await tx.quote.updateMany({
+          where: { id: sale.quoteId, tenantId, deletedAt: null, status: { not: 'CONVERTED' } },
+          data: { status: 'CONVERTED', convertedOrderId: created.id },
+        });
+        if (marked.count === 0) {
+          throw new Error('QUOTE_ALREADY_CONVERTED');
+        }
+      }
+
       return created;
     });
 
@@ -656,6 +688,10 @@ orders.post('/', requireActiveTenant, async (c) => {
     // Corrida rara: dois syncs do mesmo `id` ao mesmo tempo → o 2º viola a PK. Trata como dedup.
     if (isOffline && err instanceof Error && (err as { code?: string }).code === 'P2002') {
       return c.json({ ok: true, data: { id: sale.id, deduped: true } }, 200);
+    }
+    // ADR-024 (2.B): o orçamento foi convertido por outra venda entre a checagem e o commit (corrida).
+    if (err instanceof Error && err.message === 'QUOTE_ALREADY_CONVERTED') {
+      return c.json({ ok: false, error: 'Este orçamento já foi convertido em venda.' }, 409);
     }
     // Crédito da loja: o saldo mudou entre a checagem e o débito (corrida) — pede para refazer.
     if (err instanceof Error && err.message === 'INSUFFICIENT_CREDIT') {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   PAYMENT_METHOD_LABELS,
@@ -11,6 +11,8 @@ import {
   unitTypeLabels,
   type CreateQuoteResult,
   type PaymentMethod,
+  type QuoteDetail,
+  type QuoteItem,
   type SaleUnitMode,
   type UnitType,
 } from '@nexoloja/shared';
@@ -36,7 +38,7 @@ import {
   cardFeePercentFor,
   netMarginPercent,
 } from '@nexoloja/core';
-import { apiGet, apiPost } from '@/lib/api';
+import { apiGet, apiPatch, apiPost } from '@/lib/api';
 import { cacheCashSession, readCachedCashSession } from '@/lib/cashSessionCache';
 import { cacheProducts, readCachedProducts } from '@/lib/catalog';
 import { enqueueMutation } from '@/lib/outbox';
@@ -373,6 +375,22 @@ export default function VendaPage() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   });
   const [savingQuote, setSavingQuote] = useState(false);
+  // Nome LIVRE de quem é o orçamento (ADR-024, 2.B) — identificação de balcão sem cadastro.
+  const [quoteCustomerName, setQuoteCustomerName] = useState('');
+  // Orçamento de origem (ADR-024, 2.B): quando o PDV é aberto por "Gerar venda" (`convert`) ou
+  // "Editar rascunho" (`edit`) via `?quoteId=`. Carrega o número (banner), o modo e as observações
+  // (preservadas ao salvar a edição). Ausente = venda/orçamento novos.
+  const [sourceQuote, setSourceQuote] = useState<{
+    id: string;
+    number: number;
+    mode: 'convert' | 'edit';
+    notes: string | null;
+  } | null>(null);
+  // Itens do orçamento que a reconstrução NÃO conseguiu remontar (par de orçamento antigo sem o
+  // parceiro, ou produto que saiu do catálogo) — sinalizados para o operador re-adicionar à mão.
+  const [quoteReview, setQuoteReview] = useState<string[]>([]);
+  // Roda a reconstrução do `?quoteId=` uma única vez (depois que o catálogo carrega).
+  const quoteAppliedRef = useRef(false);
   // Venda a prazo (ADR-019): valor deixado a prazo, cliente devedor e vencimento opcional.
   // `creditInput` vazio/0 = venda à vista comum (nenhuma regressão). Online-only nesta fatia.
   // `showCredit` mantém a opção ESCONDIDA por padrão (PDV limpo) — só aparece quando o operador
@@ -533,6 +551,27 @@ export default function VendaPage() {
       setShowCredit(true);
     }
   }, []);
+
+  // Reconstrução do PDV a partir de um orçamento (ADR-024, 2.B): "Gerar venda" (`?quoteId=`) ou
+  // "Editar rascunho" (`?quoteId=&edit=1`). Espera o catálogo carregar (preço/estoque saem dele) e
+  // roda UMA vez (guarda no ref). Lê a URL no cliente, como o prefill de cliente acima.
+  useEffect(() => {
+    if (quoteAppliedRef.current || products.length === 0) return;
+    const params = new URLSearchParams(window.location.search);
+    const qid = params.get('quoteId');
+    if (!qid) return;
+    quoteAppliedRef.current = true;
+    const editMode = params.get('edit') === '1';
+    (async () => {
+      try {
+        const detail = await apiGet<QuoteDetail>(`/quotes/${qid}`);
+        applyQuoteToCart(detail, editMode);
+      } catch (e) {
+        setError((e as Error).message);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [products]);
 
   /** Define o modelo (80mm/A4), injeta a regra @page e abre o diálogo de impressão. */
   function imprimir() {
@@ -841,16 +880,18 @@ export default function VendaPage() {
       : `Margem: ${margin}%${feeNote} • Sem margem para desconto`;
   }
 
-  // `productId` padrão = seleção do dropdown; o scanner/Enter passa o id do único match da busca.
-  // `mode` (EF-3): 'ALT' vende a embalagem fechada (rolo); default 'BASE' = venda de sempre.
-  function addToCart(productId: string = selected, mode: SaleUnitMode = 'BASE') {
-    setError(null);
-    const p = products.find((x) => x.id === productId);
-    const q = Number(qty);
-    if (!p || !(q > 0)) {
-      setError('Selecione um produto e uma quantidade válida.');
-      return;
-    }
+  /**
+   * Constrói UMA linha de carrinho (avulsa) a partir do produto do catálogo, no modo pedido
+   * (BASE/ALT — EF-3): calcula preço, fator para unidade-base, unidade vendida, custo por unidade
+   * vendida e acréscimos por forma (ADR-016). PURA em relação ao estado — NÃO checa estoque nem mexe
+   * no carrinho —, reusada por `addToCart` (entrada manual) e pela reconstrução de orçamento (2.B).
+   * `meterInvalid` sinaliza corte por metro fora do passo de 0,5 m (quem chama decide como reagir).
+   */
+  function buildCartLine(
+    p: Product,
+    mode: SaleUnitMode,
+    quantity: number,
+  ): { line: CartItem; factorToBase: number; meterInvalid: boolean } {
     const closed = isClosedPrimary({
       unit: p.unit,
       conversionFactor: p.conversionFactor != null ? Number(p.conversionFactor) : null,
@@ -863,6 +904,7 @@ export default function VendaPage() {
     let lineCost: number; // custo POR UNIDADE VENDIDA (para a margem/tooltip)
     let surchargeDebit: number;
     let surchargeCredit: number;
+    let meterInvalid = false;
 
     if (closed) {
       // ADR-017: unidade fechada como principal. `mode==='ALT'` só corta se houver preço/metro;
@@ -875,10 +917,7 @@ export default function VendaPage() {
       };
       const barLen = Number(p.conversionFactor);
       const closedMode = mode === 'ALT' && sellsByMeter(ccfg) ? 'METER' : 'WHOLE';
-      if (closedMode === 'METER' && !isValidMeterStep(q)) {
-        setError('A venda por metro deve ser em múltiplos de 0,5 m (mín. 0,5 m).');
-        return;
-      }
+      if (closedMode === 'METER' && !isValidMeterStep(quantity)) meterInvalid = true;
       const r = resolveClosedSale(ccfg, closedMode);
       unitPrice = r.unitPrice;
       factorToBase = r.metersPerUnit; // barra = tamanho; metro = 1
@@ -904,40 +943,55 @@ export default function VendaPage() {
       surchargeCredit = resolveSurcharge(surchargeCfg(p), 'CREDIT_CARD', effMode);
     }
 
-    const stock = Number(p.stockQty);
-    const key = `${p.id}:${effMode}`;
+    const line: CartItem = {
+      key: `${p.id}:${effMode}`,
+      productId: p.id,
+      name: p.name,
+      unitPrice,
+      costPrice: lineCost,
+      quantity,
+      stockQty: Number(p.stockQty),
+      saleMode: effMode,
+      unitType,
+      baseUnitType: closed ? ('METER' as UnitType) : p.unit,
+      conversionFactor: factorToBase,
+      closed,
+      surchargeDebit,
+      surchargeCredit,
+    };
+    return { line, factorToBase, meterInvalid };
+  }
+
+  // `productId` padrão = seleção do dropdown; o scanner/Enter passa o id do único match da busca.
+  // `mode` (EF-3): 'ALT' vende a embalagem fechada (rolo); default 'BASE' = venda de sempre.
+  function addToCart(productId: string = selected, mode: SaleUnitMode = 'BASE') {
+    setError(null);
+    const p = products.find((x) => x.id === productId);
+    const q = Number(qty);
+    if (!p || !(q > 0)) {
+      setError('Selecione um produto e uma quantidade válida.');
+      return;
+    }
+    const { line, factorToBase, meterInvalid } = buildCartLine(p, mode, q);
+    if (meterInvalid) {
+      setError('A venda por metro deve ser em múltiplos de 0,5 m (mín. 0,5 m).');
+      return;
+    }
+    const key = line.key;
     const existing = cart.find((c) => c.key === key);
     const newQty = (existing?.quantity ?? 0) + q;
     // Trava de estoque em UNIDADE-BASE: soma a base já consumida por OUTRAS linhas do mesmo
     // produto — inclusive as linhas de PAR, que também consomem este produto (ADR-015) — mais
     // a base desta linha (EF-3).
     const otherBase = baseUsedByProduct(p.id, key);
-    if (otherBase + newQty * factorToBase > stock) {
-      setError(`Estoque insuficiente para "${p.name}" (disponível: ${stock}).`);
+    if (otherBase + newQty * factorToBase > line.stockQty) {
+      setError(`Estoque insuficiente para "${p.name}" (disponível: ${line.stockQty}).`);
       return;
     }
     if (existing) {
       setCart(cart.map((c) => (c.key === key ? { ...c, quantity: newQty } : c)));
     } else {
-      setCart([
-        ...cart,
-        {
-          key,
-          productId: p.id,
-          name: p.name,
-          unitPrice,
-          costPrice: lineCost,
-          quantity: q,
-          stockQty: stock,
-          saleMode: effMode,
-          unitType,
-          baseUnitType: closed ? ('METER' as UnitType) : p.unit,
-          conversionFactor: factorToBase,
-          closed,
-          surchargeDebit,
-          surchargeCredit,
-        },
-      ]);
+      setCart([...cart, { ...line, quantity: q }]);
     }
     setSelected('');
     setQty('1');
@@ -950,6 +1004,53 @@ export default function VendaPage() {
    * enviar vira dois itens. O preço de cada lado sai do rateio puro do core (`splitPairPrice`),
    * e a trava exige estoque **dos dois** produtos — o par consome 1 de cada.
    */
+  /**
+   * Constrói a linha de PAR (ADR-015): uma linha só com o preço do par; o rateio fica em `pair` para
+   * expandir em dois itens no envio. PURA quanto ao estado (não checa estoque nem mexe no carrinho) —
+   * reusada por `addPairToCart` e pela reconstrução de orçamento (2.B). `stockQty` = pares possíveis.
+   */
+  function buildPairCartLine(p: Product, partner: Product, pairPrice: number, quantity: number): CartItem {
+    const mainSide = { salePrice: Number(p.salePrice), stockQty: Number(p.stockQty) };
+    const partnerSide = { salePrice: Number(partner.salePrice), stockQty: Number(partner.stockQty) };
+    return {
+      key: `${p.id}:PAIR:${partner.id}`,
+      productId: p.id,
+      name: `${p.name} + ${partner.name}`,
+      // A linha carrega o preço do PAR; o rateio fica guardado em `pair` para o envio.
+      unitPrice: pairPrice,
+      // Custo do par = soma dos custos, p/ a margem da linha sair correta.
+      costPrice: Number(p.costPrice) + Number(partner.costPrice),
+      quantity,
+      stockQty: pairAvailableQty(mainSide, partnerSide),
+      saleMode: 'BASE',
+      unitType: p.unit,
+      baseUnitType: p.unit,
+      conversionFactor: 1,
+      // ADR-016: o par consome 1 de cada lado, então os DOIS acréscimos incidem. Somados
+      // aqui, entram no preço do par ANTES do rateio — a soma dos dois itens segue exata.
+      surchargeDebit: Number(
+        (
+          surchargePerBaseUnit(surchargeCfg(p), 'DEBIT_CARD') +
+          surchargePerBaseUnit(surchargeCfg(partner), 'DEBIT_CARD')
+        ).toFixed(4),
+      ),
+      surchargeCredit: Number(
+        (
+          surchargePerBaseUnit(surchargeCfg(p), 'CREDIT_CARD') +
+          surchargePerBaseUnit(surchargeCfg(partner), 'CREDIT_CARD')
+        ).toFixed(4),
+      ),
+      pair: {
+        partnerId: partner.id,
+        partnerName: partner.name,
+        // Avulsos: o rateio é feito no envio, quando a quantidade final é conhecida.
+        mainSalePrice: mainSide.salePrice,
+        partnerSalePrice: partnerSide.salePrice,
+        partnerStockQty: partnerSide.stockQty,
+      },
+    };
+  }
+
   function addPairToCart(productId: string = selected) {
     setError(null);
     const p = products.find((x) => x.id === productId);
@@ -964,22 +1065,18 @@ export default function VendaPage() {
       return;
     }
     const { partner, pairPrice } = resolved;
-
-    const mainSide = { salePrice: Number(p.salePrice), stockQty: Number(p.stockQty) };
-    const partnerSide = { salePrice: Number(partner.salePrice), stockQty: Number(partner.stockQty) };
-
-    const key = `${p.id}:PAIR:${partner.id}`;
+    const line = buildPairCartLine(p, partner, pairPrice, q);
+    const key = line.key;
     const existing = cart.find((c) => c.key === key);
     const newQty = (existing?.quantity ?? 0) + q;
 
     // O par consome 1 de CADA lado: checa os dois estoques, já descontando o que o carrinho
     // consumiu por outras linhas (avulsas ou de outro par).
-    const maxPairs = pairAvailableQty(mainSide, partnerSide);
     const usedMain = baseUsedByProduct(p.id, key);
     const usedPartner = baseUsedByProduct(partner.id, key);
-    if (newQty + usedMain > mainSide.stockQty || newQty + usedPartner > partnerSide.stockQty) {
+    if (newQty + usedMain > Number(p.stockQty) || newQty + usedPartner > Number(partner.stockQty)) {
       setError(
-        `Estoque insuficiente para o par (disponível: ${Math.max(0, maxPairs - Math.max(usedMain, usedPartner))} par(es)).`,
+        `Estoque insuficiente para o par (disponível: ${Math.max(0, line.stockQty - Math.max(usedMain, usedPartner))} par(es)).`,
       );
       return;
     }
@@ -987,46 +1084,7 @@ export default function VendaPage() {
     if (existing) {
       setCart(cart.map((c) => (c.key === key ? { ...c, quantity: newQty } : c)));
     } else {
-      setCart([
-        ...cart,
-        {
-          key,
-          productId: p.id,
-          name: `${p.name} + ${partner.name}`,
-          // A linha carrega o preço do PAR; o rateio fica guardado em `pair` para o envio.
-          unitPrice: pairPrice,
-          // Custo do par = soma dos custos, p/ a margem da linha sair correta.
-          costPrice: Number(p.costPrice) + Number(partner.costPrice),
-          quantity: q,
-          stockQty: maxPairs,
-          saleMode: 'BASE',
-          unitType: p.unit,
-          baseUnitType: p.unit,
-          conversionFactor: 1,
-          // ADR-016: o par consome 1 de cada lado, então os DOIS acréscimos incidem. Somados
-          // aqui, entram no preço do par ANTES do rateio — a soma dos dois itens segue exata.
-          surchargeDebit: Number(
-            (
-              surchargePerBaseUnit(surchargeCfg(p), 'DEBIT_CARD') +
-              surchargePerBaseUnit(surchargeCfg(partner), 'DEBIT_CARD')
-            ).toFixed(4),
-          ),
-          surchargeCredit: Number(
-            (
-              surchargePerBaseUnit(surchargeCfg(p), 'CREDIT_CARD') +
-              surchargePerBaseUnit(surchargeCfg(partner), 'CREDIT_CARD')
-            ).toFixed(4),
-          ),
-          pair: {
-            partnerId: partner.id,
-            partnerName: partner.name,
-            // Avulsos: o rateio é feito no envio, quando a quantidade final é conhecida.
-            mainSalePrice: mainSide.salePrice,
-            partnerSalePrice: partnerSide.salePrice,
-            partnerStockQty: partnerSide.stockQty,
-          },
-        },
-      ]);
+      setCart([...cart, line]);
     }
     setSelected('');
     setQty('1');
@@ -1257,6 +1315,9 @@ export default function VendaPage() {
             ...(orderNote.trim() ? { notes: orderNote.trim() } : {}),
           }
         : {}),
+      // Conversão de orçamento (ADR-024, 2.B): quando o PDV foi aberto a partir de um orçamento, a
+      // venda marca-o CONVERTED (no servidor, na transação da venda). Online-only.
+      ...(sourceQuote ? { quoteId: sourceQuote.id } : {}),
     };
     const parsed = createSaleSchema.safeParse(payload);
     if (!parsed.success) {
@@ -1270,6 +1331,10 @@ export default function VendaPage() {
       // offline a resposta é um stub sem número → comprovante imprime "código pendente".
       const res = await apiPost<{ change: number; orderNumber?: number | null }>('/orders', parsed.data);
       setView({ ...doneBase, change, orderNumber: res?.orderNumber ?? null });
+      // ADR-024 (2.B): a venda converteu o orçamento (agora CONVERTED). Esquece a origem para uma
+      // eventual "Voltar e editar → concluir" não reenviar o `quoteId` (que daria 409 já convertido).
+      setSourceQuote(null);
+      setQuoteReview([]);
       // Cesta persistente (ADR-021): venda registrada — esvazia a cesta em todos os aparelhos (o
       // comprovante usa o snapshot em `doneBase.items`). Evita reabrir um carrinho já vendido.
       clearCart();
@@ -1306,21 +1371,123 @@ export default function VendaPage() {
    *  por linha de exibição (o par vira "… (par)"; o modo por metro decora a unidade), igual ao
    *  comprovante. O servidor recalcula os totais (fonte única do core). */
   function cartToQuoteItems() {
-    return pricedCart.map((c) => {
-      const name = c.pair
-        ? `${c.name} (par)`
-        : c.saleMode === 'ALT'
-          ? `${c.name} — ${unitShort(c.unitType)} (${c.conversionFactor} ${unitShort(c.baseUnitType)})`
-          : c.name;
-      return {
-        productId: c.productId,
-        productName: name,
-        unit: c.unitType,
-        saleMode: c.saleMode,
-        quantity: c.quantity,
-        unitPrice: c.unitPrice,
-        total: Number((c.unitPrice * c.quantity).toFixed(2)),
-      };
+    let group = 0;
+    return pricedCart.flatMap((c) => {
+      if (!c.pair) {
+        const name =
+          c.saleMode === 'ALT'
+            ? `${c.name} — ${unitShort(c.unitType)} (${c.conversionFactor} ${unitShort(c.baseUnitType)})`
+            : c.name;
+        return [
+          {
+            productId: c.productId,
+            productName: name,
+            unit: c.unitType,
+            saleMode: c.saleMode,
+            quantity: c.quantity,
+            unitPrice: c.unitPrice,
+            total: Number((c.unitPrice * c.quantity).toFixed(2)),
+          },
+        ];
+      }
+      // ADR-024 (2.B): o par é gravado FIEL — DOIS itens com o mesmo `pairGroup` e preços rateados
+      // (mesmo motor da venda, `splitPairLine`), para reconstruir o par ao reabrir/converter. Na
+      // exibição/nota, o `groupPairedItems` (core) volta a juntá-los em UMA linha "A + B".
+      group += 1;
+      const split = splitPairLine(
+        { salePrice: c.pair.mainSalePrice, stockQty: 0 },
+        { salePrice: c.pair.partnerSalePrice, stockQty: 0 },
+        c.unitPrice, // preço do par
+        c.quantity,
+      );
+      const mainName = products.find((x) => x.id === c.productId)?.name ?? c.name;
+      const partnerUnit = products.find((x) => x.id === c.pair!.partnerId)?.unit ?? c.unitType;
+      return [
+        {
+          productId: c.productId,
+          productName: mainName,
+          unit: c.unitType,
+          saleMode: 'BASE' as SaleUnitMode,
+          quantity: c.quantity,
+          unitPrice: split.mainUnitPrice,
+          total: Number((split.mainUnitPrice * c.quantity).toFixed(2)),
+          pairGroup: group,
+        },
+        {
+          productId: c.pair.partnerId,
+          productName: c.pair.partnerName,
+          unit: partnerUnit,
+          saleMode: 'BASE' as SaleUnitMode,
+          quantity: c.quantity,
+          unitPrice: split.pairedUnitPrice,
+          total: Number((split.pairedUnitPrice * c.quantity).toFixed(2)),
+          pairGroup: group,
+        },
+      ];
+    });
+  }
+
+  /**
+   * Reconstrói o carrinho a partir de um orçamento salvo (ADR-024, 2.B). Reusa os construtores de
+   * linha com preço/estoque ATUAIS do catálogo — a venda/edição parte do preço de hoje, não do
+   * congelado. Pares (dois itens de mesmo `pairGroup`) são remontados; orçamentos antigos (par
+   * colapsado "X (par)" sem grupo) e produtos que saíram do catálogo entram na lista de revisão.
+   */
+  function applyQuoteToCart(detail: QuoteDetail, editMode: boolean) {
+    const review: string[] = [];
+    const newCart: CartItem[] = [];
+    const groups = new Map<number, QuoteItem[]>();
+    const singles: QuoteItem[] = [];
+    for (const it of detail.items) {
+      if (it.pairGroup != null) {
+        const arr = groups.get(it.pairGroup) ?? [];
+        arr.push(it);
+        groups.set(it.pairGroup, arr);
+      } else {
+        singles.push(it);
+      }
+    }
+    for (const it of singles) {
+      // Orçamento antigo (2.A) gravava o par como UMA linha "X (par)" sem grupo → parceiro perdido.
+      if (it.productName.trim().endsWith('(par)')) {
+        review.push(it.productName);
+        continue;
+      }
+      const p = it.productId ? products.find((x) => x.id === it.productId) : undefined;
+      if (!p) {
+        review.push(it.productName);
+        continue;
+      }
+      const { line } = buildCartLine(p, it.saleMode === 'ALT' ? 'ALT' : 'BASE', Number(it.quantity));
+      newCart.push(line);
+    }
+    for (const arr of groups.values()) {
+      const first = arr[0];
+      const main = first?.productId ? products.find((x) => x.id === first.productId) : undefined;
+      const qty = Number(first?.quantity ?? 0);
+      const resolved = main ? resolvePair(main) : null;
+      if (!main || !resolved || qty <= 0) {
+        review.push(arr.map((a) => a.productName).join(' + '));
+        continue;
+      }
+      newCart.push(buildPairCartLine(main, resolved.partner, resolved.pairPrice, qty));
+    }
+    setCart(newCart);
+    setQuoteReview(review);
+    const disc = Number(detail.discountAmount);
+    setDiscount(disc > 0 ? String(disc) : '');
+    if (detail.customerId) {
+      setCustomerId(detail.customerId);
+      setCustomerName(detail.customerName ?? '');
+    } else {
+      setQuoteCustomerName(detail.customerName ?? '');
+    }
+    if (detail.validUntil) setQuoteValidity(detail.validUntil.slice(0, 10));
+    setSourceQuote({
+      id: detail.id,
+      number: detail.quoteNumber,
+      mode: editMode ? 'edit' : 'convert',
+      notes: detail.notes,
     });
   }
 
@@ -1339,13 +1506,25 @@ export default function VendaPage() {
     }
     setSavingQuote(true);
     try {
+      // Nome de quem é o orçamento: o cadastro (quando vinculado) manda; senão, o nome livre (2.B).
+      const freeName = quoteCustomerName.trim();
       const payload = {
         items: cartToQuoteItems(),
         ...(discountValue > 0 ? { discountAmount: discountValue } : {}),
         ...(quoteValidity ? { validUntil: quoteValidity } : {}),
         ...(customerId ? { customerId } : {}),
+        ...(freeName ? { customerName: freeName } : {}),
       };
-      const res = await apiPost<CreateQuoteResult>('/quotes', payload);
+      // Editar rascunho (2.B): salva por cima do MESMO O-… (PATCH com `items`, discriminado pela API)
+      // e preserva a observação do orçamento. Fora disso, cria um novo documento (POST).
+      const editing = sourceQuote?.mode === 'edit';
+      const res =
+        editing && sourceQuote
+          ? await apiPatch<CreateQuoteResult>(`/quotes/${sourceQuote.id}`, {
+              ...payload,
+              ...(sourceQuote.notes ? { notes: sourceQuote.notes } : {}),
+            })
+          : await apiPost<CreateQuoteResult>('/quotes', payload);
       setView({
         kind: 'quote',
         total: totals.total,
@@ -1379,6 +1558,11 @@ export default function VendaPage() {
     setConfirmClear(false);
     setPayments([{ method: 'CASH', amount: '' }]);
     setDiscount('');
+    // ADR-024 (2.B): esquece o orçamento de origem, o nome livre e a lista de revisão — a próxima
+    // venda/orçamento nasce do zero (não reenvia `quoteId`, não reaproveita o nome).
+    setSourceQuote(null);
+    setQuoteReview([]);
+    setQuoteCustomerName('');
     // Limpa a venda a prazo para a próxima venda nascer à vista.
     resetCredit();
     // Limpa o uso de crédito da loja (ADR-022, Fatia C).
@@ -1618,23 +1802,44 @@ export default function VendaPage() {
               efêmera (`!saved`); ao salvar, o bloco some e vira o aviso "Orçamento salvo ✅ O-000045".
               Imprimir acima = encaminhar sem guardar; salvar aqui = vira documento localizável. */}
           {isQuote && view.kind === 'quote' && !view.saved && (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-2">
-              <label className="flex items-center gap-2 text-sm text-gray-600">
-                Válido até
-                <input
-                  type="date"
-                  value={quoteValidity}
-                  onChange={(e) => setQuoteValidity(e.target.value)}
-                  className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
-                />
-              </label>
-              <button
-                onClick={onSalvarOrcamento}
-                disabled={savingQuote}
-                className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
-              >
-                {savingQuote ? 'Salvando…' : 'Salvar orçamento'}
-              </button>
+            <div className="space-y-2 rounded-lg bg-gray-50 px-3 py-2">
+              {/* Nome livre de quem é o orçamento (ADR-024, 2.B) — só quando NÃO há cliente
+                  cadastrado vinculado (aí o nome do cadastro é a identidade). */}
+              {!customerId && (
+                <label className="flex items-center gap-2 text-sm text-gray-600">
+                  Nome
+                  <input
+                    type="text"
+                    value={quoteCustomerName}
+                    onChange={(e) => setQuoteCustomerName(e.target.value)}
+                    maxLength={120}
+                    placeholder="De quem é o orçamento (opcional)"
+                    className="flex-1 rounded-lg border border-gray-300 px-2 py-1 text-sm"
+                  />
+                </label>
+              )}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label className="flex items-center gap-2 text-sm text-gray-600">
+                  Válido até
+                  <input
+                    type="date"
+                    value={quoteValidity}
+                    onChange={(e) => setQuoteValidity(e.target.value)}
+                    className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
+                  />
+                </label>
+                <button
+                  onClick={onSalvarOrcamento}
+                  disabled={savingQuote}
+                  className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                >
+                  {savingQuote
+                    ? 'Salvando…'
+                    : sourceQuote?.mode === 'edit'
+                      ? 'Salvar alterações'
+                      : 'Salvar orçamento'}
+                </button>
+              </div>
             </div>
           )}
 
@@ -1692,6 +1897,26 @@ export default function VendaPage() {
   return (
     <div className="mx-auto max-w-6xl">
       <h1 className="mb-6 text-2xl font-bold">Venda</h1>
+
+      {/* ADR-024 (2.B): o PDV foi aberto a partir de um orçamento — "Gerar venda" (converte ao
+          concluir) ou "Editar rascunho" (Salvar grava por cima do mesmo O-…). */}
+      {sourceQuote && (
+        <div className="mb-4 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm">
+          <p className="font-medium text-indigo-900">
+            {sourceQuote.mode === 'edit' ? 'Editando o orçamento ' : 'Gerando venda do orçamento '}
+            <span className="font-mono">{formatQuoteNumber(sourceQuote.number)}</span>
+            {sourceQuote.mode === 'edit'
+              ? ' — "Salvar alterações" grava por cima do mesmo código.'
+              : ' — conclua a venda para convertê-lo.'}
+          </p>
+          {quoteReview.length > 0 && (
+            <p className="mt-1 text-amber-800">
+              ⚠️ Reveja estes itens (par de orçamento antigo ou produto fora do catálogo) e
+              re-adicione à mão: {quoteReview.join('; ')}.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Aviso de conexão (ADR-011 §9): só aparece offline; texto depende do flag OFFLINE_SALES. */}
       <OfflineSalesNotice offlineSales={offlineSales} />

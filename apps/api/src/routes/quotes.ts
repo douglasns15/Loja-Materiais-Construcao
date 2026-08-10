@@ -4,6 +4,7 @@ import { calcSaleItemTotal, calcSaleTotals } from '@nexoloja/core';
 import {
   createQuoteSchema,
   parseQuoteNumberQuery,
+  reviseQuoteSchema,
   updateQuoteSchema,
   type QuoteEffectiveStatus,
   type QuoteStatus,
@@ -86,7 +87,15 @@ quotes.get('/', async (c) => {
   }
 
   const q = (c.req.query('q') ?? '').trim();
-  const qWhere = q ? { customer: { name: { contains: q, mode: 'insensitive' as const } } } : {};
+  // Busca "por cliente": casa o nome do cadastro vinculado OU o nome livre de balcão (ADR-024, 2.B).
+  const searchOr = q
+    ? {
+        OR: [
+          { customer: { name: { contains: q, mode: 'insensitive' as const } } },
+          { customerName: { contains: q, mode: 'insensitive' as const } },
+        ],
+      }
+    : null;
   const stWhere = statusWhere(c.req.query('status'));
   const dateFilter = buildDateFilter(c.req.query('from'), c.req.query('to'));
   const quoteNumber = parseQuoteNumberQuery(c.req.query('number'));
@@ -96,14 +105,14 @@ quotes.get('/', async (c) => {
     Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(Math.floor(limitRaw), PAGE_MAX) : PAGE_DEFAULT;
   const cursorParam = c.req.query('cursor');
   const cursor = cursorParam ? decodeCursor(cursorParam) : null;
-  const keyset = cursor
+  const keysetOr = cursor
     ? {
         OR: [
           { createdAt: { lt: new Date(cursor.createdAt) } },
           { createdAt: new Date(cursor.createdAt), id: { lt: cursor.id } },
         ],
       }
-    : {};
+    : null;
 
   try {
     const prisma = createPrismaClient(connectionString);
@@ -111,11 +120,14 @@ quotes.get('/', async (c) => {
       where: {
         tenantId,
         deletedAt: null,
-        ...qWhere,
         ...stWhere,
         ...(dateFilter ? { createdAt: dateFilter } : {}),
         ...(quoteNumber ? { quoteNumber } : {}),
-        ...keyset,
+        // `searchOr` e `keysetOr` carregam cada um seu próprio `OR`; combiná-los sob `AND` evita que um
+        // sobrescreva o outro (ou o `OR` que o filtro de status pode ter) na mesma chave do objeto.
+        ...(searchOr || keysetOr
+          ? { AND: [...(searchOr ? [searchOr] : []), ...(keysetOr ? [keysetOr] : [])] }
+          : {}),
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
@@ -123,6 +135,7 @@ quotes.get('/', async (c) => {
         id: true,
         quoteNumber: true,
         customerId: true,
+        customerName: true, // nome livre de balcão (ADR-024, 2.B) — fallback do nome de exibição
         status: true,
         total: true,
         validUntil: true,
@@ -139,7 +152,8 @@ quotes.get('/', async (c) => {
       id: row.id,
       quoteNumber: row.quoteNumber,
       customerId: row.customerId,
-      customerName: row.customer?.name ?? null,
+      // Nome de EXIBIÇÃO: cadastro vinculado tem prioridade; senão, o nome livre de balcão (2.B).
+      customerName: row.customer?.name ?? row.customerName ?? null,
       status: row.status,
       effectiveStatus: effectiveStatus(row.status, row.validUntil),
       total: row.total,
@@ -178,6 +192,7 @@ quotes.get('/:id', async (c) => {
         id: true,
         quoteNumber: true,
         customerId: true,
+        customerName: true, // nome livre de balcão (ADR-024, 2.B)
         status: true,
         subtotal: true,
         discountAmount: true,
@@ -214,7 +229,8 @@ quotes.get('/:id', async (c) => {
         id: row.id,
         quoteNumber: row.quoteNumber,
         customerId: row.customerId,
-        customerName: row.customer?.name ?? null,
+        // Nome de EXIBIÇÃO: cadastro vinculado tem prioridade; senão, o nome livre de balcão (2.B).
+        customerName: row.customer?.name ?? row.customerName ?? null,
         status: row.status,
         effectiveStatus: effectiveStatus(row.status, row.validUntil),
         subtotal: row.subtotal,
@@ -290,6 +306,8 @@ quotes.post('/', requireActiveTenant, async (c) => {
           tenantId,
           quoteNumber: lastQuoteNumber,
           customerId: quote.customerId ?? null,
+          // Nome livre de balcão (ADR-024, 2.B) — vazio normaliza para null.
+          customerName: quote.customerName?.trim() || null,
           status: 'DRAFT',
           subtotal,
           discountAmount: quote.discountAmount ?? 0,
@@ -339,17 +357,94 @@ quotes.patch('/:id', async (c) => {
   if (!UUID_RE.test(id)) {
     return c.json({ ok: false, error: 'Orçamento não encontrado.' }, 404);
   }
-  const parsed = updateQuoteSchema.safeParse(await c.req.json().catch(() => null));
-  if (!parsed.success) {
-    return c.json(
-      { ok: false, error: 'Dados inválidos.', issues: parsed.error.flatten() },
-      400,
-    );
-  }
-  const patch = parsed.data;
+  const body = await c.req.json().catch(() => null);
+  // ADR-024 (2.B): revisão de CONTEÚDO (itens) de um rascunho — discriminada pela presença de `items`
+  // (o CORS não libera PUT). Reabre no PDV, edita e salva por cima do mesmo O-…; a partir de SENT trava.
+  const isRevision =
+    !!body && typeof body === 'object' && Array.isArray((body as { items?: unknown }).items);
 
   try {
     const prisma = createPrismaClient(connectionString);
+
+    if (isRevision) {
+      const parsed = reviseQuoteSchema.safeParse(body);
+      if (!parsed.success) {
+        return c.json(
+          { ok: false, error: 'Dados do orçamento inválidos.', issues: parsed.error.flatten() },
+          400,
+        );
+      }
+      const rev = parsed.data;
+      const existing = await prisma.quote.findFirst({
+        where: { id, tenantId, deletedAt: null },
+        select: { id: true, status: true },
+      });
+      if (!existing) {
+        return c.json({ ok: false, error: 'Orçamento não encontrado.' }, 404);
+      }
+      if (existing.status !== 'DRAFT') {
+        return c.json(
+          {
+            ok: false,
+            error: 'Só um rascunho pode ter os itens editados; a partir de "Enviado" o conteúdo trava.',
+          },
+          409,
+        );
+      }
+      // Totais recalculados no servidor (fonte única do core), como no POST.
+      const { subtotal, total } = calcSaleTotals(rev.items, { discountAmount: rev.discountAmount });
+      if (total < 0) {
+        return c.json({ ok: false, error: 'O desconto não pode ser maior que o subtotal.' }, 400);
+      }
+      if (rev.customerId) {
+        const cust = await prisma.customer.findFirst({
+          where: { id: rev.customerId, tenantId },
+          select: { id: true },
+        });
+        if (!cust) {
+          return c.json({ ok: false, error: 'Cliente não encontrado.' }, 400);
+        }
+      }
+      // Substitui os itens e reescreve o cabeçalho na MESMA transação (o número O-… não muda).
+      const updated = await prisma.$transaction(async (tx) => {
+        await tx.quoteItem.deleteMany({ where: { quoteId: id } });
+        return tx.quote.update({
+          where: { id },
+          data: {
+            customerId: rev.customerId ?? null,
+            customerName: rev.customerName?.trim() || null,
+            subtotal,
+            discountAmount: rev.discountAmount ?? 0,
+            total,
+            validUntil: rev.validUntil ? new Date(`${rev.validUntil}T23:59:59.999-03:00`) : null,
+            notes: rev.notes ?? null,
+            items: {
+              create: rev.items.map((it) => ({
+                tenantId, // denormalizado (ADR-003)
+                productId: it.productId ?? null,
+                productName: it.productName,
+                unit: it.unit,
+                saleMode: it.saleMode ?? null,
+                quantity: it.quantity,
+                unitPrice: it.unitPrice,
+                discount: it.discount ?? 0,
+                total: calcSaleItemTotal(it), // fonte única do core (arredonda por linha)
+                pairGroup: it.pairGroup ?? null,
+              })),
+            },
+          },
+          select: { id: true, quoteNumber: true },
+        });
+      });
+      return c.json({ ok: true, data: updated });
+    }
+
+    // Ciclo de vida (status/validade/observação/nome) — não toca nos itens.
+    const parsed = updateQuoteSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ ok: false, error: 'Dados inválidos.', issues: parsed.error.flatten() }, 400);
+    }
+    const patch = parsed.data;
     const existing = await prisma.quote.findFirst({
       where: { id, tenantId, deletedAt: null },
       select: { id: true, status: true },
@@ -369,6 +464,10 @@ quotes.patch('/:id', async (c) => {
           ? { validUntil: patch.validUntil ? new Date(`${patch.validUntil}T23:59:59.999-03:00`) : null }
           : {}),
         ...(patch.notes !== undefined ? { notes: patch.notes ?? null } : {}),
+        // Nome livre editável (ADR-024, 2.B) — vazio normaliza para null.
+        ...(patch.customerName !== undefined
+          ? { customerName: patch.customerName?.trim() || null }
+          : {}),
       },
       select: { id: true, status: true, validUntil: true, notes: true },
     });

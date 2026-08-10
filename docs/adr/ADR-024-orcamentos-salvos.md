@@ -5,8 +5,17 @@
   231/231 + shared 9/9; typecheck api/web ✅; build web ✅; dry-run api ✅. Deploy: API `83c465f2` + web
   `0e0465dd` (smokes ✅). **Refino de UX do PDV NO AR e VALIDADO pelo Owner (2026-08-10, web `10389bcb`, commit `34b6611`):** "Orçamento" virou
   botão único (gera a prévia); "Válido até" + "Salvar orçamento" migraram para a tela de prévia (junto do
-  "Imprimir") — bloco redundante do carrinho removido; só UI (typecheck + build ✅). **Pendência:**
-  **Sub-fatia 2.B** — editar rascunho no PDV + converter em venda (`quoteId` no `POST /orders`).
+  "Imprimir") — bloco redundante do carrinho removido; só UI (typecheck + build ✅).
+  **Sub-fatia 2.B COMPLETA (Opção 2) — NO AR (2026-08-10), aguardando E2E do Owner.** Migration `0023`
+  (`quotes.customerName`, aditiva, sem drift). Inclui: **(a)** campo de **nome livre** de balcão em salvar/
+  editar/listar/detalhe/busca (sem criar cadastro); **(b) converter em venda** — "Gerar venda" abre o PDV
+  pré-preenchido (`?quoteId=`), e o `POST /orders` marca `CONVERTED` + `convertedOrderId` na transação da
+  venda (guarda à prova de corrida); **(c) editar rascunho** — reabrir DRAFT no PDV (`?quoteId=&edit=1`) e
+  "Salvar alterações" grava por cima do mesmo `O-…` (`PATCH /quotes/:id` com `items`, discriminado — o CORS
+  não libera PUT; só DRAFT); **(d) fidelidade de par** — o orçamento agora SALVA o par expandido em 2 itens
+  com `pairGroup` (mesmo motor da venda), e a exibição/nota reagrupa via `groupPairedItems` (core). Gates:
+  core 231/231, shared 9/9, typecheck api/web ✅, build web (21 rotas, `/venda` 17 kB) ✅, dry-run api ✅.
+  Deploy: API `c5980090` + web `ea0b2614` (smokes ✅).
 - **Data:** 2026-08-07
 
 > **Refino de UX do PDV (planejado, pós-2.A — observação do Owner no E2E de 2026-08-07):** na 2.A o PDV
@@ -231,9 +240,16 @@ como no ADR-023.
   /quotes/:id` status/validade/notes, soft-delete de rascunho); PDV ganha "Salvar orçamento"; tela
   **/orcamentos** (lista/busca/detalhe/reimprimir + status derivado Expirado); `ReceiptPrint` do orçamento
   ganha o `O-000045` + validade.
-- **2.B — Editar rascunho + Converter em venda:** reabrir `DRAFT` no PDV (`?quoteId=` carrega o carrinho;
-  "Salvar" atualiza o mesmo enquanto DRAFT); "Gerar venda" pré-preenche o PDV; `POST /orders` aceita
-  `quoteId` e marca `CONVERTED` + `convertedOrderId` na transação da venda.
+- **2.B — Editar rascunho + Converter em venda + nome livre (Opção 2, IMPLEMENTADA):** migration `0023`
+  (`quotes.customerName`). Nome livre de balcão em salvar/editar/listar/detalhe/busca. Reabrir `DRAFT` no PDV
+  (`?quoteId=&edit=1` carrega o carrinho; "Salvar alterações" grava por cima via `PATCH /quotes/:id` com
+  `items` — só DRAFT). "Gerar venda" pré-preenche o PDV (`?quoteId=`); `POST /orders` aceita `quoteId` e marca
+  `CONVERTED` + `convertedOrderId` na transação da venda (guarda à prova de corrida). **Par gravado FIEL**
+  (2 itens + `pairGroup`; exibição/nota reagrupam via `groupPairedItems`). **Reconstrução** reusa os
+  construtores de linha do PDV com preço/estoque ATUAIS (a venda parte do preço de hoje). **Limitação:**
+  orçamentos criados na **2.A** guardaram o par colapsado ("X (par)", sem `pairGroup`) — ao reabrir, essas
+  linhas (e produtos que saíram do catálogo) entram numa **lista de revisão** para o operador re-adicionar à
+  mão (não há como remontar o par sem o parceiro). Orçamentos novos (2.B) não têm essa limitação.
 
 ---
 

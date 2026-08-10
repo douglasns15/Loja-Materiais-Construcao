@@ -4,6 +4,27 @@
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
 > **Última atualização:** 2026-08-10 — **ADR-024 (orçamentos salvos — documento `O-000045`) —
+> Sub-fatia 2.B COMPLETA (Opção 2) NO AR, aguardando E2E do Owner.** Fecha o ADR-024. **Migration `0023`
+> (`quotes.customerName`, aditiva, aplicada sem drift — aprovada antes de codar, regra 1).** Quatro entregas:
+> **(a) nome livre de balcão** — campo opcional para identificar de quem é o orçamento SEM criar cadastro
+> (a pessoa pode não voltar); aparece em salvar/editar/listar/detalhe e entra na busca "por cliente".
+> **(b) Converter em venda** — "Gerar venda" no detalhe abre o PDV pré-preenchido (`?quoteId=`); ao concluir,
+> o `POST /orders` marca o orçamento `CONVERTED` + `convertedOrderId` na MESMA transação da venda (guarda
+> `updateMany` condicional à prova de corrida; recusa se já convertido). **(c) Editar rascunho** — reabrir um
+> DRAFT no PDV (`?quoteId=&edit=1`) carrega o carrinho; "Salvar alterações" grava por cima do mesmo `O-…` via
+> `PATCH /quotes/:id` com `items` (discriminado — o CORS não libera PUT; só enquanto DRAFT). **(d) Fidelidade
+> de par** — o orçamento passou a SALVAR o par expandido em 2 itens com `pairGroup` (mesmo motor da venda,
+> `splitPairLine`), e a exibição/nota reagrupam via `groupPairedItems` (core). **Reconstrução** reusa os
+> construtores de linha do PDV (extraídos p/ `buildCartLine`/`buildPairCartLine`, sem duplicar preço) com
+> preço/estoque ATUAIS. **Limitação:** orçamentos da **2.A** guardaram o par colapsado sem `pairGroup` → ao
+> reabrir, essas linhas (e produtos fora do catálogo) entram numa **lista de revisão** p/ re-adicionar à mão.
+> Gates: core **231/231**, shared **9/9**, typecheck api/web ✅, build web (**21 rotas**, `/venda` 17 kB) ✅,
+> dry-run api ✅; migration `0023` sem drift. ⚠️ **Deploy de API obrigatório** (conversão + `customerName` +
+> revisão). **NO AR:** API `c5980090` + web `ea0b2614`; smokes ✅ (health 200; `/quotes`, `PATCH /quotes/:id`,
+> `/orders` sem token 401; web HTML no-store + CSS 200). **Falta:** E2E do Owner. Ver ADR-024 e "ADR-024" no
+> registro. **ADR-024 (par ADR-023/024) COMPLETO após o E2E.**
+>
+> **Antes:** 2026-08-10 — **ADR-024 (orçamentos salvos — documento `O-000045`) —
 > refino de UX do PDV NO AR e VALIDADO pelo Owner (web `10389bcb`).** O refino pedido no E2E de 2.A:
 > **"Orçamento" virou botão único** (gera a prévia) e **"Válido até" + "Salvar orçamento" migraram para a
 > tela de prévia** (junto do "Imprimir") — o bloco redundante do carrinho foi removido. **Só UI, sem

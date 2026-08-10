@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { groupPairedItems } from '@nexoloja/core';
 import {
   formatOrderNumber,
   formatQuoteNumber,
@@ -279,11 +281,15 @@ function QuoteDetailModal({
   onClose: () => void;
   onChanged: () => void;
 }) {
+  const router = useRouter();
   const [detail, setDetail] = useState<QuoteDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [validUntil, setValidUntil] = useState('');
   const [notes, setNotes] = useState('');
+  // Nome livre de balcão (ADR-024, 2.B) — editável só quando NÃO há cliente cadastrado vinculado
+  // (aí o nome do cadastro é a identidade). `detail.customerName` já resolve o de exibição.
+  const [custName, setCustName] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   async function reload() {
@@ -292,6 +298,7 @@ function QuoteDetailModal({
       setDetail(d);
       setValidUntil(d.validUntil ? d.validUntil.slice(0, 10) : '');
       setNotes(d.notes ?? '');
+      setCustName(d.customerId ? '' : (d.customerName ?? ''));
       setError(null);
     } catch (e) {
       setError((e as Error).message);
@@ -378,14 +385,14 @@ function QuoteDetailModal({
 
             {error && <p className="text-sm text-red-600">{error}</p>}
 
-            {/* Itens (snapshot) */}
+            {/* Itens (snapshot) — pares (2.B) voltam a UMA linha "A + B (par)" via groupPairedItems. */}
             <ul className="divide-y divide-gray-100 rounded-lg border border-gray-100 text-sm">
-              {detail.items.map((it) => (
-                <li key={it.id} className="flex justify-between gap-2 px-3 py-2 text-gray-700">
+              {groupPairedItems(detail.items).map((line, idx) => (
+                <li key={idx} className="flex justify-between gap-2 px-3 py-2 text-gray-700">
                   <span className="min-w-0 truncate">
-                    {Number(it.quantity)}× {it.productName}
+                    {line.quantity}× {line.isPair ? `${line.label} (par)` : line.label}
                   </span>
-                  <span className="shrink-0 tabular-nums">{BRL(it.total)}</span>
+                  <span className="shrink-0 tabular-nums">{BRL(line.total)}</span>
                 </li>
               ))}
             </ul>
@@ -414,7 +421,26 @@ function QuoteDetailModal({
               </div>
             ) : (
               <>
-                {/* Ciclo de vida: status + validade + observação */}
+                {/* Ações (ADR-024, 2.B): gerar venda (converte ao concluir no PDV) e, se rascunho,
+                    editar os itens reabrindo no PDV (salva por cima do mesmo O-…). */}
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => router.push(`/venda?quoteId=${detail.id}`)}
+                    className="rounded-lg bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700"
+                  >
+                    Gerar venda
+                  </button>
+                  {detail.status === 'DRAFT' && (
+                    <button
+                      onClick={() => router.push(`/venda?quoteId=${detail.id}&edit=1`)}
+                      className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
+                    >
+                      Editar no PDV
+                    </button>
+                  )}
+                </div>
+
+                {/* Ciclo de vida: status + validade + nome + observação */}
                 <div className="grid gap-3 rounded-lg bg-gray-50 p-3 sm:grid-cols-2">
                   <label className="flex flex-col text-xs text-gray-600">
                     Status
@@ -439,6 +465,20 @@ function QuoteDetailModal({
                       className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
                     />
                   </label>
+                  {/* Nome livre (2.B): só quando não há cliente cadastrado vinculado. */}
+                  {!detail.customerId && (
+                    <label className="flex flex-col text-xs text-gray-600 sm:col-span-2">
+                      Nome (de quem é o orçamento)
+                      <input
+                        type="text"
+                        value={custName}
+                        onChange={(e) => setCustName(e.target.value)}
+                        maxLength={120}
+                        placeholder="Opcional"
+                        className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
+                      />
+                    </label>
+                  )}
                   <label className="flex flex-col text-xs text-gray-600 sm:col-span-2">
                     Observação
                     <textarea
@@ -451,11 +491,17 @@ function QuoteDetailModal({
                   </label>
                   <div className="sm:col-span-2">
                     <button
-                      onClick={() => patch({ validUntil: validUntil || null, notes: notes.trim() || null })}
+                      onClick={() =>
+                        patch({
+                          validUntil: validUntil || null,
+                          notes: notes.trim() || null,
+                          ...(detail.customerId ? {} : { customerName: custName.trim() || null }),
+                        })
+                      }
                       disabled={busy}
                       className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50"
                     >
-                      Salvar validade/observação
+                      Salvar alterações
                     </button>
                   </div>
                 </div>
@@ -519,10 +565,12 @@ function QuoteDetailModal({
             <ReceiptPrint
               kind="quote"
               store={store}
-              items={detail.items.map((it) => ({
-                name: it.productName,
-                quantity: Number(it.quantity),
-                unitPrice: Number(it.unitPrice),
+              // Pares (2.B) impressos como UMA linha "A + B (par)" com o preço do par; o unitário
+              // sai do total ÷ qtd (mesmo critério do Histórico de Vendas).
+              items={groupPairedItems(detail.items).map((line) => ({
+                name: line.isPair ? `${line.label} (par)` : line.label,
+                quantity: line.quantity,
+                unitPrice: line.quantity > 0 ? Number((line.total / line.quantity).toFixed(2)) : line.total,
               }))}
               total={Number(detail.total)}
               discount={Number(detail.discountAmount)}

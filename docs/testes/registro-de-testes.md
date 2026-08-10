@@ -4233,3 +4233,42 @@ efêmero · Válido até + Salvar = documento `O-000045`).
 > **E2E do Owner VALIDADO (2026-08-10):** "validado com sucesso" — carrinho com "Orçamento" único → prévia
 > com "Válido até"/"Salvar orçamento" → `O-000045` salvo. Commit `34b6611`. **Próximo:** Sub-fatia 2.B
 > (editar rascunho + converter em venda). Ver ADR-024.
+
+### ADR-024 — Sub-fatia 2.B: converter + editar rascunho + nome livre + fidelidade de par (2026-08-10)
+
+Opção 2 (fatia completa que fecha o ADR-024). **Migration `0023_quote_customer_name`** (`quotes.customerName
+VARCHAR(120)`, aditiva/nullable, aprovada antes de codar — regra 1) aplicada no Supabase **sem drift**.
+
+- **Nome livre de balcão:** identifica de quem é o orçamento SEM criar cadastro. `createQuoteSchema`/
+  `updateQuoteSchema`/`reviseQuoteSchema` ganham `customerName`; a API grava/edita e a busca "por cliente"
+  (`GET /quotes?q=`) casa cadastro **OU** nome livre (OR combinado sob `AND` com keyset/status). `customerName`
+  na resposta virou nome de EXIBIÇÃO (cadastro tem prioridade; senão o livre). PDV mostra o campo só quando
+  não há cliente vinculado; detalhe da tela Orçamentos também edita.
+- **Converter em venda:** "Gerar venda" abre `/venda?quoteId=`; `createSaleSchema.quoteId` (online-only) faz o
+  `POST /orders` marcar `CONVERTED` + `convertedOrderId` na transação da venda — `updateMany` condicional
+  (`status ≠ CONVERTED`) é à prova de corrida (aborta a venda se convertido no meio). Validação amigável antes
+  da transação (404/409).
+- **Editar rascunho:** `/venda?quoteId=&edit=1` reconstrói o carrinho; "Salvar alterações" faz `PATCH
+  /quotes/:id` com `items` (discriminado por `items` — CORS não libera PUT), que substitui os itens do MESMO
+  `O-…` e recalcula os totais (só DRAFT; 409 a partir de SENT).
+- **Fidelidade de par:** `cartToQuoteItems` passou a expandir o par em 2 itens com `pairGroup` (mesmo
+  `splitPairLine` da venda); a exibição/nota reagrupam via `groupPairedItems` (core). Reconstrução reusa
+  `buildCartLine`/`buildPairCartLine` (extraídos de `addToCart`/`addPairToCart`, sem duplicar preço) com
+  preço/estoque ATUAIS. Par de orçamento antigo (2.A, sem `pairGroup`) e produto fora do catálogo entram numa
+  lista de revisão no PDV.
+
+**Build / typecheck / deploy**
+
+| Teste | Esperado | Resultado |
+|---|---|---|
+| Core / shared (Vitest) — regressão | 231 / 9 | ✅ 231/231 · 9/9 |
+| Typecheck api (`tsc`) + web | sem erros | ✅ |
+| Build web (`next build`) | 21 rotas, `/venda` | ✅ 21 rotas (`/venda` 17 kB) |
+| Dry-run api (`wrangler --dry-run`) | ok | ✅ |
+| `prisma migrate deploy` (0023) + diff `--exit-code` | aplicada, sem drift | ✅ |
+| Deploy API + web + smokes | 401 sem token / HTML no-store + CSS 200 | ✅ API `c5980090` + web `ea0b2614` |
+
+> Smokes: health 200; `GET /quotes`, `PATCH /quotes/:id`, `POST /orders` sem token → 401; postdeploy do web OK.
+> **Falta:** E2E do Owner (salvar com nome livre; buscar por nome livre; "Gerar venda" → V-… + orçamento
+> CONVERTED; editar rascunho salvando no mesmo O-…; par salvo e reaberto com fidelidade; orçamento antigo cai
+> na lista de revisão). **Fecha o ADR-024 (par ADR-023/024) após o E2E.** Ver ADR-024.

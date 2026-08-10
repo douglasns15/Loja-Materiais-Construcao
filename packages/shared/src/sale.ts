@@ -129,6 +129,13 @@ export const createSaleSchema = z.object({
   scheduledPickupAt: z.string().optional(),
   /** Flag "Data por item" (ADR-020): quando `true`, a previsão vem de cada item (`saleItem.scheduledPickupAt`). */
   perItemSchedule: z.boolean().optional(),
+  /**
+   * Conversão de orçamento em venda (ADR-024, 2.B): quando presente, esta venda foi gerada a partir do
+   * orçamento `quoteId`. Na MESMA transação da venda, o servidor marca o orçamento `CONVERTED` e grava
+   * `convertedOrderId` (guarda: recusa se já convertido). Ausente = venda comum. Online-only (a conversão
+   * é retaguarda; a fila offline não a usa).
+   */
+  quoteId: z.string().uuid().optional(),
 });
 export type CreateSaleInput = z.infer<typeof createSaleSchema>;
 
