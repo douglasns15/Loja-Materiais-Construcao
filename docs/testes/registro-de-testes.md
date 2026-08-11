@@ -4461,3 +4461,49 @@ extensions`. **Aprovada ANTES de aplicar (regra 1).** 100% aditiva/reversível: 
 (`Luva 50` não traz o de 40mm), CPF/telefone por dígitos intactos. Commit `003761f`. Fatia
 **UI.Busca.Tokenizada CONCLUÍDA.** **Base p/ o futuro:** a Opção B (typo-tolerance via `pg_trgm`) reusa
 este desenho quando fizer falta.
+
+---
+
+## UI.Estoque.CustoNaEntrada — Custo do produto atualizado pela Entrada de estoque (2026-08-11)
+
+Pedido do Owner (Horizonte 1): na tela **Estoque › Entrada de estoque**, o campo **Custo Unitário
+(opcional)**, quando preenchido, era gravado **só** no `StockMovement.unitCost` (e exibido como coluna
+histórica no detalhe do produto), mas **não atualizava o custo do cadastro** (`Product.costPrice`) — que
+alimenta a **margem** (ADR-016), o PDV e os relatórios. Percepção do Owner ("essa info não vai para lugar
+nenhum") confirmada no código.
+
+**Decisão do Owner (produto, antes de codar):** ao informar o custo na entrada, **sobrescrever o custo do
+cadastro** (método **"último custo"**) — **pedindo confirmação**, pois muda a margem em todo o sistema.
+Alternativas descartadas: custo médio ponderado (menos intuitivo, sensível a estoque zerado/negativo) e
+sobrescrever sem avisar. **Sem migration** (`costPrice` já existe).
+
+**Nuance da unidade fechada (ADR-017).** `Product.costPrice` é por **unidade de venda** (custo da barra/
+rolo), enquanto `StockMovement.unitCost` é por **unidade-base** (por metro). Então o valor mandado ao
+cadastro é o **digitado** (por barra), **não** o `unitCost` convertido por metro. Os dois coexistem, cada
+um na sua unidade.
+
+- **shared:** `createStockMovementSchema` ganhou `newCostPrice` opcional (`z.number().positive()`) — o novo
+  `costPrice` por unidade de venda; distinto do `unitCost`.
+- **API (`POST /stock/movements`):** em entrada (INCOME), se vier `newCostPrice`, sobrescreve
+  `product.costPrice` na **MESMA transação** do `StockMovement` + `stockQty` (ADR-001). Saída (EXPENSE)
+  nunca mexe no custo.
+- **Web (`/estoque`):** ao registrar, se o custo digitado ≠ custo do cadastro, `confirm()` "o custo de X vai
+  passar de R$ A para R$ B — confirmar?". **OK** envia `newCostPrice` e atualiza; **Cancelar** registra a
+  entrada e **mantém** o custo (a confirmação gate só o custo, não a entrada). Notice reflete: "Custo do
+  produto atualizado." quando aplica.
+
+**Gates**
+
+| Gate | Resultado |
+|---|---|
+| Core (Vitest) | ✅ intocado (nenhuma função pura mudou) |
+| Shared (Vitest) | ✅ 9/9 |
+| Typecheck web (`tsc --noEmit`) | ✅ |
+| Typecheck/dry-run API (`wrangler deploy --dry-run`) | ✅ |
+| Deploy de API (⚠️ obrigatório: a atualização vive no `POST /stock/movements`) | ✅ Version `ddcd426f` |
+| Deploy web + `postdeploy` smoke | ✅ Version `ba308d91` (HTML no-store + CSS 200) |
+| Smoke — health / `POST /stock/movements` sem token | ✅ 200 / 401 |
+
+**E2E do Owner — ⏭️ pendente.** Roteiro sugerido: (1) entrada com custo ≠ do cadastro → confirmar → conferir
+o novo custo em Produtos/PDV/margem; (2) repetir e **cancelar** → entrada registrada, custo intacto; (3)
+produto de **barra/rolo** → conferir que o custo do cadastro fica por barra (não por metro).

@@ -17,6 +17,12 @@ export const createStockMovementSchema = z.object({
   type: stockMovementTypeSchema.default('INCOME'),
   quantity: z.number().positive(),
   unitCost: z.number().nonnegative().optional(),
+  /// Novo custo do CADASTRO (`Product.costPrice`), por unidade de venda. Quando informado numa
+  /// entrada (INCOME), o servidor sobrescreve o custo do produto na MESMA transação — mantém o
+  /// custo do cadastro em dia com a última compra (método "último custo"). O cliente decide se
+  /// envia (confirmação do operador); vazio ⇒ o custo do cadastro fica intocado. Diferente de
+  /// `unitCost`, que é por unidade-BASE (ex.: por metro na barra/rolo) e vive só no StockMovement.
+  newCostPrice: z.number().positive().optional(),
   supplierId: z.string().uuid().optional(),
   reason: z.string().max(150).optional(),
 });

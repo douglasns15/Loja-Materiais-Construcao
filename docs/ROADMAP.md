@@ -3,7 +3,28 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-11 — **Busca padronizada: tokenizada (AND) + acento-insensível no
+> **Última atualização:** 2026-08-11 — **Custo do produto atualizado pela Entrada de estoque (opcional,
+> com confirmação) — NO AR, aguardando E2E do Owner.** Pedido do Owner (Horizonte 1): o campo **Custo
+> Unitário (opcional)** da Entrada de estoque era gravado só no `StockMovement.unitCost` (e exibido como
+> coluna histórica no detalhe do produto), mas **não atualizava o custo do cadastro** (`Product.costPrice`)
+> — que alimenta a margem (ADR-016), o PDV e os relatórios ("essa info não vai para lugar nenhum",
+> confirmado no código). **Decisão do Owner (produto):** ao informar o custo na entrada, **sobrescrever o
+> custo do cadastro (método "último custo") — pedindo confirmação** (muda a margem em todo o sistema);
+> descartados custo médio ponderado e sobrescrever sem avisar. **Sem migration** (`costPrice` já existe).
+> **shared:** `createStockMovementSchema` ganhou `newCostPrice` opcional (novo `costPrice` por **unidade de
+> venda**; distinto do `unitCost`, que é por unidade-BASE/metro e vive só no movimento). **API (`POST
+> /stock/movements`):** em entrada (INCOME), se vier `newCostPrice`, sobrescreve `product.costPrice` na
+> **MESMA transação** do `StockMovement` + `stockQty` (ADR-001); saída nunca mexe no custo. **Web
+> (`/estoque`):** ao registrar, se o custo digitado ≠ custo do cadastro, `confirm()` "o custo vai passar de
+> R$ A para R$ B — confirmar?"; **OK** atualiza, **Cancelar** registra a entrada e mantém o custo (a
+> confirmação gate só o custo). **Barra/rolo (ADR-017):** o valor enviado ao cadastro é o **digitado** (por
+> barra = unidade de venda, que é o que `costPrice` guarda), não o `unitCost` convertido por metro. Gates:
+> web typecheck ✅, API dry-run ✅, shared **9/9** ✅ (core intocado). ⚠️ **Deploy de API obrigatório** (a
+> atualização vive no `POST /stock/movements`). **NO AR:** API `ddcd426f` + web `ba308d91`; smokes ✅ (health
+> 200, `POST /stock/movements` sem token 401; web HTML no-store + CSS 200). **Falta:** E2E do Owner. Ver
+> "UI.Estoque.CustoNaEntrada" no registro.
+>
+> **Antes:** 2026-08-11 — **Busca padronizada: tokenizada (AND) + acento-insensível no
 > servidor — NO AR e VALIDADO pelo Owner.** Pedido do Owner (Horizonte 1): padronizar a busca. **Dois
 > problemas achados no código:** (1) o match era por **substring da query inteira** — "Luva 40" **não**
 > achava "Luva ESG 40mm"; (2) só o **cliente** dobrava acento — o **servidor** era só case-insensitive

@@ -112,6 +112,9 @@ type Movement = {
 const QTY = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 4 });
 
+const BRL = (v: string | number) =>
+  Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
 const DATETIME = (iso: string) =>
   new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 
@@ -370,11 +373,30 @@ export default function EstoquePage() {
         : Number(entry.unitCost)
       : undefined;
 
+    // O custo digitado é por UNIDADE DE VENDA (barra/rolo/unidade) = exatamente o `Product.costPrice`.
+    // Se diferente do custo do cadastro, oferecemos sobrescrever o custo do produto ("último custo"),
+    // pedindo confirmação — pois isso muda a margem em todo o sistema (PDV/relatórios/ADR-016). Se o
+    // operador cancelar, a entrada é registrada mesmo assim, sem tocar no custo do cadastro.
+    let newCostPrice: number | undefined;
+    if (entry.unitCost && entryProduct) {
+      const typedCost = Number(entry.unitCost);
+      const currentCost = Number(entryProduct.costPrice);
+      if (Number(typedCost.toFixed(4)) !== Number(currentCost.toFixed(4))) {
+        newCostPrice = window.confirm(
+          `O custo de "${entryProduct.name}" vai passar de ${BRL(currentCost)} para ${BRL(typedCost)}. ` +
+            `Isso atualiza a margem em todo o sistema. Confirmar?`,
+        )
+          ? typedCost
+          : undefined;
+      }
+    }
+
     const parsed = createStockMovementSchema.safeParse({
       productId: entry.productId,
       type: 'INCOME',
       quantity: qtyMeters,
       unitCost: unitCostMeters,
+      newCostPrice,
       supplierId: entry.supplierId || undefined,
       reason: entry.reason || undefined,
     });
@@ -387,7 +409,11 @@ export default function EstoquePage() {
     try {
       await apiPost('/stock/movements', parsed.data);
       setEntry({ productId: '', quantity: '', unitCost: '', supplierId: '', reason: '' });
-      setNotice('Entrada de estoque registrada.');
+      setNotice(
+        newCostPrice != null
+          ? 'Entrada de estoque registrada. Custo do produto atualizado.'
+          : 'Entrada de estoque registrada.',
+      );
       await Promise.all([loadCatalog(), loadMovements()]);
     } catch (e) {
       setError((e as Error).message);

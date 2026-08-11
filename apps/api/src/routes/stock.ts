@@ -185,7 +185,16 @@ stock.post('/movements', requireActiveTenant, async (c) => {
       });
       await tx.product.update({
         where: { id: mov.productId },
-        data: { stockQty: newQty },
+        data: {
+          stockQty: newQty,
+          // Custo do cadastro em dia com a última compra ("último custo"): quando o operador
+          // confirma na entrada, o cliente manda `newCostPrice` (por unidade de venda) e o custo
+          // do produto é sobrescrito na MESMA transação. Só em entrada (INCOME); saída não mexe
+          // no custo. Vazio ⇒ mantém o custo atual.
+          ...(mov.type === 'INCOME' && mov.newCostPrice != null
+            ? { costPrice: mov.newCostPrice }
+            : {}),
+        },
       });
       return movement;
     });
