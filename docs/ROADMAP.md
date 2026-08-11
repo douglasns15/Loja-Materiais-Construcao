@@ -3,7 +3,23 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-11 — **Custo do produto atualizado pela Entrada de estoque (opcional,
+> **Última atualização:** 2026-08-11 — **Nome do PDF da nota pelo código + impressão do resumo da
+> dívida — NO AR, aguardando E2E do Owner.** Dois pedidos do Owner (Horizonte 1). **(1) Nome do arquivo
+> PDF:** ao "Salvar como PDF", toda nota baixava como **"NexoLoja.pdf"** (o navegador usa o
+> `document.title` como nome sugerido). Agora o PDF sai nomeado pelo **código do documento** — venda
+> **`V-000128.pdf`**, orçamento **`O-000045.pdf`** — trocando o `document.title` antes de imprimir e
+> restaurando via `afterprint` (com teto de segurança). **(2) Impressão do resumo da dívida:** a tela de
+> Contas a Receber (e o perfil do cliente) não imprimia o resumo de uma dívida específica → o
+> `ReceivableDetailModal` ganhou **"Imprimir resumo"** (80mm/A4) que gera um documento novo
+> (`ReceivablePrint`: cabeçalho da loja + `V-000128` + situação original/recebido/devolvido/saldo + itens
+> + recebimentos + devoluções), com o PDF nomeado pelo **código da dívida** (a venda de origem —
+> `V-000128.pdf`). **Refatoração:** os 3 `imprimir()` (PDV/Histórico/Orçamentos) que repetiam o mesmo
+> bloco foram unificados em **`printArea()`** (lib/print.ts), que centraliza modelo + `@page` + logo +
+> nome do arquivo. **Web-only** (sem API/migration). Gates: web typecheck ✅, build (**21 rotas**,
+> `/contas-a-receber` 6.71 kB, `/venda` 17.3 kB) ✅. **NO AR:** web `5b79dfb1`; smoke ✅ (HTML no-store +
+> CSS 200). **Falta:** E2E do Owner. Ver "UI.Impressao.NomePdfEDivida" no registro.
+>
+> **Antes:** 2026-08-11 — **Custo do produto atualizado pela Entrada de estoque (opcional,
 > com confirmação) — NO AR e VALIDADO pelo Owner.** Pedido do Owner (Horizonte 1): o campo **Custo
 > Unitário (opcional)** da Entrada de estoque era gravado só no `StockMovement.unitCost` (e exibido como
 > coluna histórica no detalhe do produto), mas **não atualizava o custo do cadastro** (`Product.costPrice`)

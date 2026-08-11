@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import {
+  formatOrderNumber,
   PAYMENT_METHOD_LABELS,
   RECEIVABLE_STATUS_LABELS,
   RETURN_TARGET_LABELS,
@@ -10,6 +11,9 @@ import {
   type ReceivableRow,
 } from '@nexoloja/shared';
 import { apiGet, apiPatch } from '@/lib/api';
+import { printArea } from '@/lib/print';
+import { ReceivablePrint } from '@/components/ReceivablePrint';
+import type { Store } from '@/components/ReceiptPrint';
 
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -34,6 +38,11 @@ export function ReceivableDetailModal({
   const [detail, setDetail] = useState<ReceivableDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Impressão do resumo da dívida: identidade da loja (logo/nome) para o cabeçalho + modelo do papel.
+  // O `store` é buscado aqui para o modal ser autossuficiente nas duas telas que o usam.
+  const [store, setStore] = useState<Store | null>(null);
+  const [printModel, setPrintModel] = useState<'80mm' | 'A4'>('80mm');
 
   // Observação da dívida (edição inline).
   const [notes, setNotes] = useState('');
@@ -62,6 +71,21 @@ export function ReceivableDetailModal({
       cancelled = true;
     };
   }, [receivableId, reloadSignal]);
+
+  // Identidade da loja para o cabeçalho da impressão (uma vez).
+  useEffect(() => {
+    apiGet<Store>('/tenant').then(setStore).catch(() => {});
+  }, []);
+
+  /** Abre o diálogo de impressão do resumo. O PDF sai nomeado pelo código da dívida (V-000128). */
+  async function imprimir() {
+    if (!detail) return;
+    await printArea({
+      model: printModel,
+      logoUrl: store?.logoUrl,
+      fileName: formatOrderNumber(detail.orderNumber) || 'Divida',
+    });
+  }
 
   async function saveNotes() {
     if (!detail) return;
@@ -291,6 +315,26 @@ export function ReceivableDetailModal({
               </div>
             </div>
 
+            {/* Impressão do resumo da dívida — gera PDF nomeado pelo código (V-000128.pdf). */}
+            <div className="flex items-center gap-2 border-t border-gray-200 pt-3">
+              <span className="text-sm text-gray-600">Imprimir:</span>
+              <select
+                value={printModel}
+                onChange={(e) => setPrintModel(e.target.value as '80mm' | 'A4')}
+                className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
+              >
+                <option value="80mm">80mm</option>
+                <option value="A4">A4</option>
+              </select>
+              <button
+                type="button"
+                onClick={imprimir}
+                className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
+              >
+                Imprimir resumo
+              </button>
+            </div>
+
             {onReceive && detail.status === 'OPEN' && (
               <button
                 type="button"
@@ -315,6 +359,9 @@ export function ReceivableDetailModal({
                 Receber
               </button>
             )}
+
+            {/* Documento imprimível (oculto na tela; só aparece na impressão). */}
+            <ReceivablePrint store={store} detail={detail} />
           </>
         )}
       </div>

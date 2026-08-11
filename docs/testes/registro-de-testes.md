@@ -4508,3 +4508,40 @@ um na sua unidade.
 cadastro → confirmar → novo custo em Produtos/PDV/margem; (2) cancelar → entrada registrada, custo intacto;
 (3) produto de **barra/rolo** → custo do cadastro por barra (não por metro). Commit `b836bb9`. Fatia
 **UI.Estoque.CustoNaEntrada CONCLUÍDA.**
+
+---
+
+## UI.Impressao.NomePdfEDivida — Nome do PDF pelo código + impressão do resumo da dívida (2026-08-11)
+
+Dois pedidos do Owner (Horizonte 1), ambos sobre impressão. **Web-only** (sem API/migration).
+
+**1) Nome do arquivo PDF.** Ao "Salvar como PDF", toda nota baixava como **"NexoLoja.pdf"** — o navegador
+usa o `document.title` (título da aba) como nome sugerido. Agora o PDF sai nomeado pelo **código do
+documento**: venda **`V-000128.pdf`**, orçamento **`O-000045.pdf`**. Como: um helper único `printArea()`
+(lib/print.ts) troca o `document.title` pelo código ANTES de `window.print()` e o restaura no evento
+`afterprint` (com `safeFileName` limpando caracteres proibidos + teto de segurança de 60 s caso o
+navegador não dispare o evento).
+
+**2) Impressão do resumo da dívida.** A tela **Contas a Receber** (e o **perfil do cliente**, que reusam o
+`ReceivableDetailModal`) não tinha como imprimir o resumo de uma dívida específica. Adicionado **"Imprimir
+resumo"** (seletor 80mm/A4) que gera um documento novo — `ReceivablePrint`, espelhando o `ReceiptPrint`:
+cabeçalho da loja (logo/nome/CNPJ) + código da venda `V-000128` + situação (original/recebido/devolvido/
+saldo) + itens + recebimentos + devoluções. O PDF é nomeado pelo **código da dívida** (a venda de origem,
+`V-000128.pdf`). O modal busca o `store` (`GET /tenant`) sozinho para ser autossuficiente nas duas telas.
+
+**Refatoração (DRY):** os **três** `imprimir()` (PDV/Histórico/Orçamentos) repetiam o mesmo bloco
+(data-model + `@page` + `ensureImageLoaded` + `window.print`). Foram unificados no `printArea()`, que agora
+também cuida do nome do arquivo — quatro chamadores (os 3 + a dívida).
+
+**Gates**
+
+| Gate | Resultado |
+|---|---|
+| Typecheck web (`tsc --noEmit`) | ✅ |
+| Build web | ✅ 21 rotas (`/contas-a-receber` 6.71 kB, `/venda` 17.3 kB, `/vendas` 8.3 kB, `/orcamentos` 5.42 kB) |
+| Deploy web + `postdeploy` smoke | ✅ Version `5b79dfb1` (HTML no-store + CSS 200) |
+
+**E2E do Owner — ⏭️ pendente.** Roteiro sugerido: (1) no PDV, concluir venda → Imprimir → "Salvar como PDF"
+→ nome sai `V-000128.pdf`; idem reimpressão no Histórico e um orçamento salvo (`O-000045.pdf`); (2) em
+Contas a Receber, abrir uma dívida → "Imprimir resumo" (80mm e A4) → confere o conteúdo e o nome do PDF
+(`V-000128.pdf`); (3) mesmo botão no perfil do cliente.

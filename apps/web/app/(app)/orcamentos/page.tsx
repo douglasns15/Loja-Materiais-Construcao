@@ -14,7 +14,7 @@ import {
   type QuotesPage,
 } from '@nexoloja/shared';
 import { apiDelete, apiGet, apiPatch } from '@/lib/api';
-import { ensureImageLoaded } from '@/lib/print';
+import { printArea } from '@/lib/print';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { ReceiptPrint, type Store } from '@/components/ReceiptPrint';
 
@@ -339,23 +339,11 @@ function QuoteDetailModal({
     }
   }
 
-  /** Injeta a regra @page do modelo e abre o diálogo de impressão (mesmo padrão do PDV/Histórico). */
+  /** Abre o diálogo de impressão (mesmo padrão do PDV/Histórico). O PDF sai nomeado pelo código do
+   *  orçamento (O-000045) em vez do genérico "NexoLoja.pdf". Ver lib/print.ts. */
   async function imprimir() {
-    const area = document.getElementById('print-area');
-    if (area) area.setAttribute('data-model', printModel);
-    let style = document.getElementById('print-page-style') as HTMLStyleElement | null;
-    if (!style) {
-      style = document.createElement('style');
-      style.id = 'print-page-style';
-      document.head.appendChild(style);
-    }
-    style.textContent =
-      printModel === '80mm'
-        ? '@media print { @page { size: 80mm auto; margin: 4mm; } }'
-        : '@media print { @page { size: A4; margin: 14mm; } }';
-    // Garante a logo baixada antes de imprimir (some do papel se trocada agora). Ver lib/print.ts.
-    await ensureImageLoaded(store?.logoUrl);
-    window.print();
+    const fileName = detail ? formatQuoteNumber(detail.quoteNumber) : null;
+    await printArea({ model: printModel, logoUrl: store?.logoUrl, fileName });
   }
 
   return (

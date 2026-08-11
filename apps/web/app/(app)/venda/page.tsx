@@ -6,6 +6,7 @@ import {
   PAYMENT_METHOD_LABELS,
   buildSaleMutation,
   createSaleSchema,
+  formatOrderNumber,
   formatQuoteNumber,
   paymentMethodLabel,
   unitTypeLabels,
@@ -46,7 +47,7 @@ import { useOutboxSyncContext } from '@/lib/outboxSync';
 import { useMe } from '@/lib/useMe';
 import { useOnline } from '@/lib/useOnline';
 import { useCart } from '@/lib/cartStore';
-import { ensureImageLoaded } from '@/lib/print';
+import { printArea } from '@/lib/print';
 import { ReceiptPrint, type Store } from '@/components/ReceiptPrint';
 import { CartItemInfo } from '@/components/CartItemInfo';
 import { StoreDisabledNotice } from '@/components/StoreDisabledNotice';
@@ -574,23 +575,16 @@ export default function VendaPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [products]);
 
-  /** Define o modelo (80mm/A4), injeta a regra @page e abre o diálogo de impressão. */
+  /** Abre o diálogo de impressão. O PDF sai nomeado pelo código do documento (venda V-000128 /
+   *  orçamento O-000045) em vez do genérico "NexoLoja.pdf". Ver lib/print.ts. */
   async function imprimir() {
-    const area = document.getElementById('print-area');
-    if (area) area.setAttribute('data-model', printModel);
-    let style = document.getElementById('print-page-style') as HTMLStyleElement | null;
-    if (!style) {
-      style = document.createElement('style');
-      style.id = 'print-page-style';
-      document.head.appendChild(style);
-    }
-    style.textContent =
-      printModel === '80mm'
-        ? '@media print { @page { size: 80mm auto; margin: 4mm; } }'
-        : '@media print { @page { size: A4; margin: 14mm; } }';
-    // Garante a logo baixada antes de imprimir (some do papel se trocada agora). Ver lib/print.ts.
-    await ensureImageLoaded(store?.logoUrl);
-    window.print();
+    const fileName =
+      view?.kind === 'quote'
+        ? formatQuoteNumber(view.quoteNumber)
+        : view?.kind === 'done'
+          ? formatOrderNumber(view.orderNumber)
+          : null;
+    await printArea({ model: printModel, logoUrl: store?.logoUrl, fileName });
   }
 
   const discountValue = Math.max(0, Number(discount) || 0);

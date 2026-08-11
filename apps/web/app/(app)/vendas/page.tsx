@@ -12,7 +12,7 @@ import {
 import { groupPairedItems } from '@nexoloja/core';
 import { apiGet, apiPost } from '@/lib/api';
 import { useOnline } from '@/lib/useOnline';
-import { ensureImageLoaded } from '@/lib/print';
+import { printArea } from '@/lib/print';
 import { PeriodFilter, defaultRange } from '@/components/PeriodFilter';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { ReceiptPrint, type Store } from '@/components/ReceiptPrint';
@@ -225,23 +225,11 @@ export default function VendasPage() {
     })();
   }, []);
 
-  /** Define o modelo (80mm/A4), injeta a regra @page e abre o diálogo de impressão. */
+  /** Abre o diálogo de impressão. O PDF sai nomeado pelo código da venda (V-000128) em vez do
+   *  genérico "NexoLoja.pdf". Ver lib/print.ts. */
   async function imprimir() {
-    const area = document.getElementById('print-area');
-    if (area) area.setAttribute('data-model', printModel);
-    let style = document.getElementById('print-page-style') as HTMLStyleElement | null;
-    if (!style) {
-      style = document.createElement('style');
-      style.id = 'print-page-style';
-      document.head.appendChild(style);
-    }
-    style.textContent =
-      printModel === '80mm'
-        ? '@media print { @page { size: 80mm auto; margin: 4mm; } }'
-        : '@media print { @page { size: A4; margin: 14mm; } }';
-    // Garante a logo baixada antes de imprimir (some do papel se trocada agora). Ver lib/print.ts.
-    await ensureImageLoaded(store?.logoUrl);
-    window.print();
+    const fileName = printJob ? formatOrderNumber(printJob.order.orderNumber) : null;
+    await printArea({ model: printModel, logoUrl: store?.logoUrl, fileName });
   }
 
   /** Reimprime o comprovante de uma venda já registrada. */
