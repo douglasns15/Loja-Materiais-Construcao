@@ -4504,6 +4504,7 @@ um na sua unidade.
 | Deploy web + `postdeploy` smoke | ✅ Version `ba308d91` (HTML no-store + CSS 200) |
 | Smoke — health / `POST /stock/movements` sem token | ✅ 200 / 401 |
 
-**E2E do Owner — ⏭️ pendente.** Roteiro sugerido: (1) entrada com custo ≠ do cadastro → confirmar → conferir
-o novo custo em Produtos/PDV/margem; (2) repetir e **cancelar** → entrada registrada, custo intacto; (3)
-produto de **barra/rolo** → conferir que o custo do cadastro fica por barra (não por metro).
+**E2E do Owner — ✅ VALIDADO (2026-08-11):** "testado e validado com sucesso" — (1) entrada com custo ≠ do
+cadastro → confirmar → novo custo em Produtos/PDV/margem; (2) cancelar → entrada registrada, custo intacto;
+(3) produto de **barra/rolo** → custo do cadastro por barra (não por metro). Commit `b836bb9`. Fatia
+**UI.Estoque.CustoNaEntrada CONCLUÍDA.**

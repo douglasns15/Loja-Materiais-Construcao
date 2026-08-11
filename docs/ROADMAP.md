@@ -4,7 +4,7 @@
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
 > **Última atualização:** 2026-08-11 — **Custo do produto atualizado pela Entrada de estoque (opcional,
-> com confirmação) — NO AR, aguardando E2E do Owner.** Pedido do Owner (Horizonte 1): o campo **Custo
+> com confirmação) — NO AR e VALIDADO pelo Owner.** Pedido do Owner (Horizonte 1): o campo **Custo
 > Unitário (opcional)** da Entrada de estoque era gravado só no `StockMovement.unitCost` (e exibido como
 > coluna histórica no detalhe do produto), mas **não atualizava o custo do cadastro** (`Product.costPrice`)
 > — que alimenta a margem (ADR-016), o PDV e os relatórios ("essa info não vai para lugar nenhum",
@@ -21,8 +21,9 @@
 > barra = unidade de venda, que é o que `costPrice` guarda), não o `unitCost` convertido por metro. Gates:
 > web typecheck ✅, API dry-run ✅, shared **9/9** ✅ (core intocado). ⚠️ **Deploy de API obrigatório** (a
 > atualização vive no `POST /stock/movements`). **NO AR:** API `ddcd426f` + web `ba308d91`; smokes ✅ (health
-> 200, `POST /stock/movements` sem token 401; web HTML no-store + CSS 200). **Falta:** E2E do Owner. Ver
-> "UI.Estoque.CustoNaEntrada" no registro.
+> 200, `POST /stock/movements` sem token 401; web HTML no-store + CSS 200). **E2E do Owner VALIDADO
+> (2026-08-11):** "testado e validado com sucesso". Commit `b836bb9`. **Fatia UI.Estoque.CustoNaEntrada
+> CONCLUÍDA.** Ver "UI.Estoque.CustoNaEntrada" no registro.
 >
 > **Antes:** 2026-08-11 — **Busca padronizada: tokenizada (AND) + acento-insensível no
 > servidor — NO AR e VALIDADO pelo Owner.** Pedido do Owner (Horizonte 1): padronizar a busca. **Dois
