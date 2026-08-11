@@ -26,21 +26,15 @@ http://localhost:3000/
 
 <> filtrar por campo, em cada cabeçalho ter opção de filtrar 
 
-<> Em relatórios, no botão Hoje ter nele algo assim "< Hoje >" se clicar na seta "<" pra esquerda volta pros dias anteriores e a seta para direita ">" a partir do momento que vc volta para o dia anterior, ele libera pra ser clicada e voltar até no máximo o dia de Hoje.
-
 <> Em cadastros, tipo produto, quando estiver digitando o nome de um Fabricante, sugerir nome já existente na base e autocompletar com tab.
 
 <> Inserir cadastro de fornecedor
-
-<ADR-020> - Falta a fase 2, venda para retirar depois
 
 <> Modo Dark e  opção de customização cores de layout.
 
 <> Peso tmbm em MLs no cadastro do Produto, eu coloquei em Gramas, mas depois de salvar ele converte pra kilos
 
 <> Mostrar campo Observação na info do produto no carrinho
-
-<> Campos de busca: Exemplo Luva ESG 40mm
 
 <> Tela de Estoque, a Entrada de Estoque precisa ser mais clara quanto aos dados que precisam ser digitados, o custo unitário não deveria atualizar o valor de custo no cadastro do produto, qual deveria ser o comportamento?
 
