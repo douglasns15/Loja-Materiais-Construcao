@@ -4,7 +4,7 @@
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
 > **Última atualização:** 2026-08-11 — **Nome do PDF da nota pelo código + impressão do resumo da
-> dívida — NO AR, aguardando E2E do Owner.** Dois pedidos do Owner (Horizonte 1). **(1) Nome do arquivo
+> dívida (dívida e conta) — NO AR e VALIDADO pelo Owner.** Dois pedidos do Owner (Horizonte 1). **(1) Nome do arquivo
 > PDF:** ao "Salvar como PDF", toda nota baixava como **"NexoLoja.pdf"** (o navegador usa o
 > `document.title` como nome sugerido). Agora o PDF sai nomeado pelo **código do documento** — venda
 > **`V-000128.pdf`**, orçamento **`O-000045.pdf`** — trocando o `document.title` antes de imprimir e
@@ -21,7 +21,10 @@
 > bloco foram unificados em **`printArea()`** (lib/print.ts), que centraliza modelo + `@page` + logo +
 > nome do arquivo. **Web-only** (sem API/migration). Gates: web typecheck ✅, build (**21 rotas**,
 > `/contas-a-receber` 6.71 kB, `/venda` 17.3 kB) ✅. **NO AR:** web `5b79dfb1` → `3f19d4e8` (Por Cliente);
-> smoke ✅ (HTML no-store + CSS 200). **Falta:** E2E do Owner. Ver "UI.Impressao.NomePdfEDivida" no registro.
+> smoke ✅ (HTML no-store + CSS 200). **E2E do Owner VALIDADO (2026-08-11):** "tudo validado e testado com
+> sucesso" — nome do PDF pelo código (venda/orçamento) e "Imprimir resumo" nas duas visões (por dívida e
+> Por Cliente). Commits `6e74ac0` + `5b4ae2c`. **Fatia UI.Impressao.NomePdfEDivida CONCLUÍDA.** Ver
+> "UI.Impressao.NomePdfEDivida" no registro.
 >
 > **Antes:** 2026-08-11 — **Custo do produto atualizado pela Entrada de estoque (opcional,
 > com confirmação) — NO AR e VALIDADO pelo Owner.** Pedido do Owner (Horizonte 1): o campo **Custo

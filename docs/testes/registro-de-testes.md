@@ -4548,8 +4548,9 @@ também cuida do nome do arquivo — quatro chamadores (os 3 + a dívida).
 | Build web | ✅ 21 rotas (`/contas-a-receber` 6.71 kB, `/venda` 17.3 kB, `/vendas` 8.3 kB, `/orcamentos` 5.42 kB) |
 | Deploy web + `postdeploy` smoke | ✅ Version `5b79dfb1` (HTML no-store + CSS 200) |
 
-**E2E do Owner — ⏭️ pendente.** Roteiro sugerido: (1) no PDV, concluir venda → Imprimir → "Salvar como PDF"
-→ nome sai `V-000128.pdf`; idem reimpressão no Histórico e um orçamento salvo (`O-000045.pdf`); (2) em
-Contas a Receber, abrir uma dívida → "Imprimir resumo" (80mm e A4) → confere o conteúdo e o nome do PDF
-(`V-000128.pdf`); (3) mesmo botão no perfil do cliente; (4) na visão **Por Cliente**, abrir a conta →
-"Imprimir resumo" → resumo consolidado (saldo + dívidas + itens em aberto), PDF `Conta ….pdf`.
+**E2E do Owner — ✅ VALIDADO (2026-08-11):** "tudo validado e testado com sucesso" — (1) no PDV, venda →
+Imprimir → "Salvar como PDF" sai `V-000128.pdf`; reimpressão no Histórico e orçamento salvo (`O-000045.pdf`);
+(2) Contas a Receber → dívida → "Imprimir resumo" (80mm/A4), conteúdo e nome (`V-000128.pdf`); (3) mesmo
+botão no perfil do cliente; (4) visão **Por Cliente** → conta → "Imprimir resumo" → consolidado (saldo +
+dívidas + itens em aberto), PDF `Conta ….pdf`. Commits `6e74ac0` + `5b4ae2c`. Fatia
+**UI.Impressao.NomePdfEDivida CONCLUÍDA.**
