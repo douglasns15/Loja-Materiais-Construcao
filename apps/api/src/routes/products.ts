@@ -5,6 +5,15 @@ import { createProductSchema, updateProductSchema } from '@nexoloja/shared';
 import { type Env, getConnectionString, getTenantId } from '../lib/request';
 import { requireAuth } from '../middleware/auth';
 
+/**
+ * Escapa os curingas do `LIKE`/`ILIKE` (`%`, `_`, `\`) para que o token seja tratado como
+ * texto literal (substring), igual ao `.includes()` do core — sem isso, um `%` digitado
+ * viraria "qualquer coisa". Usa `\` como escape (o default do Postgres).
+ */
+function likeEscape(s: string): string {
+  return s.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
+
 /** Acrescenta a margem calculada (regra pura de packages/core) ao produto. */
 function withMargin<T extends { costPrice: unknown; salePrice: unknown }>(p: T) {
   return {
@@ -140,42 +149,46 @@ products.get('/search', async (c) => {
         : PRODUCTS_PAGE_DEFAULT;
 
     const q = c.req.query('q')?.trim();
-    const insensitive = Prisma.QueryMode.insensitive;
-    // Case-insensitive no servidor. (A busca client-side também dobrava acento; o Postgres só
-    // dobra acento com a extensão `unaccent` — fica como refino futuro se fizer falta.)
-    const search = q
-      ? {
-          OR: [
-            { name: { contains: q, mode: insensitive } },
-            { popularName: { contains: q, mode: insensitive } },
-            { manufacturer: { contains: q, mode: insensitive } },
-            { sku: { contains: q, mode: insensitive } },
-          ],
-        }
-      : {};
-
     const cursorParam = c.req.query('cursor');
     const cursor = cursorParam ? decodeCursor(cursorParam) : null;
-    const keyset = cursor
-      ? {
-          OR: [
-            { name: { gt: cursor.name } },
-            { name: cursor.name, id: { gt: cursor.id } },
-          ],
-        }
-      : {};
 
-    const list = await prisma.product.findMany({
-      where: {
-        tenantId,
-        deletedAt: null,
-        ...(includeInactive ? {} : { isActive: true }),
-        ...search,
-        ...keyset,
-      },
-      orderBy: [{ name: 'asc' }, { id: 'asc' }],
-      take: limit + 1,
-    });
+    // Busca tokenizada (AND, ordem-livre) e ACENTO-insensível, espelhando `productMatchesQuery`
+    // do core: a query é quebrada em palavras e CADA palavra precisa aparecer em algum dos campos
+    // (nome/nome popular/fabricante/SKU). `extensions.unaccent()` dobra o acento dos DOIS lados
+    // (dado e busca) — só ele exige SQL cru, pois o Prisma não expressa unaccent. `ILIKE` cobre a
+    // caixa. Montado com `Prisma.sql` (parametrizado ⇒ à prova de injeção); keyset e ordenação
+    // (name asc, id asc) preservados. `unaccent` mora no schema `extensions` no Supabase.
+    const tokens = q ? q.split(/\s+/).filter(Boolean) : [];
+    const conditions: Prisma.Sql[] = [
+      Prisma.sql`p."tenantId" = ${tenantId}::uuid`,
+      Prisma.sql`p."deletedAt" IS NULL`,
+    ];
+    if (!includeInactive) {
+      conditions.push(Prisma.sql`p."isActive" = true`);
+    }
+    for (const token of tokens) {
+      const pat = `%${likeEscape(token)}%`;
+      conditions.push(Prisma.sql`(
+        extensions.unaccent(p."name") ILIKE extensions.unaccent(${pat})
+        OR extensions.unaccent(coalesce(p."popularName", '')) ILIKE extensions.unaccent(${pat})
+        OR extensions.unaccent(coalesce(p."manufacturer", '')) ILIKE extensions.unaccent(${pat})
+        OR extensions.unaccent(p."sku") ILIKE extensions.unaccent(${pat})
+      )`);
+    }
+    if (cursor) {
+      conditions.push(
+        Prisma.sql`(p."name" > ${cursor.name} OR (p."name" = ${cursor.name} AND p."id" > ${cursor.id}::uuid))`,
+      );
+    }
+
+    const list = await prisma.$queryRaw<
+      Array<Record<string, unknown> & { id: string; name: string; costPrice: unknown; salePrice: unknown }>
+    >(Prisma.sql`
+      SELECT * FROM "products" p
+      WHERE ${Prisma.join(conditions, ' AND ')}
+      ORDER BY p."name" ASC, p."id" ASC
+      LIMIT ${limit + 1}
+    `);
 
     const hasMore = list.length > limit;
     const rows = hasMore ? list.slice(0, limit) : list;

@@ -1082,6 +1082,41 @@ describe('productMatchesQuery', () => {
     expect(productMatchesQuery(semPopular, 'ferro')).toBe(false);
   });
 
+  describe('busca tokenizada (AND, ordem-livre)', () => {
+    const luva = {
+      name: 'Luva ESG 40mm',
+      popularName: null,
+      manufacturer: 'Tigre',
+      sku: 'LV40',
+    };
+
+    it('casa quando os tokens estão separados no nome ("Luva 40" → "Luva ESG 40mm")', () => {
+      expect(productMatchesQuery(luva, 'Luva 40')).toBe(true);
+    });
+
+    it('a ordem dos tokens não importa', () => {
+      expect(productMatchesQuery(luva, '40 luva')).toBe(true);
+    });
+
+    it('exige TODOS os tokens (AND): se um não bate, não casa', () => {
+      expect(productMatchesQuery(luva, 'Luva 50')).toBe(false);
+      expect(productMatchesQuery(luva, 'Luva cimento')).toBe(false);
+    });
+
+    it('tokens podem cair em campos diferentes (marca + nome)', () => {
+      expect(productMatchesQuery(luva, 'tigre luva')).toBe(true);
+    });
+
+    it('acento-fold vale por token ("vergalhao 8" acha "Vergalhão CA-50 8mm")', () => {
+      expect(productMatchesQuery(p, 'vergalhao 8')).toBe(true);
+    });
+
+    it('um token não vaza de um campo para o outro (separação por espaço)', () => {
+      // "40mmtigre" não existe: "40mm" termina o nome e "Tigre" começa a marca.
+      expect(productMatchesQuery(luva, '40mmtigre')).toBe(false);
+    });
+  });
+
   it('funciona com os campos opcionais omitidos (produto antigo)', () => {
     const minimo = { name: 'Areia média', sku: 'AR-M' };
     expect(productMatchesQuery(minimo, 'areia')).toBe(true);

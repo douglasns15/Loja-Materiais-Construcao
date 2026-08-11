@@ -7,6 +7,14 @@ import { requireAuth } from '../middleware/auth';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * Escapa os curingas do `LIKE`/`ILIKE` (`%`, `_`, `\`) para que o termo seja tratado como
+ * texto literal (substring). Usa `\` como escape (o default do Postgres).
+ */
+function likeEscape(s: string): string {
+  return s.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
+
 const customers = new Hono<Env>();
 
 // Todas as rotas de clientes exigem autenticação (JWT do Supabase).
@@ -64,36 +72,52 @@ customers.get('/', async (c) => {
 
     const q = c.req.query('q')?.trim();
     const digits = q ? q.replace(/\D+/g, '') : '';
-    const insensitive = Prisma.QueryMode.insensitive;
-    const search = q
-      ? {
-          OR: [
-            { name: { contains: q, mode: insensitive } },
-            { email: { contains: q, mode: insensitive } },
-            // CPF/CNPJ e telefone são guardados só com dígitos (forma canônica) — compara por dígitos.
-            ...(digits ? [{ cpfCnpj: { contains: digits } }, { phone: { contains: digits } }] : []),
-          ],
-        }
-      : {};
-
     const cursorParam = c.req.query('cursor');
     const cursor = cursorParam ? decodeCursor(cursorParam) : null;
-    // Keyset: só as linhas APÓS o cursor em (name asc, id asc).
-    const keyset = cursor
-      ? {
-          OR: [
-            { name: { gt: cursor.name } },
-            { name: cursor.name, id: { gt: cursor.id } },
-          ],
-        }
-      : {};
 
-    // `take: limit + 1`: a linha extra só sinaliza se há próxima página.
-    const list = await prisma.customer.findMany({
-      where: { tenantId, deletedAt: null, ...search, ...keyset },
-      orderBy: [{ name: 'asc' }, { id: 'asc' }],
-      take: limit + 1,
-    });
+    // Busca por NOME/E-MAIL tokenizada (AND, ordem-livre) e ACENTO-insensível (`extensions.unaccent`,
+    // dobra acento nos dois lados) — "joão silva" acha "Maria João da Silva". CPF/CNPJ e telefone são
+    // guardados só com dígitos (forma canônica), então casam por dígitos contínuos (não tokeniza). A
+    // pessoa procura OU por texto OU por número. Montado com `Prisma.sql` (parametrizado ⇒ à prova de
+    // injeção); keyset e ordenação (name asc, id asc) preservados.
+    const tokens = q ? q.split(/\s+/).filter(Boolean) : [];
+    const conditions: Prisma.Sql[] = [
+      Prisma.sql`c."tenantId" = ${tenantId}::uuid`,
+      Prisma.sql`c."deletedAt" IS NULL`,
+    ];
+    if (tokens.length > 0) {
+      // Texto: TODOS os tokens em nome OU e-mail (unaccent). Dígitos: CPF/CNPJ OU telefone.
+      const textMatch = Prisma.join(
+        tokens.map((token) => {
+          const pat = `%${likeEscape(token)}%`;
+          return Prisma.sql`(
+            extensions.unaccent(c."name") ILIKE extensions.unaccent(${pat})
+            OR extensions.unaccent(coalesce(c."email", '')) ILIKE extensions.unaccent(${pat})
+          )`;
+        }),
+        ' AND ',
+      );
+      const digitPat = `%${likeEscape(digits)}%`;
+      const digitMatch = digits
+        ? Prisma.sql`(c."cpfCnpj" LIKE ${digitPat} OR c."phone" LIKE ${digitPat})`
+        : Prisma.sql`false`;
+      conditions.push(Prisma.sql`((${textMatch}) OR ${digitMatch})`);
+    }
+    if (cursor) {
+      conditions.push(
+        Prisma.sql`(c."name" > ${cursor.name} OR (c."name" = ${cursor.name} AND c."id" > ${cursor.id}::uuid))`,
+      );
+    }
+
+    // `LIMIT limit + 1`: a linha extra só sinaliza se há próxima página.
+    const list = await prisma.$queryRaw<Array<Record<string, unknown> & { id: string; name: string }>>(
+      Prisma.sql`
+        SELECT * FROM "customers" c
+        WHERE ${Prisma.join(conditions, ' AND ')}
+        ORDER BY c."name" ASC, c."id" ASC
+        LIMIT ${limit + 1}
+      `,
+    );
 
     const hasMore = list.length > limit;
     const rows = hasMore ? list.slice(0, limit) : list;

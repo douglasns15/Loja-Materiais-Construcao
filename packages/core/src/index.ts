@@ -901,20 +901,23 @@ export function normalizeSearchText(text: string): string {
 
 /**
  * `true` se o produto casa com a busca por **nome oficial, nome popular, fabricante
- * OU SKU** (digitar qualquer um dos quatro encontra o produto). Match por substring,
- * acento- e caixa-insensível. Query vazia casa tudo (sem filtro). Função pura reusada
- * no cadastro (apps/web) e no PDV.
+ * OU SKU** (digitar qualquer um dos quatro encontra o produto). Acento- e caixa-insensível.
+ *
+ * **Busca tokenizada (AND, ordem-livre)** — como os buscadores de mercado: a query é quebrada
+ * em palavras e o produto casa quando **CADA** palavra aparece (como substring) em algum dos
+ * campos. Assim "Luva 40" acha "Luva ESG 40mm" e "40 luva" também — a ordem não importa, e as
+ * palavras podem cair em campos diferentes (ex.: marca + nome). Query vazia casa tudo (sem
+ * filtro). Função pura reusada no cadastro (apps/web) e no PDV.
  */
 export function productMatchesQuery(product: ProductSearchFields, query: string): boolean {
-  const q = normalizeSearchText(query);
-  if (!q) return true; // sem termo digitado → não filtra nada
-  const fields = [
-    product.name,
-    product.popularName ?? '',
-    product.manufacturer ?? '',
-    product.sku,
-  ];
-  return fields.some((field) => normalizeSearchText(field).includes(q));
+  const tokens = normalizeSearchText(query).split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return true; // sem termo digitado → não filtra nada
+  // Concatena os campos num "palheiro" único (separados por espaço, pra uma palavra nunca
+  // vazar de um campo pro outro) e exige que TODOS os tokens estejam presentes.
+  const haystack = normalizeSearchText(
+    [product.name, product.popularName ?? '', product.manufacturer ?? '', product.sku].join(' '),
+  );
+  return tokens.every((token) => haystack.includes(token));
 }
 
 // =============================================================================
