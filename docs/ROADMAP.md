@@ -13,11 +13,15 @@
 > `ReceivableDetailModal` ganhou **"Imprimir resumo"** (80mm/A4) que gera um documento novo
 > (`ReceivablePrint`: cabeçalho da loja + `V-000128` + situação original/recebido/devolvido/saldo + itens
 > + recebimentos + devoluções), com o PDF nomeado pelo **código da dívida** (a venda de origem —
-> `V-000128.pdf`). **Refatoração:** os 3 `imprimir()` (PDV/Histórico/Orçamentos) que repetiam o mesmo
+> `V-000128.pdf`). **Follow-up (pedido do Owner):** faltava o botão na visão **Por Cliente**
+> (`CustomerAccountModal`), que é justamente o resumo consolidado de tudo que o cliente deve → mesmo
+> "Imprimir resumo" (novo `CustomerAccountPrint`: saldo devedor total + crédito a favor + dívidas em
+> aberto por venda + itens em aberto consolidados), PDF nomeado pelo cliente (`Conta ….pdf`).
+> **Refatoração:** os 3 `imprimir()` (PDV/Histórico/Orçamentos) que repetiam o mesmo
 > bloco foram unificados em **`printArea()`** (lib/print.ts), que centraliza modelo + `@page` + logo +
 > nome do arquivo. **Web-only** (sem API/migration). Gates: web typecheck ✅, build (**21 rotas**,
-> `/contas-a-receber` 6.71 kB, `/venda` 17.3 kB) ✅. **NO AR:** web `5b79dfb1`; smoke ✅ (HTML no-store +
-> CSS 200). **Falta:** E2E do Owner. Ver "UI.Impressao.NomePdfEDivida" no registro.
+> `/contas-a-receber` 6.71 kB, `/venda` 17.3 kB) ✅. **NO AR:** web `5b79dfb1` → `3f19d4e8` (Por Cliente);
+> smoke ✅ (HTML no-store + CSS 200). **Falta:** E2E do Owner. Ver "UI.Impressao.NomePdfEDivida" no registro.
 >
 > **Antes:** 2026-08-11 — **Custo do produto atualizado pela Entrada de estoque (opcional,
 > com confirmação) — NO AR e VALIDADO pelo Owner.** Pedido do Owner (Horizonte 1): o campo **Custo

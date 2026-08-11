@@ -4529,6 +4529,13 @@ cabeçalho da loja (logo/nome/CNPJ) + código da venda `V-000128` + situação (
 saldo) + itens + recebimentos + devoluções. O PDF é nomeado pelo **código da dívida** (a venda de origem,
 `V-000128.pdf`). O modal busca o `store` (`GET /tenant`) sozinho para ser autossuficiente nas duas telas.
 
+**Follow-up (Por Cliente).** No E2E o Owner notou que o botão só estava no detalhe **de uma dívida**
+(`ReceivableDetailModal`), mas o resumo de **tudo o que o cliente deve** vive na visão **Por Cliente**
+(`CustomerAccountModal`). Adicionado o mesmo **"Imprimir resumo"** lá, com um documento próprio
+(`CustomerAccountPrint`): saldo devedor total + crédito a favor + **dívidas em aberto** (uma por venda,
+código + data + saldo) + **itens em aberto** consolidados por produto. PDF nomeado pelo cliente
+(`Conta ….pdf`). Deploy `3f19d4e8`.
+
 **Refatoração (DRY):** os **três** `imprimir()` (PDV/Histórico/Orçamentos) repetiam o mesmo bloco
 (data-model + `@page` + `ensureImageLoaded` + `window.print`). Foram unificados no `printArea()`, que agora
 também cuida do nome do arquivo — quatro chamadores (os 3 + a dívida).
@@ -4544,4 +4551,5 @@ também cuida do nome do arquivo — quatro chamadores (os 3 + a dívida).
 **E2E do Owner — ⏭️ pendente.** Roteiro sugerido: (1) no PDV, concluir venda → Imprimir → "Salvar como PDF"
 → nome sai `V-000128.pdf`; idem reimpressão no Histórico e um orçamento salvo (`O-000045.pdf`); (2) em
 Contas a Receber, abrir uma dívida → "Imprimir resumo" (80mm e A4) → confere o conteúdo e o nome do PDF
-(`V-000128.pdf`); (3) mesmo botão no perfil do cliente.
+(`V-000128.pdf`); (3) mesmo botão no perfil do cliente; (4) na visão **Por Cliente**, abrir a conta →
+"Imprimir resumo" → resumo consolidado (saldo + dívidas + itens em aberto), PDF `Conta ….pdf`.
