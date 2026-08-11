@@ -46,6 +46,8 @@ http://localhost:3000/
 
 <> Contador do Caixa, ele só apagar os valores digitados quando eu abrir o caixa, até lá, fica em memória, e no fechamento a mesma coisa, só apaga depois de eu fechar o caixa e tmbm ter um botão dentro do contador, chamado zerar contador.
 
+<> Alguns itens zerados que não aparecem como em baixa, checar até mesmo outros que estão com poucas unidades.
+
 ## Subir servidor
 
 cd C:\Users\Douglas\Documents\GitHub\Loja-Materiais-Construcao
