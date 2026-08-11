@@ -3525,9 +3525,10 @@ margem de segurança (paginação seria overkill numa tabela que cresce 1 linha/
 | Deploy web | ✅ Version `cd12db31` |
 | Smoke — health / `/products/search` sem token / `/customers` sem token / `/login` | ✅ 200 / 401 / 401 / 200 |
 
-**Nota (acento).** A busca client-side dobrava acento (`normalizeSearchText`); o Postgres só dobra com
-a extensão `unaccent`. A busca no servidor é **case-insensitive** mas **não** acento-insensível — refino
-futuro (habilitar `unaccent`) se fizer falta.
+**Nota (acento) — RESOLVIDO em 2026-08-11.** Na época, a busca client-side dobrava acento
+(`normalizeSearchText`) mas o servidor era só **case-insensitive** (o Postgres só dobra com a extensão
+`unaccent`). Esse "refino futuro" foi feito na fatia **UI.Busca.Tokenizada** (migration `0025`,
+`extensions.unaccent`) — o servidor passou a dobrar acento também. Ver "UI.Busca.Tokenizada" no fim.
 
 **E2E do Owner — ✅ VALIDADO (2026-07-27):** "tudo certo, validado" — busca no servidor em Clientes e
 Produtos (+ "Mostrar mais"); em Produtos, scan achando produto fora da página, dropdown de par listando
@@ -4397,3 +4398,66 @@ Fora de escopo: Orçamentos (date input é "Válido até"), Contas a Receber e E
 | Atalhos 7d/30d + De/Até; Vendas (busca por código/ordenação) e Movimentações (Produto/Tipo/Motivo, Limpar) intactos | ✅ |
 
 > **E2E do Owner VALIDADO (2026-08-10):** "tudo validado". Ver "UI.Filtro.Periodo" no ROADMAP.
+
+---
+
+## UI.Busca.Tokenizada — Busca padronizada: tokenizada (AND) + acento-insensível no servidor (2026-08-11)
+
+Pedido do Owner (Horizonte 1): **padronizar o mecanismo de busca**. Consulta de produto antes de codar
+(como buscadores de mercado funcionam) → **duas correções**:
+
+1. **Tokenização (AND, ordem-livre).** O match era por **substring da query inteira** — `"Luva 40"` **não**
+   achava `"Luva ESG 40mm"` (a string "luva 40" não é contígua). Agora a query vira **tokens** e o produto
+   casa quando **TODOS** aparecem (em qualquer campo, em qualquer ordem).
+2. **Acento no servidor.** Só o **cliente** dobrava acento (`normalizeSearchText`); o servidor era só
+   case-insensitive (divergência anotada como "refino futuro" na fatia UI.Busca.Servidor). Agora o servidor
+   dobra acento via `extensions.unaccent`, **padronizando** cliente e servidor.
+
+**Decisão do Owner:** **Opção A** (tokenizada + `unaccent`) vs. **Opção B** (coluna `searchText` +
+`pg_trgm`) — B **adiada** (só compensa em base grande ou p/ typo-tolerance). Confirmado com o Owner que a
+B **não onera** o banco na escala atual (poucos MB), mas custa complexidade (trigger + backfill) → A agora.
+
+**Core (`packages/core`).** `productMatchesQuery` reescrito: `normalizeSearchText(query)` → `split(/\s+/)`
+→ exige que **cada token** esteja no palheiro concatenado dos 4 campos (nome/nome popular/fabricante/SKU),
+juntados por espaço (um token não vaza de um campo p/ o outro). Acento-fold por token.
+
+| Teste (novos) | Resultado |
+|---|---|
+| `"Luva 40"` → "Luva ESG 40mm" | ✅ |
+| ordem dos tokens não importa (`"40 luva"`) | ✅ |
+| **AND**: `"Luva 50"` / `"Luva cimento"` **não** casam | ✅ |
+| tokens em campos diferentes (`"tigre luva"` = marca+nome) | ✅ |
+| acento por token (`"vergalhao 8"` → "Vergalhão CA-50 8mm") | ✅ |
+| token não vaza entre campos (`"40mmtigre"` não casa) | ✅ |
+| **Total core** | ✅ **237/237** (era 231; +6) |
+
+**API (`apps/api`) — introduz `$queryRaw`** (não havia SQL cru; padrão novo, regra 4). `GET
+/products/search` e `GET /customers`: WHERE montado com **`Prisma.sql`** (parametrizado ⇒ **à prova de
+injeção**), `extensions.unaccent(campo) ILIKE extensions.unaccent($token)` por token; helper `likeEscape`
+neutraliza `%`/`_`/`\` (substring literal, igual ao `.includes` do core). **Keyset e ordenação (name asc,
+id asc) preservados.** Clientes: nome/e-mail tokenizado+unaccent; **CPF/CNPJ e telefone seguem por dígitos**
+(forma canônica) — a pessoa procura OU por texto OU por número.
+
+**Banco.** Migration `0025_unaccent_extension` — `CREATE EXTENSION IF NOT EXISTS unaccent WITH SCHEMA
+extensions`. **Aprovada ANTES de aplicar (regra 1).** 100% aditiva/reversível: não toca tabela/coluna/
+índice/dado/RLS. **Aplicada via `migrate deploy`** (sem `migrate dev`), sem drift. **Validada no banco:**
+`prisma db execute` de `SELECT extensions.unaccent('Vergalhão ...')` → "Script executed successfully"
+(função chamável pelo papel do runtime).
+
+**Gates**
+
+| Gate | Resultado |
+|---|---|
+| Core (Vitest) | ✅ 237/237 |
+| Typecheck API (`wrangler deploy --dry-run`) | ✅ |
+| Typecheck web (`tsc --noEmit`) | ✅ |
+| Migration `0025` | ✅ aplicada, sem drift, validada |
+| Deploy de API (⚠️ obrigatório: SQL cru + migration) | ✅ Version `b113161b` |
+| Deploy web (core) + `postdeploy` smoke | ✅ Version `26f08971` (HTML no-store + CSS 200) |
+| Smoke — health / `/products/search` sem token / `/customers` sem token | ✅ 200 / 401 / 401 |
+
+**E2E do Owner — ✅ VALIDADO (2026-08-11):** "tudo validado com sucesso" — `"Luva 40"` acha "Luva ESG
+40mm" (PDV, ordem-livre), acento ignorado sem acento digitado (Produtos/Clientes/servidor), AND real
+(`Luva 50` não traz o de 40mm), CPF/telefone por dígitos intactos. Commit `003761f`. Fatia
+**UI.Busca.Tokenizada CONCLUÍDA.** **Base p/ o futuro:** a Opção B (typo-tolerance via `pg_trgm`) reusa
+este desenho quando fizer falta.

@@ -3,7 +3,34 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-10 — **Navegação ‹ Hoje › + default "Hoje" nos filtros por data —
+> **Última atualização:** 2026-08-11 — **Busca padronizada: tokenizada (AND) + acento-insensível no
+> servidor — NO AR e VALIDADO pelo Owner.** Pedido do Owner (Horizonte 1): padronizar a busca. **Dois
+> problemas achados no código:** (1) o match era por **substring da query inteira** — "Luva 40" **não**
+> achava "Luva ESG 40mm"; (2) só o **cliente** dobrava acento — o **servidor** era só case-insensitive
+> (divergência já anotada como "refino futuro" no registro). **Decisão do Owner (consulta de produto):**
+> **Opção A** — busca **tokenizada** (a query vira palavras; CADA palavra precisa aparecer, ordem-livre =
+> AND) + `unaccent` no servidor — vs. **Opção B** (coluna denormalizada `searchText` + índice `pg_trgm`),
+> **adiada** (só compensa em base grande ou p/ tolerância a erro de digitação; a B fica como upgrade
+> natural). **Core:** `productMatchesQuery` reescrito — quebra a query em tokens e casa quando **todos**
+> aparecem no palheiro concatenado (nome/nome popular/fabricante/SKU, separados por espaço p/ um token não
+> vazar entre campos); acento-fold por token. **+6 testes → 237/237.** **API (introduz `$queryRaw` — não
+> havia SQL cru antes; padrão novo, regra 4):** `GET /products/search` e `GET /customers` montam o WHERE com
+> `Prisma.sql` (**parametrizado ⇒ à prova de injeção**) usando `extensions.unaccent()` por token, dobrando
+> acento nos **dois** lados (dado e busca); helper `likeEscape` neutraliza os curingas `%`/`_`/`\` (substring
+> literal, igual ao `.includes` do core); **keyset e ordenação (name asc, id asc) preservados**. Clientes:
+> nome/e-mail tokenizado+unaccent, **CPF/telefone seguem por dígitos** (forma canônica). **Migration
+> `0025_unaccent_extension` aprovada ANTES de aplicar (regra 1) e aplicada sem drift:** `CREATE EXTENSION IF
+> NOT EXISTS unaccent WITH SCHEMA extensions` — **100% aditiva/reversível** (não toca tabela/coluna/índice/
+> dado/RLS); validada no banco (`extensions.unaccent(...)` chamável pelo papel do runtime). Gates: core
+> **237/237**, API dry-run/typecheck ✅, web typecheck ✅. ⚠️ **Deploy de API obrigatório** (rotas com SQL
+> cru + a migration). **NO AR:** API `b113161b` + web `26f08971`; smokes ✅ (health 200, `/products/search`
+> e `/customers` sem token 401; web HTML no-store + CSS 200). **E2E do Owner VALIDADO (2026-08-11):** "tudo
+> validado com sucesso" — "Luva 40" → "Luva ESG 40mm", ordem-livre, acento ignorado (Produtos/Clientes/
+> servidor), AND real (`Luva 50` não traz o de 40mm). Commit `003761f`. Ver "UI.Busca.Tokenizada" no
+> registro. **Base p/ o futuro:** a Opção B (typo-tolerance via `pg_trgm`) reusa este desenho quando fizer
+> falta.
+>
+> **Antes:** 2026-08-10 — **Navegação ‹ Hoje › + default "Hoje" nos filtros por data —
 > NO AR e VALIDADO pelo Owner.** Pedido do Owner (Horizonte 1): navegar dia a dia sem digitar datas, em
 > **todas** as telas com filtro por período, e abrir sempre em **Hoje**. **Só UI, sem API/migration.** Novo
 > componente reutilizável **`apps/web/components/PeriodFilter.tsx`** (controlado por `{ from, to }` local):
