@@ -4554,3 +4554,47 @@ Imprimir → "Salvar como PDF" sai `V-000128.pdf`; reimpressão no Histórico e 
 botão no perfil do cliente; (4) visão **Por Cliente** → conta → "Imprimir resumo" → consolidado (saldo +
 dívidas + itens em aberto), PDF `Conta ….pdf`. Commits `6e74ac0` + `5b4ae2c`. Fatia
 **UI.Impressao.NomePdfEDivida CONCLUÍDA.**
+
+---
+
+## UI.Estoque.ZeradoBaixo — Zerado sempre conta como baixo, mesmo sem mínimo cadastrado (2026-08-12)
+
+Achado do Owner na tela de Estoque: produtos **zerados** (ex.: "Fita Dupla-Face 12mm", "…19mm") **não**
+apareciam no painel "Reposição de estoque" nem no filtro "Só baixo", mesmo com saldo 0. **Causa raiz:** a
+regra canônica `isLowStock` (core) exige **mínimo definido** (`minStockQty > 0 && stockQty <= minStockQty`)
+— então quem tinha o "Estoque mínimo" em branco (0) ficava invisível nos alertas, escondendo a ruptura de
+venda. Num catálogo de 367 itens, vários se encaixavam nisso.
+
+**Decisão do Owner (produto):** **Opção 1 — "zerado sempre é crítico"** (vs. Opção 2, criar filtro/aba
+"Zerados" separado; adiada). Conceitualmente os ERPs separam "ruptura/sem estoque" de "abaixo do mínimo",
+mas a Opção 1 é a forma mais enxuta e já herda a distinção visual porque a UI **já** rotulava "zerado" vs
+"baixo" e ordenava zerados no topo.
+
+- **Core:** nova função pura **`needsReplenishment`** = `stockQty <= 0` **OU** `isLowStock` — o zerado entra
+  no alerta independentemente de mínimo. `isLowStock` **mantida intocada** (regra estrita do ponto de
+  reposição, reusada no PDV). **+6 testes → 243/243.**
+- **Web `/estoque`:** painel de reposição + filtro (agora **"Só baixo/zerado"**) passam a usar
+  `needsReplenishment`; badge da tabela distingue **"zerado"** (vermelho) de **"baixo"** (âmbar), igual ao
+  painel de topo; coluna "Comprar" mostra **"—"** quando não há meta (zerado sem mínimo, em vez de "+0").
+- **API Suporte + Web Suporte:** dashboard **"Estoque baixo/zerado"** e a lista de produtos (`GET
+  /support/:tenantId` e `.../products`, flag `low` + filtro `lowStock=1`) usam a mesma regra — a query passou
+  a incluir `stockQty <= 0` (`OR` no `where`); badge zerado/baixo; mensagem vazia "Nenhum item baixo ou zerado."
+
+Lógica do `/estoque` é **client-side** (sobre a lista já carregada); a tela de **Suporte** depende do
+`low`/`lowStock` recalculado na API. **Sem migration.**
+
+**Gates**
+
+| Gate | Resultado |
+|---|---|
+| Core (Vitest) | ✅ 243/243 (era 237, +6 `needsReplenishment`) |
+| Typecheck web (`tsc --noEmit`) | ✅ |
+| Build web | ✅ (`/estoque` 9.53 kB, `/plataforma/suporte/[tenantId]` 4.71 kB) |
+| Typecheck/dry-run API (`wrangler deploy --dry-run`) | ✅ |
+| Deploy de API (⚠️ obrigatório: `low`/`lowStock` do Suporte no servidor) | ✅ Version `8d509c1f` |
+| Deploy web + `postdeploy` smoke | ✅ Version `b6ed7012` (HTML no-store + CSS 200) |
+| Smoke — health / `/support/:tenantId/products` sem token | ✅ 200 / 401 |
+
+**E2E do Owner — ✅ VALIDADO (2026-08-12):** "tudo validado com sucesso" — zerados sem mínimo agora aparecem
+no painel de reposição e no filtro "Só baixo/zerado" (tela de Estoque e Suporte), com badge "zerado"
+distinto de "baixo". Commit `59502c2`. Fatia **UI.Estoque.ZeradoBaixo CONCLUÍDA.**

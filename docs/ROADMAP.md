@@ -3,7 +3,28 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-11 — **Nome do PDF da nota pelo código + impressão do resumo da
+> **Última atualização:** 2026-08-12 — **Estoque: zerado sempre conta como baixo, mesmo sem mínimo
+> cadastrado — NO AR e VALIDADO pelo Owner.** Achado do Owner: produtos **zerados** sem "Estoque mínimo"
+> cadastrado (`minStockQty=0`) **não** apareciam no painel "Reposição de estoque" nem no filtro "Só baixo"
+> — ficavam invisíveis mesmo com saldo 0. **Causa raiz:** a regra canônica `isLowStock` exige mínimo
+> definido (`minStockQty > 0 && stockQty <= minStockQty`), escondendo a ruptura de venda de quem deixou o
+> mínimo em branco (vários, num catálogo de 367). **Decisão do Owner (produto):** **Opção 1 — "zerado
+> sempre é crítico"** (vs. Opção 2 — filtro/aba "Zerados" à parte, adiada; a Opção 1 é mais enxuta e já
+> herda a distinção visual que a UI fazia). **Core:** nova função pura **`needsReplenishment`** =
+> `stockQty <= 0` **OU** `isLowStock` — zerado entra no alerta independentemente de mínimo; `isLowStock`
+> **intocada** (regra estrita do ponto de reposição, reusada no PDV). **+6 testes → 243/243.** **Web
+> `/estoque`:** painel de reposição + filtro (agora **"Só baixo/zerado"**) usam `needsReplenishment`; badge
+> distingue **"zerado"** (vermelho) de **"baixo"** (âmbar); coluna "Comprar" mostra **"—"** para zerado sem
+> mínimo (não há meta). **Suporte (API + web):** dashboard **"Estoque baixo/zerado"** e a lista de produtos
+> (flag `low` + filtro `lowStock=1`) usam a mesma regra — a query passou a incluir `stockQty <= 0` (`OR` no
+> `where`); badge zerado/baixo. Lógica do `/estoque` é client-side; a de Suporte vive no servidor. **Sem
+> migration.** Gates: core **243/243**, web typecheck+build (`/estoque` 9.53 kB, `/plataforma/suporte`
+> 4.71 kB) ✅, API dry-run ✅. ⚠️ **Deploy de API obrigatório** (`low`/`lowStock` do Suporte). **NO AR:** API
+> `8d509c1f` + web `b6ed7012`; smokes ✅ (health 200, `/support/:tenantId/products` sem token 401; web HTML
+> no-store + CSS 200). **E2E do Owner VALIDADO (2026-08-12):** "tudo validado com sucesso". Commit
+> `59502c2`. **Fatia UI.Estoque.ZeradoBaixo CONCLUÍDA.** Ver "UI.Estoque.ZeradoBaixo" no registro.
+>
+> **Antes:** 2026-08-11 — **Nome do PDF da nota pelo código + impressão do resumo da
 > dívida (dívida e conta) — NO AR e VALIDADO pelo Owner.** Dois pedidos do Owner (Horizonte 1). **(1) Nome do arquivo
 > PDF:** ao "Salvar como PDF", toda nota baixava como **"NexoLoja.pdf"** (o navegador usa o
 > `document.title` como nome sugerido). Agora o PDF sai nomeado pelo **código do documento** — venda
