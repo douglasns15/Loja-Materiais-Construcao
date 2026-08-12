@@ -10,6 +10,7 @@ import {
 import {
   isClosedPrimary,
   isLowStock,
+  needsReplenishment,
   normalizeSearchText,
   productMatchesQuery,
   replenishmentShortfall,
@@ -151,7 +152,7 @@ export default function EstoquePage() {
   const [stockOpen, toggleStock] = usePersistedOpen('estoque:stockOpen');
   const [movementsOpen, toggleMovements] = usePersistedOpen('estoque:movementsOpen');
 
-  // "Estoque atual": busca (nome/apelido/fabricante/SKU), filtro "só baixo" e ordenação por
+  // "Estoque atual": busca (nome/apelido/fabricante/SKU), filtro "só baixo/zerado" e ordenação por
   // qualquer coluna — para achar o produto sem rolar a página inteira.
   const [stockSearch, setStockSearch] = useState('');
   const [lowOnly, setLowOnly] = useState(false);
@@ -231,8 +232,9 @@ export default function EstoquePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters.productId, filters.type, filters.reason, filters.dateFrom, filters.dateTo]);
 
-  // Painel de reposição (EF-2): produtos no ponto de reposição (saldo ≤ mínimo, com mínimo
-  // definido — regra pura `isLowStock` do core), já com a sugestão de quanto comprar
+  // Painel de reposição (EF-2): produtos que precisam de atenção — zerados (saldo ≤ 0, MESMO sem
+  // mínimo cadastrado) OU baixos pelo ponto de reposição (regra pura `needsReplenishment` do core,
+  // Opção 1: "zerado sempre é crítico"), já com a sugestão de quanto comprar
   // (`replenishmentShortfall`). Ordena zerados primeiro, depois a maior falta no topo.
   const replenish = useMemo(
     () =>
@@ -243,10 +245,10 @@ export default function EstoquePage() {
             p,
             out: level.stockQty <= 0,
             shortfall: replenishmentShortfall(level),
-            low: isLowStock(level),
+            attention: needsReplenishment(level),
           };
         })
-        .filter((r) => r.low)
+        .filter((r) => r.attention)
         .sort((a, b) => Number(b.out) - Number(a.out) || b.shortfall - a.shortfall),
     [products],
   );
@@ -300,7 +302,7 @@ export default function EstoquePage() {
     return list;
   }, [movements, movSort]);
 
-  // Tabela "Estoque atual": busca + "só baixo" + ordenação. Aplicado no cliente sobre a lista.
+  // Tabela "Estoque atual": busca + "só baixo/zerado" + ordenação. Aplicado no cliente sobre a lista.
   const visibleStock = useMemo(() => {
     const val = (p: Product): number | string => {
       const s = summary[p.id] ?? { income: 0, expense: 0 };
@@ -325,7 +327,10 @@ export default function EstoquePage() {
     };
     const list = products.filter((p) => {
       if (!productMatchesQuery(p, stockSearch)) return false;
-      if (lowOnly && !isLowStock({ stockQty: Number(p.stockQty), minStockQty: Number(p.minStockQty) }))
+      if (
+        lowOnly &&
+        !needsReplenishment({ stockQty: Number(p.stockQty), minStockQty: Number(p.minStockQty) })
+      )
         return false;
       return true;
     });
@@ -510,15 +515,18 @@ export default function EstoquePage() {
                   </td>
                   <td className="px-4 py-2 text-right text-amber-800/70">{QTY(p.minStockQty)}</td>
                   <td className="px-4 py-2 text-right font-semibold text-amber-900">
-                    +{QTY(shortfall)}
+                    {/* Sem mínimo cadastrado não há meta de compra (zerado entra pela ruptura):
+                        mostra "—" em vez de "+0", que sugeriria comprar nada. */}
+                    {shortfall > 0 ? `+${QTY(shortfall)}` : '—'}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
           <p className="px-4 py-2 text-xs text-amber-800/80">
-            “Comprar” é o quanto falta para o saldo voltar ao mínimo. Defina o mínimo de cada produto
-            na tela de Produtos.
+            Itens <strong>zerados</strong> aparecem aqui mesmo sem mínimo cadastrado (não há como
+            vendê-los). “Comprar” é o quanto falta para o saldo voltar ao mínimo — defina o mínimo de
+            cada produto na tela de Produtos para receber a sugestão de compra.
           </p>
           </div>
           )}
@@ -665,7 +673,7 @@ export default function EstoquePage() {
                   onChange={(e) => setLowOnly(e.target.checked)}
                   className="h-4 w-4 rounded border-gray-300"
                 />
-                Só baixo
+                Só baixo/zerado
               </label>
               <span className="text-xs text-gray-500">
                 {visibleStock.length} de {products.length}
@@ -722,10 +730,13 @@ export default function EstoquePage() {
               </tr>
             ) : (
               visibleStock.slice(0, stockLimit).map((p) => {
-                const low = isLowStock({
-                  stockQty: Number(p.stockQty),
-                  minStockQty: Number(p.minStockQty),
-                });
+                // Zerado (ruptura) tem prioridade visual sobre "baixo": badge vermelho "zerado" vs
+                // âmbar "baixo" (Opção 1 — igual ao painel de reposição). `isLowStock` segue sendo a
+                // regra estrita do mínimo; `out` cobre o zerado mesmo sem mínimo cadastrado.
+                const level = { stockQty: Number(p.stockQty), minStockQty: Number(p.minStockQty) };
+                const out = level.stockQty <= 0;
+                const low = isLowStock(level);
+                const attention = out || low;
                 const s = summary[p.id] ?? { income: 0, expense: 0 };
                 // Saldo reconstruído do histórico (ADR-001): Σ entradas − Σ saídas. Deve bater
                 // com o cache `stockQty`; quando diverge, sinalizamos (não é erro — dado antigo
@@ -743,15 +754,21 @@ export default function EstoquePage() {
                       >
                         {p.name}
                       </button>
-                      {low && (
-                        <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800">
-                          baixo
+                      {attention && (
+                        <span
+                          className={`ml-2 rounded px-1.5 py-0.5 text-xs font-medium ${
+                            out ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'
+                          }`}
+                        >
+                          {out ? 'zerado' : 'baixo'}
                         </span>
                       )}
                     </td>
                     <td className="px-4 py-2 text-gray-600">{p.sku}</td>
                     <td
-                      className={`px-4 py-2 text-right font-medium ${low ? 'text-amber-700' : ''}`}
+                      className={`px-4 py-2 text-right font-medium ${
+                        out ? 'text-red-700' : low ? 'text-amber-700' : ''
+                      }`}
                     >
                       {fmtStock(p)}
                     </td>

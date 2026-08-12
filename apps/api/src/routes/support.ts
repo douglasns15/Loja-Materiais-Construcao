@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { createPrismaClient } from '@nexoloja/db';
-import { calcMarginPercent } from '@nexoloja/core';
+import { calcMarginPercent, needsReplenishment } from '@nexoloja/core';
 import { type Env, getConnectionString } from '../lib/request';
 import { requireSupportSession } from '../middleware/auth';
 import type { Context } from 'hono';
@@ -108,7 +108,7 @@ support.get('/:tenantId/overview', async (c) => {
       return c.json({ ok: false, error: 'Loja não encontrada.' }, 404);
     }
 
-    const [productCount, customerCount, userCount, openCash, withMin, recentOrders, recentAudit] =
+    const [productCount, customerCount, userCount, openCash, replenishCandidates, recentOrders, recentAudit] =
       await Promise.all([
         prisma.product.count({ where: { tenantId, deletedAt: null } }),
         prisma.customer.count({ where: { tenantId, deletedAt: null } }),
@@ -118,10 +118,16 @@ support.get('/:tenantId/overview', async (c) => {
           orderBy: { openedAt: 'desc' },
           select: { id: true, openedAt: true, openingAmount: true },
         }),
-        // Estoque baixo exige comparar duas colunas (stockQty <= minStockQty), que o Prisma não
-        // faz no `where`; buscamos só os que têm mínimo definido e filtramos em memória.
+        // Precisa de reposição = zerado (stockQty <= 0, MESMO sem mínimo) OU abaixo do mínimo.
+        // A comparação entre duas colunas (stockQty <= minStockQty) o Prisma não faz no `where`;
+        // reduzimos os candidatos no banco (tem mínimo definido OU está zerado) e aplicamos a
+        // regra pura `needsReplenishment` em memória.
         prisma.product.findMany({
-          where: { tenantId, deletedAt: null, minStockQty: { gt: 0 } },
+          where: {
+            tenantId,
+            deletedAt: null,
+            OR: [{ minStockQty: { gt: 0 } }, { stockQty: { lte: 0 } }],
+          },
           select: { id: true, name: true, stockQty: true, minStockQty: true },
         }),
         prisma.order.findMany({
@@ -138,8 +144,8 @@ support.get('/:tenantId/overview', async (c) => {
         }),
       ]);
 
-    const lowStock = withMin
-      .filter((p) => num(p.stockQty) <= num(p.minStockQty))
+    const lowStock = replenishCandidates
+      .filter((p) => needsReplenishment({ stockQty: num(p.stockQty), minStockQty: num(p.minStockQty) }))
       .slice(0, 10)
       .map((p) => ({ id: p.id, name: p.name, stockQty: num(p.stockQty), minStockQty: num(p.minStockQty) }));
 
@@ -296,7 +302,9 @@ support.get('/:tenantId/products', async (c) => {
           stockQty,
           minStockQty,
           isActive: p.isActive,
-          low: minStockQty > 0 && stockQty <= minStockQty,
+          // "Precisa repor": zerado (mesmo sem mínimo) OU abaixo do mínimo (Opção 1). O filtro
+          // `lowOnly` abaixo herda esta mesma regra via `p.low`.
+          low: needsReplenishment({ stockQty, minStockQty }),
           // Autoria (ADR-010): quem cadastrou/alterou por último + quando (para exibição).
           createdByName: p.createdByName,
           updatedByName: p.updatedByName,

@@ -990,6 +990,18 @@ export function isLowStock(item: StockLevelFields): boolean {
 }
 
 /**
+ * `true` quando o produto precisa de atenção de reposição: está **zerado** (saldo ≤ 0,
+ * MESMO sem mínimo definido) **ou** está **baixo** pela regra do mínimo (`isLowStock`).
+ * Um item zerado é ruptura de venda por si só — não dá para vender — então entra no alerta
+ * independentemente de o lojista ter cadastrado o mínimo (Opção 1: "zerado sempre é crítico").
+ * `isLowStock` continua sendo a regra estrita do ponto de reposição (reusada no PDV); esta é
+ * a regra das superfícies de alerta da tela de Estoque (painel de reposição + filtro "Só baixo").
+ */
+export function needsReplenishment(item: StockLevelFields): boolean {
+  return item.stockQty <= 0 || isLowStock(item);
+}
+
+/**
  * Quanto comprar para o saldo voltar ao mínimo (`minStockQty − stockQty`, nunca negativo).
  * Retorna 0 quando o item não está baixo (nada a repor). Arredondado a 4 casas (precisão de
  * `Product.stockQty`, cobre kg/m² fracionados). Sugestão de compra do painel de reposição.

@@ -6,6 +6,7 @@ import {
   calcExpectedCash,
   calcInventoryAdjustment,
   isLowStock,
+  needsReplenishment,
   replenishmentShortfall,
   calcMarginPercent,
   calcOrderTotal,
@@ -248,6 +249,32 @@ describe('isLowStock', () => {
 
   it('zerado com mínimo definido → baixo', () => {
     expect(isLowStock({ stockQty: 0, minStockQty: 5 })).toBe(true);
+  });
+});
+
+describe('needsReplenishment', () => {
+  it('zerado SEM mínimo → precisa repor (ruptura, mesmo sem mínimo cadastrado)', () => {
+    expect(needsReplenishment({ stockQty: 0, minStockQty: 0 })).toBe(true);
+  });
+
+  it('zerado COM mínimo → precisa repor', () => {
+    expect(needsReplenishment({ stockQty: 0, minStockQty: 5 })).toBe(true);
+  });
+
+  it('baixo (abaixo do mínimo, mas positivo) → precisa repor', () => {
+    expect(needsReplenishment({ stockQty: 3, minStockQty: 10 })).toBe(true);
+  });
+
+  it('saldo positivo sem mínimo → ok (não precisa repor)', () => {
+    expect(needsReplenishment({ stockQty: 4, minStockQty: 0 })).toBe(false);
+  });
+
+  it('saldo acima do mínimo → ok', () => {
+    expect(needsReplenishment({ stockQty: 11, minStockQty: 10 })).toBe(false);
+  });
+
+  it('saldo negativo → precisa repor (defensivo)', () => {
+    expect(needsReplenishment({ stockQty: -2, minStockQty: 0 })).toBe(true);
   });
 });
 

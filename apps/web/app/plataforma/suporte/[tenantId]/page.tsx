@@ -302,17 +302,28 @@ function ResumoTab({
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <section className="rounded-2xl bg-white p-4 shadow-sm">
           <h2 className="mb-3 font-semibold">
-            Estoque baixo{' '}
+            Estoque baixo/zerado{' '}
             <span className="text-xs font-normal text-gray-500">({data.lowStock.length})</span>
           </h2>
           {data.lowStock.length === 0 ? (
-            <p className="text-sm text-gray-500">Nenhum item abaixo do mínimo.</p>
+            <p className="text-sm text-gray-500">Nenhum item baixo ou zerado.</p>
           ) : (
             <ul className="divide-y divide-gray-100 text-sm">
               {data.lowStock.map((p) => (
                 <li key={p.id} className="flex justify-between py-1.5">
-                  <span>{p.name}</span>
-                  <span className="text-red-600">
+                  <span>
+                    {p.name}
+                    <span
+                      className={`ml-2 rounded px-1 py-0.5 text-[10px] font-medium ${
+                        p.stockQty <= 0
+                          ? 'bg-red-100 text-red-700'
+                          : 'bg-amber-100 text-amber-800'
+                      }`}
+                    >
+                      {p.stockQty <= 0 ? 'zerado' : 'baixo'}
+                    </span>
+                  </span>
+                  <span className={p.stockQty <= 0 ? 'text-red-600' : 'text-amber-700'}>
                     {QTY(p.stockQty)} / {QTY(p.minStockQty)}
                   </span>
                 </li>
@@ -644,7 +655,7 @@ function ProdutosTab({
             checked={lowOnly}
             onChange={(e) => setLowOnly(e.target.checked)}
           />
-          Só estoque baixo
+          Só baixo/zerado
         </label>
         <button
           onClick={load}
@@ -707,8 +718,14 @@ function ProdutosTab({
                       </span>
                       <span className="text-xs text-gray-500"> / {QTY(p.minStockQty)}</span>
                       {p.low && (
-                        <span className="ml-1 rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-700">
-                          baixo
+                        <span
+                          className={`ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                            p.stockQty <= 0
+                              ? 'bg-red-100 text-red-700'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}
+                        >
+                          {p.stockQty <= 0 ? 'zerado' : 'baixo'}
                         </span>
                       )}
                     </td>
