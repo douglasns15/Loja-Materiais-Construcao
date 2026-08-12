@@ -48,6 +48,16 @@ http://localhost:3000/
 
 <> Alguns itens zerados que não aparecem como em baixa, checar até mesmo outros que estão com poucas unidades.
 
+<> Cadastro Fornecedor
+
+<> Botão de sugestão de preço por porcentagem
+
+<> Ao atualizar estoque e preço, na tela de produtos, pensar na melhor forma de comunicar ao usuário que o produto X teve seu preço de custo ajustado, revise o valor do produto
+
+<> Validar calculo de margem dos produtos, exemplo.: gr-red-100-cr
+
+<> 
+
 ## Subir servidor
 
 cd C:\Users\Douglas\Documents\GitHub\Loja-Materiais-Construcao
