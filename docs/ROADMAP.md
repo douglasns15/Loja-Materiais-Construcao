@@ -4,8 +4,8 @@
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
 > **Última atualização:** 2026-08-14 — **Refino do cadastro (2 pedidos do Owner no E2E): máscaras de
-> telefone/CNPJ/CPF + busca de Fornecedor no padrão da busca de Produto — NO AR, aguardando E2E.** O Owner
-> **validou os 4 fluxos** da fatia UI.Cadastros.Fornecedores e pediu dois ajustes. **(1) Máscaras:** todo
+> telefone/CNPJ/CPF + busca de Fornecedor no padrão da busca de Produto — NO AR e VALIDADO pelo Owner.** O
+> Owner **validou os 4 fluxos** da fatia UI.Cadastros.Fornecedores e pediu dois ajustes. **(1) Máscaras:** todo
 > campo de **telefone/CNPJ/CPF** passa a **formatar ao sair do campo** (blur) com a máscara respectiva —
 > `(11) 98765-4321`, `11.222.333/0001-81`, `123.456.789-09`. **shared (+5 testes → 14/14):** novos
 > `formatCpf` e `formatCpfCnpj` (decide CPF×CNPJ pela contagem de dígitos) ao lado dos já existentes
@@ -18,10 +18,17 @@
 > virou o **mesmo componente de busca** do Produto — novo **`SupplierPicker`** (espelha o `ProductPicker`:
 > campo de busca, lista ao digitar, "pílula" do selecionado + "Trocar"; filtro client-side acento-insensível
 > por nome/CNPJ), com rodapé **"+ Cadastrar novo fornecedor"** preservando o quick-add. **Web-only, sem
-> API/migration.** Gates: shared **14/14**, web typecheck + build (**22 rotas**, `/fornecedores` 3.33 kB,
-> `/estoque` 11.2 kB, `/customers` 3.83 kB). **NO AR:** web `011ae5cb`; smoke ✅ (HTML no-store + CSS 200).
-> **Falta: E2E do Owner** (conferir máscaras nos 5 pontos e a nova busca de fornecedor no Estoque). Ver
-> "UI.Cadastros.Fornecedores" (refino) no registro.
+> API/migration.** **Dois ajustes finais no `SupplierPicker` pedidos no E2E:** (a) **bug** — a lista não
+> fechava ao clicar fora (ficava presa até escolher algo); adicionado fechamento por **clique-fora + Esc**
+> (fornecedor é opcional ⇒ clicar fora deixa o campo vazio); (b) **paridade com o Produto** — a lista passa a
+> aparecer **só ao digitar** (`open && query.trim()`), então "Trocar" **limpa sem reabrir** a lista; o rodapé
+> "+ Cadastrar novo fornecedor" acompanha a busca. Gates: shared **14/14**, web typecheck + build (**22
+> rotas**). **NO AR:** web `011ae5cb` → `75ac6571` (clique-fora + CNPJ mascarado na lista) → `6f5e49e0`
+> (lista só ao digitar); smokes ✅ (HTML no-store + CSS 200). **E2E do Owner VALIDADO (2026-08-14):** "tudo
+> funcionando corretamente" — máscaras nos 5 pontos e a busca de fornecedor no Estoque (buscar, selecionar,
+> Trocar limpa sem travar). Commits `9b6b9c7` (refino) + `99e3f6f` (clique-fora) + `95227f8` (lista só ao
+> digitar). **Fatia UI.Cadastros.Fornecedores CONCLUÍDA.** Ver "UI.Cadastros.Fornecedores" (refino) no
+> registro.
 >
 > **Antes:** 2026-08-14 — **Cadastro de Fornecedor (tela + submenu "Cadastros") +
 > quick-add de Fornecedor no Estoque e de Cliente no PDV — NO AR, aguardando E2E do Owner.** Achado do

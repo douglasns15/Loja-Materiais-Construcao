@@ -4720,5 +4720,21 @@ Dois pedidos do Owner ao validar a fatia. **Web-only, sem API/migration.**
 
 **Gates:** shared **14/14** ✅ · web typecheck ✅ · build web ✅ (**22 rotas**; `/fornecedores` 3.33 kB,
 `/estoque` 11.2 kB, `/customers` 3.83 kB). **NO AR:** web `011ae5cb`; smoke ✅ (HTML no-store + CSS 200).
-**E2E do Owner — ⏭️ PENDENTE:** conferir as máscaras nos 5 pontos (digitar → sair → mascara; reabrir edição
-mostra mascarado) e a nova busca de fornecedor no Estoque (buscar, selecionar, Trocar, "+ Cadastrar novo").
+
+**Dois ajustes finais no `SupplierPicker` (pedidos ao testar):**
+
+- **(a) 🐞 Bug — a lista não fechava ao clicar fora:** ao selecionar um fornecedor e clicar em "Trocar", a
+  lista de busca abria e **não fechava** ao clicar fora — o campo ficava preso até escolher alguma opção
+  (não deixava só limpar/sair, sendo o campo **opcional**). **Fix:** handler de **clique-fora (mousedown) +
+  Esc** fecha a lista e limpa a busca (container com `ref`, mesmo padrão do menu de conta do layout). De
+  passagem, o **CNPJ exibido na lista** passou a sair mascarado (`formatCnpj`). Web `75ac6571`.
+- **(b) Paridade total com o ProductPicker — lista só ao digitar:** o Owner notou que no seletor de Produto
+  o "Trocar" **limpa sem reabrir** a lista (ela só aparece com texto digitado) e pediu o mesmo no Fornecedor.
+  A lista passou a renderizar só com `open && query.trim()` (matches vazio sem busca). O rodapé "+ Cadastrar
+  novo fornecedor" acompanha a busca (aparece ao digitar — mesmo fluxo do quick-add de cliente no PDV). Web
+  `6f5e49e0`.
+
+**E2E do Owner — ✅ VALIDADO (2026-08-14):** "tudo funcionando corretamente" — máscaras nos 5 pontos (digitar
+→ sair → mascara; reabrir edição mostra mascarado) e a busca de fornecedor no Estoque (buscar, selecionar,
+Trocar limpa sem travar, "+ Cadastrar novo"). Commits `9b6b9c7` (refino) + `99e3f6f` (clique-fora) + `95227f8`
+(lista só ao digitar). **Fatia UI.Cadastros.Fornecedores CONCLUÍDA.**
