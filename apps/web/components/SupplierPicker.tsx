@@ -1,7 +1,8 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { normalizeSearchText } from '@nexoloja/core';
+import { formatCnpj } from '@nexoloja/shared';
 
 /**
  * Seletor de fornecedor com **busca**, no MESMO formato do seletor de produto (`ProductPicker`) —
@@ -34,8 +35,33 @@ export function SupplierPicker<S extends PickerSupplier>({
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const selected = suppliers.find((s) => s.id === value) ?? null;
+
+  // Fecha a lista ao clicar fora (ou Esc): o fornecedor é OPCIONAL, então clicar fora deve
+  // simplesmente deixar o campo como está (vazio, se nada foi escolhido) — não travar até escolher.
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setQuery('');
+      }
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        setOpen(false);
+        setQuery('');
+      }
+    }
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
 
   // Lista curta: sem busca mostra os primeiros; com busca, filtra por nome/CNPJ (acento-insensível).
   const matches = useMemo(() => {
@@ -74,7 +100,7 @@ export function SupplierPicker<S extends PickerSupplier>({
   }
 
   return (
-    <div className="relative">
+    <div className="relative" ref={containerRef}>
       <input
         ref={inputRef}
         type="search"
@@ -104,7 +130,9 @@ export function SupplierPicker<S extends PickerSupplier>({
                   className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-gray-50"
                 >
                   <span className="min-w-0 truncate font-medium">{s.name}</span>
-                  {s.cnpj && <span className="shrink-0 text-xs text-gray-500">{s.cnpj}</span>}
+                  {s.cnpj && (
+                    <span className="shrink-0 text-xs text-gray-500">{formatCnpj(s.cnpj)}</span>
+                  )}
                 </button>
               </li>
             ))
