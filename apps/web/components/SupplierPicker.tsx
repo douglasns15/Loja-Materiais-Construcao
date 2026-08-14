@@ -63,12 +63,15 @@ export function SupplierPicker<S extends PickerSupplier>({
     };
   }, [open]);
 
-  // Lista curta: sem busca mostra os primeiros; com busca, filtra por nome/CNPJ (acento-insensível).
-  const matches = useMemo(() => {
-    const q = normalizeSearchText(query);
-    if (!q) return suppliers.slice(0, 8);
-    return suppliers.filter((s) => normalizeSearchText(`${s.name} ${s.cnpj ?? ''}`).includes(q));
-  }, [suppliers, query]);
+  // Igual ao ProductPicker: a lista aparece SÓ ao digitar (sem busca ⇒ vazia). Assim "Trocar" limpa
+  // o campo sem reabrir a lista abaixo. Filtro por nome/CNPJ, acento-insensível.
+  const matches = useMemo(
+    () =>
+      query.trim()
+        ? suppliers.filter((s) => normalizeSearchText(`${s.name} ${s.cnpj ?? ''}`).includes(normalizeSearchText(query)))
+        : [],
+    [suppliers, query],
+  );
 
   function pick(s: S) {
     onChange(s.id);
@@ -115,11 +118,11 @@ export function SupplierPicker<S extends PickerSupplier>({
         className="w-full rounded-lg border border-gray-300 px-3 py-2 disabled:opacity-60"
         aria-label="Buscar fornecedor"
       />
-      {open && (
+      {open && query.trim() && (
         <ul className="absolute z-10 mt-1 max-h-72 w-full divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
           {matches.length === 0 ? (
             <li className="px-3 py-3 text-center text-sm text-gray-500">
-              {query.trim() ? 'Nenhum fornecedor encontrado.' : 'Nenhum fornecedor cadastrado.'}
+              Nenhum fornecedor encontrado.
             </li>
           ) : (
             matches.map((s) => (
