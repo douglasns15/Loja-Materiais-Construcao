@@ -4649,3 +4649,53 @@ Margem/Preço), margem negativa (prejuízo), margem ≥ 100 travada, UX de centa
 que muda o custo → aviso no cadastro → "Revisar preço"/"Marcar como conferido"), Preço sempre a 2 casas e os
 ícones de info. Commits `69aa807` (esteira + item 5) + `ced3303` (refinos). Fatia **UI.Produtos.EsteiraPrecificacao
 CONCLUÍDA.**
+
+## UI.Cadastros.Fornecedores — Tela de Fornecedores + submenu "Cadastros" + quick-add (Estoque e PDV) (2026-08-14)
+
+Achado do Owner: a **Entrada de Estoque** tinha o dropdown "Fornecedor (opcional)…" mas **não existia tela
+para cadastrar fornecedor** — então o dropdown vivia vazio. O **backend já existia desde a Fase 1** (modelo
+`Supplier`, CRUD `/suppliers` com GET/POST/PATCH/DELETE, schemas Zod `create/updateSupplierSchema`); só a UI
+nunca foi feita (o checklist de Fase 1 marcava `/suppliers` como pronto referindo-se **apenas à API**).
+
+**Decisões de produto (Owner, antes de codar):**
+- **(1)** Tela própria de Fornecedores, mas Clientes + Fornecedores agrupados num **submenu recolhível
+  "Cadastros"** (a barra lateral estava ficando longa). **Produtos fica fora** do grupo — é uso diário, não
+  deve custar um clique a mais.
+- **(2) Quick-add** em dois pontos: "+ Novo fornecedor" na Entrada de Estoque e "+ Cadastrar cliente" na busca
+  do PDV — quando não acha na lista, cadastra na hora e **já seleciona** (menos idas e voltas).
+- **(3)** Só **nome obrigatório**; CNPJ/telefone/e-mail/endereço opcionais + **campo de observações** (texto
+  livre) — paridade com o cadastro de Cliente.
+
+**Migration `0027_supplier_notes`** (aprovada **antes de aplicar** — regra 1): `Supplier.notes VarChar(500)?`
+— 100% aditiva/reversível (sem DEFAULT/backfill, sem tocar RLS), mesmo perfil da 0018 (`customers.debtNotes`).
+NULL = sem observação (inclusive todas as linhas atuais).
+
+- **shared:** `createSupplierSchema`/`updateSupplierSchema` ganharam `notes` opcional (≤ 500). API sem mudança
+  de rota (já devolve o objeto inteiro; o client Prisma foi regenerado).
+- **web — `/fornecedores`:** listar + **busca client-side acento-insensível** (`normalizeSearchText`; a API de
+  suppliers devolve a lista inteira) + cadastrar + editar + remover (soft-delete, ADR-004).
+- **web — `SupplierFormModal`:** componente **único** de criar/editar, reusado no quick-add do Estoque (ao
+  salvar, devolve o registro para o chamador já selecioná-lo).
+- **web — `CustomerQuickAddModal`:** create-only, **nome pré-preenchido** com o que foi digitado na busca do
+  PDV; ao salvar, o PDV seleciona o cliente e limpa a busca.
+- **web — menu:** `layout.tsx` reestruturado para suportar **grupos recolhíveis** (`NavGroup` + `children`);
+  grupo "Cadastros" lembra o estado aberto/fechado em `localStorage` e **abre sozinho** quando a rota atual é
+  um filho. `/fornecedores` entrou nas `WARM_ROUTES` (casulo offline do ADR-012).
+- **Sem lógica de `core`** (CRUD puro; nenhuma função de cálculo tocada).
+
+**Gates**
+
+| Gate | Resultado |
+|---|---|
+| Testes shared (Vitest) | ✅ 9/9 |
+| Typecheck web (`tsc --noEmit`) | ✅ |
+| Typecheck/dry-run API (`wrangler deploy --dry-run`) | ✅ |
+| Build web | ✅ (**22 rotas**; `/fornecedores` 3.09 kB, `/estoque` 10.8 kB, `/venda` 18.2 kB) |
+| Migration `0027` (`migrate deploy` no Supabase) | ✅ aplicada, sem drift (`migrate status`: só a 0027 pendente antes) |
+| Deploy de API (⚠️ obrigatório: aceita/retorna `notes`) | ✅ Version `0cc280b2` |
+| Deploy web + `postdeploy` smoke | ✅ Version `45fcca5d` (HTML no-store + CSS 200) |
+| Smoke — health / `/suppliers` / `/customers` sem token | ✅ 200 / 401 / 401 |
+
+**E2E do Owner — ⏭️ PENDENTE.** Roteiro sugerido: (1) menu → grupo "Cadastros" abre/fecha e lembra; (2)
+`/fornecedores` cadastrar/buscar/editar/remover + observações; (3) Estoque → Entrada → "+ Novo" cadastra e já
+seleciona o fornecedor; (4) PDV → buscar cliente inexistente → "+ Cadastrar 'nome'" cria e seleciona na venda.

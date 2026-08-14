@@ -3,7 +3,29 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-14 — **Esteira de precificação sincronizada (Custo · Markup ·
+> **Última atualização:** 2026-08-14 — **Cadastro de Fornecedor (tela + submenu "Cadastros") +
+> quick-add de Fornecedor no Estoque e de Cliente no PDV — NO AR, aguardando E2E do Owner.** Achado do
+> Owner: a Entrada de Estoque tinha o dropdown "Fornecedor" mas **não existia tela para cadastrá-lo** —
+> o backend (`Supplier`, CRUD `/suppliers`, schemas Zod) existe desde a Fase 1, mas a UI nunca foi feita
+> (o checklist marcava `/suppliers` como pronto referindo-se **só à API**). **Decisões de produto (Owner,
+> antes de codar):** (1) tela própria de Fornecedores, agrupada com Clientes num **submenu recolhível
+> "Cadastros"** (encurta a barra lateral; Produtos fica fora — é uso diário); (2) **quick-add**: "+ Novo
+> fornecedor" na Entrada de Estoque e "+ Cadastrar cliente" na busca do PDV (quando não acha, cadastra na
+> hora e **já seleciona**); (3) nome obrigatório, demais opcionais + **campo de observações**. **Migration
+> `0027_supplier_notes` aprovada antes de aplicar (regra 1) e aplicada sem drift:** `Supplier.notes
+> VarChar(500)?` — 100% aditiva/reversível (sem DEFAULT/backfill, sem RLS), mesmo perfil da 0018
+> (`customers`). **shared:** `createSupplierSchema`/`updateSupplierSchema` ganharam `notes`. **web:** rota
+> `/fornecedores` (listar + busca client-side acento-insensível + cadastrar + editar + remover
+> soft-delete), componente único **`SupplierFormModal`** (criar/editar, reusado no quick-add do Estoque),
+> **`CustomerQuickAddModal`** (create-only, nome pré-preenchido pela busca), menu reestruturado com **grupo
+> "Cadastros"** recolhível (preferência lembrada em `localStorage`; abre sozinho quando a rota ativa é um
+> filho). **Sem lógica de `core`.** Gates: shared **9/9**, web typecheck + build (**22 rotas**,
+> `/fornecedores` 3.09 kB, `/estoque` 10.8 kB, `/venda` 18.2 kB), API dry-run; migration `0027` sem drift.
+> ⚠️ **Deploy de API obrigatório** (aceita/retorna `notes`). **NO AR:** migration aplicada; API `0cc280b2`
+> + web `45fcca5d`; smokes ✅ (health 200; `/suppliers` e `/customers` sem token 401; web HTML no-store +
+> CSS 200). **Falta: E2E do Owner.** Ver "UI.Cadastros.Fornecedores" no registro.
+>
+> **Antes:** 2026-08-14 — **Esteira de precificação sincronizada (Custo · Markup ·
 > Preço · Margem) + aviso de revisão de preço — NO AR e VALIDADO pelo Owner.** Pedido do Owner:
 > adotar o padrão de mercado (Bling/Conta Azul/Omie) de precificação em tempo real no cadastro/edição
 > de produtos, com os 4 campos interligados, sem "botão escondido". **Decisão central que elimina o
@@ -1288,7 +1310,9 @@
 - [x] Endpoint de validação `GET /db-check` lendo o banco (validado em `wrangler dev`)
 - [x] CRUD de **Produtos** (`/products`) — validado ponta a ponta no Supabase
 - [x] CRUD de **Clientes** (`/customers`) — validado ponta a ponta no Supabase
-- [x] CRUD de **Categorias** (`/categories`, com hierarquia) e **Fornecedores** (`/suppliers`)
+- [x] CRUD de **Categorias** (`/categories`, com hierarquia) e **Fornecedores** (`/suppliers`) — API
+      (a **tela** de Fornecedores só chegou em 2026-08-14; ver "UI.Cadastros.Fornecedores"). Categorias
+      seguem sem tela dedicada.
 - [x] Deploy na edge (Cloudflare Workers + Hyperdrive) — `https://nexoloja-api.imortal.workers.dev`
 
 > ℹ️ Tenant ainda vem do header temporário `x-tenant-id` — será substituído pelo

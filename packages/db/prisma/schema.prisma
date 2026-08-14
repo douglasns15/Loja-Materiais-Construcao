@@ -409,6 +409,7 @@ model Supplier {
   phone     String?   @db.VarChar(20)
   email     String?   @db.VarChar(150)
   address   String?   @db.VarChar(300)
+  notes     String?   @db.VarChar(500) // Observação livre do cadastro do fornecedor (migration 0027)
   isActive  Boolean   @default(true)
   deletedAt DateTime? // Soft-delete (ADR-004)
   createdAt DateTime  @default(now())

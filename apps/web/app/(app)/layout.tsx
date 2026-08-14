@@ -15,7 +15,14 @@ import { QueueChip } from './QueueChip';
 import { CartChip } from './CartChip';
 import { OfflineNav } from './OfflineNav';
 
-const NAV = [
+// O menu suporta itens simples (`href`) e GRUPOS recolhíveis (`group` + `children`) — o grupo
+// "Cadastros" junta os cadastros menos frequentes (Clientes, Fornecedores) para não alongar a barra.
+type NavLink = { href: string; label: string; adminOnly?: boolean };
+type NavGroup = { group: string; children: NavLink[] };
+type NavEntry = NavLink | NavGroup;
+const isGroup = (e: NavEntry): e is NavGroup => 'group' in e;
+
+const NAV: NavEntry[] = [
   { href: '/venda', label: 'Nova Venda' },
   { href: '/vendas', label: 'Histórico de Vendas' },
   { href: '/orcamentos', label: 'Orçamentos' },
@@ -24,13 +31,24 @@ const NAV = [
   { href: '/entregas', label: 'Entregas' },
   { href: '/products', label: 'Produtos' },
   { href: '/estoque', label: 'Estoque' },
-  { href: '/customers', label: 'Clientes' },
+  {
+    group: 'Cadastros',
+    children: [
+      { href: '/customers', label: 'Clientes' },
+      { href: '/fornecedores', label: 'Fornecedores' },
+    ],
+  },
   { href: '/relatorios', label: 'Relatórios' },
   { href: '/configuracoes', label: 'Configurações', adminOnly: true },
 ];
 
+// Rótulo da tela atual no topo (achata os grupos para procurar pelo href).
+const NAV_LINKS: NavLink[] = NAV.flatMap((e) => (isGroup(e) ? e.children : [e]));
+
 // Lembra a preferência de recolher a barra no desktop entre sessões.
 const COLLAPSE_KEY = 'nexoloja:sidebar-collapsed';
+// Lembra quais grupos do menu (ex.: "Cadastros") ficam abertos.
+const GROUPS_KEY = 'nexoloja:nav-groups-open';
 
 // CS-3 (ADR-012): telas cujo **shell** deve estar em cache para a navegação por reload funcionar
 // offline. Inclui TODAS as telas do menu — não só as offline-capable (venda/caixa/pendências): as
@@ -48,6 +66,7 @@ const WARM_ROUTES = [
   '/products',
   '/estoque',
   '/customers',
+  '/fornecedores',
   '/relatorios',
   '/configuracoes',
   '/pendencias',
@@ -63,6 +82,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // Gaveta no celular/tablet (overlay) e recolher no desktop (esconde a barra).
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  // Grupos recolhíveis do menu (ex.: "Cadastros"): mapa label→aberto, lembrado entre sessões.
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const accountRef = useRef<HTMLDivElement>(null);
 
   // Fecha o menu de conta ao clicar fora dele.
@@ -77,9 +98,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return () => document.removeEventListener('mousedown', onClickOutside);
   }, [menuOpen]);
 
-  // Restaura a preferência de recolher (desktop) salva no navegador.
+  // Restaura a preferência de recolher (desktop) e a de grupos abertos, salvas no navegador.
   useEffect(() => {
     setCollapsed(localStorage.getItem(COLLAPSE_KEY) === '1');
+    try {
+      setOpenGroups(JSON.parse(localStorage.getItem(GROUPS_KEY) || '{}'));
+    } catch {
+      /* preferência ausente/corrompida → começa vazio (grupos usam o default) */
+    }
   }, []);
 
   // Ao navegar, fecha a gaveta do celular (evita ficar aberta sobre a tela nova).
@@ -133,6 +159,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     });
   }
 
+  // Um grupo abre por default quando a rota atual é um dos seus filhos; senão, segue a preferência.
+  const isGroupOpen = (g: NavGroup) =>
+    openGroups[g.group] ?? g.children.some((c) => c.href === pathname);
+
+  function toggleGroup(g: NavGroup) {
+    setOpenGroups((prev) => {
+      const next = { ...prev, [g.group]: !isGroupOpen(g) };
+      localStorage.setItem(GROUPS_KEY, JSON.stringify(next));
+      return next;
+    });
+  }
+
   async function logout() {
     clearCachedMe();
     await supabase.auth.signOut();
@@ -143,7 +181,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return <div className="p-8 text-gray-600">Carregando…</div>;
   }
 
-  const currentLabel = NAV.find((item) => item.href === pathname)?.label ?? 'NexoLoja';
+  const currentLabel = NAV_LINKS.find((item) => item.href === pathname)?.label ?? 'NexoLoja';
 
   return (
     <OutboxSyncProvider>
@@ -182,18 +220,72 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </button>
         </div>
         <nav className="flex-1 space-y-1 overflow-y-auto">
-          {NAV.filter((item) => !item.adminOnly || isAdmin).map((item) => {
-            const active = pathname === item.href;
+          {NAV.map((entry) => {
+            // Item simples (link direto).
+            if (!isGroup(entry)) {
+              if (entry.adminOnly && !isAdmin) return null;
+              const active = pathname === entry.href;
+              return (
+                <Link
+                  key={entry.href}
+                  href={entry.href}
+                  className={`block rounded-lg px-3 py-2 text-sm font-medium transition ${
+                    active ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  {entry.label}
+                </Link>
+              );
+            }
+
+            // Grupo recolhível (ex.: "Cadastros"): cabeçalho + filhos indentados.
+            const open = isGroupOpen(entry);
+            const hasActiveChild = entry.children.some((c) => c.href === pathname);
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`block rounded-lg px-3 py-2 text-sm font-medium transition ${
-                  active ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                {item.label}
-              </Link>
+              <div key={entry.group}>
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(entry)}
+                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition ${
+                    hasActiveChild && !open
+                      ? 'bg-gray-100 text-gray-900'
+                      : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                  aria-expanded={open}
+                >
+                  <span>{entry.group}</span>
+                  <svg
+                    className={`h-4 w-4 shrink-0 text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </button>
+                {open && (
+                  <div className="mt-1 space-y-1 pl-3">
+                    {entry.children.map((child) => {
+                      const active = pathname === child.href;
+                      return (
+                        <Link
+                          key={child.href}
+                          href={child.href}
+                          className={`block rounded-lg px-3 py-2 text-sm font-medium transition ${
+                            active ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-100'
+                          }`}
+                        >
+                          {child.label}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
         </nav>

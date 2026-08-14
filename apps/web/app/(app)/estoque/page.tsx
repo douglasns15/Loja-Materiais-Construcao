@@ -25,6 +25,7 @@ import { StockDetail, type StockProduct } from '@/components/StockDetail';
 import { MoneyInput } from '@/components/MoneyInput';
 import { ProductPicker } from '@/components/ProductPicker';
 import { PeriodFilter, defaultRange } from '@/components/PeriodFilter';
+import { SupplierFormModal } from '@/components/SupplierFormModal';
 
 // `GET /products` devolve a linha completa do produto; o detalhe de estoque (StockDetail)
 // usa esses campos extras (custo/venda, peso, descrição…), então o tipo espelha o StockProduct.
@@ -129,6 +130,8 @@ export default function EstoquePage() {
   const online = useOnline();
   const [products, setProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  // Atalho "+ Novo fornecedor" na Entrada de estoque: cadastra sem sair da tela e já seleciona.
+  const [supplierModalOpen, setSupplierModalOpen] = useState(false);
   const [movements, setMovements] = useState<Movement[]>([]);
   // Resumo consolidado por produto (Σ entradas/saídas) para a visão "saldo × mínimo × histórico".
   const [summary, setSummary] = useState<Record<string, { income: number; expense: number }>>({});
@@ -570,18 +573,29 @@ export default function EstoquePage() {
               onChange={(v) => setEntry({ ...entry, unitCost: v })}
               className="rounded-lg border border-gray-300 px-3 py-2"
             />
-            <select
-              value={entry.supplierId}
-              onChange={(e) => setEntry({ ...entry, supplierId: e.target.value })}
-              className="rounded-lg border border-gray-300 px-3 py-2 sm:col-span-2"
-            >
-              <option value="">Fornecedor (opcional)…</option>
-              {suppliers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
+            <div className="flex gap-2 sm:col-span-2">
+              <select
+                value={entry.supplierId}
+                onChange={(e) => setEntry({ ...entry, supplierId: e.target.value })}
+                className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2"
+              >
+                <option value="">Fornecedor (opcional)…</option>
+                {suppliers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+              {/* Não achou o fornecedor na lista? Cadastra na hora e já seleciona. */}
+              <button
+                type="button"
+                onClick={() => setSupplierModalOpen(true)}
+                className="shrink-0 whitespace-nowrap rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+                title="Cadastrar um novo fornecedor"
+              >
+                + Novo
+              </button>
+            </div>
             <input
               placeholder="Motivo (ex: Compra NF 1234)"
               value={entry.reason}
@@ -977,6 +991,20 @@ export default function EstoquePage() {
           product={detailProduct}
           summary={summary[detailProduct.id] ?? { income: 0, expense: 0 }}
           onClose={() => setDetailProduct(null)}
+        />
+      )}
+
+      {/* Quick-add de fornecedor: cadastra sem sair da Entrada e já seleciona o novo fornecedor. */}
+      {supplierModalOpen && (
+        <SupplierFormModal
+          onClose={() => setSupplierModalOpen(false)}
+          onSaved={(s) => {
+            // Insere na lista (ordem alfabética) e seleciona no dropdown, sem recarregar tudo.
+            setSuppliers((prev) =>
+              [...prev, { id: s.id, name: s.name }].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')),
+            );
+            setEntry((e) => ({ ...e, supplierId: s.id }));
+          }}
         />
       )}
     </div>

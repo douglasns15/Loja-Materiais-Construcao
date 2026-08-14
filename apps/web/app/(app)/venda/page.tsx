@@ -54,6 +54,7 @@ import { StoreDisabledNotice } from '@/components/StoreDisabledNotice';
 import { OfflineSalesNotice } from '@/components/OfflineSalesNotice';
 import { BarcodeScanButton } from '@/components/BarcodeScanButton';
 import { MoneyInput } from '@/components/MoneyInput';
+import { CustomerQuickAddModal } from '@/components/CustomerQuickAddModal';
 
 /** Taxas da maquininha que vêm junto no `GET /tenant` (ADR-016). */
 type StoreCardFees = {
@@ -403,6 +404,9 @@ export default function VendaPage() {
   const [customerName, setCustomerName] = useState('');
   const [customerQuery, setCustomerQuery] = useState('');
   const [customerOptions, setCustomerOptions] = useState<{ id: string; name: string }[]>([]);
+  // Cadastro rápido de cliente no PDV: `null` = fechado; string = modal aberto com esse nome
+  // pré-preenchido (o que já foi digitado na busca).
+  const [customerModalName, setCustomerModalName] = useState<string | null>(null);
   // Saldo em aberto do cliente selecionado (ADR-022): alerta de "Dívida ativa" ao pôr numa conta
   // que já existe. `null` = ainda não sabido / sem dívida / offline. Só informativo.
   const [customerDebt, setCustomerDebt] = useState<number | null>(null);
@@ -1654,6 +1658,16 @@ export default function VendaPage() {
             ))}
           </ul>
         )}
+        {/* Não achou o cliente na busca? Cadastra na hora (já com o nome digitado) e seleciona. */}
+        {customerQuery.trim() && (
+          <button
+            type="button"
+            onClick={() => setCustomerModalName(customerQuery.trim())}
+            className="mt-1 block w-full rounded-lg border border-dashed border-gray-300 px-3 py-2 text-left text-sm font-medium text-blue-600 hover:bg-blue-50"
+          >
+            + Cadastrar “{customerQuery.trim()}”
+          </button>
+        )}
       </div>
     );
   }
@@ -2750,6 +2764,20 @@ export default function VendaPage() {
             />
           );
         })()}
+
+      {/* Cadastro rápido de cliente (a partir da busca do PDV): cria e já seleciona na venda. */}
+      {customerModalName !== null && (
+        <CustomerQuickAddModal
+          initialName={customerModalName}
+          onClose={() => setCustomerModalName(null)}
+          onCreated={(c) => {
+            setCustomerId(c.id);
+            setCustomerName(c.name);
+            setCustomerQuery('');
+            setCustomerOptions([]);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -10,6 +10,7 @@ export const createSupplierSchema = z.object({
   phone: z.string().max(20).optional(),
   email: z.string().email().max(150).optional(),
   address: z.string().max(300).optional(),
+  notes: z.string().max(500).optional(), // Observação livre do cadastro (paridade com Cliente)
 });
 export type CreateSupplierInput = z.infer<typeof createSupplierSchema>;
 
