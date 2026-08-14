@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { createCustomerSchema } from '@nexoloja/shared';
+import { createCustomerSchema, formatCpfCnpj, formatPhoneBr } from '@nexoloja/shared';
 import { apiPost } from '@/lib/api';
+import { MaskedInput } from '@/components/MaskedInput';
 
 /** Cliente recém-criado devolvido ao chamador (o PDV já o seleciona). */
 export type CreatedCustomer = { id: string; name: string };
@@ -100,12 +101,12 @@ export function CustomerQuickAddModal({
             <label htmlFor="qc-cpf" className="block text-sm font-medium text-gray-700">
               CPF/CNPJ
             </label>
-            <input
+            <MaskedInput
               id="qc-cpf"
-              type="text"
               value={form.cpfCnpj}
-              onChange={(e) => setForm({ ...form, cpfCnpj: e.target.value })}
-              maxLength={18}
+              onChange={(v) => setForm({ ...form, cpfCnpj: v })}
+              format={formatCpfCnpj}
+              maxDigits={14}
               className={inputClass}
             />
           </div>
@@ -113,12 +114,13 @@ export function CustomerQuickAddModal({
             <label htmlFor="qc-phone" className="block text-sm font-medium text-gray-700">
               Telefone
             </label>
-            <input
+            <MaskedInput
               id="qc-phone"
-              type="text"
               value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
-              maxLength={20}
+              onChange={(v) => setForm({ ...form, phone: v })}
+              format={formatPhoneBr}
+              maxDigits={11}
+              inputMode="tel"
               className={inputClass}
             />
           </div>

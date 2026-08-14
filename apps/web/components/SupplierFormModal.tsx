@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { createSupplierSchema, updateSupplierSchema } from '@nexoloja/shared';
+import { createSupplierSchema, formatCnpj, formatPhoneBr, updateSupplierSchema } from '@nexoloja/shared';
 import { apiDelete, apiGet, apiPatch, apiPost } from '@/lib/api';
+import { MaskedInput } from '@/components/MaskedInput';
 
 /** Fornecedor como devolvido pela API (`/suppliers`). */
 export type Supplier = {
@@ -165,12 +166,12 @@ export function SupplierFormModal({
               <label htmlFor="sup-cnpj" className="block text-sm font-medium text-gray-700">
                 CNPJ
               </label>
-              <input
+              <MaskedInput
                 id="sup-cnpj"
-                type="text"
                 value={form.cnpj}
-                onChange={(e) => setForm({ ...form, cnpj: e.target.value })}
-                maxLength={18}
+                onChange={(v) => setForm({ ...form, cnpj: v })}
+                format={formatCnpj}
+                maxDigits={14}
                 className={inputClass}
               />
             </div>
@@ -178,12 +179,13 @@ export function SupplierFormModal({
               <label htmlFor="sup-phone" className="block text-sm font-medium text-gray-700">
                 Telefone
               </label>
-              <input
+              <MaskedInput
                 id="sup-phone"
-                type="text"
                 value={form.phone}
-                onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                maxLength={20}
+                onChange={(v) => setForm({ ...form, phone: v })}
+                format={formatPhoneBr}
+                maxDigits={11}
+                inputMode="tel"
                 className={inputClass}
               />
             </div>

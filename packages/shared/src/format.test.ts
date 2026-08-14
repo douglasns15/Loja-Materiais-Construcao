@@ -1,10 +1,46 @@
 import { describe, expect, it } from 'vitest';
 import {
+  formatCnpj,
+  formatCpf,
+  formatCpfCnpj,
   formatOrderNumber,
+  formatPhoneBr,
   formatQuoteNumber,
   parseOrderNumberQuery,
   parseQuoteNumberQuery,
 } from './format';
+
+// Máscaras de documento/telefone (apresentação; o banco guarda só dígitos).
+describe('formatCpf', () => {
+  it('mascara 11 dígitos como 000.000.000-00', () => {
+    expect(formatCpf('12345678909')).toBe('123.456.789-09');
+    expect(formatCpf('123.456.789-09')).toBe('123.456.789-09'); // reformatar é idempotente
+  });
+  it('tamanho ≠ 11 volta só os dígitos (não trava digitação parcial)', () => {
+    expect(formatCpf('123456')).toBe('123456');
+    expect(formatCpf('')).toBe('');
+    expect(formatCpf(null)).toBe('');
+  });
+});
+
+describe('formatCpfCnpj', () => {
+  it('até 11 dígitos usa máscara de CPF; acima, de CNPJ', () => {
+    expect(formatCpfCnpj('12345678909')).toBe('123.456.789-09');
+    expect(formatCpfCnpj('11222333000181')).toBe('11.222.333/0001-81');
+  });
+  it('tamanhos incompletos voltam só os dígitos', () => {
+    expect(formatCpfCnpj('112223330001')).toBe('112223330001'); // 12 díg. (CNPJ incompleto)
+    expect(formatCpfCnpj('')).toBe('');
+  });
+});
+
+describe('formatCnpj / formatPhoneBr (regressão)', () => {
+  it('CNPJ 14 díg. e telefones fixo/celular', () => {
+    expect(formatCnpj('11222333000181')).toBe('11.222.333/0001-81');
+    expect(formatPhoneBr('1133334444')).toBe('(11) 3333-4444');
+    expect(formatPhoneBr('11987654321')).toBe('(11) 98765-4321');
+  });
+});
 
 // ADR-023 — código humano da venda (V-000128). Funções puras de apresentação/busca.
 describe('formatOrderNumber', () => {

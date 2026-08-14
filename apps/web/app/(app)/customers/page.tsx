@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { createCustomerSchema } from '@nexoloja/shared';
+import { createCustomerSchema, formatCpfCnpj, formatPhoneBr } from '@nexoloja/shared';
 import { apiGet, apiPost } from '@/lib/api';
 import { useOnline } from '@/lib/useOnline';
 import { OfflineNotice } from '@/components/OfflineNotice';
+import { MaskedInput } from '@/components/MaskedInput';
 import { CustomerProfile } from '@/components/CustomerProfile';
 
 type Customer = {
@@ -126,16 +127,21 @@ export default function CustomersPage() {
           onChange={(e) => setForm({ ...form, name: e.target.value })}
           className="rounded-lg border border-gray-300 px-3 py-2 sm:col-span-2"
         />
-        <input
+        <MaskedInput
           placeholder="CPF/CNPJ"
           value={form.cpfCnpj}
-          onChange={(e) => setForm({ ...form, cpfCnpj: e.target.value })}
+          onChange={(v) => setForm({ ...form, cpfCnpj: v })}
+          format={formatCpfCnpj}
+          maxDigits={14}
           className="rounded-lg border border-gray-300 px-3 py-2"
         />
-        <input
+        <MaskedInput
           placeholder="Telefone"
           value={form.phone}
-          onChange={(e) => setForm({ ...form, phone: e.target.value })}
+          onChange={(v) => setForm({ ...form, phone: v })}
+          format={formatPhoneBr}
+          maxDigits={11}
+          inputMode="tel"
           className="rounded-lg border border-gray-300 px-3 py-2"
         />
         <input
@@ -209,8 +215,8 @@ export default function CustomersPage() {
                       {c.name}
                     </button>
                   </td>
-                  <td className="px-4 py-2 text-gray-600">{c.cpfCnpj ?? '—'}</td>
-                  <td className="px-4 py-2 text-gray-600">{c.phone ?? '—'}</td>
+                  <td className="px-4 py-2 text-gray-600">{c.cpfCnpj ? formatCpfCnpj(c.cpfCnpj) : '—'}</td>
+                  <td className="px-4 py-2 text-gray-600">{c.phone ? formatPhoneBr(c.phone) : '—'}</td>
                   <td className="px-4 py-2 text-gray-600">{c.email ?? '—'}</td>
                   <td className="px-4 py-2 text-xs text-gray-600">
                     {byLine(c.updatedByName, c.updatedAt)}

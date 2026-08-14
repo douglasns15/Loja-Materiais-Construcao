@@ -21,6 +21,27 @@ export function formatCnpj(value: string | null | undefined): string {
 }
 
 /**
+ * Formata um CPF (11 dígitos) como `000.000.000-00`.
+ * Entrada parcial ou com tamanho diferente de 11 volta apenas com os dígitos —
+ * assim campos incompletos não travam a digitação.
+ */
+export function formatCpf(value: string | null | undefined): string {
+  const d = onlyDigits(value).slice(0, 11);
+  if (d.length !== 11) return d;
+  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+}
+
+/**
+ * Formata um documento que pode ser CPF **ou** CNPJ (campo `cpfCnpj` do cliente): decide pela
+ * quantidade de dígitos — até 11 usa a máscara de CPF, acima usa a de CNPJ. Tamanhos incompletos
+ * caem no ramo correspondente (que volta só os dígitos), então não travam a digitação.
+ */
+export function formatCpfCnpj(value: string | null | undefined): string {
+  const d = onlyDigits(value).slice(0, 14);
+  return d.length > 11 ? formatCnpj(d) : formatCpf(d);
+}
+
+/**
  * Formata telefone BR: `(00) 0000-0000` (fixo, 10 díg.) ou `(00) 00000-0000`
  * (celular, 11 díg.). Fora desses tamanhos, volta apenas com os dígitos.
  */

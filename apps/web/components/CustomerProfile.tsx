@@ -2,12 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import {
+  formatCpfCnpj,
   formatOrderNumber,
+  formatPhoneBr,
   RECEIVABLE_STATUS_LABELS,
   updateCustomerSchema,
   type CustomerHistory,
 } from '@nexoloja/shared';
 import { apiGet, apiPatch } from '@/lib/api';
+import { MaskedInput } from '@/components/MaskedInput';
 import { ReceivableDetailModal } from '@/components/ReceivableDetailModal';
 
 const BRL = (v: string | number) =>
@@ -118,19 +121,43 @@ export function CustomerProfile({
     }
   }
 
-  function field(label: string, key: keyof FormState, opts?: { type?: string; full?: boolean }) {
+  function setField(key: keyof FormState, v: string) {
+    setSaved(false);
+    setForm((f) => (f ? { ...f, [key]: v } : f));
+  }
+
+  function field(
+    label: string,
+    key: keyof FormState,
+    opts?: {
+      type?: string;
+      full?: boolean;
+      /** Máscara ao sair do campo (telefone/CPF/CNPJ); guarda só dígitos. */
+      mask?: (v: string | null | undefined) => string;
+      maxDigits?: number;
+    },
+  ) {
+    const inputClass = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm';
     return (
       <label className={`block ${opts?.full ? 'sm:col-span-2' : ''}`}>
         <span className="mb-1 block text-xs text-gray-600">{label}</span>
-        <input
-          type={opts?.type ?? 'text'}
-          value={form?.[key] ?? ''}
-          onChange={(e) => {
-            setSaved(false);
-            setForm((f) => (f ? { ...f, [key]: e.target.value } : f));
-          }}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-        />
+        {opts?.mask ? (
+          <MaskedInput
+            value={form?.[key] ?? ''}
+            onChange={(v) => setField(key, v)}
+            format={opts.mask}
+            maxDigits={opts.maxDigits ?? 14}
+            inputMode={opts.maxDigits === 11 ? 'tel' : 'numeric'}
+            className={inputClass}
+          />
+        ) : (
+          <input
+            type={opts?.type ?? 'text'}
+            value={form?.[key] ?? ''}
+            onChange={(e) => setField(key, e.target.value)}
+            className={inputClass}
+          />
+        )}
       </label>
     );
   }
@@ -165,8 +192,8 @@ export function CustomerProfile({
             {/* Dados do cliente (editáveis). */}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {field('Nome', 'name', { full: true })}
-              {field('CPF/CNPJ', 'cpfCnpj')}
-              {field('Telefone', 'phone')}
+              {field('CPF/CNPJ', 'cpfCnpj', { mask: formatCpfCnpj, maxDigits: 14 })}
+              {field('Telefone', 'phone', { mask: formatPhoneBr, maxDigits: 11 })}
               {field('E-mail', 'email', { type: 'email', full: true })}
               {field('Endereço', 'address', { full: true })}
               <label className="block sm:col-span-2">

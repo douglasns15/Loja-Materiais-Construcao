@@ -3,7 +3,27 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-14 — **Cadastro de Fornecedor (tela + submenu "Cadastros") +
+> **Última atualização:** 2026-08-14 — **Refino do cadastro (2 pedidos do Owner no E2E): máscaras de
+> telefone/CNPJ/CPF + busca de Fornecedor no padrão da busca de Produto — NO AR, aguardando E2E.** O Owner
+> **validou os 4 fluxos** da fatia UI.Cadastros.Fornecedores e pediu dois ajustes. **(1) Máscaras:** todo
+> campo de **telefone/CNPJ/CPF** passa a **formatar ao sair do campo** (blur) com a máscara respectiva —
+> `(11) 98765-4321`, `11.222.333/0001-81`, `123.456.789-09`. **shared (+5 testes → 14/14):** novos
+> `formatCpf` e `formatCpfCnpj` (decide CPF×CNPJ pela contagem de dígitos) ao lado dos já existentes
+> `formatCnpj`/`formatPhoneBr`. **web:** componente **`MaskedInput`** (mesmo padrão de **buffer de foco** do
+> `MoneyInput`: dígitos crus enquanto focado — sem pulo de cursor — e máscara ao desfocar; guarda só os
+> **dígitos**, forma canônica do banco, então busca por dígitos e envio ao servidor não mudam). Aplicado em
+> **todos** os campos doc/telefone: `SupplierFormModal`, tela `/fornecedores` (form + lista),
+> `CustomerQuickAddModal`, `CustomerProfile` e tela `/customers` (form + lista) — as listas também exibem
+> mascarado. **(2) Busca de Fornecedor = busca de Produto:** na Entrada de Estoque o `<select>` de fornecedor
+> virou o **mesmo componente de busca** do Produto — novo **`SupplierPicker`** (espelha o `ProductPicker`:
+> campo de busca, lista ao digitar, "pílula" do selecionado + "Trocar"; filtro client-side acento-insensível
+> por nome/CNPJ), com rodapé **"+ Cadastrar novo fornecedor"** preservando o quick-add. **Web-only, sem
+> API/migration.** Gates: shared **14/14**, web typecheck + build (**22 rotas**, `/fornecedores` 3.33 kB,
+> `/estoque` 11.2 kB, `/customers` 3.83 kB). **NO AR:** web `011ae5cb`; smoke ✅ (HTML no-store + CSS 200).
+> **Falta: E2E do Owner** (conferir máscaras nos 5 pontos e a nova busca de fornecedor no Estoque). Ver
+> "UI.Cadastros.Fornecedores" (refino) no registro.
+>
+> **Antes:** 2026-08-14 — **Cadastro de Fornecedor (tela + submenu "Cadastros") +
 > quick-add de Fornecedor no Estoque e de Cliente no PDV — NO AR, aguardando E2E do Owner.** Achado do
 > Owner: a Entrada de Estoque tinha o dropdown "Fornecedor" mas **não existia tela para cadastrá-lo** —
 > o backend (`Supplier`, CRUD `/suppliers`, schemas Zod) existe desde a Fase 1, mas a UI nunca foi feita

@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { createSupplierSchema } from '@nexoloja/shared';
+import { createSupplierSchema, formatCnpj, formatPhoneBr } from '@nexoloja/shared';
 import { normalizeSearchText } from '@nexoloja/core';
 import { apiGet, apiPost } from '@/lib/api';
 import { useOnline } from '@/lib/useOnline';
 import { OfflineNotice } from '@/components/OfflineNotice';
+import { MaskedInput } from '@/components/MaskedInput';
 import { SupplierFormModal, type Supplier } from '@/components/SupplierFormModal';
 
 /** Estado do formulário de cadastro (tudo string; opcionais vazios são omitidos no envio). */
@@ -88,16 +89,21 @@ export default function SuppliersPage() {
           onChange={(e) => setForm({ ...form, name: e.target.value })}
           className="rounded-lg border border-gray-300 px-3 py-2 sm:col-span-2"
         />
-        <input
+        <MaskedInput
           placeholder="CNPJ (opcional)"
           value={form.cnpj}
-          onChange={(e) => setForm({ ...form, cnpj: e.target.value })}
+          onChange={(v) => setForm({ ...form, cnpj: v })}
+          format={formatCnpj}
+          maxDigits={14}
           className="rounded-lg border border-gray-300 px-3 py-2"
         />
-        <input
+        <MaskedInput
           placeholder="Telefone (opcional)"
           value={form.phone}
-          onChange={(e) => setForm({ ...form, phone: e.target.value })}
+          onChange={(v) => setForm({ ...form, phone: v })}
+          format={formatPhoneBr}
+          maxDigits={11}
+          inputMode="tel"
           className="rounded-lg border border-gray-300 px-3 py-2"
         />
         <input
@@ -176,8 +182,8 @@ export default function SuppliersPage() {
                       {s.name}
                     </button>
                   </td>
-                  <td className="px-4 py-2 text-gray-600">{s.cnpj ?? '—'}</td>
-                  <td className="px-4 py-2 text-gray-600">{s.phone ?? '—'}</td>
+                  <td className="px-4 py-2 text-gray-600">{s.cnpj ? formatCnpj(s.cnpj) : '—'}</td>
+                  <td className="px-4 py-2 text-gray-600">{s.phone ? formatPhoneBr(s.phone) : '—'}</td>
                   <td className="px-4 py-2 text-gray-600">{s.email ?? '—'}</td>
                 </tr>
               ))

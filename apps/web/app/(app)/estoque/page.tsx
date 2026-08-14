@@ -26,6 +26,7 @@ import { MoneyInput } from '@/components/MoneyInput';
 import { ProductPicker } from '@/components/ProductPicker';
 import { PeriodFilter, defaultRange } from '@/components/PeriodFilter';
 import { SupplierFormModal } from '@/components/SupplierFormModal';
+import { SupplierPicker } from '@/components/SupplierPicker';
 
 // `GET /products` devolve a linha completa do produto; o detalhe de estoque (StockDetail)
 // usa esses campos extras (custo/venda, peso, descrição…), então o tipo espelha o StockProduct.
@@ -573,28 +574,15 @@ export default function EstoquePage() {
               onChange={(v) => setEntry({ ...entry, unitCost: v })}
               className="rounded-lg border border-gray-300 px-3 py-2"
             />
-            <div className="flex gap-2 sm:col-span-2">
-              <select
+            {/* Fornecedor: mesmo padrão de busca do Produto (SupplierPicker). Opcional; o rodapé
+                "+ Cadastrar novo fornecedor" abre o quick-add e já seleciona. */}
+            <div className="sm:col-span-2">
+              <SupplierPicker
+                suppliers={suppliers}
                 value={entry.supplierId}
-                onChange={(e) => setEntry({ ...entry, supplierId: e.target.value })}
-                className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2"
-              >
-                <option value="">Fornecedor (opcional)…</option>
-                {suppliers.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-              {/* Não achou o fornecedor na lista? Cadastra na hora e já seleciona. */}
-              <button
-                type="button"
-                onClick={() => setSupplierModalOpen(true)}
-                className="shrink-0 whitespace-nowrap rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
-                title="Cadastrar um novo fornecedor"
-              >
-                + Novo
-              </button>
+                onChange={(id) => setEntry({ ...entry, supplierId: id })}
+                onCreateNew={() => setSupplierModalOpen(true)}
+              />
             </div>
             <input
               placeholder="Motivo (ex: Compra NF 1234)"

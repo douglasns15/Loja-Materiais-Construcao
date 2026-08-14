@@ -4696,6 +4696,29 @@ NULL = sem observação (inclusive todas as linhas atuais).
 | Deploy web + `postdeploy` smoke | ✅ Version `45fcca5d` (HTML no-store + CSS 200) |
 | Smoke — health / `/suppliers` / `/customers` sem token | ✅ 200 / 401 / 401 |
 
-**E2E do Owner — ⏭️ PENDENTE.** Roteiro sugerido: (1) menu → grupo "Cadastros" abre/fecha e lembra; (2)
-`/fornecedores` cadastrar/buscar/editar/remover + observações; (3) Estoque → Entrada → "+ Novo" cadastra e já
-seleciona o fornecedor; (4) PDV → buscar cliente inexistente → "+ Cadastrar 'nome'" cria e seleciona na venda.
+**E2E do Owner — ✅ VALIDADO (2026-08-14):** "todos os 4 testes funcionaram perfeitamente" — (1) grupo
+"Cadastros" abre/fecha e lembra; (2) `/fornecedores` cadastrar/buscar/editar/remover + observações; (3)
+Estoque → "+ Novo" cadastra e já seleciona; (4) PDV → "+ Cadastrar 'nome'" cria e seleciona na venda. **Dois
+refinos pedidos no E2E (abaixo).**
+
+### Refino (2026-08-14) — máscaras de telefone/CNPJ/CPF + busca de Fornecedor no padrão da de Produto
+
+Dois pedidos do Owner ao validar a fatia. **Web-only, sem API/migration.**
+
+- **(1) Máscaras ao sair do campo:** todo campo de **telefone/CNPJ/CPF** formata no blur com a máscara —
+  `(11) 98765-4321`, `11.222.333/0001-81`, `123.456.789-09`. **shared:** novos `formatCpf` e `formatCpfCnpj`
+  (escolhe CPF×CNPJ pela contagem de dígitos), ao lado de `formatCnpj`/`formatPhoneBr`; **+5 testes → 14/14**
+  (inclui regressão de CNPJ/telefone e idempotência ao reformatar). **web `MaskedInput`** — buffer de foco
+  igual ao `MoneyInput`: mostra **dígitos crus** enquanto focado (sem pulo de cursor) e **mascara ao
+  desfocar**; guarda só **dígitos** (forma canônica do banco → busca por dígitos e envio ao servidor
+  inalterados). Aplicado em **5 superfícies**: `SupplierFormModal`, `/fornecedores` (form + coluna da lista),
+  `CustomerQuickAddModal`, `CustomerProfile` e `/customers` (form + coluna da lista).
+- **(2) Busca de Fornecedor no Estoque = busca de Produto:** o `<select>` de fornecedor da Entrada de Estoque
+  virou **`SupplierPicker`**, que **espelha o `ProductPicker`** (campo de busca, lista ao digitar, pílula do
+  selecionado + "Trocar"; filtro client-side acento-insensível por nome/CNPJ). Mantém o quick-add como rodapé
+  **"+ Cadastrar novo fornecedor"**. Campo segue **opcional** (sem seleção = campo de busca; "Trocar" limpa).
+
+**Gates:** shared **14/14** ✅ · web typecheck ✅ · build web ✅ (**22 rotas**; `/fornecedores` 3.33 kB,
+`/estoque` 11.2 kB, `/customers` 3.83 kB). **NO AR:** web `011ae5cb`; smoke ✅ (HTML no-store + CSS 200).
+**E2E do Owner — ⏭️ PENDENTE:** conferir as máscaras nos 5 pontos (digitar → sair → mascara; reabrir edição
+mostra mascarado) e a nova busca de fornecedor no Estoque (buscar, selecionar, Trocar, "+ Cadastrar novo").
