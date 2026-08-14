@@ -390,7 +390,8 @@ export default function ProductsPage() {
       description: p.description ?? '',
       unit: p.unit,
       costPrice: String(Number(p.costPrice)),
-      salePrice: String(Number(p.salePrice)),
+      // Preço de venda sempre a 2 casas (dados legados podem vir com 4; a esteira só cobre o cálculo).
+      salePrice: String(Number(Number(p.salePrice).toFixed(2))),
       weight: p.weightKg === null ? '' : String(Number(p.weightKg)),
       weightUnit: 'kg',
       minStockQty: String(Number(p.minStockQty)),

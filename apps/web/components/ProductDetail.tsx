@@ -118,7 +118,9 @@ function toForm(p: ProductFull): FormState {
     description: p.description ?? '',
     unit: p.unit,
     costPrice: String(Number(p.costPrice)),
-    salePrice: String(Number(p.salePrice)),
+    // Preço de venda sempre a 2 casas: dados legados podem vir com 4 (Decimal(12,4)) e apareceriam
+    // no campo ao focar. A esteira já arredonda os cálculos; aqui cobrimos a carga.
+    salePrice: String(Number(Number(p.salePrice).toFixed(2))),
     minStockQty: String(Number(p.minStockQty)),
     weight: p.weightKg === null ? '' : String(Number(p.weightKg)),
     weightUnit: 'kg',

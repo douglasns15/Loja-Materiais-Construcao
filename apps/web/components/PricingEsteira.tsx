@@ -12,6 +12,47 @@ import { MoneyInput } from '@/components/MoneyInput';
 import { PercentInput } from '@/components/PercentInput';
 
 /**
+ * Normaliza um preço canônico para **2 casas** (a única precisão do dinheiro). O `salePrice`
+ * pode chegar do banco com 4 casas (`Decimal(12,4)`) — ex.: "33.1075" — e, ao focar o campo,
+ * o `MoneyInput` mostraria a precisão cheia ("33,1075"). Aqui garantimos que o Preço de Venda
+ * nunca carregue mais de 2 casas, em qualquer caminho (carga, digitação direta ou cálculo).
+ */
+function money2(v: string): string {
+  if (v.trim() === '') return '';
+  const n = Number(v);
+  return Number.isFinite(n) ? String(Number(n.toFixed(2))) : v;
+}
+
+/**
+ * Ícone de info clicável ao lado do rótulo: abre uma frase curta explicando o campo (pedido
+ * do Owner). Clique alterna; sai do foco fecha — funciona no toque (mobile) sem depender de hover.
+ */
+function InfoHint({ text, label }: { text: string; label: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className="relative inline-flex">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        onBlur={() => setOpen(false)}
+        aria-label={label}
+        className="flex h-4 w-4 items-center justify-center rounded-full border border-gray-400 text-[10px] font-semibold leading-none text-gray-500 hover:bg-gray-200 hover:text-gray-700"
+      >
+        i
+      </button>
+      {open && (
+        <span
+          role="tooltip"
+          className="absolute left-1/2 top-6 z-10 w-52 -translate-x-1/2 rounded-lg bg-gray-900 px-3 py-2 text-[11px] font-normal leading-snug text-white shadow-lg"
+        >
+          {text}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/**
  * **Esteira de precificação** sincronizada (padrão Bling / Conta Azul / Omie):
  * Custo · Markup (s/ custo) · Preço de venda · Margem (s/ venda), interligados
  * em tempo real.
@@ -66,9 +107,9 @@ export function PricingEsteira({
     });
   }
 
-  // Editar Preço → fixa o preço; markup e margem re-derivam sozinhos (regra #4).
+  // Editar Preço → fixa o preço (normalizado a 2 casas); markup e margem re-derivam (regra #4).
   function onPriceChange(v: string) {
-    onChange({ costPrice, salePrice: v });
+    onChange({ costPrice, salePrice: money2(v) });
   }
 
   // Editar Markup → recalcula o preço (regra #2). Precisa de custo > 0 como base.
@@ -119,7 +160,13 @@ export function PricingEsteira({
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className={labelCls}>Markup s/ custo (%)</span>
+          <span className={`${labelCls} flex items-center gap-1`}>
+            Markup s/ custo (%)
+            <InfoHint
+              label="O que é Markup?"
+              text="Quanto você soma SOBRE O CUSTO para chegar ao preço. Ex.: custo R$ 60 + markup 66,67% = venda R$ 100."
+            />
+          </span>
           <PercentInput
             value={markupShown}
             onChange={onMarkupChange}
@@ -132,7 +179,7 @@ export function PricingEsteira({
         <label className="flex flex-col gap-1">
           <span className={labelCls}>{priceLabel}</span>
           <MoneyInput
-            value={salePrice}
+            value={money2(salePrice)}
             onChange={onPriceChange}
             disabled={disabled}
             className={fieldCls}
@@ -140,7 +187,13 @@ export function PricingEsteira({
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className={labelCls}>Margem s/ venda (%)</span>
+          <span className={`${labelCls} flex items-center gap-1`}>
+            Margem s/ venda (%)
+            <InfoHint
+              label="O que é Margem?"
+              text="Quanto sobra SOBRE A VENDA depois do custo. Ex.: vendendo a R$ 100 um item que custou R$ 60, a margem é 40%."
+            />
+          </span>
           <PercentInput
             value={marginShown}
             onChange={onMarginChange}
