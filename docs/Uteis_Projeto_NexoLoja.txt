@@ -28,35 +28,21 @@ http://localhost:3000/
 
 <> Em cadastros, tipo produto, quando estiver digitando o nome de um Fabricante, sugerir nome já existente na base e autocompletar com tab.
 
-<> Inserir cadastro de fornecedor
-
 <> Modo Dark e  opção de customização cores de layout.
 
 <> Peso tmbm em MLs no cadastro do Produto, eu coloquei em Gramas, mas depois de salvar ele converte pra kilos
 
 <> Mostrar campo Observação na info do produto no carrinho
 
-<> Tela de Estoque, a Entrada de Estoque precisa ser mais clara quanto aos dados que precisam ser digitados, o custo unitário não deveria atualizar o valor de custo no cadastro do produto, qual deveria ser o comportamento?
-
 <> Em Relatórios, na sessão "Por forma de pagamento" ter como clicar em detalhes e também como exportar excel, mostrando o detalhe de todas as vendas, mostrando as vendas por cada forma de pagamento.
 
 <> Nova ideia de tela de Venda com campo buscar no topo da tela, de ponta a ponta, com tudo abaixo.. E campos de pesquisa, ao aparecerem resultados, permitir acionar o seta pra baixo, pra cima.
 
-<> Nome dos arquivos precisam constar os códigos das notas ou orçamentos ou o nome do que está sendo exportado.
-
 <> Contador do Caixa, ele só apagar os valores digitados quando eu abrir o caixa, até lá, fica em memória, e no fechamento a mesma coisa, só apaga depois de eu fechar o caixa e tmbm ter um botão dentro do contador, chamado zerar contador.
-
-<> Alguns itens zerados que não aparecem como em baixa, checar até mesmo outros que estão com poucas unidades.
 
 <> Cadastro Fornecedor
 
-<> Botão de sugestão de preço por porcentagem
-
-<> Ao atualizar estoque e preço, na tela de produtos, pensar na melhor forma de comunicar ao usuário que o produto X teve seu preço de custo ajustado, revise o valor do produto
-
-<> Validar calculo de margem dos produtos, exemplo.: gr-red-100-cr
-
-<> 
+<> quando voltar, é só dizer "vamos de Categorias" e a gente fecha as 2-3 decisões de produto e parte pra implementação.
 
 ## Subir servidor
 
