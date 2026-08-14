@@ -4598,3 +4598,54 @@ Lógica do `/estoque` é **client-side** (sobre a lista já carregada); a tela d
 **E2E do Owner — ✅ VALIDADO (2026-08-12):** "tudo validado com sucesso" — zerados sem mínimo agora aparecem
 no painel de reposição e no filtro "Só baixo/zerado" (tela de Estoque e Suporte), com badge "zerado"
 distinto de "baixo". Commit `59502c2`. Fatia **UI.Estoque.ZeradoBaixo CONCLUÍDA.**
+
+## UI.Produtos.EsteiraPrecificacao — Esteira de precificação sincronizada + aviso de revisão de preço (2026-08-14)
+
+Pedido do Owner: adotar o padrão dos grandes ERPs (Bling, Conta Azul, Omie) para o cálculo de preço/margem
+no cadastro e na edição de produtos — 4 campos **interligados em tempo real** (Custo · Markup · Preço de
+Venda · Margem), sem "botão escondido", com arredondamento correto e sem travar o input ao digitar centavos.
+
+**Decisão de arquitetura (elimina o loop de re-render, regra de ouro do pedido):** a **verdade** do produto
+são só `costPrice` e `salePrice`; **markup e margem são SEMPRE derivados** (nunca viram estado próprio).
+Editar markup/margem apenas **recalcula o Preço**; não há `useEffect` de sincronização, logo não existe o
+ciclo A→B→A. É o mesmo modelo que o banco/projeto já usava (a API calcula `marginPercent` em runtime, nunca
+persiste). **Arredondamento reverso (item 2 do pedido) sai de graça:** o Preço é a única grandeza monetária
+(2 casas); markup/margem, por derivarem do preço já arredondado, refletem os centavos reais sozinhos.
+
+- **Core (+13 testes → 256/256):** `markupPercent` (lucro s/ custo), `salePriceFromMarkup`,
+  `salePriceFromMargin` (trava margem ≥ 100 = 0, impossível), `repriceHoldingMarkup` (mudar o custo
+  preservando o markup = escalar o preço na proporção do custo). A margem s/ venda **reusa** `calcMarginPercent`
+  (sem duplicar). Testes de **ida-e-volta** (preço→markup→preço e preço→margem→preço idempotentes no centavo).
+- **Web:** `PercentInput.tsx` (buffer de foco, mesmo truque do `MoneyInput` — não "pula" ao digitar) +
+  `PricingEsteira.tsx` (os 4 campos + **semáforo**: prejuízo/no custo/margem magra <10%/saudável; aviso ao
+  passar de 100% na margem). Ligado no cadastro (`products/page.tsx`) e na edição (`ProductDetail.tsx`) via um
+  único `onChange` que devolve `{costPrice, salePrice}` (a reprecificação por custo muda os dois de forma atômica).
+- **Item 5 — aviso de revisão de preço (migration):** quando uma Entrada de estoque sobrescreve o custo
+  ("último custo", 2026-08-11), a margem muda em todo o sistema mas o Preço **não**. **Migration
+  `0026_product_price_review`** (`Product.priceReviewPendingAt DateTime?`, aditiva/reversível, sem RLS,
+  **aprovada antes de aplicar** — regra 1 — e aplicada sem drift). `POST /stock/movements` grava o instante só
+  quando a entrada **muda** o custo (mesma transação, ADR-001); `PATCH /products/:id` limpa via
+  `dismissPriceReview` (**sinal, não coluna** — salvar só o estoque mínimo pela lista não dispensa o aviso).
+  `ProductDetail` mostra faixa **âmbar discreta** no rodapé com "Revisar preço" / "Marcar como conferido".
+- **Refino (a):** Preço de venda **sempre 2 casas** — `salePrice` é `Decimal(12,4)` e um valor legado (ex.:
+  `33,1075`) aparecia com 4 casas ao **focar** o campo; normalizado na carga (`toForm`/`copyFrom`), na digitação
+  direta e na exibição (helper `money2`). **Refino (b):** ícones **"ⓘ" clicáveis** em Markup e Margem com frase
+  curta explicando cada um (clique alterna, funciona no toque — não depende de hover).
+
+**Gates**
+
+| Gate | Resultado |
+|---|---|
+| Core (Vitest) | ✅ 256/256 (era 243, +13 da esteira) |
+| Typecheck shared/API/web (`tsc --noEmit`) | ✅ |
+| Build web | ✅ (`/products` 12.6 kB) |
+| Migration `0026` (`migrate deploy` no Supabase) | ✅ aplicada, `Database schema is up to date!` (sem drift) |
+| Deploy de API (⚠️ obrigatório: item 5 no `POST /stock/movements`) | ✅ Version `2b172964` |
+| Deploy web + `postdeploy` smoke | ✅ Versions `8ab68a4f` (esteira+item 5) → `6731a3c5` (refinos), HTML no-store + CSS 200 |
+| Smoke — health / `/stock/movements` / `/products` sem token | ✅ 200 / 401 / 401 |
+
+**E2E do Owner — ✅ VALIDADO (2026-08-14):** "validado com sucesso" — os 4 fluxos da esteira (Custo/Markup/
+Margem/Preço), margem negativa (prejuízo), margem ≥ 100 travada, UX de centavos sem travar, o item 5 (Entrada
+que muda o custo → aviso no cadastro → "Revisar preço"/"Marcar como conferido"), Preço sempre a 2 casas e os
+ícones de info. Commits `69aa807` (esteira + item 5) + `ced3303` (refinos). Fatia **UI.Produtos.EsteiraPrecificacao
+CONCLUÍDA.**

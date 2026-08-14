@@ -3,7 +3,45 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-12 — **Estoque: zerado sempre conta como baixo, mesmo sem mínimo
+> **Última atualização:** 2026-08-14 — **Esteira de precificação sincronizada (Custo · Markup ·
+> Preço · Margem) + aviso de revisão de preço — NO AR e VALIDADO pelo Owner.** Pedido do Owner:
+> adotar o padrão de mercado (Bling/Conta Azul/Omie) de precificação em tempo real no cadastro/edição
+> de produtos, com os 4 campos interligados, sem "botão escondido". **Decisão central que elimina o
+> loop de re-render:** a VERDADE são só `costPrice` e `salePrice`; **markup e margem são SEMPRE
+> derivados** (nunca viram estado próprio) — editar markup/margem só recalcula o Preço, sem ciclo
+> A→B→A; não há `useEffect` de sincronização. **Core (+13 testes → 256/256):** `markupPercent`,
+> `salePriceFromMarkup`, `salePriceFromMargin`, `repriceHoldingMarkup` (a margem sobre venda reusa
+> `calcMarginPercent`; preservar o markup ao mudar o custo = **escalar o preço na proporção do
+> custo**). Testes de **ida-e-volta** (preço→markup→preço e preço→margem→preço idempotentes no
+> centavo) travam a esteira. **Web:** `PercentInput` (buffer de foco — não trava ao digitar centavos,
+> regra de UX #3) + `PricingEsteira` (4 campos + **semáforo**: prejuízo/no custo/margem magra/saudável;
+> trava **margem ≥ 100%**, matematicamente impossível → orienta usar markup). Ligado no cadastro
+> (`/products`) e na edição (`ProductDetail`). **Arredondamento reverso (item 2 do pedido) sai de
+> graça:** o Preço é a única grandeza monetária (2 casas); markup/margem, por derivarem do preço já
+> arredondado, refletem os centavos reais sozinhos. **Item 5 — aviso de revisão de preço:** quando uma
+> Entrada de estoque sobrescreve o custo ("último custo", 2026-08-11), a margem muda em todo o sistema
+> mas o Preço **não**. **Migration `0026_product_price_review` aprovada antes de aplicar (regra 1) e
+> aplicada sem drift:** `Product.priceReviewPendingAt DateTime?` — 100% aditiva/reversível (sem
+> DEFAULT/backfill, sem mudança de RLS, mesmo perfil das 0010–0012). `POST /stock/movements` grava o
+> instante quando a entrada **muda** o custo (mesma transação, ADR-001); `PATCH /products/:id` limpa
+> via `dismissPriceReview` (**sinal, não coluna** — salvar só o estoque mínimo pela lista NÃO dispensa
+> o aviso). `ProductDetail` mostra faixa **âmbar discreta** "custo ajustado, confira o preço" com
+> "Revisar preço" / "Marcar como conferido". **2 refinos do E2E (web-only):** (a) **Preço de venda
+> sempre 2 casas** — as fórmulas do core já arredondavam, mas `salePrice` é `Decimal(12,4)` e um valor
+> legado (ex.: `33,1075`) aparecia com 4 casas ao **focar** o campo (o `MoneyInput` mostra a precisão
+> cheia); normalizado na carga (`toForm`/`copyFrom`), na digitação direta e na exibição (helper
+> `money2`). (b) **Ícones "ⓘ" clicáveis** em Markup e Margem com frase curta explicando cada um (clique
+> alterna, funciona no toque). Gates: core **256/256**, typecheck shared/api/web, build web (`/products`
+> 12.6 kB), migration `0026` sem drift. ⚠️ **Deploy de API obrigatório** (o item 5 vive no `POST
+> /stock/movements`). **NO AR:** migration aplicada; API `2b172964` + web `6731a3c5` (esteira+item 5 em
+> `8ab68a4f`); smokes ✅ (health 200; `/stock/movements` e `/products` sem token 401; web HTML no-store
+> + CSS 200). **E2E do Owner VALIDADO (2026-08-14):** "validado com sucesso" — os 4 fluxos da esteira,
+> margem negativa, margem ≥100 travada, UX de centavos, item 5 (Entrada muda custo → aviso → Revisar/
+> Conferido), preço a 2 casas e ícones de info. Commits `69aa807` (esteira + item 5) + `ced3303`
+> (refinos); push do Owner. **Fatia UI.Produtos.EsteiraPrecificacao CONCLUÍDA.** Ver
+> "UI.Produtos.EsteiraPrecificacao" no registro.
+>
+> **Antes:** 2026-08-12 — **Estoque: zerado sempre conta como baixo, mesmo sem mínimo
 > cadastrado — NO AR e VALIDADO pelo Owner.** Achado do Owner: produtos **zerados** sem "Estoque mínimo"
 > cadastrado (`minStockQty=0`) **não** apareciam no painel "Reposição de estoque" nem no filtro "Só baixo"
 > — ficavam invisíveis mesmo com saldo 0. **Causa raiz:** a regra canônica `isLowStock` exige mínimo
