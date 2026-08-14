@@ -336,11 +336,20 @@ products.patch('/:id', async (c) => {
       const pairError = await validatePair(prisma, tenantId, id, parsed.data.pairedProductId);
       if (pairError) return c.json({ ok: false, error: pairError }, 400);
     }
+    // Item 5 da esteira: `dismissPriceReview` NÃO é coluna — é um sinal. Traduz em limpar
+    // `priceReviewPendingAt` e não vaza para o Prisma (senão o update quebraria por campo
+    // desconhecido). Separado do resto do payload por desestruturação.
+    const { dismissPriceReview, ...patchData } = parsed.data;
     // updateMany garante o escopo do tenant (proteção antes do RLS da Fase 2).
     const result = await prisma.product.updateMany({
       where: { id, tenantId, deletedAt: null },
       // Autoria (ADR-010): registra quem alterou por último + snapshot do nome.
-      data: { ...parsed.data, updatedById: c.get('userId'), updatedByName: c.get('userName') },
+      data: {
+        ...patchData,
+        ...(dismissPriceReview ? { priceReviewPendingAt: null } : {}),
+        updatedById: c.get('userId'),
+        updatedByName: c.get('userName'),
+      },
     });
     if (result.count === 0) {
       return c.json({ ok: false, error: 'Produto não encontrado.' }, 404);

@@ -283,6 +283,12 @@ model Product {
   conversionFactor Decimal?   @db.Decimal(10, 4)
   costPrice        Decimal    @db.Decimal(12, 4)
   salePrice        Decimal    @db.Decimal(12, 4)
+  /// Aviso de revisão de preço (item 5 da esteira de precificação): quando uma Entrada de estoque
+  /// sobrescreve o `costPrice` ("último custo", ADR de 2026-08-11), a margem muda em todo o sistema
+  /// mas o `salePrice` NÃO — então marcamos aqui o instante do ajuste. O cadastro do produto mostra
+  /// um aviso discreto "custo ajustado, confira o preço" até o operador reconhecer (limpa no PATCH
+  /// com `dismissPriceReview`). NULL ⇒ nada pendente. Só sinaliza; nunca altera preço automaticamente.
+  priceReviewPendingAt DateTime?
   /// Venda em unidade alternativa (ADR-013 — EF-3). Quando `altUnit` + `altSalePrice` +
   /// `conversionFactor` estão preenchidos, o produto pode ser vendido também na embalagem
   /// fechada (ex.: ROLO de 100 m) com PREÇO PRÓPRIO — o fechado costuma sair mais barato por

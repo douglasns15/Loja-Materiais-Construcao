@@ -11,6 +11,7 @@ import {
 } from '@nexoloja/core';
 import { apiDelete, apiPatch } from '@/lib/api';
 import { MoneyInput } from '@/components/MoneyInput';
+import { PricingEsteira } from '@/components/PricingEsteira';
 
 /**
  * Painel de **visualizar / editar** o cadastro de um produto (fatia EP).
@@ -49,6 +50,8 @@ export type ProductFull = {
   surchargeCredit: string | null;
   // Desativar/Reativar: `false` = fora de circulação (some do PDV/Estoque), reversível.
   isActive: boolean;
+  // Item 5 da esteira: instante em que uma Entrada de estoque ajustou o custo; null ⇒ nada pendente.
+  priceReviewPendingAt: string | null;
   marginPercent: number;
   createdByName: string | null;
   createdAt: string;
@@ -229,6 +232,9 @@ export function ProductDetail({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   // Trava dupla-clique em desativar/reativar (PATCH isActive).
   const [togglingActive, setTogglingActive] = useState(false);
+  // Item 5 da esteira: aviso "custo ajustado por Entrada de estoque, confira o preço".
+  const priceReviewPending = product.priceReviewPendingAt != null;
+  const [dismissingReview, setDismissingReview] = useState(false);
 
   // Trocar de produto (clicar outra linha com o painel aberto) recomeça em leitura.
   useEffect(() => {
@@ -296,7 +302,12 @@ export function ProductDetail({
     }
     setSaving(true);
     try {
-      await apiPatch(`/products/${product.id}`, parsed.data);
+      // Salvar o cadastro reconhece o aviso de revisão de preço (o operador esteve na esteira e
+      // conferiu o preço). `dismissPriceReview` não é coluna — o servidor limpa a marca.
+      await apiPatch(`/products/${product.id}`, {
+        ...parsed.data,
+        ...(priceReviewPending ? { dismissPriceReview: true } : {}),
+      });
       await onSaved();
       setEditing(false);
     } catch (e) {
@@ -331,6 +342,20 @@ export function ProductDetail({
       setError((e as Error).message);
     } finally {
       setTogglingActive(false);
+    }
+  }
+
+  /** Item 5: reconhece o aviso de revisão de preço sem abrir a edição (botão "Marcar como conferido"). */
+  async function onDismissReview() {
+    setError(null);
+    setDismissingReview(true);
+    try {
+      await apiPatch(`/products/${product.id}`, { dismissPriceReview: true });
+      await onSaved();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setDismissingReview(false);
     }
   }
 
@@ -490,6 +515,38 @@ export function ProductDetail({
               de Estoque (ADR-001).
             </p>
 
+            {/* Item 5 da esteira: aviso discreto de que o custo foi ajustado por uma Entrada de
+                estoque e a margem mudou — pedindo para conferir o Preço de Venda. Persiste até o
+                operador reconhecer (aqui ou ao salvar uma edição). */}
+            {priceReviewPending && (
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                <p className="text-xs text-amber-800">
+                  ⚠️ O <strong>custo</strong> deste produto foi ajustado por uma Entrada de estoque
+                  {product.priceReviewPendingAt
+                    ? ` em ${new Date(product.priceReviewPendingAt).toLocaleDateString('pt-BR')}`
+                    : ''}
+                  . A margem mudou — <strong>confira o Preço de Venda</strong>.
+                </p>
+                <div className="flex shrink-0 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditing(true)}
+                    className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-100"
+                  >
+                    Revisar preço
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onDismissReview}
+                    disabled={dismissingReview}
+                    className="rounded-lg px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100 disabled:opacity-60"
+                  >
+                    {dismissingReview ? '…' : 'Marcar como conferido'}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {confirmingDelete ? (
               // Confirmação da exclusão (definitiva). Avisa quando desfaz um par (ADR-015).
               <div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4">
@@ -613,22 +670,17 @@ export function ProductDetail({
                 className={inputCls}
               />
             </label>
-            <label className="sm:col-span-2">
-              <span className={labelCls}>{closed ? `Custo ${unitArticle}` : 'Custo'}</span>
-              <MoneyInput
-                value={form.costPrice}
-                onChange={(v) => setForm({ ...form, costPrice: v })}
-                className={inputCls}
+            {/* Esteira de precificação sincronizada (Custo · Markup · Preço · Margem).
+                A verdade continua sendo costPrice/salePrice; markup e margem são derivados. */}
+            <div className="sm:col-span-6">
+              <PricingEsteira
+                costPrice={form.costPrice}
+                salePrice={form.salePrice}
+                onChange={(next) => setForm((f) => ({ ...f, ...next }))}
+                costLabel={closed ? `Custo ${unitArticle}` : 'Custo'}
+                priceLabel={closed ? `Preço ${unitArticle}` : 'Venda'}
               />
-            </label>
-            <label className="sm:col-span-2">
-              <span className={labelCls}>{closed ? `Preço ${unitArticle}` : 'Venda'}</span>
-              <MoneyInput
-                value={form.salePrice}
-                onChange={(v) => setForm({ ...form, salePrice: v })}
-                className={inputCls}
-              />
-            </label>
+            </div>
             <label className="sm:col-span-2">
               <span className={labelCls}>Estoque mínimo</span>
               <input

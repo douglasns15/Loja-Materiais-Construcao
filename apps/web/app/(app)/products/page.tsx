@@ -8,6 +8,7 @@ import { useOnline } from '@/lib/useOnline';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { BarcodeScanButton } from '@/components/BarcodeScanButton';
 import { MoneyInput } from '@/components/MoneyInput';
+import { PricingEsteira } from '@/components/PricingEsteira';
 import { ProductDetail, type CardFees, type ProductFull } from '@/components/ProductDetail';
 
 /**
@@ -503,20 +504,17 @@ export default function ProductsPage() {
             />
           </div>
         </div>
-        <Field label={isClosedUnit ? `Custo ${unitArticle}` : 'Custo'}>
-          <MoneyInput
-            value={form.costPrice}
-            onChange={(v) => setForm({ ...form, costPrice: v })}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2"
+        {/* Esteira de precificação sincronizada (Custo · Markup · Preço · Margem). A verdade
+            continua sendo costPrice/salePrice; markup e margem são derivados (sem loop). */}
+        <div className="sm:col-span-6">
+          <PricingEsteira
+            costPrice={form.costPrice}
+            salePrice={form.salePrice}
+            onChange={(next) => setForm((f) => ({ ...f, ...next }))}
+            costLabel={isClosedUnit ? `Custo ${unitArticle}` : 'Custo'}
+            priceLabel={isClosedUnit ? `Preço ${unitArticle}` : 'Preço de venda'}
           />
-        </Field>
-        <Field label={isClosedUnit ? `Preço ${unitArticle}` : 'Preço de venda'}>
-          <MoneyInput
-            value={form.salePrice}
-            onChange={(v) => setForm({ ...form, salePrice: v })}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2"
-          />
-        </Field>
+        </div>
         {/* Unidade de venda (UnitType) — como o produto é vendido/medido. */}
         <Field label="Unidade de venda" className="sm:col-span-2">
           <select

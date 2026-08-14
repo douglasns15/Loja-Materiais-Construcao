@@ -150,7 +150,7 @@ stock.post('/movements', requireActiveTenant, async (c) => {
     const prisma = createPrismaClient(connectionString);
     const product = await prisma.product.findFirst({
       where: { id: mov.productId, tenantId, deletedAt: null },
-      select: { id: true, name: true, stockQty: true },
+      select: { id: true, name: true, stockQty: true, costPrice: true },
     });
     if (!product) {
       return c.json({ ok: false, error: 'Produto inexistente.' }, 400);
@@ -166,6 +166,14 @@ stock.post('/movements', requireActiveTenant, async (c) => {
         400,
       );
     }
+
+    // Item 5 da esteira de precificação: só marca "revise o preço" quando a entrada REALMENTE
+    // muda o custo do cadastro (INCOME + newCostPrice informado e diferente do custo atual). Um
+    // reajuste que repete o mesmo custo não incomoda o operador com aviso.
+    const costChanges =
+      mov.type === 'INCOME' &&
+      mov.newCostPrice != null &&
+      Number(mov.newCostPrice) !== Number(product.costPrice);
 
     const result = await prisma.$transaction(async (tx) => {
       const movement = await tx.stockMovement.create({
@@ -194,6 +202,9 @@ stock.post('/movements', requireActiveTenant, async (c) => {
           ...(mov.type === 'INCOME' && mov.newCostPrice != null
             ? { costPrice: mov.newCostPrice }
             : {}),
+          // Aviso de revisão de preço: a margem mudou com o novo custo, mas o preço não —
+          // o cadastro do produto sinaliza "confira o preço" até o operador reconhecer.
+          ...(costChanges ? { priceReviewPendingAt: new Date() } : {}),
         },
       });
       return movement;

@@ -120,5 +120,10 @@ export const updateProductSchema = createProductSchema
     // cadastro e o histórico ficam); `true` reativa. Distinto do soft-delete (`deletedAt`),
     // que é definitivo. Só existe no update — o produto sempre nasce ativo.
     isActive: z.boolean().optional(),
+    // Item 5 da esteira de precificação: `true` reconhece o aviso "custo ajustado por Entrada de
+    // estoque, confira o preço" e limpa `priceReviewPendingAt`. NÃO é coluna — é um SINAL que o
+    // servidor traduz em `priceReviewPendingAt: null` (ver PATCH /products/:id). Assim uma edição
+    // de estoque mínimo (que manda só `minStockQty`) nunca dispensa o aviso sem querer.
+    dismissPriceReview: z.boolean().optional(),
   });
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;

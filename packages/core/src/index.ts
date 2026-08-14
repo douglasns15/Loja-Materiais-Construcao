@@ -38,6 +38,58 @@ export function calcMarginPercent(costPrice: number, salePrice: number): number 
   return Number((((salePrice - costPrice) / salePrice) * 100).toFixed(2));
 }
 
+// -----------------------------------------------------------------------------
+// ESTEIRA DE PRECIFICAÇÃO — markup × margem × preço (padrão de mercado: Bling,
+// Conta Azul, Omie). A VERDADE do produto são só Custo e Preço; markup e margem
+// são SEMPRE derivados — nunca viram estado próprio, o que elimina o loop de
+// re-render (A→B→A). O preço é a única grandeza monetária, logo é o que se
+// arredonda a 2 casas; markup e margem exibidos, por derivarem do preço já
+// arredondado, refletem os centavos reais sem "ajuste reverso" manual.
+// -----------------------------------------------------------------------------
+
+/**
+ * Markup % = lucro sobre o **custo** (distinto da margem, que é sobre a venda).
+ * Ex.: custo 60, venda 100 → 66,67%. Custo ≤ 0 ⇒ 0 (não há base para markup).
+ * Arredondado a 2 casas para exibição.
+ */
+export function markupPercent(costPrice: number, salePrice: number): number {
+  if (costPrice <= 0) return 0;
+  return Number((((salePrice - costPrice) / costPrice) * 100).toFixed(2));
+}
+
+/**
+ * Preço de venda a partir do markup: `Custo × (1 + M/100)`. Sempre 2 casas — o
+ * centavo é a verdade, e markup/margem re-derivam desse preço arredondado.
+ */
+export function salePriceFromMarkup(costPrice: number, markup: number): number {
+  return Number((costPrice * (1 + markup / 100)).toFixed(2));
+}
+
+/**
+ * Preço de venda a partir da margem sobre a venda: `Custo / (1 − G/100)`.
+ * Margem ≥ 100 é impossível (o denominador zera/inverte e o preço explodiria) ⇒
+ * devolve 0; a UI deve travar a entrada em < 100 antes de chamar. Sempre 2 casas.
+ */
+export function salePriceFromMargin(costPrice: number, margin: number): number {
+  if (margin >= 100) return 0;
+  return Number((costPrice / (1 - margin / 100)).toFixed(2));
+}
+
+/**
+ * Regra "mudou o Custo → preserva o markup/margem, recalcula o Preço": preservar
+ * o markup ao trocar o custo equivale a **escalar o preço na mesma proporção do
+ * custo** (`(P−C)/C` constante ⇔ `P'/C' = P/C`). Custo antigo ≤ 0 ⇒ não há markup
+ * a preservar, então mantém o preço (o markup passa a ser derivado do novo custo).
+ */
+export function repriceHoldingMarkup(
+  oldCost: number,
+  oldPrice: number,
+  newCost: number,
+): number {
+  if (oldCost <= 0) return oldPrice;
+  return Number((oldPrice * (newCost / oldCost)).toFixed(2));
+}
+
 // =============================================================================
 // CAIXA (Cash Session)
 // =============================================================================

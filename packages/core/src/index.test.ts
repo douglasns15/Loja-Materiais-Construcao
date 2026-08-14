@@ -9,6 +9,10 @@ import {
   needsReplenishment,
   replenishmentShortfall,
   calcMarginPercent,
+  markupPercent,
+  salePriceFromMarkup,
+  salePriceFromMargin,
+  repriceHoldingMarkup,
   calcOrderTotal,
   calcSaleItemTotal,
   calcSaleTotals,
@@ -98,6 +102,83 @@ describe('calcMarginPercent', () => {
 
   it('arredonda a 2 casas', () => {
     expect(calcMarginPercent(10, 30)).toBe(66.67);
+  });
+});
+
+describe('esteira de precificação (markup × margem × preço)', () => {
+  describe('markupPercent', () => {
+    it('calcula o lucro sobre o custo', () => {
+      // custo 60, venda 100 → 40 de lucro sobre 60 = 66,67%
+      expect(markupPercent(60, 100)).toBe(66.67);
+    });
+
+    it('retorna 0 quando o custo é 0 (sem base para markup)', () => {
+      expect(markupPercent(0, 100)).toBe(0);
+    });
+
+    it('aceita markup negativo (venda abaixo do custo)', () => {
+      expect(markupPercent(100, 80)).toBe(-20);
+    });
+  });
+
+  describe('salePriceFromMarkup', () => {
+    it('aplica o markup sobre o custo', () => {
+      expect(salePriceFromMarkup(60, 66.67)).toBe(100);
+    });
+
+    it('markup 0 devolve o próprio custo', () => {
+      expect(salePriceFromMarkup(37, 0)).toBe(37);
+    });
+
+    it('arredonda o preço a 2 casas', () => {
+      // 25 × 1,3243 = 33,1075 → 33,11
+      expect(salePriceFromMarkup(25, 32.43)).toBe(33.11);
+    });
+  });
+
+  describe('salePriceFromMargin', () => {
+    it('resolve o preço para uma margem sobre a venda', () => {
+      // margem 40% ⇒ 60 / 0,6 = 100
+      expect(salePriceFromMargin(60, 40)).toBe(100);
+    });
+
+    it('margem 0 devolve o próprio custo', () => {
+      expect(salePriceFromMargin(37, 0)).toBe(37);
+    });
+
+    it('margem >= 100 é impossível ⇒ 0 (a UI trava antes)', () => {
+      expect(salePriceFromMargin(60, 100)).toBe(0);
+      expect(salePriceFromMargin(60, 150)).toBe(0);
+    });
+  });
+
+  describe('repriceHoldingMarkup', () => {
+    it('escala o preço na proporção do custo (preserva markup/margem)', () => {
+      // custo 60→66 (+10%), preço 100 → 110; markup segue 66,67%
+      const p = repriceHoldingMarkup(60, 100, 66);
+      expect(p).toBe(110);
+      expect(markupPercent(66, p)).toBe(66.67);
+    });
+
+    it('mantém o preço quando o custo antigo era 0 (nada a preservar)', () => {
+      expect(repriceHoldingMarkup(0, 50, 30)).toBe(50);
+    });
+  });
+
+  describe('ida e volta (o que garante a esteira sem loop)', () => {
+    it('preço → markup → preço é idempotente no centavo', () => {
+      const cost = 25;
+      const price = 37;
+      const m = markupPercent(cost, price); // 48
+      expect(salePriceFromMarkup(cost, m)).toBe(price);
+    });
+
+    it('preço → margem → preço é idempotente no centavo', () => {
+      const cost = 25;
+      const price = 37;
+      const g = calcMarginPercent(cost, price); // 32,43
+      expect(salePriceFromMargin(cost, g)).toBe(price);
+    });
   });
 });
 
