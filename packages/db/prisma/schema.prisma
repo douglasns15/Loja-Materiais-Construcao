@@ -267,6 +267,11 @@ model Product {
   tenantId         String     @db.Uuid
   categoryId       String?    @db.Uuid
   sku              String     @db.VarChar(60) // Código interno ou código de barras
+  /// Código de barras GTIN-8/12/13/14 (EAN/UPC), opcional. DISTINTO do `sku` (código interno da
+  /// loja): um produto pode ter SKU interno E código de barras oficial. É a chave de enriquecimento
+  /// pelo catálogo global (ADR-025) e alimenta a busca por leitura de scanner junto com o `sku`.
+  /// Não-único de propósito (não quebra legado nem importação de NF-e); unicidade fica na aplicação.
+  ean              String?    @db.VarChar(14)
   name             String     @db.VarChar(150)
   /// Nome popular/regional do produto — usado para busca no PDV além do nome oficial.
   /// Genérico p/ qualquer ramo. Ex.: "Ferro 8" p/ "Vergalhão CA-50 8mm"; "Dipirona" p/ "Dipirona Sódica 500mg".
@@ -348,7 +353,44 @@ model Product {
   @@index([tenantId, popularName])
   @@index([tenantId, manufacturer])
   @@index([tenantId, pairedProductId])
+  // Busca por código de barras (scanner) e casamento na importação de NF-e (ADR-025).
+  @@index([tenantId, ean])
   @@map("products")
+}
+
+/// Catálogo global de ficha técnica por EAN — cache de enriquecimento COMPARTILHADO entre TODAS as
+/// lojas (ADR-025). Diferente de todo o resto do schema, é CROSS-TENANT: NÃO tem `tenantId`, uma
+/// linha por GTIN. Guarda só dado de ficha técnica PÚBLICO (nome oficial, marca, NCM, foto) — nunca
+/// preço, custo ou estoque, que continuam no `Product` de cada loja (fonte de verdade). O que uma
+/// loja busca/importa (leitura de EAN externa ou XML de NF-e) alimenta o cache e a próxima loja já
+/// acha de graça, sem nova chamada externa.
+///
+/// SEGURANÇA (exceção consciente ao RLS-por-tenant): a migration habilita RLS SEM policy nenhuma, o
+/// que BLOQUEIA qualquer acesso via `supabase-js`/PostgREST (anon/authenticated). Todo acesso passa
+/// pela API (papel `postgres`/Prisma pela conexão pooled, que ignora RLS). Como não há dado
+/// comercial aqui, o pior caso de vazamento seria ficha técnica pública de produto.
+///
+/// CUSTO-ZERO: `imageUrl` guarda a URL EXTERNA pública (hotlink do CDN da fonte, ex.: Open Food
+/// Facts) — nunca baixamos o binário para o R2 nem BLOB no banco (CLAUDE.md §6 / ADR-007).
+model ProductCatalog {
+  /// GTIN-8/12/13/14 normalizado (só dígitos). Chave natural — uma ficha por código de barras.
+  ean          String   @id @db.VarChar(14)
+  /// Nome oficial do produto conforme a fonte (xProd da NF-e ou nome da API). Pode divergir do
+  /// `nome_exibicao` que a loja usa no PDV — este é só a referência de ficha técnica.
+  officialName String?  @db.VarChar(200)
+  /// Marca/fabricante conforme a fonte.
+  brand        String?  @db.VarChar(120)
+  /// NCM (Nomenclatura Comum do Mercosul), 8 dígitos — útil para fiscal/relatórios futuros.
+  ncm          String?  @db.VarChar(8)
+  /// URL EXTERNA pública da foto (hotlink). Nunca binário no banco nem cópia no R2 (custo-zero).
+  imageUrl     String?  @db.VarChar(500)
+  /// Origem do dado: 'off' (Open Food Facts) | 'cosmos' (Bluesoft) | 'nfe' (XML de nota) |
+  /// 'manual' (digitado pelo lojista). Ajuda a priorizar/depurar a procedência do enriquecimento.
+  source       String?  @db.VarChar(30)
+  updatedAt    DateTime @updatedAt
+  createdAt    DateTime @default(now())
+
+  @@map("product_catalog_global")
 }
 
 // =============================================================================

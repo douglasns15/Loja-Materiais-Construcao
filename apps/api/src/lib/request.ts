@@ -21,6 +21,13 @@ export type Bindings = {
   SUPPORT_TOKEN_SECRET?: string;
   /** Bucket de mídia no Cloudflare R2 — logo da loja (ADR-007). */
   MEDIA?: R2Bucket;
+  /**
+   * Token do Bluesoft Cosmos (secret do Worker) para enriquecimento de EAN (ADR-025). OPCIONAL:
+   * sem ele, a busca de EAN simplesmente pula o Cosmos e cai no cache global + Open Food Facts —
+   * nunca gera custo nem erro. Provisionar com `wrangler secret put COSMOS_TOKEN` só se quiser
+   * usar a base BR (free tier é rate-limited). O cache global absorve repetições e reduz chamadas.
+   */
+  COSMOS_TOKEN?: string;
 };
 
 /**

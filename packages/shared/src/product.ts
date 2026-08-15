@@ -39,7 +39,16 @@ export const unitTypeLabels: Record<UnitType, string> = {
 /// (header temporário na Fase 1; claim do JWT na Fase 2).
 export const createProductSchema = z.object({
   sku: z.string().min(1).max(60),
+  /// Código de barras GTIN-8/12/13/14 (EAN/UPC), opcional e DISTINTO do `sku` (código interno).
+  /// Guardado como dígitos crus (até 14). É a chave de enriquecimento pelo catálogo global
+  /// (ADR-025) e alimenta a busca por scanner junto com o `sku`. Validação de dígito verificador
+  /// fica em `catalog.ts` (`isValidGtin`) e é aplicada só para decidir consulta externa/cache —
+  /// o armazenamento é tolerante (um código industrial sem GTIN válido ainda pode ser guardado).
+  ean: z.string().max(14).optional(),
   name: z.string().min(1).max(150),
+  /// Foto do produto — URL EXTERNA pública (hotlink do CDN da fonte de EAN, ADR-025) ou do R2.
+  /// Nunca binário no banco (CLAUDE.md §6). Preenchida pelo enriquecimento por EAN; opcional.
+  imageUrl: z.string().url().max(500).optional(),
   /// Nome popular/regional do produto — usado na busca do PDV além do nome oficial.
   /// Opcional e genérico p/ qualquer ramo (ex.: "Ferro 8", "Dipirona").
   popularName: z.string().max(150).optional(),
@@ -102,6 +111,10 @@ export const updateProductSchema = createProductSchema
   .omit({ initialStock: true })
   .partial()
   .extend({
+    // `null` limpa o código de barras gravado (volta a casar só pelo sku).
+    ean: z.string().max(14).nullable().optional(),
+    // `null` remove a foto do produto.
+    imageUrl: z.string().url().max(500).nullable().optional(),
     popularName: z.string().max(150).nullable().optional(),
     manufacturer: z.string().max(120).nullable().optional(),
     description: z.string().max(500).nullable().optional(),

@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { createProductSchema, unitTypeLabels, type UnitType } from '@nexoloja/shared';
+import { createProductSchema, onlyDigits, unitTypeLabels, type UnitType } from '@nexoloja/shared';
 import { productMatchesQuery } from '@nexoloja/core';
 import { apiGet, apiPatch, apiPost } from '@/lib/api';
 import { useOnline } from '@/lib/useOnline';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { BarcodeScanButton } from '@/components/BarcodeScanButton';
+import { EanEnrichmentCard, useEanLookup } from '@/components/EanEnrichment';
 import { MoneyInput } from '@/components/MoneyInput';
 import { PricingEsteira } from '@/components/PricingEsteira';
 import { ProductDetail, type CardFees, type ProductFull } from '@/components/ProductDetail';
@@ -79,6 +80,8 @@ export default function ProductsPage() {
     popularName: '',
     manufacturer: '',
     sku: '',
+    // Código de barras (ADR-025) — distinto do SKU interno. Dispara o enriquecimento por EAN.
+    ean: '',
     description: '',
     unit: 'UNIT' as UnitType,
     costPrice: '',
@@ -102,6 +105,10 @@ export default function ProductsPage() {
   const [saving, setSaving] = useState(false);
   // Nome do produto usado como base pelo botão "Copiar" (mostra um aviso sobre o form).
   const [copiedFromName, setCopiedFromName] = useState<string | null>(null);
+  // Foto vinda do enriquecimento por EAN (hotlink) a enviar no cadastro; null = sem foto.
+  const [enrichImageUrl, setEnrichImageUrl] = useState<string | null>(null);
+  // Busca inteligente de EAN (ADR-025): observa o código do form e traz a ficha (cache → externa).
+  const eanLookup = useEanLookup(form.ean);
 
   // Busca NO SERVIDOR (nome/popular/fabricante/SKU): `search` é o campo; a query dispara com debounce.
   const [search, setSearch] = useState('');
@@ -263,6 +270,10 @@ export default function ProductsPage() {
       // Fabricante/marca — opcional; também entra na busca (nome/popular/fabricante/SKU).
       manufacturer: form.manufacturer.trim() || undefined,
       sku: form.sku,
+      // Código de barras (ADR-025): só dígitos; vazio não envia coluna.
+      ean: onlyDigits(form.ean) || undefined,
+      // Foto por hotlink aplicada pelo enriquecimento (URL externa; nunca cópia no R2).
+      imageUrl: enrichImageUrl || undefined,
       description: form.description.trim() || undefined,
       unit: form.unit,
       costPrice: Number(form.costPrice),
@@ -310,6 +321,7 @@ export default function ProductsPage() {
         popularName: '',
         manufacturer: '',
         sku: '',
+        ean: '',
         description: '',
         unit: 'UNIT',
         costPrice: '',
@@ -326,6 +338,7 @@ export default function ProductsPage() {
         surchargeDebit: '',
         surchargeCredit: '',
       });
+      setEnrichImageUrl(null);
       setCopiedFromName(null);
       await reloadAll();
     } catch (e) {
@@ -387,6 +400,8 @@ export default function ProductsPage() {
       popularName: p.popularName ?? '',
       manufacturer: p.manufacturer ?? '',
       sku: '',
+      // Código de barras é único por produto — não copia (como o SKU).
+      ean: '',
       description: p.description ?? '',
       unit: p.unit,
       costPrice: String(Number(p.costPrice)),
@@ -405,6 +420,7 @@ export default function ProductsPage() {
       surchargeCredit: p.surchargeCredit === null ? '' : String(Number(p.surchargeCredit)),
     });
     setCopiedFromName(p.name);
+    setEnrichImageUrl(null);
     setDetailId(null);
     setError(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -490,21 +506,57 @@ export default function ProductsPage() {
             className="w-full rounded-lg border border-gray-300 px-3 py-2"
           />
         </Field>
-        {/* Composto (input + botão de escanear): usa div/span p/ não aninhar botão em <label>. */}
+        {/* SKU = código INTERNO da loja (distinto do código de barras/EAN abaixo). */}
         <div className="flex flex-col gap-1 sm:col-span-2">
-          <span className="text-xs font-medium text-gray-600">SKU / código de barras</span>
+          <span className="text-xs font-medium text-gray-600">SKU (código interno)</span>
           <div className="flex gap-2">
             <input
               value={form.sku}
               onChange={(e) => setForm({ ...form, sku: e.target.value })}
+              title="Código interno da loja. Para o código de barras do fabricante, use o campo EAN ao lado."
               className="w-full rounded-lg border border-gray-300 px-3 py-2"
             />
             <BarcodeScanButton
               onScan={(code) => setForm((f) => ({ ...f, sku: code.trim() }))}
-              label="Escanear código de barras para o SKU"
+              label="Escanear código para o SKU"
             />
           </div>
         </div>
+        {/* Código de barras (EAN/GTIN) — dispara o enriquecimento automático (ADR-025). */}
+        <div className="flex flex-col gap-1 sm:col-span-2">
+          <span className="text-xs font-medium text-gray-600">Código de barras (EAN)</span>
+          <div className="flex gap-2">
+            <input
+              value={form.ean}
+              onChange={(e) => setForm({ ...form, ean: e.target.value })}
+              inputMode="numeric"
+              placeholder="Escaneie ou digite o EAN"
+              title="Código de barras do fabricante. Ao ler/digitar um EAN válido, buscamos nome, marca, NCM e foto automaticamente."
+              className="w-full rounded-lg border border-gray-300 px-3 py-2"
+            />
+            <BarcodeScanButton
+              onScan={(code) => setForm((f) => ({ ...f, ean: code.trim() }))}
+              label="Escanear código de barras (EAN)"
+            />
+          </div>
+        </div>
+        {/* Resultado da busca inteligente de EAN: ficha (foto/nome/marca/NCM) + "Preencher". */}
+        {(eanLookup.loading || eanLookup.result) && (
+          <div className="sm:col-span-6">
+            <EanEnrichmentCard
+              state={eanLookup}
+              onApply={(data) => {
+                // Preenche só o que faz sentido, sem sobrescrever o que o operador já digitou.
+                setForm((f) => ({
+                  ...f,
+                  name: f.name.trim() ? f.name : (data.officialName ?? f.name),
+                  manufacturer: f.manufacturer.trim() ? f.manufacturer : (data.brand ?? f.manufacturer),
+                }));
+                setEnrichImageUrl(data.imageUrl ?? null);
+              }}
+            />
+          </div>
+        )}
         {/* Esteira de precificação sincronizada (Custo · Markup · Preço · Margem). A verdade
             continua sendo costPrice/salePrice; markup e margem são derivados (sem loop). */}
         <div className="sm:col-span-6">

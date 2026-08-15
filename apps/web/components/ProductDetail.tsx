@@ -1,7 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { updateProductSchema, unitTypeLabels, type UnitType } from '@nexoloja/shared';
+import {
+  isValidGtin,
+  onlyDigits,
+  updateProductSchema,
+  unitTypeLabels,
+  type EanLookupResult,
+  type UnitType,
+} from '@nexoloja/shared';
 import {
   cardFeePercentFor,
   isClosedPrimary,
@@ -9,7 +16,7 @@ import {
   splitWholeAndRemainder,
   surchargePerBaseUnit,
 } from '@nexoloja/core';
-import { apiDelete, apiPatch } from '@/lib/api';
+import { apiDelete, apiGet, apiPatch } from '@/lib/api';
 import { MoneyInput } from '@/components/MoneyInput';
 import { PricingEsteira } from '@/components/PricingEsteira';
 
@@ -29,6 +36,10 @@ import { PricingEsteira } from '@/components/PricingEsteira';
 export type ProductFull = {
   id: string;
   sku: string;
+  // Código de barras (EAN/GTIN) — distinto do sku interno (ADR-025). null ⇒ sem código.
+  ean: string | null;
+  // Foto do produto — URL externa (hotlink) ou do R2. null ⇒ sem foto.
+  imageUrl: string | null;
   name: string;
   popularName: string | null;
   manufacturer: string | null;
@@ -89,6 +100,7 @@ type FormState = {
   popularName: string;
   manufacturer: string;
   sku: string;
+  ean: string;
   description: string;
   unit: UnitType;
   costPrice: string;
@@ -115,6 +127,7 @@ function toForm(p: ProductFull): FormState {
     popularName: p.popularName ?? '',
     manufacturer: p.manufacturer ?? '',
     sku: p.sku,
+    ean: p.ean ?? '',
     description: p.description ?? '',
     unit: p.unit,
     costPrice: String(Number(p.costPrice)),
@@ -161,6 +174,8 @@ function buildPatch(original: ProductFull, f: FormState): Record<string, unknown
   const next = {
     name: f.name.trim(),
     sku: f.sku.trim(),
+    // Código de barras guardado como dígitos; vazio limpa (null).
+    ean: onlyDigits(f.ean) || null,
     popularName: textOrNull(f.popularName),
     manufacturer: textOrNull(f.manufacturer),
     description: textOrNull(f.description),
@@ -184,6 +199,7 @@ function buildPatch(original: ProductFull, f: FormState): Record<string, unknown
   const current = {
     name: original.name,
     sku: original.sku,
+    ean: original.ean,
     popularName: original.popularName,
     manufacturer: original.manufacturer,
     description: original.description,
@@ -237,6 +253,9 @@ export function ProductDetail({
   // Item 5 da esteira: aviso "custo ajustado por Entrada de estoque, confira o preço".
   const priceReviewPending = product.priceReviewPendingAt != null;
   const [dismissingReview, setDismissingReview] = useState(false);
+  // "Sincronizar dados pelo EAN" (ADR-025): preenche marca/foto vazias pela ficha do catálogo.
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
 
   // Trocar de produto (clicar outra linha com o painel aberto) recomeça em leitura.
   useEffect(() => {
@@ -361,6 +380,45 @@ export function ProductDetail({
     }
   }
 
+  /**
+   * "Sincronizar dados pelo EAN" (pedido 3 do Owner): busca a ficha do catálogo global (que também
+   * consulta a fonte externa no cache-miss) e preenche APENAS os campos VAZIOS do produto — marca e
+   * foto. Nunca sobrescreve o que o operador já cadastrou. O NCM é fiscal e vive no catálogo global
+   * (não é coluna do produto), então fica conhecido lá, mas não altera este cadastro.
+   */
+  async function onSyncEan() {
+    setError(null);
+    setSyncMsg(null);
+    const digits = onlyDigits(product.ean ?? '');
+    if (!isValidGtin(digits)) {
+      setError('Cadastre um código de barras (EAN) válido para sincronizar.');
+      return;
+    }
+    setSyncing(true);
+    try {
+      const r = await apiGet<EanLookupResult>(`/catalog/ean/${digits}`);
+      if (!r.found || !r.catalog) {
+        setSyncMsg('Sem ficha técnica nas fontes gratuitas para este código.');
+        return;
+      }
+      const patch: Record<string, unknown> = {};
+      if (!product.manufacturer && r.catalog.brand) patch.manufacturer = r.catalog.brand;
+      if (!product.imageUrl && r.catalog.imageUrl) patch.imageUrl = r.catalog.imageUrl;
+      if (Object.keys(patch).length === 0) {
+        setSyncMsg('Nada a preencher — marca e foto já estão no cadastro.');
+        return;
+      }
+      await apiPatch(`/products/${product.id}`, patch);
+      await onSaved();
+      const filled = Object.keys(patch).map((k) => (k === 'manufacturer' ? 'marca' : 'foto'));
+      setSyncMsg(`Preenchido pela ficha: ${filled.join(' e ')}.`);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   const inputCls = 'w-full rounded-lg border border-gray-300 px-3 py-2';
   const labelCls = 'text-xs font-medium text-gray-600';
 
@@ -384,7 +442,20 @@ export function ProductDetail({
         className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-2xl"
       >
         <div className="mb-4 flex items-start justify-between gap-3">
-          <div className="min-w-0">
+          <div className="flex min-w-0 items-start gap-3">
+            {/* Foto do produto (hotlink; ADR-025). onError esconde link externo quebrado. */}
+            {product.imageUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={product.imageUrl}
+                alt={`Foto de ${product.name}`}
+                className="h-14 w-14 shrink-0 rounded-lg border border-gray-200 bg-white object-contain"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).style.display = 'none';
+                }}
+              />
+            )}
+            <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h2 className="truncate text-lg font-bold">{product.name}</h2>
               {!product.isActive && (
@@ -397,6 +468,7 @@ export function ProductDetail({
               {product.sku}
               {product.manufacturer ? ` · ${product.manufacturer}` : ''}
             </p>
+            </div>
           </div>
           <button
             type="button"
@@ -416,7 +488,8 @@ export function ProductDetail({
               <Row label="Nome" value={product.name} />
               <Row label="Nome popular" value={product.popularName} />
               <Row label="Fabricante" value={product.manufacturer} />
-              <Row label="SKU / código de barras" value={product.sku} />
+              <Row label="SKU (código interno)" value={product.sku} />
+              <Row label="Código de barras (EAN)" value={product.ean} />
               <Row label="Unidade de venda" value={unitTypeLabels[product.unit]} />
               <Row
                 label="Peso"
@@ -516,6 +589,28 @@ export function ProductDetail({
               O estoque não se edita pelo cadastro — o saldo só muda por movimentação, na tela
               de Estoque (ADR-001).
             </p>
+
+            {/* Enriquecimento por EAN (ADR-025) — preenche marca/foto vazias pela ficha do catálogo
+                global (que consulta a fonte externa no cache-miss). Nunca sobrescreve o já digitado. */}
+            <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-gray-100 pt-3">
+              <button
+                type="button"
+                onClick={onSyncEan}
+                disabled={syncing || !product.ean}
+                className="rounded-lg border border-blue-300 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                title={
+                  product.ean
+                    ? 'Busca marca e foto pelo código de barras e preenche o que estiver vazio no cadastro.'
+                    : 'Cadastre um código de barras (EAN) neste produto para usar.'
+                }
+              >
+                {syncing ? 'Sincronizando…' : '🔄 Sincronizar dados pelo EAN'}
+              </button>
+              {syncMsg && <span className="text-xs text-gray-600">{syncMsg}</span>}
+              {!product.ean && (
+                <span className="text-xs text-gray-500">Cadastre um EAN (em Editar) para habilitar.</span>
+              )}
+            </div>
 
             {/* Item 5 da esteira: aviso discreto de que o custo foi ajustado por uma Entrada de
                 estoque e a margem mudou — pedindo para conferir o Preço de Venda. Persiste até o
@@ -665,10 +760,20 @@ export function ProductDetail({
               />
             </label>
             <label className="sm:col-span-3">
-              <span className={labelCls}>SKU / código de barras</span>
+              <span className={labelCls}>SKU (código interno)</span>
               <input
                 value={form.sku}
                 onChange={(e) => setForm({ ...form, sku: e.target.value })}
+                className={inputCls}
+              />
+            </label>
+            <label className="sm:col-span-3">
+              <span className={labelCls}>Código de barras (EAN)</span>
+              <input
+                value={form.ean}
+                onChange={(e) => setForm({ ...form, ean: e.target.value })}
+                inputMode="numeric"
+                placeholder="EAN/GTIN do fabricante"
                 className={inputCls}
               />
             </label>
