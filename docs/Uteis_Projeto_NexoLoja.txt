@@ -44,6 +44,18 @@ http://localhost:3000/
 
 <> quando voltar, é só dizer "vamos de Categorias" e a gente fecha as 2-3 decisões de produto e parte pra implementação.
 
+<> Devolução de itens mas o cliente faz uma nova compra esse valor referente ao(s) item(ns) devolvido(s) é colocado como desconto em uma nova compra, com isso eu deveria usar como crédito, preciso testar esse fluxo.. pq o botão de crédito não habilitou pra mim.
+
+Como retomar na próxima sessão
+
+Só dizer algo como "vamos continuar de onde paramos no ADR-025". O ponto exato:
+
+E2E da Fatia 1 — checklist de 6 casos no registro de testes (ou naquela lista que te passei). Se validar, eu marco "Fatia 1 CONCLUÍDA" no ROADMAP/registro.
+Fatia 2 — importação de XML de NF-e (a tela De-Para que desenhamos), que é a fonte forte de EAN para material de construção. O desenho já está aprovado e registrado na ADR-025 §5.
+Pendências menores: git push (quando você quiser) e, se decidir usar a base BR, provisionar o COSMOS_TOKEN.
+
+Bom descanso — está tudo ancorado para continuar sem atrito.
+
 ## Subir servidor
 
 cd C:\Users\Douglas\Documents\GitHub\Loja-Materiais-Construcao
