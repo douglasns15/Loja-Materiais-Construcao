@@ -4738,3 +4738,57 @@ Dois pedidos do Owner ao validar a fatia. **Web-only, sem API/migration.**
 → sair → mascara; reabrir edição mostra mascarado) e a busca de fornecedor no Estoque (buscar, selecionar,
 Trocar limpa sem travar, "+ Cadastrar novo"). Commits `9b6b9c7` (refino) + `99e3f6f` (clique-fora) + `95227f8`
 (lista só ao digitar). **Fatia UI.Cadastros.Fornecedores CONCLUÍDA.**
+
+### ADR-025 — Catálogo global de EAN, Fatia 1 (enriquecimento por código de barras) (2026-08-15)
+
+**Objetivo:** evoluir o cadastro de Produtos para enriquecimento automático via leitura de **EAN**
+(cache global cross-tenant + fontes gratuitas), custo-zero e compatível com o legado. Decisões do Owner
+(antes de codar): (1) catálogo **global compartilhado**; (2) coluna **`ean` nova** (distinta do `sku`);
+(3) imagens por **hotlink** (nunca R2); (4) **Open Food Facts + Bluesoft Cosmos** como enriquecedores
+opcionais, com cache + XML de NF-e como motor principal. ADR-025 escrita; migration `0028` aprovada antes
+de aplicar (regra 1).
+
+**Migration `0028_ean_catalog` (aditiva, aplicada sem drift):** `products.ean` (VarChar(14) nullable +
+índice `(tenantId, ean)`) + tabela cross-tenant `product_catalog_global` (ficha técnica por GTIN; **RLS
+ligado SEM policy** → bloqueia supabase-js, acesso só via API). Exceção consciente ao RLS-por-tenant
+(documentada na ADR); nenhum dado comercial na tabela (só nome oficial/marca/NCM/foto pública).
+
+| O que foi testado | Método | Resultado |
+|---|---|---|
+| Migration `0028` aplicada | `prisma migrate deploy` | ✅ "successfully applied" |
+| Sem drift schema × banco | `prisma migrate status` | ✅ "Database schema is up to date!" |
+| Client Prisma regenerado | `prisma generate` | ✅ v6.19.3 |
+| GTIN — dígito verificador (EAN-8/12/13/14, inválidos, espaços) | Vitest `catalog.test.ts` | ✅ |
+| `normalizeGtin` / `normalizeNcm` | Vitest | ✅ |
+| **shared (total)** | `vitest run` | ✅ **22/22** (+8) |
+| Typecheck web (`tsc --noEmit`) | ✅ sem erros | ✅ |
+| Build web (`next build`) | ✅ `/products` **14.2 kB** | ✅ |
+| Dry-run API (`wrangler deploy --dry-run`) | ✅ bundle OK | ✅ |
+
+**Superfícies entregues:**
+- **API:** `GET /catalog/ean/:ean` — Smart Cache: cache global → **Cosmos** (só com `COSMOS_TOKEN`) →
+  **Open Food Facts**; upsert no cache; `existingProductId` anti-duplicata (casa por `ean` OU `sku` legado);
+  **resiliente** (falha/timeout/limite externo nunca vira 500; timeout de 4 s por provider). Segredo
+  `COSMOS_TOKEN` opcional em `lib/request.ts` (ausente ⇒ Cosmos pulada, sem custo).
+- **Web (cadastro):** campo **"Código de barras (EAN)"** com scanner + **card de enriquecimento** (foto por
+  hotlink, nome oficial, marca, NCM) e botão **"Preencher com esta ficha"** (não sobrescreve o já digitado).
+  SKU relabelado para **"SKU (código interno)"**.
+- **Web (ProductDetail):** foto no cabeçalho, linha **EAN**, campo EAN na edição e botão **"🔄 Sincronizar
+  dados pelo EAN"** (preenche marca/foto vazias pela ficha do catálogo).
+
+**NO AR:** API `589f3cad` + web `34035807`; commit `8d6b9cf` (⚠️ **não** foi feito `git push` — pendente).
+Smokes ✅ (health 200; `/catalog/ean` sem token 401; web HTML no-store + CSS 200).
+
+**E2E do Owner — ⏭️ PENDENTE (retomar aqui na próxima sessão):**
+
+| # | Caso a testar | Esperado |
+|---|---|---|
+| 1 | Digitar/escanear EAN de **alimento/bebida** no cadastro | Card traz nome/marca/foto (Open Food Facts); "Preencher" preenche |
+| 2 | Repetir o **mesmo EAN** | Vem instantâneo do **cache** (card diz "(catálogo)") |
+| 3 | Escanear EAN de produto **já cadastrado** na loja | Aviso "já tem um produto com este código" |
+| 4 | Produto existente → Editar → por um EAN → **Sincronizar dados pelo EAN** | Preenche marca/foto vazias |
+| 5 | EAN de **material de construção** | Provável "sem ficha" (esperado; código é guardado) — a NF-e (Fatia 2) cobre esse ramo |
+| 6 | Foto com link quebrado | Some (placeholder), sem erro |
+
+**Falta:** E2E do Owner acima; depois **Fatia 2 — importação de XML de NF-e** (tela De-Para; desenho já
+aprovado na ADR-025 §5). Após o E2E, atualizar este registro para "Fatia 1 CONCLUÍDA".

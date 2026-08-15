@@ -3,7 +3,42 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-14 — **Refino do cadastro (2 pedidos do Owner no E2E): máscaras de
+> **Última atualização:** 2026-08-15 — **ADR-025 (catálogo global de EAN) — Fatia 1: enriquecimento
+> do cadastro por código de barras — NO AR, aguardando E2E do Owner.** Pedido do Owner: evoluir o
+> módulo de Produtos ao padrão dos grandes ERPs, enriquecendo o cadastro **automaticamente** via
+> leitura de **EAN** (câmera/digitação) e, adiante, por **XML de NF-e** — tudo **custo-zero** e
+> compatível com os ~367 produtos legados. **Decisões do Owner (perguntas de produto ANTES de codar):**
+> (1) **catálogo global COMPARTILHADO** entre lojas (efeito de rede: o que uma busca, a próxima acha de
+> graça); (2) coluna **`ean` NOVA** no `Product`, distinta do `sku` interno; (3) **imagens por HOTLINK**
+> (URL externa; nunca cópia no R2 — custo-zero); (4) **Open Food Facts + Bluesoft Cosmos** como
+> enriquecedores **opcionais**, com o **cache global + XML da NF-e** como motor principal (para
+> construção, a nota é a melhor fonte). **Ponto-chave do desenho:** o `Product` continua sendo a tabela
+> do lojista (preço/custo/estoque, fonte de verdade) — NÃO foi substituído; ganhou só o `ean`. **ADR-025
+> escrita (regra 4) e migration `0028_ean_catalog` aprovada antes de aplicar (regra 1), aplicada sem
+> drift:** `products.ean` (VarChar(14) nullable + índice, referência SOLTA ao catálogo — sem FK dura,
+> como a autoria) + tabela **cross-tenant** `product_catalog_global` (ficha técnica por GTIN: nome
+> oficial/marca/NCM/foto). **Segurança (exceção consciente ao RLS-por-tenant):** a tabela global tem
+> **RLS ligado SEM policy** → `supabase-js`/PostgREST fica 100% bloqueado; acesso só pela API (papel
+> `postgres`/Prisma, que ignora RLS). Sem dado comercial lá. **shared (+8 testes → 22/22):** validador de
+> **GTIN** (dígito verificador GS1) + `normalizeNcm` + schemas do catálogo; `ean`/`imageUrl` nos schemas
+> de produto. **API:** `GET /catalog/ean/:ean` — Smart Cache (cache global → **Cosmos** só com
+> `COSMOS_TOKEN` → **Open Food Facts**), upsert no cache, `existingProductId` anti-duplicata,
+> **resiliente** (falha/limite externo nunca vira 500; timeout 4 s/provider). O `COSMOS_TOKEN` é secret
+> **opcional** — ausente ⇒ Cosmos pulada, **nunca gera custo**. **Web:** campo **"Código de barras (EAN)"**
+> com scanner + **card de enriquecimento** (foto hotlink/nome/marca/NCM + "Preencher") no cadastro; no
+> **ProductDetail** foto no cabeçalho, linha EAN, campo EAN na edição e botão **"🔄 Sincronizar dados pelo
+> EAN"** (preenche marca/foto vazias). SKU relabelado p/ **"SKU (código interno)"**. Gates: shared
+> **22/22**, web typecheck + build (**22 rotas**, `/products` 14.2 kB), API dry-run; migration `0028` sem
+> drift. ⚠️ **Deploy de API obrigatório** (rota `/catalog` nova). **NO AR:** API `589f3cad` + web
+> `34035807`; smokes ✅ (health 200; `/catalog/ean` sem token 401; web HTML no-store + CSS 200). **Commit
+> `8d6b9cf` — ⚠️ NÃO foi feito `git push` (pendente, a critério do Owner).** **Falta: E2E do Owner** (o
+> Owner encerrou a sessão antes de testar — checklist de 6 casos no registro, seção "ADR-025 … Fatia 1").
+> **Próximo passo combinado: Fatia 2 — importação de XML de NF-e** (tela De-Para item-a-item: casa por
+> EAN, sugestão por nome, busca manual sempre disponível, cadastro na hora pré-preenchido; confirmar
+> atualiza custo "último custo" + gera Entrada de estoque ADR-001 + alimenta o catálogo global; desenho
+> aprovado na ADR-025 §5). Ver ADR-025 e "ADR-025 … Fatia 1" no registro de testes.
+>
+> **Antes:** 2026-08-14 — **Refino do cadastro (2 pedidos do Owner no E2E): máscaras de
 > telefone/CNPJ/CPF + busca de Fornecedor no padrão da busca de Produto — NO AR e VALIDADO pelo Owner.** O
 > Owner **validou os 4 fluxos** da fatia UI.Cadastros.Fornecedores e pediu dois ajustes. **(1) Máscaras:** todo
 > campo de **telefone/CNPJ/CPF** passa a **formatar ao sair do campo** (blur) com a máscara respectiva —
