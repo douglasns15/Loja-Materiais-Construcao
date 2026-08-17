@@ -146,6 +146,39 @@ O projeto é **TypeScript-first, ponta a ponta** — uma linguagem só, do banco
 `(entrada) => saída` e é **reusada tanto no cliente** (cálculo otimista, resposta instantânea) **quanto no
 servidor** (cálculo autoritativo). Isso só é barato porque cliente e servidor falam TypeScript.
 
+### 4.1 Linguagem × Runtime × Framework × Biblioteca
+
+Quatro conceitos que costumam ser confundidos. Entendê-los evita afirmações imprecisas do tipo
+*"o backend está em Node"* ou *"TypeScript é uma biblioteca do Node"* — **ambas erradas**.
+
+| Conceito | O que é | Análogia | No NexoLoja |
+|---|---|---|---|
+| **Linguagem** | O idioma em que o código é escrito | O idioma que você fala | **TypeScript** (front, back, core, schemas) |
+| **Runtime** | *Onde* o código executa de fato | O lugar onde o idioma é falado | **Cloudflare Workers** (backend e web); navegador (front); Node só como ferramenta local |
+| **Framework** | Estrutura que organiza o código e "dá as rédeas" do fluxo | O esqueleto do prédio | **Hono** (API), **Next.js** (web) |
+| **Biblioteca** | Código pronto que *você* chama quando precisa | Ferramenta na caixa | `jose`, `zod`, `@zxing/library`, `supabase-js` |
+
+**Relações que valem gravar:**
+
+- **TypeScript não é biblioteca nem pertence ao Node.** É uma **linguagem** (superset de JavaScript,
+  criada pela Microsoft). Ela sempre é **compilada para JavaScript** antes de rodar — nenhum runtime
+  executa TypeScript diretamente.
+
+  ```
+  código TypeScript ──(compilador tsc)──► JavaScript ──► roda no runtime (Workers, navegador, Node…)
+  ```
+
+- **Node.js é um runtime, não a linguagem.** É *um* lugar onde JavaScript roda — não o único. Aqui o
+  backend **não roda em Node**: roda em **Cloudflare Workers** (motor V8/`workerd`, com APIs web-padrão
+  como `fetch`/`crypto`, sem `fs`/`net` do Node). Node aparece só como **ferramenta local** de
+  build/testes/scripts (`npm`, `turbo`, `vitest`, `wrangler dev`).
+
+- **Framework × Biblioteca:** o framework chama o *seu* código (inversão de controle — o Hono decide
+  quando sua rota roda); a biblioteca é o *seu* código que chama ela (você decide quando usar o `zod`).
+
+> **Frase correta para o backend:** "escrito em **TypeScript** (linguagem), estruturado com **Hono**
+> (framework), executando em **Cloudflare Workers** (runtime)". Não é Node, e TypeScript não é biblioteca.
+
 ---
 
 ## 5. Arquitetura — diagramas C4
