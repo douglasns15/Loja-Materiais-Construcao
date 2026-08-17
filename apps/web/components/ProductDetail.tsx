@@ -19,6 +19,7 @@ import {
 import { apiDelete, apiGet, apiPatch } from '@/lib/api';
 import { MoneyInput } from '@/components/MoneyInput';
 import { PricingEsteira } from '@/components/PricingEsteira';
+import { BarcodeScanButton } from '@/components/BarcodeScanButton';
 
 /**
  * Painel de **visualizar / editar** o cadastro de um produto (fatia EP).
@@ -88,6 +89,25 @@ const toSurcharge = (p: ProductFull) => ({
 export type CardFees = {
   cardFeeDebitPercent?: number | null;
   cardFeeCreditPercent?: number | null;
+};
+
+/**
+ * Uma diferença proposta pela "Sincronizar dados pelo EAN" (ADR-025): campo do cadastro × valor da
+ * ficha do catálogo. O operador decide, campo a campo, o que aplicar — a sincronização nunca
+ * sobrescreve sozinha o que já foi digitado. Campo vazio já vem marcado (preencher é seguro);
+ * campo com valor divergente vem desmarcado (substituir o seu texto é opt-in).
+ */
+type SyncProposal = {
+  key: 'name' | 'manufacturer' | 'imageUrl';
+  label: string;
+  /** Valor atual no cadastro (null/vazio = campo em branco). */
+  current: string | null;
+  /** Valor vindo da ficha do catálogo (sempre não-vazio quando há proposta). */
+  proposed: string;
+  /** Foto: renderiza miniatura em vez de texto. */
+  isImage?: boolean;
+  /** Marcado para aplicar. Default: campo vazio = marcado; divergente = desmarcado. */
+  selected: boolean;
 };
 
 /** Autoria (ADR-010): "<nome> · <data>", ou "—" quando não há registro (dados antigos). */
@@ -253,9 +273,12 @@ export function ProductDetail({
   // Item 5 da esteira: aviso "custo ajustado por Entrada de estoque, confira o preço".
   const priceReviewPending = product.priceReviewPendingAt != null;
   const [dismissingReview, setDismissingReview] = useState(false);
-  // "Sincronizar dados pelo EAN" (ADR-025): preenche marca/foto vazias pela ficha do catálogo.
+  // "Sincronizar dados pelo EAN" (ADR-025): busca a ficha e propõe diferenças p/ o operador escolher.
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  // Diferenças ficha × cadastro aguardando a escolha do operador (null = painel fechado).
+  const [syncProposals, setSyncProposals] = useState<SyncProposal[] | null>(null);
+  const [applyingSync, setApplyingSync] = useState(false);
 
   // Trocar de produto (clicar outra linha com o painel aberto) recomeça em leitura.
   useEffect(() => {
@@ -263,6 +286,9 @@ export function ProductDetail({
     setEditing(false);
     setError(null);
     setConfirmingDelete(false);
+    // Descarta propostas/aviso de sincronização do produto anterior (eram de outro EAN).
+    setSyncProposals(null);
+    setSyncMsg(null);
   }, [product]);
 
   // Esc fecha o painel (atalho de teclado no desktop, CLAUDE.md → menos cliques).
@@ -382,13 +408,16 @@ export function ProductDetail({
 
   /**
    * "Sincronizar dados pelo EAN" (pedido 3 do Owner): busca a ficha do catálogo global (que também
-   * consulta a fonte externa no cache-miss) e preenche APENAS os campos VAZIOS do produto — marca e
-   * foto. Nunca sobrescreve o que o operador já cadastrou. O NCM é fiscal e vive no catálogo global
-   * (não é coluna do produto), então fica conhecido lá, mas não altera este cadastro.
+   * consulta a fonte externa no cache-miss) e **propõe** as diferenças (nome, marca, foto) para o
+   * operador escolher, campo a campo, o que aplicar (`onApplySync`). Campo vazio já vem marcado
+   * (preencher é seguro); campo divergente do que já foi digitado vem desmarcado (substituir é
+   * opt-in) — nunca sobrescreve sozinho. O NCM é fiscal e vive no catálogo global (não é coluna do
+   * produto), então fica conhecido lá, mas não altera este cadastro.
    */
   async function onSyncEan() {
     setError(null);
     setSyncMsg(null);
+    setSyncProposals(null);
     const digits = onlyDigits(product.ean ?? '');
     if (!isValidGtin(digits)) {
       setError('Cadastre um código de barras (EAN) válido para sincronizar.');
@@ -401,21 +430,64 @@ export function ProductDetail({
         setSyncMsg('Sem ficha técnica nas fontes gratuitas para este código.');
         return;
       }
-      const patch: Record<string, unknown> = {};
-      if (!product.manufacturer && r.catalog.brand) patch.manufacturer = r.catalog.brand;
-      if (!product.imageUrl && r.catalog.imageUrl) patch.imageUrl = r.catalog.imageUrl;
-      if (Object.keys(patch).length === 0) {
-        setSyncMsg('Nada a preencher — marca e foto já estão no cadastro.');
+      const proposals: SyncProposal[] = [];
+      const consider = (
+        key: SyncProposal['key'],
+        label: string,
+        current: string | null | undefined,
+        proposed: string | null | undefined,
+        isImage = false,
+      ) => {
+        const p = (proposed ?? '').trim();
+        if (!p) return; // a ficha não traz esse dado
+        const c = (current ?? '').trim();
+        if (c === p) return; // cadastro já igual à ficha — nada a propor
+        // Vazio ⇒ pré-marcado (preencher é seguro); divergente ⇒ desmarcado (substituir é opt-in).
+        proposals.push({ key, label, current: c || null, proposed: p, isImage, selected: !c });
+      };
+      consider('name', 'Nome do produto', product.name, r.catalog.officialName);
+      consider('manufacturer', 'Fabricante / marca', product.manufacturer, r.catalog.brand);
+      consider('imageUrl', 'Foto', product.imageUrl, r.catalog.imageUrl, true);
+
+      if (proposals.length === 0) {
+        setSyncMsg('O cadastro já está igual à ficha do catálogo — nada a atualizar.');
         return;
       }
-      await apiPatch(`/products/${product.id}`, patch);
-      await onSaved();
-      const filled = Object.keys(patch).map((k) => (k === 'manufacturer' ? 'marca' : 'foto'));
-      setSyncMsg(`Preenchido pela ficha: ${filled.join(' e ')}.`);
+      setSyncProposals(proposals);
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setSyncing(false);
+    }
+  }
+
+  /** Marca/desmarca uma diferença proposta pela sincronização. */
+  const toggleSyncProposal = (key: SyncProposal['key']) =>
+    setSyncProposals(
+      (ps) => ps?.map((p) => (p.key === key ? { ...p, selected: !p.selected } : p)) ?? null,
+    );
+
+  /** Aplica ao cadastro só as diferenças que o operador marcou (PATCH com os campos escolhidos). */
+  async function onApplySync() {
+    if (!syncProposals) return;
+    const chosen = syncProposals.filter((p) => p.selected);
+    if (chosen.length === 0) {
+      setSyncProposals(null);
+      return;
+    }
+    setError(null);
+    setApplyingSync(true);
+    try {
+      const patch: Record<string, unknown> = {};
+      for (const p of chosen) patch[p.key] = p.proposed;
+      await apiPatch(`/products/${product.id}`, patch);
+      await onSaved();
+      setSyncProposals(null);
+      setSyncMsg(`Atualizado pela ficha: ${chosen.map((p) => p.label.toLowerCase()).join(', ')}.`);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setApplyingSync(false);
     }
   }
 
@@ -590,25 +662,120 @@ export function ProductDetail({
               de Estoque (ADR-001).
             </p>
 
-            {/* Enriquecimento por EAN (ADR-025) — preenche marca/foto vazias pela ficha do catálogo
-                global (que consulta a fonte externa no cache-miss). Nunca sobrescreve o já digitado. */}
-            <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-gray-100 pt-3">
-              <button
-                type="button"
-                onClick={onSyncEan}
-                disabled={syncing || !product.ean}
-                className="rounded-lg border border-blue-300 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
-                title={
-                  product.ean
-                    ? 'Busca marca e foto pelo código de barras e preenche o que estiver vazio no cadastro.'
-                    : 'Cadastre um código de barras (EAN) neste produto para usar.'
-                }
-              >
-                {syncing ? 'Sincronizando…' : '🔄 Sincronizar dados pelo EAN'}
-              </button>
-              {syncMsg && <span className="text-xs text-gray-600">{syncMsg}</span>}
-              {!product.ean && (
-                <span className="text-xs text-gray-500">Cadastre um EAN (em Editar) para habilitar.</span>
+            {/* Enriquecimento por EAN (ADR-025) — busca a ficha do catálogo global (que consulta a
+                fonte externa no cache-miss) e PROPÕE as diferenças; o operador escolhe o que aplicar,
+                campo a campo. Nunca sobrescreve sozinho o que já foi digitado. */}
+            <div className="mt-4 border-t border-gray-100 pt-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={onSyncEan}
+                  disabled={syncing || !product.ean}
+                  className="rounded-lg border border-blue-300 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                  title={
+                    product.ean
+                      ? 'Busca nome, marca e foto pelo código de barras e mostra o que difere do cadastro para você escolher o que aplicar.'
+                      : 'Cadastre um código de barras (EAN) neste produto para usar.'
+                  }
+                >
+                  {syncing ? 'Sincronizando…' : '🔄 Sincronizar dados pelo EAN'}
+                </button>
+                {syncMsg && <span className="text-xs text-gray-600">{syncMsg}</span>}
+                {!product.ean && (
+                  <span className="text-xs text-gray-500">
+                    Cadastre um EAN (em Editar) para habilitar.
+                  </span>
+                )}
+              </div>
+
+              {/* Painel de escolha: cada diferença ficha × cadastro com uma marcação. */}
+              {syncProposals && (
+                <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50/60 p-3">
+                  <p className="mb-2 text-xs font-medium text-blue-900">
+                    Ficha encontrada pelo código de barras. Marque o que deseja aplicar ao cadastro:
+                  </p>
+                  <ul className="flex flex-col gap-2">
+                    {syncProposals.map((p) => (
+                      <li key={p.key} className="rounded-lg bg-white p-2">
+                        <label className="flex cursor-pointer items-start gap-2">
+                          <input
+                            type="checkbox"
+                            checked={p.selected}
+                            onChange={() => toggleSyncProposal(p.key)}
+                            className="mt-1 shrink-0"
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-xs font-medium text-gray-700">
+                              {p.label}
+                              {!p.current && (
+                                <span className="ml-1 font-normal text-gray-400">(vazio no cadastro)</span>
+                              )}
+                            </span>
+                            {p.isImage ? (
+                              <span className="mt-1 flex items-center gap-2 text-xs text-gray-500">
+                                {p.current ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                    src={p.current}
+                                    alt="Foto atual"
+                                    className="h-10 w-10 rounded border border-gray-200 object-contain"
+                                    onError={(e) => {
+                                      (e.currentTarget as HTMLImageElement).style.display = 'none';
+                                    }}
+                                  />
+                                ) : (
+                                  <span className="text-gray-400">sem foto</span>
+                                )}
+                                <span aria-hidden>→</span>
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={p.proposed}
+                                  alt="Foto da ficha"
+                                  className="h-10 w-10 rounded border border-blue-200 object-contain"
+                                  onError={(e) => {
+                                    (e.currentTarget as HTMLImageElement).style.display = 'none';
+                                  }}
+                                />
+                              </span>
+                            ) : (
+                              <span className="mt-0.5 block text-xs">
+                                {p.current ? (
+                                  <>
+                                    <span className="text-gray-400 line-through">{p.current}</span>{' '}
+                                    <span aria-hidden className="text-gray-400">
+                                      →
+                                    </span>{' '}
+                                    <span className="font-medium text-gray-900">{p.proposed}</span>
+                                  </>
+                                ) : (
+                                  <span className="font-medium text-gray-900">{p.proposed}</span>
+                                )}
+                              </span>
+                            )}
+                          </span>
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-3 flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSyncProposals(null)}
+                      disabled={applyingSync}
+                      className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onApplySync}
+                      disabled={applyingSync || !syncProposals.some((p) => p.selected)}
+                      className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {applyingSync ? 'Aplicando…' : 'Aplicar selecionados'}
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
 
@@ -767,16 +934,23 @@ export function ProductDetail({
                 className={inputCls}
               />
             </label>
-            <label className="sm:col-span-3">
+            {/* Código de barras (EAN) — leitura pela câmera (mesmo padrão do cadastro novo). */}
+            <div className="flex flex-col gap-1 sm:col-span-3">
               <span className={labelCls}>Código de barras (EAN)</span>
-              <input
-                value={form.ean}
-                onChange={(e) => setForm({ ...form, ean: e.target.value })}
-                inputMode="numeric"
-                placeholder="EAN/GTIN do fabricante"
-                className={inputCls}
-              />
-            </label>
+              <div className="flex gap-2">
+                <input
+                  value={form.ean}
+                  onChange={(e) => setForm({ ...form, ean: e.target.value })}
+                  inputMode="numeric"
+                  placeholder="Escaneie ou digite o EAN/GTIN"
+                  className={inputCls}
+                />
+                <BarcodeScanButton
+                  onScan={(code) => setForm((f) => ({ ...f, ean: code.trim() }))}
+                  label="Escanear código de barras (EAN)"
+                />
+              </div>
+            </div>
             {/* Esteira de precificação sincronizada (Custo · Markup · Preço · Margem).
                 A verdade continua sendo costPrice/salePrice; markup e margem são derivados. */}
             <div className="sm:col-span-6">

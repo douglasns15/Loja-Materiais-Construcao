@@ -1,6 +1,6 @@
 # ADR-025 — Catálogo global de EAN (enriquecimento do cadastro por código de barras e NF-e)
 
-- **Status:** Aceito — Fatia 1 implementada (aguardando deploy + E2E do Owner)
+- **Status:** Aceito — **Fatia 1 concluída** (deploy + E2E do Owner validados em 2026-08-17). Fatia 2 (NF-e) pendente.
 - **Data:** 2026-08-15
 - **Contexto de fase:** Fase 3 — evolução do módulo de Produtos (cadastro enriquecido, custo-zero)
 
@@ -82,6 +82,21 @@ casamento automático por EAN; sugestão por nome; **busca manual** sempre dispo
 `ProductPicker`); cadastro na hora pré-preenchido. Confirmar um item atualiza custo ("último custo",
 ADR de 2026-08-11) + gera Entrada de estoque (`StockMovement` INCOME, ADR-001, transação por item) +
 alimenta o catálogo global. Detalhes na próxima fatia.
+
+### 6. UX de aplicação da ficha ao cadastro (nunca sobrescreve sozinho)
+
+A ficha do catálogo (nome oficial/marca/foto) **completa** o cadastro do lojista, mas o `Product.name` é
+o nome **comercial da loja** (§1) — muitas fontes trazem nome técnico feio/incompleto. Então a UI nunca
+grava a ficha automaticamente:
+
+- **No cadastro novo** (`EanEnrichmentCard`): ao ler/digitar um GTIN válido, mostra a ficha e um botão
+  **"Preencher"** que só preenche o que o operador **ainda não digitou** (não sobrescreve).
+- **Na edição** (`ProductDetail` → **"🔄 Sincronizar dados pelo EAN"**): busca a ficha e **propõe as
+  diferenças** (nome, marca, foto) num painel ficha × cadastro. Campo **vazio** vem **marcado** (preencher
+  é seguro); campo com valor **divergente** vem **desmarcado** (substituir o que já foi digitado é
+  **opt-in**), e "Aplicar selecionados" grava só o escolhido. *(Evolução 2026-08-17, pedido do Owner: antes
+  a sincronização só preenchia campo vazio e nunca tocava no nome.)* O campo EAN da edição também tem o
+  leitor de câmera (`BarcodeScanButton`), igual ao cadastro novo.
 
 ## Consequências
 

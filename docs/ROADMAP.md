@@ -3,7 +3,35 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-15 — **ADR-025 (catálogo global de EAN) — Fatia 1: enriquecimento
+> **Última atualização:** 2026-08-17 — **ADR-025 (catálogo global de EAN) — Fatia 1 CONCLUÍDA (E2E do
+> Owner validado) + 2 ajustes.** No E2E o Owner apontou dois pontos, ambos resolvidos e no ar (deploy web
+> `1970f365`, só frontend): **(1)** o campo EAN da **edição** não tinha o leitor de **câmera** (só o
+> cadastro novo tinha) → adicionado `BarcodeScanButton` na edição; **(2)** o **"🔄 Sincronizar dados pelo
+> EAN"** só preenchia campo vazio e nunca tocava no nome (correto no desenho antigo, mas o Owner quis mais)
+> → passou a **propor as diferenças** (nome/marca/foto) num painel ficha × cadastro: vazio vem marcado
+> (preencher), divergente vem desmarcado (substituir é opt-in), "Aplicar selecionados" grava só o escolhido
+> — nunca sobrescreve sozinho (ADR-025 §6). **Fontes de EAN — estado real:** só cache global local +
+> **Open Food Facts** ativos (conferido via `wrangler secret list`: **`COSMOS_TOKEN` não provisionado** ⇒
+> **Cosmos dormente**). OFF só cobre alimentos/bebidas/cosméticos ⇒ cobertura baixa p/ construção
+> (esperado). **CRONOGRAMA ACORDADO com o Owner (2026-08-17):** **(1) Fatia 2 — importação de XML de NF-e**
+> AGORA (motor principal p/ construção; ver desenho na ADR-025 §5 e "mais abaixo"); **(2) logo após fechar
+> a Fatia 2, LIGAR a Bluesoft Cosmos** (`wrangler secret put COSMOS_TOKEN`; free tier = **25 consultas/dia**,
+> sem cartão, sem cobrança automática — excedente vira 429 tratado como "sem ficha"; avaliar um **contador
+> de consumo nosso** no Worker já que a Cosmos não avisa proximidade de limite). Depois, seguir com
+> **CATEGORIAS** e demais itens da Fase 3.
+>
+> **Fatia 2.A (NF-e) — NO AR (2026-08-17), E2E do Owner ⏸️ EM ANDAMENTO (pausado).** Decisões:
+> operador confirma qtde/custo (sem conversão de unidade na 2.A); fornecedor casado por CNPJ (criado se
+> novo); **idempotência POR ITEM** (reupar a nota pré-marca só o que falta; "já lançado" é aviso, não
+> bloqueio). **SEM migration** (reusa Product/StockMovement/ProductCatalog/Supplier/AuditEvent). Peças:
+> `shared/nfe.ts` (parser puro + schemas, **35/35** com +13 testes), `web/lib/nfe.ts` (`parseNfeXml` via
+> DOMParser, sem dep), `api/routes/nfe.ts` (`POST /nfe/entry` transação por item ADR-001 + `GET
+> /nfe/imported`), `web/components/NfeImportModal.tsx` (De-Para) + botão "📄 Importar NF-e" em Estoque.
+> Gates: web/api typecheck ✅, api dry-run ✅. **NO AR:** API `2c4d40fc` + web `66bcdfd1`; smokes ✅.
+> **RETOMAR o E2E pelo roteiro passo a passo `docs/testes/e2e-nfe-fatia-2a.md`** (6 casos). Commit local
+> em `main` (push do Owner). Detalhes originais da Fatia 1 ↓.
+>
+> **2026-08-15 — ADR-025 Fatia 1: enriquecimento
 > do cadastro por código de barras — NO AR, aguardando E2E do Owner.** Pedido do Owner: evoluir o
 > módulo de Produtos ao padrão dos grandes ERPs, enriquecendo o cadastro **automaticamente** via
 > leitura de **EAN** (câmera/digitação) e, adiante, por **XML de NF-e** — tudo **custo-zero** e

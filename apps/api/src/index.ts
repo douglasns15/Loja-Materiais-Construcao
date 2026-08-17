@@ -4,6 +4,7 @@ import { createPrismaClient } from '@nexoloja/db';
 import { type Env, getConnectionString } from './lib/request';
 import products from './routes/products';
 import catalog from './routes/catalog';
+import nfe from './routes/nfe';
 import customers from './routes/customers';
 import categories from './routes/categories';
 import suppliers from './routes/suppliers';
@@ -62,6 +63,7 @@ app.get('/public/logo/:tenantId', async (c) => {
 // Rotas de recursos
 app.route('/products', products);
 app.route('/catalog', catalog);
+app.route('/nfe', nfe);
 app.route('/customers', customers);
 app.route('/categories', categories);
 app.route('/suppliers', suppliers);

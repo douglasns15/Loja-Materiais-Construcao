@@ -27,11 +27,13 @@ import { ProductPicker } from '@/components/ProductPicker';
 import { PeriodFilter, defaultRange } from '@/components/PeriodFilter';
 import { SupplierFormModal } from '@/components/SupplierFormModal';
 import { SupplierPicker } from '@/components/SupplierPicker';
+import { NfeImportModal } from '@/components/NfeImportModal';
 
 // `GET /products` devolve a linha completa do produto; o detalhe de estoque (StockDetail)
 // usa esses campos extras (custo/venda, peso, descrição…), então o tipo espelha o StockProduct.
 // `updatedAt` (também no payload) ordena o "Estoque atual" pelos mais recentemente atualizados.
-type Product = StockProduct & { updatedAt: string };
+// `ean` (ADR-025) vem no payload mas não está no StockProduct — o De-Para (NF-e) casa por ele.
+type Product = StockProduct & { updatedAt: string; ean: string | null };
 
 /** Chaves de ordenação da tabela "Estoque atual". `recent` (padrão) = mais recentemente
  *  atualizados primeiro; não é coluna clicável, é só a ordem inicial. As demais são colunas. */
@@ -171,6 +173,8 @@ export default function EstoquePage() {
 
   // Produto aberto no painel de detalhe (características + histórico de movimentações).
   const [detailProduct, setDetailProduct] = useState<Product | null>(null);
+  // Importação de NF-e (ADR-025, Fatia 2) — modal De-Para (leitura do XML + entrada por item).
+  const [nfeOpen, setNfeOpen] = useState(false);
 
   // Formulário de entrada de estoque (compra/recebimento).
   const [entry, setEntry] = useState({
@@ -461,7 +465,19 @@ export default function EstoquePage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <h1 className="mb-6 text-2xl font-bold">Estoque</h1>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold">Estoque</h1>
+        {/* Importar NF-e (ADR-025, Fatia 2): dá entrada de vários itens de uma nota de compra. */}
+        <button
+          type="button"
+          onClick={() => setNfeOpen(true)}
+          disabled={!online}
+          className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          title="Ler o XML da NF-e de compra e dar entrada no estoque item a item."
+        >
+          📄 Importar NF-e
+        </button>
+      </div>
 
       {/* Tela online-only (ADR-012 (c)): offline mostra o aviso de rede, não o erro cru. */}
       <OfflineNotice />
@@ -992,6 +1008,17 @@ export default function EstoquePage() {
               [...prev, { id: s.id, name: s.name }].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')),
             );
             setEntry((e) => ({ ...e, supplierId: s.id }));
+          }}
+        />
+      )}
+
+      {/* Importação de NF-e (ADR-025, Fatia 2): De-Para item-a-item + entrada de estoque. */}
+      {nfeOpen && (
+        <NfeImportModal
+          products={products}
+          onClose={() => setNfeOpen(false)}
+          onImported={async () => {
+            await Promise.all([loadCatalog(), loadMovements()]);
           }}
         />
       )}

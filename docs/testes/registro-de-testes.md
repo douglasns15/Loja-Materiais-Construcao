@@ -4779,16 +4779,82 @@ ligado SEM policy** → bloqueia supabase-js, acesso só via API). Exceção con
 **NO AR:** API `589f3cad` + web `34035807`; commit `8d6b9cf` (⚠️ **não** foi feito `git push` — pendente).
 Smokes ✅ (health 200; `/catalog/ean` sem token 401; web HTML no-store + CSS 200).
 
-**E2E do Owner — ⏭️ PENDENTE (retomar aqui na próxima sessão):**
+**E2E do Owner — ✅ VALIDADO (2026-08-17):**
 
-| # | Caso a testar | Esperado |
+| # | Caso a testar | Esperado | Resultado |
+|---|---|---|---|
+| 1 | Digitar/escanear EAN de **alimento/bebida** no cadastro | Card traz nome/marca/foto (Open Food Facts); "Preencher" preenche | ✅ |
+| 2 | Repetir o **mesmo EAN** | Vem instantâneo do **cache** (card diz "(catálogo)") | ✅ |
+| 3 | Escanear EAN de produto **já cadastrado** na loja | Aviso "já tem um produto com este código" | ✅ |
+| 4 | Produto existente → Editar → por um EAN → **Sincronizar dados pelo EAN** | Preenche/propõe pela ficha | ✅ |
+| 5 | EAN de **material de construção** | Provável "sem ficha" (esperado; código é guardado) — a NF-e (Fatia 2) cobre esse ramo | ✅ |
+| 6 | Foto com link quebrado | Some (placeholder), sem erro | ✅ |
+
+**Ajustes pós-E2E (2026-08-17) — 2 pontos do Owner, deploy `1970f365`:**
+
+1. **Câmera faltava na EDIÇÃO.** O campo EAN do formulário de edição (`ProductDetail`) era `<input>` puro,
+   sem o 📷 que já existia no cadastro novo — só dava para digitar à mão. Adicionado o `BarcodeScanButton`
+   ao lado do campo (mesmo padrão do cadastro). ✅ validado no celular.
+2. **"Sincronizar dados pelo EAN" evoluiu de "só preenche vazio" para "oferece substituir".** Antes só
+   preenchia marca/foto **vazias** e nunca tocava no nome — por isso, no teste do Owner, a foto (vazia)
+   entrou mas nome/fabricante (já preenchidos) ficaram como estavam (**comportamento correto do desenho
+   antigo, não bug**). Decisão do Owner: passar a **propor as diferenças** (nome, marca, foto) num painel
+   ficha × cadastro; campo **vazio** vem **marcado** (preencher é seguro), campo **divergente** vem
+   **desmarcado** (substituir é opt-in), com "Aplicar selecionados". Nunca sobrescreve sozinho. ✅ validado.
+   - Typecheck web ✅ sem erros; deploy web `npm run deploy` (predeploy limpa cache; postdeploy smoke ✅
+     HTML no-store + CSS 200). Só frontend — API/banco/env inalterados.
+
+**Fontes de EAN — estado real em produção (conferido via `wrangler secret list`):** só
+`SUPABASE_SERVICE_ROLE_KEY` e `SUPPORT_TOKEN_SECRET` provisionados; **`COSMOS_TOKEN` NÃO existe** ⇒ **Cosmos
+dormente**. Ativo hoje = **cache global local + Open Food Facts** (só alimentos/bebidas/cosméticos; cobertura
+baixa p/ construção — esperado). Alavancas p/ cobrir construção: (a) provisionar `COSMOS_TOKEN`
+(`wrangler secret put COSMOS_TOKEN`, free tier); (b) **Fatia 2 — NF-e** (motor principal de longo prazo).
+
+**✅ Fatia 1 CONCLUÍDA.** Próximo: **Fatia 2 — importação de XML de NF-e** (tela De-Para; desenho já
+aprovado na ADR-025 §5).
+
+---
+
+### ADR-025 — Fatia 2.A: importação de XML de NF-e (De-Para) — CÓDIGO PRONTO (2026-08-17)
+
+Motor principal de enriquecimento p/ construção (a nota traz EAN + nome + custo reais). **Decisões do
+Owner (antes de codar):** (1) **operador confirma** quantidade/custo por linha — SEM conversão automática
+da unidade comercial (uCom) na 2.A; (2) **fornecedor casado por CNPJ** (upsert no servidor pela
+`@@unique[tenantId,cnpj]`) e criado pela nota se novo; (3) **idempotência POR ITEM** (não por nota): reupar
+a mesma nota pré-marca só os itens que ainda não deram entrada, sinalizando "já lançado" no resto (aviso,
+não bloqueio — dá pra remarcar à força). **Sem migration** — reusa `Product`/`StockMovement`/
+`ProductCatalog`/`Supplier`/`AuditEvent`.
+
+**Superfícies:**
+- **shared (`nfe.ts`, parser PURO + schemas):** `parseNfeDecimal`/`nfeAccessKeyFromId`/`normalizeNfeEan`/
+  `buildNfeItem`/`buildNfeHeader`/`nfeItemKey` + `nfeEntrySchema`/`nfeImportedResultSchema`. Testes Vitest
+  `nfe.test.ts` cobrindo decimais (estoque/custo), "SEM GTIN", chave 44 díg., CNPJ. **shared 35/35 (+13).**
+- **web (`lib/nfe.ts`):** `parseNfeXml` via **DOMParser** (sem dep nova) — só caminhada no DOM, delega
+  normalização ao parser puro. Fallback `cEANTrib` quando `cEAN` = "SEM GTIN".
+- **API (`routes/nfe.ts`):** `POST /nfe/entry` — por item, transação atômica (ADR-001): cria produto se
+  novo OU soma ao existente (+ "último custo" + `priceReviewPendingAt` quando o custo muda), Entrada
+  INCOME, upsert `ProductCatalog` (source `nfe`, só preenche EAN desconhecido), `AuditEvent
+  NFE_ITEM_IMPORTED` (chave+nItem). `GET /nfe/imported?chNFe=` lê os itens já lançados (filtro JSON no
+  `meta`). Loop resiliente (uma linha com erro não derruba as outras). Bloqueado em loja inativa (ADR-009).
+- **web (`NfeImportModal.tsx` + botão "📄 Importar NF-e" em Estoque):** upload → De-Para (status por item:
+  casado por EAN / sugestão por nome / cadastrar novo, `ProductPicker` p/ busca manual, qtde/custo
+  editáveis, pré-marca só o que falta) → "Confirmar entrada" (resultado por linha; recarrega catálogo/movs).
+
+**Gates:** shared **35/35**, web typecheck ✅, api typecheck ✅, api dry-run build ✅. **Sem migration.**
+
+**NO AR (2026-08-17):** API `2c4d40fc` + web `66bcdfd1`; smokes ✅ (web HTML no-store + CSS 200). Deploy da
+API obrigatório (rota `/nfe` nova) já feito — aditiva, sem janela quebrada.
+
+**E2E do Owner — ⏸️ EM ANDAMENTO (pausado em 2026-08-17). RETOMAR reenviando o roteiro passo a passo:
+[`docs/testes/e2e-nfe-fatia-2a.md`](e2e-nfe-fatia-2a.md).** Resumo dos 6 casos:
+
+| # | Caso | Esperado |
 |---|---|---|
-| 1 | Digitar/escanear EAN de **alimento/bebida** no cadastro | Card traz nome/marca/foto (Open Food Facts); "Preencher" preenche |
-| 2 | Repetir o **mesmo EAN** | Vem instantâneo do **cache** (card diz "(catálogo)") |
-| 3 | Escanear EAN de produto **já cadastrado** na loja | Aviso "já tem um produto com este código" |
-| 4 | Produto existente → Editar → por um EAN → **Sincronizar dados pelo EAN** | Preenche marca/foto vazias |
-| 5 | EAN de **material de construção** | Provável "sem ficha" (esperado; código é guardado) — a NF-e (Fatia 2) cobre esse ramo |
-| 6 | Foto com link quebrado | Some (placeholder), sem erro |
+| 1 | Importar XML com item de **EAN já cadastrado** | Casa sozinho (mode "Casar"); confirma → estoque sobe + custo atualiza |
+| 2 | Item **sem produto** no cadastro | Cai em "Cadastrar novo" pré-preenchido (SKU/nome/EAN); confirma → cria + Entrada |
+| 3 | Item **"SEM GTIN"** | Sem EAN, casa por nome/busca manual; catálogo global não recebe ficha (ean null) |
+| 4 | **Reimportar a MESMA nota** | Itens já lançados vêm desmarcados com selo "já lançado"; só os que faltam pré-marcados |
+| 5 | **Fornecedor** da nota | Vinculado à entrada (criado por CNPJ se novo; reusa se já existe) |
+| 6 | Item com **erro** (ex.: SKU duplicado) | A linha falha e mostra o erro; as demais entram normalmente |
 
-**Falta:** E2E do Owner acima; depois **Fatia 2 — importação de XML de NF-e** (tela De-Para; desenho já
-aprovado na ADR-025 §5). Após o E2E, atualizar este registro para "Fatia 1 CONCLUÍDA".
+**Commit local em `main` (⚠️ push é do Owner):** Fatia 1 (ajustes câmera+sync) + Fatia 2.A juntos.

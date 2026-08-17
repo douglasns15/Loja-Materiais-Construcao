@@ -10,6 +10,7 @@ export type TenantId = z.infer<typeof tenantIdSchema>;
 
 export * from './product';
 export * from './catalog';
+export * from './nfe';
 export * from './customer';
 export * from './category';
 export * from './supplier';
