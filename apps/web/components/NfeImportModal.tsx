@@ -9,7 +9,7 @@ import {
   type NFeItem,
   type UnitType,
 } from '@nexoloja/shared';
-import { productMatchesQuery } from '@nexoloja/core';
+import { normalizeSearchText } from '@nexoloja/core';
 import { apiGet, apiPost } from '@/lib/api';
 import { parseNfeXml } from '@/lib/nfe';
 import { ProductPicker } from '@/components/ProductPicker';
@@ -68,15 +68,29 @@ type EntryResponse = {
   results: { nItem: number; ok: boolean; productId?: string; error?: string }[];
 };
 
-/** Casa o item da nota com um produto: 1º por EAN (confiável); 2º sugestão estrita por nome. */
+/**
+ * Casa o item da nota com um produto do cadastro, para PRÉ-VINCULAR e pré-marcar a linha:
+ *  1º por EAN (confiável — GTIN é chave universal do produto);
+ *  2º por NOME idêntico (normalizado: sem acento/caixa/espaços nas pontas).
+ *
+ * Aqui é AUTO-vínculo (o operador confirma sem escolher), então o casamento por nome tem de ser
+ * ESTRITO — igualdade exata, não a busca frouxa de balcão (`productMatchesQuery`). A busca frouxa
+ * é tokenizada por substring e casaria "Chave 2 do Caso 6" com "Chave 2 do Caso 4" (o dígito "6"
+ * cai dentro de um SKU numérico) → vínculo silencioso no produto ERRADO. Sem casamento confiável,
+ * a linha nasce em "Cadastrar novo" e o operador ainda pode buscar/escolher à mão no ProductPicker
+ * (aí a busca frouxa é ok — é humano decidindo).
+ */
 function matchProduct(item: NFeItem, products: NfeProduct[]): string {
   if (item.ean) {
     const byEan = products.find((p) => p.ean && onlyDigits(p.ean) === item.ean);
     if (byEan) return byEan.id;
   }
   if (item.name) {
-    const byName = products.find((p) => productMatchesQuery(p, item.name));
-    if (byName) return byName.id;
+    const target = normalizeSearchText(item.name);
+    if (target) {
+      const byName = products.find((p) => normalizeSearchText(p.name) === target);
+      if (byName) return byName.id;
+    }
   }
   return '';
 }

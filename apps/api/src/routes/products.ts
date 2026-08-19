@@ -154,7 +154,7 @@ products.get('/search', async (c) => {
 
     // Busca tokenizada (AND, ordem-livre) e ACENTO-insensível, espelhando `productMatchesQuery`
     // do core: a query é quebrada em palavras e CADA palavra precisa aparecer em algum dos campos
-    // (nome/nome popular/fabricante/SKU). `extensions.unaccent()` dobra o acento dos DOIS lados
+    // (nome/nome popular/fabricante/SKU/EAN). `extensions.unaccent()` dobra o acento dos DOIS lados
     // (dado e busca) — só ele exige SQL cru, pois o Prisma não expressa unaccent. `ILIKE` cobre a
     // caixa. Montado com `Prisma.sql` (parametrizado ⇒ à prova de injeção); keyset e ordenação
     // (name asc, id asc) preservados. `unaccent` mora no schema `extensions` no Supabase.
@@ -173,6 +173,7 @@ products.get('/search', async (c) => {
         OR extensions.unaccent(coalesce(p."popularName", '')) ILIKE extensions.unaccent(${pat})
         OR extensions.unaccent(coalesce(p."manufacturer", '')) ILIKE extensions.unaccent(${pat})
         OR extensions.unaccent(p."sku") ILIKE extensions.unaccent(${pat})
+        OR extensions.unaccent(coalesce(p."ean", '')) ILIKE extensions.unaccent(${pat})
       )`);
     }
     if (cursor) {

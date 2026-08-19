@@ -1165,6 +1165,14 @@ describe('productMatchesQuery', () => {
     expect(productMatchesQuery(p, 'fe8')).toBe(true);
   });
 
+  it('casa pelo código de barras (EAN) — ler/digitar o EAN acha o produto (ADR-025)', () => {
+    const comEan = { ...p, ean: '7897451415483' };
+    expect(productMatchesQuery(comEan, '7897451415483')).toBe(true);
+    // EAN ausente/nulo não quebra a busca pelos demais campos.
+    expect(productMatchesQuery({ ...p, ean: null }, 'vergalhao')).toBe(true);
+    expect(productMatchesQuery(p, '7897451415483')).toBe(false);
+  });
+
   it('casa pelo fabricante (busca por marca acha os produtos dela)', () => {
     expect(productMatchesQuery(p, 'gerdau')).toBe(true);
     expect(productMatchesQuery(p, 'GERD')).toBe(true);

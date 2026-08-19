@@ -937,6 +937,9 @@ export interface ProductSearchFields {
   popularName?: string | null;
   manufacturer?: string | null;
   sku: string;
+  /// Código de barras GTIN (ADR-025), opcional. Entra na busca para que ler/digitar o EAN
+  /// encontre o produto — o `sku` costuma ser o código interno, não o de barras.
+  ean?: string | null;
 }
 
 /**
@@ -952,8 +955,9 @@ export function normalizeSearchText(text: string): string {
 }
 
 /**
- * `true` se o produto casa com a busca por **nome oficial, nome popular, fabricante
- * OU SKU** (digitar qualquer um dos quatro encontra o produto). Acento- e caixa-insensível.
+ * `true` se o produto casa com a busca por **nome oficial, nome popular, fabricante,
+ * SKU OU código de barras (EAN)** (digitar qualquer um encontra o produto). Acento- e
+ * caixa-insensível.
  *
  * **Busca tokenizada (AND, ordem-livre)** — como os buscadores de mercado: a query é quebrada
  * em palavras e o produto casa quando **CADA** palavra aparece (como substring) em algum dos
@@ -967,7 +971,13 @@ export function productMatchesQuery(product: ProductSearchFields, query: string)
   // Concatena os campos num "palheiro" único (separados por espaço, pra uma palavra nunca
   // vazar de um campo pro outro) e exige que TODOS os tokens estejam presentes.
   const haystack = normalizeSearchText(
-    [product.name, product.popularName ?? '', product.manufacturer ?? '', product.sku].join(' '),
+    [
+      product.name,
+      product.popularName ?? '',
+      product.manufacturer ?? '',
+      product.sku,
+      product.ean ?? '',
+    ].join(' '),
   );
   return tokens.every((token) => haystack.includes(token));
 }
