@@ -13,6 +13,7 @@ import { normalizeSearchText } from '@nexoloja/core';
 import { apiGet, apiPost } from '@/lib/api';
 import { parseNfeXml } from '@/lib/nfe';
 import { ProductPicker } from '@/components/ProductPicker';
+import { MoneyInput } from '@/components/MoneyInput';
 
 /**
  * Importação de XML de NF-e — tela De-Para (ADR-025, Fatia 2). Lê o XML no navegador (`parseNfeXml`,
@@ -454,10 +455,9 @@ export function NfeImportModal({
                             placeholder="Fabricante (opcional)"
                             className={`${inputCls} col-span-2`}
                           />
-                          <input
+                          <MoneyInput
                             value={r.npSalePrice}
-                            onChange={(e) => patch(idx, { npSalePrice: e.target.value })}
-                            inputMode="decimal"
+                            onChange={(v) => patch(idx, { npSalePrice: v })}
                             placeholder="Preço de venda"
                             className={inputCls}
                             aria-label="Preço de venda do novo produto"
@@ -478,11 +478,11 @@ export function NfeImportModal({
                         </label>
                         <label className="text-xs text-gray-600">
                           Custo (un) — vazio: não muda
-                          <input
+                          <MoneyInput
                             value={r.cost}
-                            onChange={(e) => patch(idx, { cost: e.target.value })}
-                            inputMode="decimal"
+                            onChange={(v) => patch(idx, { cost: v })}
                             className={inputCls}
+                            aria-label="Custo unitário"
                           />
                         </label>
                       </div>
