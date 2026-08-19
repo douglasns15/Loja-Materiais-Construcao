@@ -4900,3 +4900,24 @@ wrangler dry-run. **Sem migration.** **NO AR:** API `b2948c41` + web `57d79bf7` 
 `e462e7e` (casamento + busca EAN) + `16e2f98` (MoneyInput). **✅ Fatia 2.A CONCLUÍDA.** Próximo (cronograma
 2026-08-17): **ligar a Bluesoft Cosmos** (`wrangler secret put COSMOS_TOKEN`, free 25/dia) → **Fatia 2.B**
 (conversão de unidade comercial, idempotência forte).
+
+### ADR-025 — Fatia 2.B: conversão de unidade comercial + idempotência forte — DESENHO APROVADO (2026-08-19)
+
+**Ainda NÃO implementada — handoff para outra sessão. Nada codado nem aplicado no banco.** Decisões de
+produto do Owner (2026-08-19) e plano completo (incl. SQL da migration `0029`) em
+[`ADR-025 §5.B`](../adr/ADR-025-catalogo-global-ean.md) e no topo do [`ROADMAP.md`](../ROADMAP.md).
+
+Resumo:
+- **Eixo 1 — conversão uCom→unidade de venda (SEM migration):** auto-sugerir o fator pela própria nota
+  (a NF-e traz `uTrib`/`qTrib`/`vUnTrib`; em muitas notas `qTrib/qCom` já é o fator, ex.: 2 CX → 24 UN ⇒
+  12), operador confirma/edita. Não persistir o fator por produto agora. Payload do `POST /nfe/entry`
+  **inalterado** (quantidade/custo seguem convertidos na unidade de venda).
+- **Eixo 2 — idempotência forte (migration `0029` aditiva, aguardando OK do Owner p/ aplicar — regra 1):**
+  tabela `nfe_import_items` com índice único `(tenantId, accessKey, nItem)` gravada na MESMA transação da
+  entrada → duplo-lançamento/corrida fisicamente impossível. Item já lançado = desmarcado + selo "já
+  lançado", **sem forçar** (correção = estornar a entrada de estoque e reimportar).
+
+**Testes a escrever na implementação (regra 2):** core — `suggestNfeFactor`, `nfeConvertedQuantity`,
+`nfeConvertedUnitCost` (Vitest); shared — parser lendo `uTrib`/`qTrib`/`vUnTrib`. Gates antes do deploy:
+core+shared, web typecheck+build, api typecheck + `wrangler dry-run`, `migrate diff` sem drift. Deploy de
+API obrigatório (idempotência vive no `POST /nfe/entry`). Push e E2E do Owner.

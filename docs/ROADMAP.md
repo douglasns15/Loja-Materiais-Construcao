@@ -3,7 +3,29 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-19 — **ADR-025 Fatia 2.A (importação de XML de NF-e) — E2E do Owner
+> **Última atualização:** 2026-08-19 — **ADR-025 Fatia 2.B (conversão de unidade comercial +
+> idempotência forte) — DESENHO APROVADO pelo Owner, AINDA NÃO IMPLEMENTADA. Retomar em outra sessão.**
+> Nada foi codado nem aplicado no banco ainda; esta é uma nota de HANDOFF. **Decisões de produto do Owner
+> (2026-08-19):** **(Eixo 1 — conversão uCom→unidade de venda, SEM migration)** auto-sugerir o fator pela
+> própria nota (a NF-e traz `uTrib`/`qTrib`/`vUnTrib`; em muitas notas `qTrib/qCom` já é o fator, ex.: 2 CX
+> → 24 UN ⇒ 12) e o operador confirma/edita; **NÃO** persistir o fator por produto agora. **(Eixo 2 —
+> idempotência forte, PRECISA da migration `0029`)** constraint DURA no banco por item (tabela nova
+> `nfe_import_items` com índice único `(tenantId, accessKey, nItem)`, gravada na MESMA transação da
+> entrada ⇒ `P2002` ⇒ rollback ⇒ nunca dobra estoque); item já lançado fica **desmarcado + selo "já
+> lançado", SEM botão de forçar** (padrão de mercado: correção = **estornar** a entrada de estoque, que já
+> existe, e reimportar). **Plano completo e SQL da migration `0029` (aditiva, tabela vazia, reversível):
+> ver [ADR-025 §5.B](adr/ADR-025-catalogo-global-ean.md).** **Superfícies a mexer:** `packages/shared`
+> (parser `nfe.ts` + `web/lib/nfe.ts` capturam `uTrib`/`qTrib`/`vUnTrib`), `packages/core` (3 funções puras
+> + Vitest: `suggestNfeFactor`, `nfeConvertedQuantity`, `nfeConvertedUnitCost`), `apps/api/src/routes/nfe.ts`
+> (insert em `nfe_import_items` + `P2002`="já lançado"; `GET /imported` lê a tabela em UNIÃO com o
+> `AuditEvent` legado), `apps/web/components/NfeImportModal.tsx` (campo "Fator (embalagem)" + selo).
+> **⚠️ Gates ANTES de aplicar/deployar:** pedir o OK final do Owner p/ aplicar a `0029` (regra 1); depois
+> core+shared tests, web typecheck+build, api typecheck + `wrangler dry-run`, `migrate diff` sem drift;
+> deploy de API obrigatório (idempotência vive no `POST /nfe/entry`). Estimativa acordada: ~1h30–2h de
+> sessão ativa (push é do Owner; E2E vem depois). **Pré-requisito paralelo pendente (cronograma
+> 2026-08-17):** ligar a Bluesoft Cosmos (`wrangler secret put COSMOS_TOKEN`, free 25/dia) — ação do Owner.
+>
+> **Antes:** 2026-08-19 — **ADR-025 Fatia 2.A (importação de XML de NF-e) — E2E do Owner
 > CONCLUÍDO + 2 bugs corrigidos + 1 refino. Fatia 2.A CONCLUÍDA.** No E2E dos 6 casos, o Caso 6 (XML com 2
 > itens de mesmo `cProd`/`cEAN`) revelou: **(Bug 1, causa raiz)** o auto-casamento do De-Para usava a busca
 > **frouxa de balcão** (`productMatchesQuery`) p/ AUTO-vincular → "Chave 2 do Caso **6**" casou em "Chave 2

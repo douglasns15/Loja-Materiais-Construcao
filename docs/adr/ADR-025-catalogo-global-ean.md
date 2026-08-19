@@ -1,6 +1,10 @@
 # ADR-025 — Catálogo global de EAN (enriquecimento do cadastro por código de barras e NF-e)
 
-- **Status:** Aceito — **Fatia 1 concluída** (deploy + E2E do Owner validados em 2026-08-17). Fatia 2 (NF-e) pendente.
+- **Status:** Aceito — **Fatia 1 concluída** (deploy + E2E do Owner validados em 2026-08-17);
+  **Fatia 2.A (importação de XML de NF-e / De-Para) concluída** (deploy + E2E do Owner validados em
+  2026-08-19). **Fatia 2.B (conversão de unidade comercial + idempotência forte) — desenho aprovado
+  pelo Owner em 2026-08-19, ainda NÃO implementada** (ver §5.B; migration `0029` planejada, aguardando
+  aplicação).
 - **Data:** 2026-08-15
 - **Contexto de fase:** Fase 3 — evolução do módulo de Produtos (cadastro enriquecido, custo-zero)
 
@@ -82,6 +86,98 @@ casamento automático por EAN; sugestão por nome; **busca manual** sempre dispo
 `ProductPicker`); cadastro na hora pré-preenchido. Confirmar um item atualiza custo ("último custo",
 ADR de 2026-08-11) + gera Entrada de estoque (`StockMovement` INCOME, ADR-001, transação por item) +
 alimenta o catálogo global. Detalhes na próxima fatia.
+
+### 5.A Fatia 2.A — De-Para item-a-item (implementada, E2E validado 2026-08-19)
+
+Entregue e no ar. Operador confirma quantidade/custo **na unidade de venda** por linha (SEM conversão
+automática); fornecedor casado por CNPJ (criado se novo); **idempotência POR ITEM** via `AuditEvent
+NFE_ITEM_IMPORTED` (`accessKey`+`nItem`) — reupar a nota pré-marca só o que falta. Sem migration (reusa
+`Product`/`StockMovement`/`ProductCatalog`/`Supplier`/`AuditEvent`). Aprendizado do E2E (Caso 6):
+auto-casamento do De-Para só por **EAN exato** ou **nome idêntico** (busca frouxa de balcão nunca
+AUTO-decide vínculo); busca de Produtos passou a olhar a coluna `ean`. Ver registro de testes.
+
+### 5.B Fatia 2.B — conversão de unidade comercial + idempotência forte (DESENHO APROVADO, não implementada)
+
+Decisões de produto do Owner (2026-08-19), fecham as duas lacunas deixadas pela 2.A:
+
+**Eixo 1 — Conversão da unidade comercial (uCom → unidade de venda). SEM migration.** A nota traz
+quantidade/custo na unidade COMERCIAL do fornecedor (`uCom`/`qCom`/`vUnCom`, ex.: 2 CX a R$ 60/CX), mas
+a loja vende em outra unidade (ex.: UN). A NF-e **também** traz a unidade TRIBUTÁVEL (`uTrib`/`qTrib`/
+`vUnTrib`), e em muitas notas `qTrib/qCom` **já é o fator** (2 CX → 24 UN ⇒ fator 12). **Decisão:
+auto-sugerir o fator pela própria nota e o operador confirma/edita** (quando a nota não ajuda, digita).
+**NÃO persistir o fator por produto agora** (vale só para a importação atual; evolução futura = lembrar
+por produto/fornecedor, à la Bling/Omie).
+- **Parser** (`shared/nfe.ts` + `web/lib/nfe.ts`): capturar `uTrib`/`qTrib`/`vUnTrib` (hoje só lê os
+  comerciais). Adicionar ao `NFeItem`: `unitTrib`, `quantityTrib`, `unitCostTrib`.
+- **Core** (`packages/core`, funções PURAS + Vitest — regra 2): `suggestNfeFactor(qCom, qTrib)` (fator
+  "limpo" = inteiro dentro de tolerância; senão 1); `nfeConvertedQuantity(qCom, factor) = qCom×factor`
+  (entra no estoque); `nfeConvertedUnitCost(vUnCom, factor) = vUnCom÷factor` (custo por unidade de venda,
+  arredondado a 4 casas como o resto).
+- **Web** (`NfeImportModal.tsx`): cada linha ganha campo **"Fator (embalagem)"** com o valor sugerido +
+  cálculo ao vivo ("2 CX × 12 = 24 UN"; "R$ 60,00/CX ÷ 12 = R$ 5,00/UN"). **O payload ao servidor NÃO
+  muda** — `quantity`/`newCostPrice` seguem já convertidos (unidade de venda), como na 2.A ⇒ zero mudança
+  de contrato no `POST /nfe/entry` por este eixo.
+
+**Eixo 2 — Idempotência forte. PRECISA de migration `0029` (aditiva).** Hoje a idempotência é fraca: só um
+`AuditEvent` com `{accessKey, nItem}` em JSON, consultado pelo `GET /imported` para PRÉ-MARCAR — **não há
+constraint no banco**, então duplo-clique/corrida pode dobrar estoque. **Decisão (padrão de mercado, ver
+abaixo): constraint dura no banco, por ITEM, sem "forçar".**
+- **Tabela nova `nfe_import_items`** com **índice único `(tenantId, accessKey, nItem)`**, gravada na MESMA
+  transação da entrada → `P2002` ⇒ rollback ⇒ **nunca dobra estoque**. Guarda `movementId` (rastreio da
+  `StockMovement`, facilita estorno). Sem `accessKey` (nota sem chave de 44 díg.) não insere aqui (não há
+  como deduplicar) — a entrada segue, como na 2.A.
+- **API** (`routes/nfe.ts`): `POST /nfe/entry` faz o `INSERT` no `nfe_import_items` (quando há `accessKey`)
+  dentro da transação de cada item; o `P2002` desse insert vira **"item já lançado"** (não erro genérico),
+  abortando só aquele item. `GET /imported` passa a ler o `nfe_import_items` (indexado) **em UNIÃO com** o
+  `AuditEvent` legado (notas da 2.A seguem pré-marcadas, sem backfill/regressão). Mantém o `AuditEvent
+  NFE_ITEM_IMPORTED` para trilha de auditoria.
+- **Web** (`NfeImportModal.tsx`): item já lançado fica **desmarcado + selo "já lançado", sem botão de
+  forçar**. Correção de erro = **estornar a entrada no Estoque** (fluxo que já existe) e reimportar.
+
+**Por que "sem forçar" (padrão de mercado):** em ERPs maduros (Bling/Omie/Tiny/Conta Azul/SAP) a chave de
+acesso de 44 díg. é a identidade fiscal única da nota; reimportar reconhece a chave e **avisa "já lançada"**,
+nunca duplica. Correção não é "relançar por cima" — é **estornar** (reverte estoque + financeiro,
+auditável) e lançar de novo. A 2.A já é MAIS flexível que o mercado (idempotência por ITEM permite terminar
+uma nota lançada pela metade); mantemos essa granularidade, mas com a garantia dura do banco. Descartadas:
+"manter forçar" (menos alinhado ao mercado) e "elevar para nível de documento" (tabela `NfeImport` de
+cabeçalho+itens; mais fiel aos ERPs grandes, mas escopo/migration muito maiores e perde a importação
+parcial da 2.A).
+
+**Migration `0029_nfe_import_item` — 100% aditiva, tabela nasce vazia (sem janela quebrada), reversível
+(`DROP TABLE`); 0 alteração em tabela existente, 0 backfill. RLS por tenant no padrão 0019/0022 (só SELECT
+p/ `authenticated`; escrita via API/papel `postgres`):**
+
+```sql
+CREATE TABLE "nfe_import_items" (
+    "id" UUID NOT NULL,
+    "tenantId" UUID NOT NULL,
+    "accessKey" VARCHAR(44) NOT NULL,
+    "nItem" INTEGER NOT NULL,
+    "productId" UUID,
+    "movementId" UUID,
+    "quantity" DECIMAL(12,4) NOT NULL,
+    "notaNumber" VARCHAR(20),
+    "createdById" UUID,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "nfe_import_items_pkey" PRIMARY KEY ("id")
+);
+CREATE UNIQUE INDEX "nfe_import_items_tenantId_accessKey_nItem_key"
+    ON "nfe_import_items"("tenantId", "accessKey", "nItem");
+CREATE INDEX "nfe_import_items_tenantId_accessKey_idx"
+    ON "nfe_import_items"("tenantId", "accessKey");
+ALTER TABLE "nfe_import_items" ADD CONSTRAINT "nfe_import_items_tenantId_fkey"
+    FOREIGN KEY ("tenantId") REFERENCES "tenants"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "nfe_import_items" ADD CONSTRAINT "nfe_import_items_productId_fkey"
+    FOREIGN KEY ("productId") REFERENCES "products"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE public.nfe_import_items ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "nfe_import_items_select_tenant" ON public.nfe_import_items
+  FOR SELECT TO authenticated USING ("tenantId" = public.current_tenant_id());
+```
+
+**⚠️ Status:** migration acima **NÃO aplicada** — aguarda o OK final do Owner para aplicar (regra 1). Deploy
+de API obrigatório (idempotência vive no `POST /nfe/entry` + tabela nova). Gates antes do deploy: core (novos
+testes de conversão) + shared (parser uTrib/qTrib) + web typecheck/build + api typecheck + `wrangler
+dry-run` + `migrate diff` sem drift.
 
 ### 6. UX de aplicação da ficha ao cadastro (nunca sobrescreve sozinho)
 
