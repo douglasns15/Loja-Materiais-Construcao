@@ -1,7 +1,10 @@
 # Roteiro E2E — Importação de NF-e (ADR-025, Fatia 2.A)
 
-> **Status:** E2E do Owner **EM ANDAMENTO** (pausado em 2026-08-17). Retomar por aqui.
-> **No ar:** API `2c4d40fc` + web `66bcdfd1` (`https://nexoloja-web.imortal.workers.dev`).
+> **Status:** ✅ **CONCLUÍDO (2026-08-19)** — Owner validou os 6 casos ("tudo validado com sucesso"). O
+> Caso 6 achou 2 bugs (auto-casamento frouxo casava no produto errado; busca não olhava o `ean`) + 1 refino
+> (MoneyInput nos campos Custo/Preço), todos corrigidos e no ar. Detalhes na seção "ADR-025 — Fatia 2.A:
+> E2E do Owner CONCLUÍDO + 3 ajustes (2026-08-19)" do `registro-de-testes.md`.
+> **No ar:** API `b2948c41` + web `57d79bf7` (`https://nexoloja-web.imortal.workers.dev`).
 > **Código:** `shared/nfe.ts` (+testes 35/35), `web/lib/nfe.ts`, `api/routes/nfe.ts`,
 > `web/components/NfeImportModal.tsx`, botão "📄 Importar NF-e" em Estoque. **Sem migration.**
 

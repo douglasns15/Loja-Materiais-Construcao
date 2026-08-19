@@ -4858,3 +4858,45 @@ API obrigatório (rota `/nfe` nova) já feito — aditiva, sem janela quebrada.
 | 6 | Item com **erro** (ex.: SKU duplicado) | A linha falha e mostra o erro; as demais entram normalmente |
 
 **Commit local em `main` (⚠️ push é do Owner):** Fatia 1 (ajustes câmera+sync) + Fatia 2.A juntos.
+
+### ADR-025 — Fatia 2.A: E2E do Owner CONCLUÍDO + 3 ajustes (2026-08-19)
+
+**E2E dos 6 casos validado pelo Owner.** No **Caso 6** o Owner montou um XML com **2 itens de `cProd`
+(SKU) e `cEAN` idênticos** (`12680` / EAN `7897451415483`, nomes "Chave do Caso 6" / "Chave 2 do Caso 6")
+e reportou dois sintomas: (a) os dois itens "entraram" mas **buscar por EAN em Produtos não achava nada**;
+(b) reabrindo a nota, os itens vinham casados com um produto **de outro EAN** ("Chave 2 do Caso 4"). A
+investigação achou **dois bugs** + um refino:
+
+- **🐞 Bug 1 (causa raiz) — auto-casamento do De-Para casava no produto ERRADO.** `matchProduct`
+  ([`NfeImportModal.tsx`](../../apps/web/components/NfeImportModal.tsx)) usava a busca frouxa de balcão
+  (`productMatchesQuery`, tokenizada por substring) para AUTO-vincular e pré-marcar a linha. "Chave 2 do
+  Caso **6**" casou com "Chave 2 do Caso **4**" (SKU `12680**4**`): os tokens `chave/2/do/caso` bateram no
+  nome e o dígito solto **`6` caiu dentro do SKU numérico** → vínculo silencioso no produto errado, com as
+  entradas indo pro item errado. **Fix:** auto-vínculo só por **EAN exato** ou **nome idêntico**
+  (`normalizeSearchText(p.name) === normalizeSearchText(item.name)`); sem match confiável → "Cadastrar
+  novo". A busca frouxa segue no `ProductPicker` (humano escolhendo). *Aprendizado:* busca de balcão
+  (forgiving) nunca deve AUTO-decidir vínculo — só apoiar a escolha de um humano.
+- **🐞 Bug 2 — busca de Produtos não olhava o campo `ean`.** Nem `productMatchesQuery` (core) nem `GET
+  /products/search` (api) incluíam a coluna `ean` (ADR-025), então digitar/ler o código de barras **não
+  achava** o produto, apesar de o `ean` estar salvo. **Fix:** `ean` entra no palheiro da busca nos dois
+  lados (`+1` teste no core). Vale p/ o campo da tabela (servidor) e o Enter-scan/PDV (cliente).
+- **✨ Refino — campos monetários do modal usam `MoneyInput`.** Custo (un) e Preço de venda eram `<input>`
+  crus (mostravam "5.944"); passaram ao `MoneyInput` padrão (formata `R$ 5,94` ao desfocar, número limpo
+  ao focar; valor canônico intacto). Semântica preservada (custo vazio = não muda; preço vazio = R$ 0,00).
+
+**Esclarecimento (dúvida do Owner sobre "já lançado"):** a idempotência é por **(chave de acesso + `nItem`)**
+via `AuditEvent NFE_ITEM_IMPORTED` — **não** por existência de produto. O selo apareceu mesmo sem produto
+"Caso 6" porque aquelas linhas da nota já tinham dado entrada antes (nos testes bugados, no produto errado).
+É aviso, não bloqueio. **Também confirmado (design):** `Product.ean` é **não-único de propósito** — a nota
+**não barra por EAN duplicado**; quem barra é o `@@unique([tenantId, sku])`.
+
+**Re-teste do Caso 6 (Owner, validado):** com SKU novo (`90006`) igual nos 2 itens → **"1 item lançado · 1
+com erro"** (item 1 entra; item 2 falha "Já existe um produto com esse SKU"); o produto criado **aparece
+buscando pelo EAN `7897451415483`**; campos monetários formatados. **"Tudo validado com sucesso."**
+
+**Gates:** core **257/257** (+1 EAN), web typecheck+build, api typecheck (pós `prisma generate`) 0 erros +
+wrangler dry-run. **Sem migration.** **NO AR:** API `b2948c41` + web `57d79bf7` (money) ← `5f28f600`
+(busca/casamento); smokes ✅ (health 200, `/products/search` 401; web HTML no-store + CSS 200). Commits
+`e462e7e` (casamento + busca EAN) + `16e2f98` (MoneyInput). **✅ Fatia 2.A CONCLUÍDA.** Próximo (cronograma
+2026-08-17): **ligar a Bluesoft Cosmos** (`wrangler secret put COSMOS_TOKEN`, free 25/dia) → **Fatia 2.B**
+(conversão de unidade comercial, idempotência forte).

@@ -3,7 +3,24 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-17 — **ADR-025 (catálogo global de EAN) — Fatia 1 CONCLUÍDA (E2E do
+> **Última atualização:** 2026-08-19 — **ADR-025 Fatia 2.A (importação de XML de NF-e) — E2E do Owner
+> CONCLUÍDO + 2 bugs corrigidos + 1 refino. Fatia 2.A CONCLUÍDA.** No E2E dos 6 casos, o Caso 6 (XML com 2
+> itens de mesmo `cProd`/`cEAN`) revelou: **(Bug 1, causa raiz)** o auto-casamento do De-Para usava a busca
+> **frouxa de balcão** (`productMatchesQuery`) p/ AUTO-vincular → "Chave 2 do Caso **6**" casou em "Chave 2
+> do Caso **4**" (o dígito `6` caindo dentro do SKU `12680**4**`), lançando no produto errado; corrigido p/
+> casar só por **EAN exato** ou **nome idêntico** (sem match → "Cadastrar novo"; busca frouxa fica só no
+> `ProductPicker`, humano escolhendo). **(Bug 2)** a busca de Produtos não olhava a coluna `ean` (nem `core`
+> nem `GET /products/search`) → ler/digitar o código de barras não achava o produto; corrigido incluindo o
+> `ean` no palheiro dos dois lados (`+1` teste core → **257/257**). **(Refino)** os campos **Custo/Preço** do
+> modal passaram a usar o `MoneyInput` (formata `R$ 5,94`; antes mostrava "5.944"). Confirmado no E2E que
+> `Product.ean` é **não-único de propósito** (a nota barra por **SKU** único, não por EAN) e que o selo "já
+> lançado" é idempotência por **(chave+`nItem`)** via `AuditEvent`, não por existência de produto. Gates:
+> core 257/257, web typecheck+build, api tsc 0 erros + dry-run; **sem migration**. **NO AR:** API `b2948c41`
+> + web `57d79bf7`; smokes ✅. Commits `e462e7e` + `16e2f98` (local em `main`, push do Owner). **E2E "tudo
+> validado com sucesso".** **Próximo (cronograma acordado):** **ligar a Bluesoft Cosmos** (`wrangler secret
+> put COSMOS_TOKEN`, free 25/dia) → **Fatia 2.B** (conversão de unidade comercial, idempotência forte).
+>
+> **Antes:** 2026-08-17 — **ADR-025 (catálogo global de EAN) — Fatia 1 CONCLUÍDA (E2E do
 > Owner validado) + 2 ajustes.** No E2E o Owner apontou dois pontos, ambos resolvidos e no ar (deploy web
 > `1970f365`, só frontend): **(1)** o campo EAN da **edição** não tinha o leitor de **câmera** (só o
 > cadastro novo tinha) → adicionado `BarcodeScanButton` na edição; **(2)** o **"🔄 Sincronizar dados pelo
