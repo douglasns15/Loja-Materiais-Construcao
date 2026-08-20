@@ -1414,3 +1414,45 @@ export function netMarginPercent(
   const fee = (unitPrice * feePercent) / 100;
   return Number((((unitPrice - fee - costPrice) / unitPrice) * 100).toFixed(2));
 }
+
+// =============================================================================
+// Conversão de unidade comercial na importação de NF-e (ADR-025 §5.B, Fatia 2.B)
+// -----------------------------------------------------------------------------
+// A nota traz quantidade/custo na unidade COMERCIAL do fornecedor (`qCom`/`vUnCom`, ex.: 2 CX a
+// R$ 60/CX), mas a loja vende em outra unidade (ex.: UN). O FATOR de embalagem (quantas unidades de
+// venda cabem numa unidade comercial) converte os dois: quantidade multiplica, custo unitário divide.
+// Funções puras — reusadas na sugestão automática (a nota também traz a unidade tributável) e no
+// cálculo ao vivo do De-Para. NÃO persistem o fator (decisão do Owner: vale só para esta importação).
+// =============================================================================
+
+/**
+ * Sugere o fator de embalagem pela própria nota: `qTrib ÷ qCom`. Em muitas NF-e a quantidade
+ * TRIBUTÁVEL já está na unidade de venda (2 CX comercial → 24 UN tributável ⇒ fator 12). Só devolve
+ * um fator "limpo" — inteiro dentro de tolerância e ≥ 1; qualquer coisa fora disso (nota não ajuda,
+ * unidades iguais, quantidade zerada) devolve **1** (sem conversão), e o operador ajusta à mão.
+ */
+export function suggestNfeFactor(qCom: number, qTrib: number): number {
+  if (!(qCom > 0) || !(qTrib > 0)) return 1;
+  const factor = qTrib / qCom;
+  if (factor < 1) return 1; // tributável menor que a comercial → não é embalagem múltipla
+  const rounded = Math.round(factor);
+  return Math.abs(factor - rounded) <= 0.01 ? rounded : 1;
+}
+
+/**
+ * Quantidade que ENTRA no estoque, na unidade de venda: `qCom × fator` (ex.: 2 CX × 12 = 24 UN).
+ * Fator inválido (≤ 0) é tratado como 1 (sem conversão). Arredonda a 4 casas, como o resto do estoque.
+ */
+export function nfeConvertedQuantity(qCom: number, factor: number): number {
+  const f = factor > 0 ? factor : 1;
+  return Number((qCom * f).toFixed(4));
+}
+
+/**
+ * Custo por unidade de VENDA: `vUnCom ÷ fator` (ex.: R$ 60,00/CX ÷ 12 = R$ 5,00/UN). Vira o "último
+ * custo" do cadastro. Fator inválido (≤ 0) é tratado como 1. Arredonda a 4 casas (precisão de custo).
+ */
+export function nfeConvertedUnitCost(vUnCom: number, factor: number): number {
+  const f = factor > 0 ? factor : 1;
+  return Number((vUnCom / f).toFixed(4));
+}

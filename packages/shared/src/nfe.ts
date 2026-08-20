@@ -47,6 +47,15 @@ export type NFeItem = {
   quantity: number;
   /** Custo unitário comercial (`vUnCom`). */
   unitCost: number;
+  /**
+   * Unidade TRIBUTÁVEL (`uTrib`) — costuma ser a unidade de venda (ex.: "UN"). Usada, junto com a
+   * quantidade tributável, para SUGERIR o fator de embalagem no De-Para (ADR-025 §5.B, Fatia 2.B).
+   */
+  unitTrib: string | null;
+  /** Quantidade tributável (`qTrib`) — base da sugestão de fator (`qTrib ÷ qCom`). */
+  quantityTrib: number;
+  /** Custo unitário tributável (`vUnTrib`) — referência; a conversão oficial usa `vUnCom ÷ fator`. */
+  unitCostTrib: number;
   /** Valor total do item (`vProd`). */
   total: number;
 };
@@ -103,6 +112,9 @@ export type RawNfeItem = {
   unit?: string | null; // uCom
   quantity?: string | null; // qCom
   unitCost?: string | null; // vUnCom
+  unitTrib?: string | null; // uTrib
+  quantityTrib?: string | null; // qTrib
+  unitCostTrib?: string | null; // vUnTrib
   total?: string | null; // vProd
 };
 
@@ -118,6 +130,9 @@ export function buildNfeItem(raw: RawNfeItem): NFeItem {
     unit: orNull(raw.unit),
     quantity: parseNfeDecimal(raw.quantity),
     unitCost: parseNfeDecimal(raw.unitCost),
+    unitTrib: orNull(raw.unitTrib),
+    quantityTrib: parseNfeDecimal(raw.quantityTrib),
+    unitCostTrib: parseNfeDecimal(raw.unitCostTrib),
     total: parseNfeDecimal(raw.total),
   };
 }

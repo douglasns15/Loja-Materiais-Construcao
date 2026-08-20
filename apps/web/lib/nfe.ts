@@ -68,6 +68,9 @@ export function parseNfeXml(xml: string): NFeDoc {
         unit: tagText(prod, 'uCom'),
         quantity: tagText(prod, 'qCom'),
         unitCost: tagText(prod, 'vUnCom'),
+        unitTrib: tagText(prod, 'uTrib'),
+        quantityTrib: tagText(prod, 'qTrib'),
+        unitCostTrib: tagText(prod, 'vUnTrib'),
         total: tagText(prod, 'vProd'),
       }),
     );

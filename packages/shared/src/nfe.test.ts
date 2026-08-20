@@ -77,8 +77,31 @@ describe('buildNfeItem', () => {
       unit: 'SC',
       quantity: 10,
       unitCost: 28.5,
+      unitTrib: null, // uTrib ausente → só rótulo, null
+      quantityTrib: 0, // qTrib ausente
+      unitCostTrib: 0, // vUnTrib ausente
       total: 285,
     });
+  });
+
+  it('captura os campos tributáveis (uTrib/qTrib/vUnTrib) p/ sugerir o fator (2 CX → 24 UN)', () => {
+    const item = buildNfeItem({
+      nItem: '1',
+      name: 'Parafuso',
+      unit: 'CX',
+      quantity: '2',
+      unitCost: '60.00',
+      unitTrib: 'UN',
+      quantityTrib: '24',
+      unitCostTrib: '5.00',
+      total: '120.00',
+    });
+    expect(item.unit).toBe('CX');
+    expect(item.quantity).toBe(2);
+    expect(item.unitCost).toBe(60);
+    expect(item.unitTrib).toBe('UN');
+    expect(item.quantityTrib).toBe(24);
+    expect(item.unitCostTrib).toBe(5);
   });
 
   it('item "SEM GTIN": guarda o cru em rawEan mas não vira chave de catálogo (ean null)', () => {

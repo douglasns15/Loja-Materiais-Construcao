@@ -4921,3 +4921,72 @@ Resumo:
 `nfeConvertedUnitCost` (Vitest); shared — parser lendo `uTrib`/`qTrib`/`vUnTrib`. Gates antes do deploy:
 core+shared, web typecheck+build, api typecheck + `wrangler dry-run`, `migrate diff` sem drift. Deploy de
 API obrigatório (idempotência vive no `POST /nfe/entry`). Push e E2E do Owner.
+
+### 🐞 Bug — "Token de autenticação ausente" intermitente ao abrir telas (2026-08-20)
+
+**Sintoma (achado do Owner):** ao acessar **Contas a Receber**, a tela mostrou a faixa vermelha **"Token de
+autenticação ausente."** e nenhum dado; um **Refresh forçado** da página fez tudo aparecer.
+
+**Causa raiz:** a mensagem é a **resposta 401 da API** (`requireAuth`, `apps/api/src/middleware/auth.ts`),
+disparada só quando a requisição chega **sem** header `Authorization: Bearer` (repare: *"ausente"*, não
+*"inválido/expirado"*). O helper `authHeaders()` (`apps/web/lib/api.ts`) fazia `supabase.auth.getSession()` e,
+quando voltava **sem** `access_token`, mandava o fetch **sem header** (`{}`). Isso acontece na corrida
+**"PWA ociosa + cold start"**: o access token (JWT ~1h) expira com a aba parada e a tela dispara o fetch
+**antes** de o supabase-js renovar (ou a renovação bate num Supabase frio e falha). O Refresh forçado
+reinicializa o cliente e troca o `refresh_token` por um access token novo (backend já quente) → volta a
+funcionar. Fraquezas de design que tornavam o transitório visível: (a) `authHeaders()` desistia calado sem
+tentar renovar; (b) o retry do `apiGet` só cobria **erro de rede**, não 401.
+
+**Correção (web-only, `apps/web/lib/api.ts`):** (1) novo `getAccessToken()` — quando `getSession()` não traz
+token, força **um** `supabase.auth.refreshSession()` antes de desistir (protegido por try/catch); `authHeaders`
+passou a usá-lo. (2) `apiGet` recalcula o header a cada volta e, em **401**, força **um** refresh e re-tenta
+**uma** vez **sem** consumir o orçamento de retry de rede (`authRetried`); se o refresh não trouxer token,
+deixa o `handle` propagar o 401 (sessão realmente perdida). POST/PATCH/DELETE se beneficiam do `authHeaders`
+reforçado, mas **não** ganham auto-retry de 401 (não são idempotentes — decisão consciente).
+
+**Gates:** web typecheck ✅, build ✅ (21 rotas, `/contas-a-receber` 6.92 kB; muda o chunk compartilhado, então
+os hashes de várias telas trocaram). Sem API, sem migration. **NO AR:** web `0be3ac41`; smoke pós-deploy ✅
+(HTML no-store + CSS 200). **Falta:** confirmação do Owner de que o 401 intermitente não reaparece após a
+PWA ficar ociosa/token expirar.
+
+### ADR-025 — Fatia 2.B: conversão de unidade comercial + idempotência forte — IMPLEMENTADA e NO AR (2026-08-20)
+
+Os dois eixos do desenho aprovado (2026-08-19) entregues numa fatia só (Owner aprovou aplicar a migration `0029`
+e fazer deploy bundle — regra 1).
+
+**Eixo 1 — conversão da unidade comercial (uCom → unidade de venda). SEM migration.**
+- **Parser (shared):** `NFeItem` ganhou `unitTrib`/`quantityTrib`/`unitCostTrib`; `buildNfeItem`/`RawNfeItem`
+  capturam `uTrib`/`qTrib`/`vUnTrib`; `web/lib/nfe.ts` lê as três tags do XML. **shared 36/36** (+1 teste do
+  item com campos tributáveis; o `toEqual` do item completo foi atualizado p/ os novos campos).
+- **Core (funções puras + Vitest — regra 2):** `suggestNfeFactor(qCom, qTrib)` (fator "limpo" = `qTrib÷qCom`
+  inteiro dentro de tolerância de 0,01 e ≥ 1; senão 1), `nfeConvertedQuantity(qCom, fator) = qCom×fator` (4
+  casas), `nfeConvertedUnitCost(vUnCom, fator) = vUnCom÷fator` (4 casas). Fator ≤ 0 tratado como 1 (nunca zera/
+  inverte estoque). **core 273/273** (+16 testes: inteiro limpo, unidades iguais, ruído decimal, não-inteiro
+  fora da tolerância, fator < 1, quantidades zeradas/negativas, fatores grandes, ida-e-volta custo×fator).
+- **Web (`NfeImportModal`):** cada linha ganhou **"Fator (embalagem)"** (sugerido pela nota) ao lado de Qtde
+  (comercial) e Custo (comercial); cálculo ao vivo quando o fator ≠ 1 (`2 CX × 12 = 24` · `R$ 60,00/CX ÷ 12 =
+  R$ 5,00/un`). **Payload ao servidor NÃO mudou** — `quantity`/`newCostPrice` seguem já convertidos.
+
+**Eixo 2 — idempotência forte. Migration `0029` aplicada.**
+- **Migration `0029_nfe_import_item`:** tabela nova `nfe_import_items` (nasce vazia), índice único
+  `(tenantId, accessKey, nItem)` + índice `(tenantId, accessKey)`; FKs p/ `tenants` (CASCADE) e `products`
+  (SET NULL); `movementId` como referência solta (rastreio/estorno). RLS por tenant (só SELECT p/
+  `authenticated`, padrão 0019/0022). **100% aditiva, reversível, sem backfill.** DDL gerado por `migrate diff`
+  (bateu com o desenho da ADR ao caractere), RLS adicionada à mão; `migrate deploy` aplicou; **`migrate diff`
+  pós-aplicação = "No difference detected"** (sem drift).
+- **API (`routes/nfe.ts`):** `POST /nfe/entry` insere em `nfe_import_items` na MESMA transação do
+  `StockMovement` (só com `accessKey`); `P2002` desse insert vira sentinela `ALREADY_IMPORTED` → "Item já
+  lançado nesta nota." (não erro genérico; como o cadastro do produto acontece ANTES, um P2002 aqui é sempre
+  da idempotência, nunca do SKU) → **rollback ⇒ estoque não dobra**. `GET /imported` lê `nfe_import_items` em
+  UNIÃO com o `AuditEvent` legado, dedup por `nItem` (tabela nova é autoritativa). `AuditEvent` mantido p/
+  auditoria.
+- **Web (`NfeImportModal`):** item já lançado fica com **checkbox travado** (`disabled` + tooltip "estorne e
+  reimporte") — **sem botão de forçar**; uma corrida que retorne "já lançado" também trava a linha (em vez de
+  loop de re-tentativa).
+
+**Gates:** core **273/273**, shared **36/36**, api typecheck + `wrangler dry-run` ✅, web typecheck + build
+(`/estoque` 15.1 kB) ✅; migration `0029` sem drift. **NO AR:** API `b624ab67` + web `c02ecef0`; smokes ✅
+(health 200, `/nfe/imported` sem token 401; web HTML no-store + CSS 200). **Falta: E2E do Owner** — fator
+sugerido/editável + conversão de qtde/custo; reimportar a mesma nota → item "já lançado" travado, sem dobrar
+estoque; nota sem chave de acesso segue lançando (sem idempotência). **Pré-requisito paralelo pendente:** ligar
+a Bluesoft Cosmos (`wrangler secret put COSMOS_TOKEN`) — ação do Owner.

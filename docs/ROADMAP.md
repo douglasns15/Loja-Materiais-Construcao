@@ -3,8 +3,46 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-19 — **ADR-025 Fatia 2.B (conversão de unidade comercial +
-> idempotência forte) — DESENHO APROVADO pelo Owner, AINDA NÃO IMPLEMENTADA. Retomar em outra sessão.**
+> **Última atualização:** 2026-08-20 — **ADR-025 Fatia 2.B (conversão de unidade comercial +
+> idempotência forte) — IMPLEMENTADA e NO AR. Falta E2E do Owner.** Os dois eixos do desenho aprovado
+> (2026-08-19) entregues. **Eixo 1 (conversão uCom→unidade de venda, SEM migration):** o parser passou a
+> ler `uTrib`/`qTrib`/`vUnTrib` (shared `NFeItem` + `web/lib/nfe.ts`); **core (+16 testes → 273/273)** ganhou
+> 3 funções puras — `suggestNfeFactor` (fator "limpo" = `qTrib÷qCom` inteiro dentro de tolerância, senão 1),
+> `nfeConvertedQuantity` (`qCom×fator`), `nfeConvertedUnitCost` (`vUnCom÷fator`, 4 casas); o `NfeImportModal`
+> ganhou **"Fator (embalagem)"** por linha (sugerido pela nota) + cálculo ao vivo (`2 CX × 12 = 24` · `R$
+> 60,00/CX ÷ 12 = R$ 5,00/un`). **O contrato do `POST /nfe/entry` NÃO mudou** — o payload chega já convertido.
+> **Eixo 2 (idempotência forte, migration `0029` aplicada):** tabela nova `nfe_import_items` com índice único
+> `(tenantId, accessKey, nItem)` gravada na MESMA transação da entrada ⇒ `P2002` ⇒ rollback ⇒ **nunca dobra
+> estoque**; item já lançado fica **desmarcado + selo "já lançado", checkbox travado (sem forçar)** — correção
+> = estornar no Estoque e reimportar. `GET /imported` lê a tabela nova **em UNIÃO com** o `AuditEvent` legado
+> (notas da 2.A seguem pré-marcadas, sem backfill). `AuditEvent NFE_ITEM_IMPORTED` mantido p/ auditoria.
+> **Migration `0029_nfe_import_item`** (aditiva, tabela vazia, reversível, RLS por tenant padrão 0019/0022)
+> **aplicada sem drift** (aprovada pelo Owner — regra 1). Gates: core 273/273, shared 36/36, api typecheck +
+> `wrangler dry-run`, web typecheck+build (`/estoque` 15.1 kB), `migrate diff` sem drift. **NO AR:** API
+> `b624ab67` + web `c02ecef0`; smokes ✅ (health 200, `/nfe/imported` sem token 401; web HTML no-store + CSS
+> 200). **Falta:** E2E do Owner (fator sugerido/editável + conversão; reimportar → "já lançado" travado sem
+> dobrar estoque). Ver "ADR-025 — Fatia 2.B" no registro. **Pré-requisito paralelo ainda pendente:** ligar a
+> Bluesoft Cosmos (`wrangler secret put COSMOS_TOKEN`, free 25/dia) — ação do Owner.
+>
+> **Antes:** 2026-08-20 — **🐞 Bug corrigido: "Token de autenticação ausente"
+> intermitente ao abrir telas — NO AR (web-only).** Achado do Owner ao abrir **Contas a Receber**: faixa
+> vermelha "Token de autenticação ausente." + tela vazia; um **Refresh forçado** trazia os dados. **Causa
+> raiz:** é o **401 da API** (`requireAuth`) quando a requisição chega **sem** header `Authorization` (não é
+> "token inválido/expirado"). O helper `authHeaders()` (`apps/web/lib/api.ts`) fazia `getSession()` e, sem
+> `access_token`, mandava o fetch **sem header** — corrida **"PWA ociosa + cold start"**: o JWT (~1h) expira
+> com a aba parada e a tela dispara o fetch **antes** de o supabase-js renovar (ou a renovação bate num
+> Supabase frio). O Refresh forçado reinicializava o cliente e renovava o token. **Correção (web-only):**
+> (1) `getAccessToken()` força **um** `refreshSession()` quando `getSession()` não traz token (beneficia
+> todas as telas); (2) `apiGet` re-tenta **uma** vez em **401** após um refresh, sem gastar o retry de rede;
+> POST/PATCH/DELETE ganham o `authHeaders` reforçado mas **não** auto-retry de 401 (não idempotentes).
+> Gates: web typecheck+build (`/contas-a-receber` 6.92 kB); sem API, sem migration. **NO AR:** web
+> `0be3ac41`; smoke ✅ (HTML no-store + CSS 200). Falta: confirmação do Owner de que não reaparece após
+> ociosidade. Ver "🐞 Bug — Token de autenticação ausente" no registro. **Próximo passo retomado abaixo
+> (Fatia 2.B).**
+>
+> **Antes:** 2026-08-19 — **ADR-025 Fatia 2.B (conversão de unidade comercial +
+> idempotência forte) — DESENHO APROVADO pelo Owner.** ✅ **IMPLEMENTADA e NO AR em 2026-08-20 (ver topo).**
+> Registro do desenho original abaixo.
 > Nada foi codado nem aplicado no banco ainda; esta é uma nota de HANDOFF. **Decisões de produto do Owner
 > (2026-08-19):** **(Eixo 1 — conversão uCom→unidade de venda, SEM migration)** auto-sugerir o fator pela
 > própria nota (a NF-e traz `uTrib`/`qTrib`/`vUnTrib`; em muitas notas `qTrib/qCom` já é o fator, ex.: 2 CX

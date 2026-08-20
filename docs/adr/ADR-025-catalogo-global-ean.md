@@ -96,7 +96,7 @@ NFE_ITEM_IMPORTED` (`accessKey`+`nItem`) — reupar a nota pré-marca só o que 
 auto-casamento do De-Para só por **EAN exato** ou **nome idêntico** (busca frouxa de balcão nunca
 AUTO-decide vínculo); busca de Produtos passou a olhar a coluna `ean`. Ver registro de testes.
 
-### 5.B Fatia 2.B — conversão de unidade comercial + idempotência forte (DESENHO APROVADO, não implementada)
+### 5.B Fatia 2.B — conversão de unidade comercial + idempotência forte (✅ IMPLEMENTADA e NO AR — 2026-08-20)
 
 Decisões de produto do Owner (2026-08-19), fecham as duas lacunas deixadas pela 2.A:
 
@@ -174,10 +174,10 @@ CREATE POLICY "nfe_import_items_select_tenant" ON public.nfe_import_items
   FOR SELECT TO authenticated USING ("tenantId" = public.current_tenant_id());
 ```
 
-**⚠️ Status:** migration acima **NÃO aplicada** — aguarda o OK final do Owner para aplicar (regra 1). Deploy
-de API obrigatório (idempotência vive no `POST /nfe/entry` + tabela nova). Gates antes do deploy: core (novos
-testes de conversão) + shared (parser uTrib/qTrib) + web typecheck/build + api typecheck + `wrangler
-dry-run` + `migrate diff` sem drift.
+**✅ Status (2026-08-20):** migration `0029` **aplicada** (Owner aprovou — regra 1), **sem drift**. Fatia 2.B
+IMPLEMENTADA e NO AR: API `b624ab67` + web `c02ecef0`. Gates: core **273/273** (+16), shared **36/36** (+1),
+api typecheck + `wrangler dry-run`, web typecheck/build. Falta o E2E do Owner. Detalhes e evidências em
+`docs/testes/registro-de-testes.md` → "ADR-025 — Fatia 2.B".
 
 ### 6. UX de aplicação da ficha ao cadastro (nunca sobrescreve sozinho)
 

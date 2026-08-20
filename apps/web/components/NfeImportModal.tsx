@@ -9,7 +9,12 @@ import {
   type NFeItem,
   type UnitType,
 } from '@nexoloja/shared';
-import { normalizeSearchText } from '@nexoloja/core';
+import {
+  normalizeSearchText,
+  nfeConvertedQuantity,
+  nfeConvertedUnitCost,
+  suggestNfeFactor,
+} from '@nexoloja/core';
 import { apiGet, apiPost } from '@/lib/api';
 import { parseNfeXml } from '@/lib/nfe';
 import { ProductPicker } from '@/components/ProductPicker';
@@ -23,8 +28,9 @@ import { MoneyInput } from '@/components/MoneyInput';
  *
  * Idempotência POR ITEM: ao (re)abrir a nota, consulta `GET /nfe/imported?chNFe=` e **pré-marca só os
  * itens que ainda não deram entrada** — os já lançados aparecem com selo e desmarcados (dá pra
- * remarcar à força, se de fato recebeu de novo). Na 2.A o operador confirma quantidade/custo por
- * linha (sem conversão automática da unidade comercial).
+ * remarcar à força, se de fato recebeu de novo). O operador confirma quantidade/custo por linha; na
+ * 2.B cada linha tem um **fator de embalagem** (sugerido pela nota via `qTrib ÷ qCom`) que converte
+ * a unidade comercial (ex.: 2 CX × 12 = 24 UN) — o payload ao servidor segue já na unidade de venda.
  */
 
 /** Campos do produto que o De-Para precisa (casar por EAN + busca do ProductPicker + rótulo). */
@@ -56,9 +62,11 @@ type Row = {
   npManufacturer: string;
   npUnit: UnitType;
   npSalePrice: string;
-  // Comuns
-  quantity: string;
-  cost: string; // "último custo" por unidade de venda (vazio = não atualiza custo)
+  // Comuns — valores COMERCIAIS da nota (uCom); a conversão p/ unidade de venda usa o `factor`.
+  quantity: string; // quantidade comercial (qCom)
+  cost: string; // custo unitário comercial (vUnCom); vazio = não atualiza o custo do cadastro
+  /** Fator de embalagem (quantas unidades de venda cabem numa unidade comercial). ADR-025 §5.B. */
+  factor: string;
   result?: { ok: boolean; error?: string };
 };
 
@@ -115,7 +123,21 @@ function toRow(item: NFeItem, products: NfeProduct[], imported: Map<number, stri
     npSalePrice: '',
     quantity: String(item.quantity),
     cost: item.unitCost > 0 ? String(item.unitCost) : '',
+    // Sugere o fator pela própria nota (qTrib ÷ qCom): 2 CX → 24 UN ⇒ 12. Sem pista, fica 1.
+    factor: String(suggestNfeFactor(item.quantity, item.quantityTrib)),
   };
+}
+
+/** Fator efetivo (≥ 1) e valores CONVERTIDOS para a unidade de venda (o que vai ao servidor). */
+function effectiveFactor(r: Row): number {
+  const f = Number(r.factor);
+  return f > 0 ? f : 1;
+}
+function convertedQty(r: Row): number {
+  return nfeConvertedQuantity(Number(r.quantity) || 0, effectiveFactor(r));
+}
+function convertedCost(r: Row): number {
+  return Number(r.cost) > 0 ? nfeConvertedUnitCost(Number(r.cost), effectiveFactor(r)) : 0;
 }
 
 const BRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -191,9 +213,10 @@ export function NfeImportModal({
       setError('Marque ao menos um item para lançar.');
       return;
     }
-    // Validação por linha (antes de bater no servidor).
+    // Validação por linha (antes de bater no servidor). A quantidade validada é a CONVERTIDA
+    // (qCom × fator) — é o que entra no estoque.
     for (const r of chosen) {
-      if (!(Number(r.quantity) > 0)) {
+      if (!(convertedQty(r) > 0)) {
         setError(`Informe a quantidade do item "${r.item.name}".`);
         return;
       }
@@ -208,10 +231,13 @@ export function NfeImportModal({
     }
 
     const items = chosen.map((r) => {
+      // O contrato do `POST /nfe/entry` NÃO muda: enviamos os valores JÁ convertidos para a unidade
+      // de venda (quantity = qCom × fator; custo = vUnCom ÷ fator). ADR-025 §5.B, Eixo 1.
+      const cost = convertedCost(r);
       const base = {
         nItem: r.item.nItem,
-        quantity: Number(r.quantity),
-        ...(Number(r.cost) > 0 ? { newCostPrice: Number(r.cost) } : {}),
+        quantity: convertedQty(r),
+        ...(cost > 0 ? { newCostPrice: cost } : {}),
         ...(r.item.ean ? { ean: r.item.ean } : {}),
         ...(r.item.name ? { officialName: r.item.name } : {}),
         ...(r.item.ncm ? { ncm: r.item.ncm } : {}),
@@ -252,9 +278,15 @@ export function NfeImportModal({
         rs.map((r) => {
           const res = byItem.get(r.item.nItem);
           if (!res || !r.selected) return r;
-          return res.ok
-            ? { ...r, result: { ok: true }, selected: false, alreadyImported: true }
-            : { ...r, result: { ok: false, error: res.error } };
+          if (res.ok) return { ...r, result: { ok: true }, selected: false, alreadyImported: true };
+          // "Já lançado" (idempotência forte venceu uma corrida/duplo-envio): trava a linha como os
+          // itens pré-marcados, em vez de deixar re-tentar num loop que sempre falharia.
+          const wasAlreadyImported = res.error === 'Item já lançado nesta nota.';
+          return {
+            ...r,
+            result: { ok: false, error: res.error },
+            ...(wasAlreadyImported ? { alreadyImported: true, selected: false } : {}),
+          };
         }),
       );
       const failed = resp.results.filter((x) => !x.ok).length;
@@ -373,7 +405,16 @@ export function NfeImportModal({
                       type="checkbox"
                       checked={r.selected}
                       onChange={() => patch(idx, { selected: !r.selected })}
-                      className="mt-1 shrink-0"
+                      // Idempotência forte (ADR-025 §5.B): item já lançado não pode ser "forçado" —
+                      // a correção é estornar a entrada no Estoque e reimportar. O checkbox fica
+                      // travado; a garantia dura mesmo é a constraint no banco.
+                      disabled={r.alreadyImported || r.result?.ok === true}
+                      title={
+                        r.alreadyImported
+                          ? 'Item já lançado nesta nota. Para corrigir, estorne a entrada no Estoque e reimporte.'
+                          : undefined
+                      }
+                      className="mt-1 shrink-0 disabled:opacity-40"
                       aria-label={`Selecionar item ${r.item.name}`}
                     />
                     <div className="min-w-0 flex-1">
@@ -465,10 +506,11 @@ export function NfeImportModal({
                         </div>
                       )}
 
-                      {/* Quantidade e custo confirmados (na unidade de venda). */}
-                      <div className="mt-2 grid grid-cols-2 gap-2 sm:max-w-sm">
+                      {/* Valores COMERCIAIS da nota + fator de embalagem (ADR-025 §5.B). O que entra
+                          no estoque é o CONVERTIDO (qCom × fator), mostrado ao vivo abaixo. */}
+                      <div className="mt-2 grid grid-cols-3 gap-2 sm:max-w-md">
                         <label className="text-xs text-gray-600">
-                          Quantidade
+                          Qtde ({r.item.unit ?? 'un'})
                           <input
                             value={r.quantity}
                             onChange={(e) => patch(idx, { quantity: e.target.value })}
@@ -477,15 +519,40 @@ export function NfeImportModal({
                           />
                         </label>
                         <label className="text-xs text-gray-600">
-                          Custo (un) — vazio: não muda
+                          Fator (embalagem)
+                          <input
+                            value={r.factor}
+                            onChange={(e) => patch(idx, { factor: e.target.value })}
+                            inputMode="numeric"
+                            className={inputCls}
+                            aria-label="Fator de embalagem"
+                          />
+                        </label>
+                        <label className="text-xs text-gray-600">
+                          Custo/{r.item.unit ?? 'un'} — vazio: não muda
                           <MoneyInput
                             value={r.cost}
                             onChange={(v) => patch(idx, { cost: v })}
                             className={inputCls}
-                            aria-label="Custo unitário"
+                            aria-label="Custo unitário comercial"
                           />
                         </label>
                       </div>
+
+                      {/* Cálculo ao vivo da conversão — só quando o fator ≠ 1 (há embalagem). */}
+                      {effectiveFactor(r) !== 1 && (
+                        <p className="mt-1 text-xs text-blue-700">
+                          Entra no estoque: {Number(r.quantity) || 0} {r.item.unit ?? 'un'} ×{' '}
+                          {effectiveFactor(r)} = <strong>{convertedQty(r)}</strong>
+                          {Number(r.cost) > 0 && (
+                            <>
+                              {' · '}
+                              {BRL(Number(r.cost))}/{r.item.unit ?? 'un'} ÷ {effectiveFactor(r)} ={' '}
+                              <strong>{BRL(convertedCost(r))}</strong>/un
+                            </>
+                          )}
+                        </p>
+                      )}
 
                       {r.result && !r.result.ok && (
                         <p className="mt-1 text-xs text-red-700">{r.result.error}</p>

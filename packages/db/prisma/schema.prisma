@@ -178,6 +178,7 @@ model Tenant {
   customerCredits     CustomerCredit[]
   quotes              Quote[]
   quoteItems          QuoteItem[]
+  nfeImportItems      NfeImportItem[]
 
   @@map("tenants")
 }
@@ -343,6 +344,7 @@ model Product {
   orderItems     OrderItem[]
   quoteItems     QuoteItem[]
   stockMovements StockMovement[]
+  nfeImportItems NfeImportItem[]
   // Auto-relação do par (ADR-015). `SetNull`: se o agregado for apagado de vez, o par
   // simplesmente deixa de existir e o produto principal segue vendendo avulso.
   pairedProduct  Product?        @relation("ProductPair", fields: [pairedProductId], references: [id], onDelete: SetNull)
@@ -977,4 +979,31 @@ model AuditEvent {
   @@index([tenantId, entity, entityId])
   @@index([tenantId, createdAt])
   @@map("audit_events")
+}
+
+/// Idempotência FORTE da importação de NF-e (ADR-025 §5.B, Fatia 2.B). Uma linha por item de nota
+/// efetivamente lançado no estoque. O índice único (tenantId, accessKey, nItem) é a garantia DURA:
+/// tentar lançar o MESMO item duas vezes gera P2002 → rollback da transação da entrada → nunca dobra
+/// estoque (a 2.A só tinha um AuditEvent, sem constraint). Gravado na MESMA transação do StockMovement;
+/// guarda o `movementId` para rastreio/estorno. Notas SEM chave de acesso (44 díg.) não entram aqui —
+/// não há como deduplicá-las —, e a entrada segue como na 2.A. O GET /imported lê esta tabela em UNIÃO
+/// com o AuditEvent legado (notas da 2.A seguem pré-marcadas, sem backfill).
+model NfeImportItem {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  accessKey   String   @db.VarChar(44)
+  nItem       Int
+  productId   String?  @db.Uuid
+  movementId  String?  @db.Uuid // StockMovement gerado — referência solta (sem FK), como a autoria
+  quantity    Decimal  @db.Decimal(12, 4)
+  notaNumber  String?  @db.VarChar(20)
+  createdById String?  @db.Uuid
+  createdAt   DateTime @default(now())
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, accessKey, nItem])
+  @@index([tenantId, accessKey])
+  @@map("nfe_import_items")
 }

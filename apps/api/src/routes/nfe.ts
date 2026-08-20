@@ -19,11 +19,14 @@ import { requireActiveTenant, requireAuth } from '../middleware/auth';
  *  - gera Entrada de estoque (StockMovement INCOME + `stockQty`), grava "último custo" e o aviso de
  *    revisão de preço quando o custo muda (mesma semântica de `POST /stock/movements`);
  *  - alimenta o catálogo global (`ProductCatalog`, upsert por EAN — efeito de rede custo-zero);
- *  - grava um `AuditEvent NFE_ITEM_IMPORTED` (chave `accessKey`+`nItem`) para a IDEMPOTÊNCIA POR
- *    ITEM: reimportar a mesma nota pré-marca só os itens que ainda não deram entrada (`GET /imported`).
+ *  - grava uma linha em `nfe_import_items` com a constraint DURA (tenantId, accessKey, nItem) —
+ *    IDEMPOTÊNCIA FORTE da 2.B: relançar o mesmo item gera P2002 ⇒ rollback ⇒ nunca dobra estoque;
+ *  - mantém o `AuditEvent NFE_ITEM_IMPORTED` para a trilha de auditoria. `GET /imported` lê a tabela
+ *    nova em UNIÃO com o AuditEvent legado, pré-marcando só os itens que ainda não deram entrada.
  *
- * Na Fatia 2.A o operador confirma/ajusta quantidade e custo por linha (sem conversão automática de
- * unidade comercial → unidade de venda). O fornecedor é casado por CNPJ (ou criado pela nota).
+ * O operador confirma/ajusta quantidade e custo por linha; a conversão da unidade comercial → unidade
+ * de venda (fator de embalagem, 2.B) é feita no cliente, então o payload já chega convertido. O
+ * fornecedor é casado por CNPJ (ou criado pela nota).
  */
 
 const nfe = new Hono<Env>();
@@ -156,7 +159,7 @@ nfe.post('/entry', requireActiveTenant, async (c) => {
           }
 
           // Entrada de estoque (ADR-001) — mesma transação, custo unitário da nota.
-          await tx.stockMovement.create({
+          const movement = await tx.stockMovement.create({
             data: {
               tenantId,
               productId: pid,
@@ -169,7 +172,36 @@ nfe.post('/entry', requireActiveTenant, async (c) => {
               userId,
               registeredByName: userName,
             },
+            select: { id: true },
           });
+
+          // Idempotência FORTE (ADR-025 §5.B, Eixo 2): grava o item lançado com a constraint dura
+          // (tenantId, accessKey, nItem). Só quando há chave de acesso (sem ela não há como
+          // deduplicar). Se este item JÁ foi lançado, o `P2002` aborta a transação inteira ⇒
+          // rollback ⇒ NUNCA dobra estoque. Convertido num sentinela para virar "já lançado" (não
+          // erro genérico) — como o cadastro do produto acontece ANTES, um P2002 aqui é sempre da
+          // idempotência, nunca do SKU.
+          if (entry.accessKey) {
+            try {
+              await tx.nfeImportItem.create({
+                data: {
+                  tenantId,
+                  accessKey: entry.accessKey,
+                  nItem: item.nItem,
+                  productId: pid,
+                  movementId: movement.id,
+                  quantity: item.quantity,
+                  notaNumber: entry.notaNumber ?? null,
+                  createdById: userId,
+                },
+              });
+            } catch (e) {
+              if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+                throw new Error('ALREADY_IMPORTED');
+              }
+              throw e;
+            }
+          }
 
           // Catálogo global: preenche a ficha de um EAN ainda desconhecido (efeito de rede). Não
           // sobrescreve ficha existente (mesma política de `catalog.ts`); refino de melhoria = 2.B.
@@ -211,7 +243,9 @@ nfe.post('/entry', requireActiveTenant, async (c) => {
         results.push({ nItem: item.nItem, ok: true, productId });
       } catch (err) {
         let msg = 'Falha ao lançar o item.';
-        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        if (err instanceof Error && err.message === 'ALREADY_IMPORTED') {
+          msg = 'Item já lançado nesta nota.';
+        } else if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
           msg = 'Já existe um produto com esse SKU.';
         } else if (err instanceof Error && err.message === 'PRODUCT_NOT_FOUND') {
           msg = 'Produto vinculado não encontrado.';
@@ -230,8 +264,10 @@ nfe.post('/entry', requireActiveTenant, async (c) => {
 
 /**
  * Itens de uma NF-e (por chave de acesso) que JÁ deram entrada — para o De-Para pré-marcar só o que
- * falta ao reimportar a mesma nota. Lê os `AuditEvent NFE_ITEM_IMPORTED` filtrando pelo `accessKey`
- * dentro do `meta` (JSON). Chave malformada devolve lista vazia (sem erro).
+ * falta ao reimportar a mesma nota. Lê a tabela `nfe_import_items` (indexada, idempotência forte da
+ * 2.B) **em UNIÃO com** os `AuditEvent NFE_ITEM_IMPORTED` legados (notas lançadas na 2.A seguem
+ * pré-marcadas, sem backfill/regressão). Dedup por `nItem` (a tabela nova é autoritativa). Chave
+ * malformada devolve lista vazia (sem erro).
  */
 nfe.get('/imported', async (c) => {
   const tenantId = getTenantId(c);
@@ -246,23 +282,43 @@ nfe.get('/imported', async (c) => {
 
   try {
     const prisma = createPrismaClient(connectionString);
-    const events = await prisma.auditEvent.findMany({
-      where: {
-        tenantId,
-        action: NFE_IMPORT_ACTION,
-        meta: { path: ['accessKey'], equals: accessKey },
-      },
-      select: { entityId: true, meta: true, createdAt: true },
-      orderBy: { createdAt: 'asc' },
-    });
-    const importedItems = events.map((e) => {
+    type Imported = { nItem: number; productId: string | null; importedAt: string };
+    const [rows, events] = await Promise.all([
+      prisma.nfeImportItem.findMany({
+        where: { tenantId, accessKey },
+        select: { nItem: true, productId: true, createdAt: true },
+        orderBy: { createdAt: 'asc' },
+      }),
+      prisma.auditEvent.findMany({
+        where: {
+          tenantId,
+          action: NFE_IMPORT_ACTION,
+          meta: { path: ['accessKey'], equals: accessKey },
+        },
+        select: { entityId: true, meta: true, createdAt: true },
+        orderBy: { createdAt: 'asc' },
+      }),
+    ]);
+
+    // Dedup por nItem: começa com o legado (AuditEvent da 2.A) e deixa a tabela nova sobrescrever.
+    const byNItem = new Map<number, Imported>();
+    for (const e of events) {
       const meta = (e.meta ?? {}) as { nItem?: number };
-      return {
-        nItem: typeof meta.nItem === 'number' ? meta.nItem : 0,
-        productId: e.entityId,
-        importedAt: e.createdAt.toISOString(),
-      };
-    });
+      const nItem = typeof meta.nItem === 'number' ? meta.nItem : 0;
+      if (nItem > 0) {
+        byNItem.set(nItem, { nItem, productId: e.entityId, importedAt: e.createdAt.toISOString() });
+      }
+    }
+    for (const r of rows) {
+      if (r.nItem > 0) {
+        byNItem.set(r.nItem, {
+          nItem: r.nItem,
+          productId: r.productId,
+          importedAt: r.createdAt.toISOString(),
+        });
+      }
+    }
+    const importedItems = [...byNItem.values()];
     return c.json({ ok: true, data: { accessKey, importedItems } });
   } catch (err) {
     console.error('GET /nfe/imported falhou:', err);
