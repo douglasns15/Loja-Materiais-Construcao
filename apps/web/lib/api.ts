@@ -2,10 +2,29 @@ import { supabase } from './supabase';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL!;
 
-/** Monta o header Authorization com o access token da sessão atual. */
-async function authHeaders(): Promise<Record<string, string>> {
+/**
+ * Access token da sessão atual; se ausente mas houver `refresh_token`, força UMA renovação.
+ * Cobre a corrida "PWA ociosa + cold start": o access token (JWT ~1h) expira enquanto a aba fica
+ * parada e a tela dispara o fetch ANTES de o supabase-js renovar (ou a renovação bate num Supabase
+ * frio e falha). Sem isso, `getSession()` volta sem token e a requisição sairia SEM `Authorization`,
+ * resultando no 401 "Token de autenticação ausente." (que só sumia com Refresh forçado da página).
+ */
+async function getAccessToken(): Promise<string | null> {
   const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
+  if (data.session?.access_token) return data.session.access_token;
+  // Sem token em mãos: tenta trocar o refresh_token por um access token novo (não deve lançar —
+  // devolve o erro no objeto —, mas protegemos mesmo assim para nunca derrubar a chamada).
+  try {
+    const { data: refreshed } = await supabase.auth.refreshSession();
+    return refreshed.session?.access_token ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Monta o header Authorization com o access token da sessão atual (renovando se preciso). */
+async function authHeaders(): Promise<Record<string, string>> {
+  const token = await getAccessToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
@@ -53,11 +72,30 @@ async function fetchWithTimeout(url: string, init: RequestInit): Promise<Respons
 }
 
 export async function apiGet<T>(path: string): Promise<T> {
-  const headers = await authHeaders();
   let lastErr: unknown;
+  let authRetried = false; // só uma tentativa de renovar o token por chamada
   for (let attempt = 0; attempt <= GET_RETRIES; attempt++) {
     try {
+      // Recalcula o header a cada volta: se renovamos o token no 401 abaixo, a próxima já o usa.
+      const headers = await authHeaders();
       const res = await fetchWithTimeout(`${API_URL}${path}`, { headers });
+      // 401 numa corrida de renovação (token expirado/ausente por PWA ociosa + cold start): força
+      // um refresh e re-tenta UMA vez, sem consumir o orçamento de retry de rede. Se o refresh não
+      // trouxer token, deixa o `handle` propagar o erro normalmente (sessão realmente perdida).
+      if (res.status === 401 && !authRetried) {
+        authRetried = true;
+        let token: string | null = null;
+        try {
+          const { data } = await supabase.auth.refreshSession();
+          token = data.session?.access_token ?? null;
+        } catch {
+          /* refresh falhou → cai no handle abaixo e propaga o 401 */
+        }
+        if (token) {
+          attempt--; // esta volta não conta como tentativa de rede
+          continue;
+        }
+      }
       return await handle<T>(res);
     } catch (err) {
       // Erro HTTP (handle lançou) ou última tentativa: propaga sem re-tentar.
