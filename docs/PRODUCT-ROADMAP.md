@@ -2,7 +2,7 @@
 
 > **O que é este documento.** A visão de **produto**: o que queremos que o NexoLoja faça, por quê e em que ordem. É deliberadamente especulativo — itens aqui **não** são compromissos, e mudam conforme aprendemos com as lojas reais.
 >
-> **Última atualização:** 2026-07-27
+> **Última atualização:** 2026-08-20
 
 ## Como este documento se relaciona com os outros
 
@@ -21,12 +21,11 @@
 
 Foco: **tornar o dia a dia do balcão impecável**. Origem: pedidos do Owner em `Uteis_Projeto_NexoLoja.txt`.
 
-> Verificado contra o código em 2026-07-27. Os itens já entregues foram removidos desta lista — o histórico deles está no [`ROADMAP.md`](ROADMAP.md).
+> Verificado contra o código em 2026-08-20. Os itens já entregues foram removidos desta lista — o histórico deles está no [`ROADMAP.md`](ROADMAP.md).
 
 | Tema | Valor para o lojista |
 |---|---|
 | **Modernização visual** | Percepção de produto profissional; legibilidade no balcão |
-| **Numeração de nota** | Número da venda no comprovante e no histórico — referência ao falar com o cliente. *Não existe hoje: pedidos são identificados por UUID.* |
 | **Busca e filtro no histórico de vendas** | Localizar uma venda específica (por nota, cliente, valor) e filtrar por coluna. *Hoje há período, ordenação e busca por código (V-000128); falta busca por cliente/valor.* |
 | **Gestão de senha pelo Super Usuário** | Destravar lojista que esqueceu a senha, sem depender de e-mail. *Não implementado no painel de plataforma.* |
 | **Ver usuários de cada loja no painel** | Clicar no número de usuários e listar quem são |
@@ -35,7 +34,7 @@ Foco: **tornar o dia a dia do balcão impecável**. Origem: pedidos do Owner em 
 
 ### Entregues recentemente (não repetir aqui)
 
-Pagamento dividido · paginação por cursor + filtro de período no histórico · ordenação (maior/menor valor, data) · botão "voltar ao topo" · sangria/suprimento e extrato do caixa · contador de cédulas e mini-DRE · troco e formas no comprovante · busca no servidor em Clientes/Produtos · numeração sequencial de vendas (`V-000128`) e busca por código · orçamentos salvos (`O-000045`, ciclo de vida, converter em venda) · correção do logo que sumia do comprovante ao ser trocado · valor recebido e troco por venda (Histórico + comprovante) · navegação ‹ Hoje › + default "Hoje" nos filtros por data (Relatórios/Vendas/Movimentações).
+Pagamento dividido · paginação por cursor + filtro de período no histórico · ordenação (maior/menor valor, data) · botão "voltar ao topo" · sangria/suprimento e extrato do caixa · contador de cédulas e mini-DRE · troco e formas no comprovante · busca no servidor em Clientes/Produtos · numeração sequencial de vendas (`V-000128`) e busca por código · orçamentos salvos (`O-000045`, ciclo de vida, converter em venda) · correção do logo que sumia do comprovante ao ser trocado · valor recebido e troco por venda (Histórico + comprovante) · navegação ‹ Hoje › + default "Hoje" nos filtros por data (Relatórios/Vendas/Movimentações) · fiado / contas a receber ([ADR-019](adr/ADR-019-venda-a-prazo-contas-a-receber.md)) e conta do cliente com devolução por item + crédito ([ADR-022](adr/ADR-022-conta-do-cliente-fiado-acumulado.md)) · cadastro por código de barras via catálogo global + importação de XML de NF-e ([ADR-025](adr/ADR-025-catalogo-global-ean.md)).
 
 ---
 
@@ -45,13 +44,11 @@ Foco: **fechar o ciclo comercial** e o módulo de material de construção.
 
 | Tema | Valor | Notas |
 |---|---|---|
-| **Entregas e frete pesado** | Diferencial do ramo: agendar entrega, motorista, veículo, peso | Modelo `Delivery` **já existe** no schema; falta produto/UI |
-| **Fiado / contas a receber** | Prática comum no balcão de material de construção | Exige modelagem de crédito do cliente |
+| **Entregas e frete pesado** | Diferencial do ramo: agendar entrega, motorista, veículo, peso | Modelo `Delivery` **já existe** no schema; retirada/entrega futura entregue ([ADR-020](adr/ADR-020-retirada-entrega-futura.md)); falta o frete pesado (motorista/veículo/peso) |
 | **Compras e reposição** | Fechar o ciclo com fornecedor; sugestão de compra pelo mínimo | `Supplier` e `minStockQty` já existem |
 | **Crédito parcelado** | Parcelamento sobre o total, com valor extra | Interage com [ADR-016](adr/ADR-016-preco-e-margem-por-forma-de-pagamento.md) |
 | **Emissão fiscal (NFC-e/NF-e)** | Obrigação legal para operar formalmente | Depende de integração terceira — decisão em aberto |
 | **Offline-first completo** | Caixa opera sem internet | Fase 3 do `ROADMAP.md`; ADRs [011](adr/ADR-011-fila-de-sincronizacao-offline.md)/[012](adr/ADR-012-cold-start-offline-first-leitura.md) |
-| **Orçamento / pré-venda** | Cotação que vira venda — comum em obra | — |
 
 ---
 
@@ -67,11 +64,10 @@ Quando muitas lojas usam o sistema, os dados agregados passam a valer mais do qu
 | **Benchmark de margem** | "Sua margem em vergalhão está abaixo da mediana de lojas parecidas" |
 | **Previsão de demanda** | Sazonalidade do setor (chuva, safra, obras) para antecipar compra |
 | **Sugestão de reposição inteligente** | Ponto de reposição calculado por histórico real, não por mínimo fixo |
-| **Catálogo compartilhado** | Cadastrar produto por código de barras puxando nome/marca já cadastrados por outras lojas — reduz drasticamente o atrito de cadastro |
 | **Poder de compra coletivo** | Agregar demanda de várias lojas para negociar com fornecedor |
 | **Detecção de anomalia** | Alertar preço de venda abaixo do custo, ou ajuste de estoque atípico |
 
-**O ativo mais subestimado da lista é o catálogo compartilhado:** ele entrega valor imediato ao lojista (cadastro rápido), gera dado estruturado para todo o resto e tem risco de privacidade baixo — dado de produto de fabricante não é dado comercial sensível. É o candidato natural a *primeiro passo*.
+**O primeiro passo desta lista — o catálogo compartilhado — já foi dado** ([ADR-025](adr/ADR-025-catalogo-global-ean.md)): cadastrar produto por código de barras puxando nome/marca do catálogo global cross-tenant, além de importação de XML de NF-e (Fatias 1, 2.A e 2.B no ar). Foi a escolha certa de *primeiro passo* justamente porque entrega valor imediato ao lojista (cadastro rápido), gera dado estruturado para todo o resto e tem risco de privacidade baixo — dado de produto de fabricante não é dado comercial sensível. O restante deste horizonte (tendências, benchmark, previsão, poder de compra) permanece como visão futura e **depende de resolver privacidade/consentimento antes** (seção abaixo).
 
 ---
 
@@ -94,7 +90,7 @@ Cada item abaixo é uma decisão real com trade-offs — exatamente o material d
 - **Consentimento:** opt-in por loja, por módulo, ou contratual global? O que a loja recebe em troca (desconto? acesso ao insight?)?
 - **Onde processar:** agregação no próprio Postgres (barato, mas concorre com a carga transacional) ou um dataset/pipeline separado?
 - **Piso de anonimato:** qual N mínimo de lojas por indicador? Qual granularidade geográfica?
-- **Identidade de produto entre lojas:** como reconciliar catálogos? Por GTIN/código de barras, ou uma entidade canônica de produto na plataforma?
+- ~~**Identidade de produto entre lojas:** como reconciliar catálogos? Por GTIN/código de barras, ou uma entidade canônica de produto na plataforma?~~ **Resolvido** por [ADR-025](adr/ADR-025-catalogo-global-ean.md): catálogo global chaveado por GTIN/EAN.
 - **Emissão fiscal:** qual provedor, e o que acontece com o offline quando a emissão exige rede?
 - **Modelo de negócio:** o insight é do plano base ou de um plano superior?
 
