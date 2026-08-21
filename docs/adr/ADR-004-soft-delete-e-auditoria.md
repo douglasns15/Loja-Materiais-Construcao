@@ -1,6 +1,6 @@
 # ADR-004: Estratégia de Soft-Delete e Auditoria
 
-**Status:** Proposto
+**Status:** Aceito — **implementado**. Soft-delete via `deletedAt` em várias entidades e o modelo `AuditEvent` estão no schema (migration `0002_rls_and_auth_hook` aplicada — ver checklist no fim deste ADR).
 **Data:** 2026-06-21
 **Deciders:** Alexandre Papassoni (Owner do produto)
 

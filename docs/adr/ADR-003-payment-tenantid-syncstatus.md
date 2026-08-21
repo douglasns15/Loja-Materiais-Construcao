@@ -1,6 +1,6 @@
 # ADR-003: Inclusão de `tenantId` e `syncStatus` no modelo `Payment`
 
-**Status:** Proposto
+**Status:** Aceito — **implementado**. `Payment.tenantId` existe no schema (denormalização multi-tenant/RLS); `syncStatus` próprio **não** foi adicionado, conforme a decisão (pagamento tratado como parte do agregado `Order`).
 **Data:** 2026-06-21
 **Deciders:** Alexandre Papassoni (Owner do produto)
 

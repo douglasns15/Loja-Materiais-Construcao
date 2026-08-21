@@ -1,6 +1,6 @@
 # ADR-001: Consistência de Estoque — `stockQty` desnormalizado vs. derivado de `StockMovement`
 
-**Status:** Proposto
+**Status:** Aceito — **implementado** (modelo `StockMovement` + cache `Product.stockQty` no schema desde `0_init`; é o motor de estoque em produção).
 **Data:** 2026-06-21
 **Deciders:** Alexandre Papassoni (Owner do produto)
 

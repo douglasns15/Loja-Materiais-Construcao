@@ -1,6 +1,6 @@
 # ADR-002: Tipo do campo `Delivery.status` — `Int` (SmallInt) cru vs. `enum`
 
-**Status:** Proposto
+**Status:** Aceito — **implementado**. O schema usa `enum DeliveryStatus` em `Delivery.status` (não mais `Int` cru); ver `schema.prisma` (comentário "ADR-002: status migrado de Int para enum"). O **Contexto** abaixo descreve o estado ANTERIOR à migração.
 **Data:** 2026-06-21
 **Deciders:** Alexandre Papassoni (Owner do produto)
 

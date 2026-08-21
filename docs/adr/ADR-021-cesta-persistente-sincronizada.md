@@ -1,7 +1,7 @@
 # ADR-021 — Cesta persistente sincronizada (carrinho do PDV por usuário, entre dispositivos)
 
-- **Status:** **Proposto** — aguardando aprovação do Owner (ADR + migration `0016_carts`) ANTES de
-  codar (regras 1 e 4 do CLAUDE.md).
+- **Status:** **Aceito — implementado e NO AR.** ADR e migration `0016_carts` foram aprovados e
+  aplicados; o modelo `Cart` está no schema e a cesta persistente está em produção.
 - **Data:** 2026-07-29
 - **Contexto de fase:** Fase 3, melhoria de UX do PDV pedida pelo Owner (antes de ADR-020 —
   retirada/entrega futura).

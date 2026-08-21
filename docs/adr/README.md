@@ -19,10 +19,10 @@ Um *Architecture Decision Record* é um documento curto e versionado que captura
 
 | ADR | Título | Status |
 |-----|--------|--------|
-| [ADR-001](./ADR-001-consistencia-de-estoque.md) | Consistência de estoque (`stockQty` vs. `StockMovement`) | Proposto |
-| [ADR-002](./ADR-002-delivery-status-enum.md) | Tipo do campo `Delivery.status` (`Int` vs. `enum`) | Proposto |
-| [ADR-003](./ADR-003-payment-tenantid-syncstatus.md) | `tenantId` e `syncStatus` no modelo `Payment` | Proposto |
-| [ADR-004](./ADR-004-soft-delete-e-auditoria.md) | Estratégia de soft-delete e auditoria | Proposto |
+| [ADR-001](./ADR-001-consistencia-de-estoque.md) | Consistência de estoque (`stockQty` vs. `StockMovement`) | Aceito — implementado |
+| [ADR-002](./ADR-002-delivery-status-enum.md) | Tipo do campo `Delivery.status` (`Int` vs. `enum`) | Aceito — implementado |
+| [ADR-003](./ADR-003-payment-tenantid-syncstatus.md) | `tenantId` e `syncStatus` no modelo `Payment` | Aceito — implementado |
+| [ADR-004](./ADR-004-soft-delete-e-auditoria.md) | Estratégia de soft-delete e auditoria | Aceito — implementado |
 | [ADR-005](./ADR-005-stack-e-arquitetura.md) | Stack tecnológica e arquitetura geral | Aceito |
 | [ADR-006](./ADR-006-devolucao-e-movimentacoes-de-caixa.md) | Devolução de venda e movimentações de caixa | Aceito |
 | [ADR-007](./ADR-007-armazenamento-de-midia-r2.md) | Armazenamento de mídia no Cloudflare R2 (logo) | Aceito |
@@ -39,7 +39,7 @@ Um *Architecture Decision Record* é um documento curto e versionado que captura
 | [ADR-018](./ADR-018-caixa-compartilhado-por-loja.md) | Caixa compartilhado por loja (quem abre, abre para todos) | Aceito — implementado/validado |
 | [ADR-019](./ADR-019-venda-a-prazo-contas-a-receber.md) | Venda a prazo / Contas a receber (o "fiado") | Aceito — implementado/validado |
 | [ADR-020](./ADR-020-retirada-entrega-futura.md) | Retirada / entrega futura (adiar a saída de estoque) | Aceito — implementado/validado |
-| [ADR-021](./ADR-021-cesta-persistente-sincronizada.md) | Cesta persistente sincronizada (carrinho do PDV entre dispositivos) | Aceito — implementado/validado |
+| [ADR-021](./ADR-021-cesta-persistente-sincronizada.md) | Cesta persistente sincronizada (carrinho do PDV entre dispositivos) | Aceito — implementado (migration `0016_carts`) |
 | [ADR-022](./ADR-022-conta-do-cliente-fiado-acumulado.md) | Conta do cliente (fiado acumulado): conta que soma + devolução por item + crédito | Aceito — implementado/validado |
 | [ADR-023](./ADR-023-numeracao-sequencial-de-vendas.md) | Numeração sequencial de vendas por loja (código `V-000128`) | Aceito — implementado/validado |
 | [ADR-024](./ADR-024-orcamentos-salvos.md) | Orçamentos salvos (documento `O-000045`, ciclo de vida, validade, conversão) | Aceito — implementado/validado (2.A + 2.B) |
