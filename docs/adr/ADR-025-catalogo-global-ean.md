@@ -175,9 +175,10 @@ CREATE POLICY "nfe_import_items_select_tenant" ON public.nfe_import_items
 ```
 
 **✅ Status (2026-08-20):** migration `0029` **aplicada** (Owner aprovou — regra 1), **sem drift**. Fatia 2.B
-IMPLEMENTADA e NO AR: API `b624ab67` + web `c02ecef0`. Gates: core **273/273** (+16), shared **36/36** (+1),
-api typecheck + `wrangler dry-run`, web typecheck/build. Falta o E2E do Owner. Detalhes e evidências em
-`docs/testes/registro-de-testes.md` → "ADR-025 — Fatia 2.B".
+IMPLEMENTADA, NO AR e **E2E do Owner VALIDADO** (caminho feliz com nota real + 5 casos de borda) — **CONCLUÍDA**.
+API `b624ab67` + web `c02ecef0`. Gates: core **273/273** (+16), shared **36/36** (+1), api typecheck +
+`wrangler dry-run`, web typecheck/build. Detalhes e evidências em `docs/testes/registro-de-testes.md` →
+"ADR-025 — Fatia 2.B".
 
 ### 6. UX de aplicação da ficha ao cadastro (nunca sobrescreve sozinho)
 

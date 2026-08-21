@@ -4,7 +4,7 @@
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
 > **Última atualização:** 2026-08-20 — **ADR-025 Fatia 2.B (conversão de unidade comercial +
-> idempotência forte) — IMPLEMENTADA e NO AR. Falta E2E do Owner.** Os dois eixos do desenho aprovado
+> idempotência forte) — IMPLEMENTADA, NO AR e E2E DO OWNER VALIDADO. Fatia 2.B CONCLUÍDA.** Os dois eixos do desenho aprovado
 > (2026-08-19) entregues. **Eixo 1 (conversão uCom→unidade de venda, SEM migration):** o parser passou a
 > ler `uTrib`/`qTrib`/`vUnTrib` (shared `NFeItem` + `web/lib/nfe.ts`); **core (+16 testes → 273/273)** ganhou
 > 3 funções puras — `suggestNfeFactor` (fator "limpo" = `qTrib÷qCom` inteiro dentro de tolerância, senão 1),
@@ -20,9 +20,13 @@
 > **aplicada sem drift** (aprovada pelo Owner — regra 1). Gates: core 273/273, shared 36/36, api typecheck +
 > `wrangler dry-run`, web typecheck+build (`/estoque` 15.1 kB), `migrate diff` sem drift. **NO AR:** API
 > `b624ab67` + web `c02ecef0`; smokes ✅ (health 200, `/nfe/imported` sem token 401; web HTML no-store + CSS
-> 200). **Falta:** E2E do Owner (fator sugerido/editável + conversão; reimportar → "já lançado" travado sem
-> dobrar estoque). Ver "ADR-025 — Fatia 2.B" no registro. **Pré-requisito paralelo ainda pendente:** ligar a
-> Bluesoft Cosmos (`wrangler secret put COSMOS_TOKEN`, free 25/dia) — ação do Owner.
+> 200). **E2E VALIDADO (2026-08-20):** Owner testou o caminho feliz + reimportação com nota real (2 itens CX→UN,
+> fatores 12 e 20 sugeridos, estoque 20→44/30→130, custo 7,41/5,04, reimport "já lançado" sem dobrar); e 5
+> casos de borda dirigidos no navegador do Owner (fator 1 sem linha de conversão; editar fator 1→2 → estoque
+> 20/custo 2,25; importação parcial → item 1 "já lançado" travado/18 sem dobrar + item 2 depois; nota sem chave
+> → aviso âmbar + reimport NÃO pré-marca; cadastrar novo pela nota). **Fatia 2.B CONCLUÍDA.** Ver "ADR-025 —
+> Fatia 2.B" no registro. **Próximo (cronograma):** ligar a Bluesoft Cosmos (`wrangler secret put
+> COSMOS_TOKEN`, free 25/dia) — ação do Owner.
 >
 > **Antes:** 2026-08-20 — **🐞 Bug corrigido: "Token de autenticação ausente"
 > intermitente ao abrir telas — NO AR (web-only).** Achado do Owner ao abrir **Contas a Receber**: faixa

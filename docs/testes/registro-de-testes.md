@@ -4986,7 +4986,29 @@ e fazer deploy bundle — regra 1).
 
 **Gates:** core **273/273**, shared **36/36**, api typecheck + `wrangler dry-run` ✅, web typecheck + build
 (`/estoque` 15.1 kB) ✅; migration `0029` sem drift. **NO AR:** API `b624ab67` + web `c02ecef0`; smokes ✅
-(health 200, `/nfe/imported` sem token 401; web HTML no-store + CSS 200). **Falta: E2E do Owner** — fator
-sugerido/editável + conversão de qtde/custo; reimportar a mesma nota → item "já lançado" travado, sem dobrar
-estoque; nota sem chave de acesso segue lançando (sem idempotência). **Pré-requisito paralelo pendente:** ligar
-a Bluesoft Cosmos (`wrangler secret put COSMOS_TOKEN`) — ação do Owner.
+(health 200, `/nfe/imported` sem token 401; web HTML no-store + CSS 200). **Pré-requisito paralelo pendente:**
+ligar a Bluesoft Cosmos (`wrangler secret put COSMOS_TOKEN`) — ação do Owner.
+
+**E2E DO OWNER — VALIDADO (2026-08-20). Fatia 2.B CONCLUÍDA.**
+
+Parte 1 — caminho feliz com nota real (Owner, prints em `Evidencias.docx`): NF-e de 2 itens comerciais em CX com
+tributável em UN (fornecedor OPTIMUS Prime, chave de 44 díg. válida). **Fatores 12 e 20 sugeridos** (24÷2, 100÷5);
+**conversão de quantidade** 2 CX→24 e 5 CX→100 (estoque 20→**44** e 30→**130**); **conversão de custo** 88,944÷12=**R$
+7,41** e 100,833÷20=**R$ 5,04**; casamento **por nome** (EAN inválido de propósito → "sem EAN"); fornecedor criado por
+CNPJ; aviso de revisão de preço (custo mudou). **Reimportação** → ambos com selo **"já lançado"** travado, **0
+marcado(s)**, estoque **não dobrou** (44/130). ✅
+
+Parte 2 — 5 casos de borda dirigidos no navegador do Owner (owner@lojademo.com; XMLs `Teste_A_Fator1`/`Teste_B_Parcial`/
+`Teste_C_SemChave` gerados p/ os casos):
+| # | Caso | Resultado |
+|---|---|---|
+| 1 | **Fator = 1** (item 10 UN, qTrib=qCom) | Fator veio **1**, **sem** linha de conversão. ✅ |
+| 2 | **Editar o fator** (1 → 2) | Linha recalculou ao vivo (10×2=20 · 4,50÷2=2,25); ao confirmar, produto criado com **estoque 20** e **custo R$ 2,25** — valor editado é o usado. ✅ |
+| 3 | **Importação parcial** (2 itens, fatores 6 e 4) | Lançado só o item 1 → "1 item lançado" (estoque **18**=3×6). Reimport → item 1 **"já lançado" travado** + "18 em estoque" (não dobrou), item 2 marcável → confirmado → item 1 seguiu em 18. ✅ |
+| 4 | **Sem chave de acesso** | Aviso âmbar **"Nota sem chave de acesso"**; entrada normal (2 CX×12=24 · R$ 2,50/un); reimport **NÃO** pré-marca (sem selo "já lançado"), como projetado. ✅ |
+| 5 | **Cadastrar novo pela nota** | Coberto nos casos 1/3/4: produtos criados pela nota já com quantidade/custo convertidos. ✅ |
+
+Nota operacional: os prints da Parte 2 ficaram intermitentes (throttle da aba de automação em segundo plano no
+Chrome — `Page.captureScreenshot` deu timeout em vários), mas os estados-chave foram capturados e o restante
+confirmado por leitura da árvore de acessibilidade. Dados de teste descartáveis criados: produtos **Teste Fator 1**,
+**Teste Parcial A/B**, **Teste Sem Chave** (preço R$ 0,00) + fornecedor **OPTIMUS Prime**.
