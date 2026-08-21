@@ -11,6 +11,7 @@ import { EanEnrichmentCard, useEanLookup } from '@/components/EanEnrichment';
 import { MoneyInput } from '@/components/MoneyInput';
 import { PricingEsteira } from '@/components/PricingEsteira';
 import { ProductDetail, type CardFees, type ProductFull } from '@/components/ProductDetail';
+import { buildCategoryOptions, type Category } from '@/lib/categories';
 
 /**
  * A lista usa o cadastro **completo** (`ProductFull`) porque a linha abre o painel de
@@ -83,6 +84,8 @@ export default function ProductsPage() {
     // Código de barras (ADR-025) — distinto do SKU interno. Dispara o enriquecimento por EAN.
     ean: '',
     description: '',
+    // Categoria (opcional) — organiza o catálogo; vazio = sem categoria.
+    categoryId: '',
     unit: 'UNIT' as UnitType,
     costPrice: '',
     salePrice: '',
@@ -123,6 +126,10 @@ export default function ProductsPage() {
   // Taxas da maquininha da loja (ADR-016) — só para o painel exibir a margem REAL por
   // modalidade. Nunca alteram preço; falha silenciosa (a margem simplesmente não desconta taxa).
   const [cardFees, setCardFees] = useState<CardFees | null>(null);
+
+  // Categorias do tenant (para o seletor de categoria do cadastro/edição). Lista inteira, pequena.
+  const [categories, setCategories] = useState<Category[]>([]);
+  const categoryOptions = buildCategoryOptions(categories);
 
   // Produto aberto no painel de visualizar/editar (null = painel fechado).
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -232,6 +239,13 @@ export default function ProductsPage() {
       .catch(() => setCardFees(null));
   }, []);
 
+  // Categorias para o seletor (falha silenciosa: sem categorias, o campo fica só com "— sem —").
+  useEffect(() => {
+    apiGet<Category[]>('/categories')
+      .then(setCategories)
+      .catch(() => setCategories([]));
+  }, []);
+
   // Remove o destaque da linha escaneada depois de alguns segundos.
   useEffect(() => {
     if (!highlightId) return;
@@ -275,6 +289,8 @@ export default function ProductsPage() {
       // Foto por hotlink aplicada pelo enriquecimento (URL externa; nunca cópia no R2).
       imageUrl: enrichImageUrl || undefined,
       description: form.description.trim() || undefined,
+      // Categoria (opcional): vazio não envia coluna. createProductSchema aceita só uuid|undefined.
+      categoryId: form.categoryId || undefined,
       unit: form.unit,
       costPrice: Number(form.costPrice),
       salePrice: Number(form.salePrice),
@@ -323,6 +339,7 @@ export default function ProductsPage() {
         sku: '',
         ean: '',
         description: '',
+        categoryId: '',
         unit: 'UNIT',
         costPrice: '',
         salePrice: '',
@@ -403,6 +420,8 @@ export default function ProductsPage() {
       // Código de barras é único por produto — não copia (como o SKU).
       ean: '',
       description: p.description ?? '',
+      // Categoria faz sentido copiar (produtos parecidos costumam ser da mesma categoria).
+      categoryId: p.categoryId ?? '',
       unit: p.unit,
       costPrice: String(Number(p.costPrice)),
       // Preço de venda sempre a 2 casas (dados legados podem vir com 4; a esteira só cobre o cálculo).
@@ -580,6 +599,23 @@ export default function ProductsPage() {
             {(Object.keys(unitTypeLabels) as UnitType[]).map((u) => (
               <option key={u} value={u}>
                 {unitTypeLabels[u]}
+              </option>
+            ))}
+          </select>
+        </Field>
+        {/* Categoria (opcional) — organiza o catálogo. Cadastre categorias em Cadastros › Categorias. */}
+        <Field label="Categoria (opcional)" className="sm:col-span-2">
+          <select
+            value={form.categoryId}
+            onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
+            title="Categoria do produto. Cadastre e organize as categorias em Cadastros › Categorias."
+            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+            aria-label="Categoria"
+          >
+            <option value="">— sem categoria —</option>
+            {categoryOptions.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
               </option>
             ))}
           </select>
@@ -967,6 +1003,7 @@ export default function ProductsPage() {
         <ProductDetail
           product={detail}
           allProducts={catalog ?? []}
+          categories={categories}
           cardFees={cardFees}
           onClose={() => setDetailId(null)}
           onSaved={reloadAll}

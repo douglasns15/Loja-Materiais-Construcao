@@ -36,6 +36,7 @@ const NAV: NavEntry[] = [
     children: [
       { href: '/customers', label: 'Clientes' },
       { href: '/fornecedores', label: 'Fornecedores' },
+      { href: '/categorias', label: 'Categorias' },
     ],
   },
   { href: '/relatorios', label: 'Relatórios' },
@@ -67,6 +68,7 @@ const WARM_ROUTES = [
   '/estoque',
   '/customers',
   '/fornecedores',
+  '/categorias',
   '/relatorios',
   '/configuracoes',
   '/pendencias',

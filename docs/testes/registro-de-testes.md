@@ -5012,3 +5012,48 @@ Nota operacional: os prints da Parte 2 ficaram intermitentes (throttle da aba de
 Chrome — `Page.captureScreenshot` deu timeout em vários), mas os estados-chave foram capturados e o restante
 confirmado por leitura da árvore de acessibilidade. Dados de teste descartáveis criados: produtos **Teste Fator 1**,
 **Teste Parcial A/B**, **Teste Sem Chave** (preço R$ 0,00) + fornecedor **OPTIMUS Prime**.
+
+## UI.Cadastros.Categorias — Tela de Categorias + seletor de categoria no Produto (2026-08-21)
+
+**Contexto.** A entidade `Category` (com hierarquia `parentId`) e a coluna `Product.categoryId` existem
+desde a Fase 1, assim como as rotas CRUD `/categories` e a aceitação de `categoryId` em `POST`/`PATCH
+/products`. Mas a feature era **morta na UI**: nenhuma tela para criar categorias e nenhum seletor no
+cadastro de Produto — logo, era impossível ao lojista organizar o catálogo por categoria.
+
+**Entrega (web-only, sem migration, sem deploy de API).** Confirmado antes de codar que `withMargin`
+(serialização do produto na API) espalha o registro (`...p`), então `categoryId` já vem no JSON de
+`GET /products*` sem tocar a API. Nenhum contrato de rota mudou (regra 7 não dispara).
+
+- **`apps/web/lib/categories.ts`** (nova) — helpers puros: `buildCategoryOptions` (achata a árvore em
+  lista ordenada com o caminho "Pai › Filho" e a profundidade p/ indentar; robusto a pai órfão/ciclo),
+  `categoryLabelMap` (id → caminho) e `descendantsAndSelf` (bloqueia ciclo no seletor de pai).
+- **`apps/web/app/(app)/categorias/page.tsx`** (nova) — criar (nome + pai opcional), busca client-side
+  acento-insensível, árvore indentada; clicar abre a edição.
+- **`apps/web/components/CategoryFormModal.tsx`** (novo) — criar/editar (nome + pai) + remover
+  (soft-delete, ADR-004). O seletor de pai exclui a própria categoria e seus descendentes (a API só
+  barra o caso trivial `parentId === id`).
+- **Menu** (`layout.tsx`) — item **Categorias** no grupo recolhível "Cadastros" + `/categorias` no
+  `WARM_ROUTES` (shell offline, ADR-012 CS-3).
+- **Seletor de categoria no Produto** — campo "Categoria (opcional)" no cadastro (`/products`) e na
+  edição (`ProductDetail`), com linha "Categoria" (caminho completo) na visualização; "Copiar" herda a
+  categoria. Vazio = sem categoria (envia `undefined` no create, `null` para limpar no patch).
+
+**Gates:** web typecheck + build (**23 rotas**, `/categorias` 3.31 kB, `/products` 15.5 kB) ✅; sem
+core/shared/API. **NO AR:** web `3bcc79a9`; smoke pós-deploy ✅ (HTML no-store + CSS 200).
+
+**Nota p/ o E2E:** a loja Demo não tem nenhuma categoria cadastrada (a UI nunca existiu) — a tela abre
+vazia e o seletor no Produto mostra só "— sem categoria —" até criar a primeira.
+
+**Checklist do E2E do Owner (pendente):**
+1. **Criar categoria principal** — em Cadastros › Categorias, criar "Elétrica" (sem pai) → aparece na lista.
+2. **Criar subcategoria** — criar "Fios e cabos" com pai "Elétrica" → aparece indentada sob "Elétrica".
+3. **Buscar** — a busca acha por nome e por caminho, ignorando acento.
+4. **Editar / mudar pai** — renomear e trocar o pai de uma categoria; conferir que o seletor de pai NÃO
+   oferece a própria categoria nem descendentes (anti-ciclo).
+5. **Remover** — remover uma categoria (soft-delete) → some da lista; um produto que a usava fica "sem
+   categoria" (FK `SET NULL` no schema).
+6. **Vincular no cadastro** — cadastrar um produto novo escolhendo a categoria → abrir o produto e conferir
+   a linha "Categoria" com o caminho completo.
+7. **Vincular na edição** — editar um produto existente, definir/trocar/limpar a categoria e salvar; "Salvar"
+   só habilita com alteração real; conferir que persiste.
+8. **Copiar** — usar "Copiar" num produto com categoria → o formulário herda a categoria.

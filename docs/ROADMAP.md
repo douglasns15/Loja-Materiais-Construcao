@@ -3,7 +3,24 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-20 — **ADR-025 Fatia 2.B (conversão de unidade comercial +
+> **Última atualização:** 2026-08-21 — **UI.Cadastros.Categorias — Tela de Categorias + seletor de
+> categoria no Produto — NO AR (web-only), aguardando E2E do Owner.** A feature de Categorias existia
+> só no schema/API desde a Fase 1 e era **morta na UI**: não havia como criar categorias nem vincular
+> produtos a elas. Entregue **sem migration e sem deploy de API** — o banco (`Category` +
+> `Product.categoryId`), as rotas `/categories` e o `categoryId` em `POST`/`PATCH /products` já existiam
+> (confirmado: `withMargin` espalha o produto, então o `categoryId` já viajava no JSON; nenhum contrato de
+> rota mudou ⇒ regra 7 não dispara). **Web:** nova lib `apps/web/lib/categories.ts` (helpers puros —
+> árvore→lista com caminho "Pai › Filho", mapa de rótulo, bloqueio de ciclo self+descendentes); tela
+> `/categorias` (criar nome+pai, buscar, árvore indentada, editar/remover via `CategoryFormModal`) no
+> submenu **"Cadastros"** + rota no warm-cache offline; **seletor de categoria** no cadastro (`/products`)
+> e na edição (`ProductDetail`, com linha "Categoria" na visualização), e "Copiar" herda a categoria.
+> Anti-ciclo no seletor de pai (a API só barra o caso trivial `parentId===id`). Gates: web typecheck +
+> build (**23 rotas**, `/categorias` 3.31 kB, `/products` 15.5 kB) ✅; sem core/shared/API. **NO AR:** web
+> `3bcc79a9`; smoke ✅ (HTML no-store + CSS 200). **Nota:** a loja Demo não tem categorias cadastradas (a
+> UI nunca existiu) — a tela abre vazia até criar a primeira. **Falta: E2E do Owner.** Ver
+> "UI.Cadastros.Categorias" no registro.
+>
+> **Antes:** 2026-08-20 — **ADR-025 Fatia 2.B (conversão de unidade comercial +
 > idempotência forte) — IMPLEMENTADA, NO AR e E2E DO OWNER VALIDADO. Fatia 2.B CONCLUÍDA.** Os dois eixos do desenho aprovado
 > (2026-08-19) entregues. **Eixo 1 (conversão uCom→unidade de venda, SEM migration):** o parser passou a
 > ler `uTrib`/`qTrib`/`vUnTrib` (shared `NFeItem` + `web/lib/nfe.ts`); **core (+16 testes → 273/273)** ganhou

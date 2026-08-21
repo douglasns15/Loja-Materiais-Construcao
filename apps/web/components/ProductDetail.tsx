@@ -17,6 +17,7 @@ import {
   surchargePerBaseUnit,
 } from '@nexoloja/core';
 import { apiDelete, apiGet, apiPatch } from '@/lib/api';
+import { buildCategoryOptions, categoryLabelMap, type Category } from '@/lib/categories';
 import { MoneyInput } from '@/components/MoneyInput';
 import { PricingEsteira } from '@/components/PricingEsteira';
 import { BarcodeScanButton } from '@/components/BarcodeScanButton';
@@ -45,6 +46,8 @@ export type ProductFull = {
   popularName: string | null;
   manufacturer: string | null;
   description: string | null;
+  // Categoria do produto (ADR-004) — null ⇒ sem categoria.
+  categoryId: string | null;
   unit: UnitType;
   costPrice: string;
   salePrice: string;
@@ -122,6 +125,7 @@ type FormState = {
   sku: string;
   ean: string;
   description: string;
+  categoryId: string;
   unit: UnitType;
   costPrice: string;
   salePrice: string;
@@ -149,6 +153,7 @@ function toForm(p: ProductFull): FormState {
     sku: p.sku,
     ean: p.ean ?? '',
     description: p.description ?? '',
+    categoryId: p.categoryId ?? '',
     unit: p.unit,
     costPrice: String(Number(p.costPrice)),
     // Preço de venda sempre a 2 casas: dados legados podem vir com 4 (Decimal(12,4)) e apareceriam
@@ -199,6 +204,8 @@ function buildPatch(original: ProductFull, f: FormState): Record<string, unknown
     popularName: textOrNull(f.popularName),
     manufacturer: textOrNull(f.manufacturer),
     description: textOrNull(f.description),
+    // Categoria: vazio limpa (null); senão o uuid escolhido.
+    categoryId: textOrNull(f.categoryId),
     unit: f.unit,
     costPrice: Number(f.costPrice),
     salePrice: Number(f.salePrice),
@@ -223,6 +230,7 @@ function buildPatch(original: ProductFull, f: FormState): Record<string, unknown
     popularName: original.popularName,
     manufacturer: original.manufacturer,
     description: original.description,
+    categoryId: original.categoryId,
     unit: original.unit,
     costPrice: Number(original.costPrice),
     salePrice: Number(original.salePrice),
@@ -249,6 +257,7 @@ function buildPatch(original: ProductFull, f: FormState): Record<string, unknown
 export function ProductDetail({
   product,
   allProducts,
+  categories,
   cardFees,
   onClose,
   onSaved,
@@ -256,6 +265,8 @@ export function ProductDetail({
   product: ProductFull;
   /** Catálogo completo — alimenta o seletor do produto agregado e a leitura do par (ADR-015). */
   allProducts: ProductFull[];
+  /** Categorias do tenant — alimentam o seletor e o rótulo da categoria na leitura. */
+  categories: Category[];
   /** Taxas da maquininha da loja (ADR-016) — só para exibir a margem real; nunca mudam preço. */
   cardFees?: CardFees | null;
   onClose: () => void;
@@ -494,6 +505,12 @@ export function ProductDetail({
   const inputCls = 'w-full rounded-lg border border-gray-300 px-3 py-2';
   const labelCls = 'text-xs font-medium text-gray-600';
 
+  // Categoria: opções para o seletor (caminho completo) e o rótulo da categoria atual na leitura.
+  const categoryOptions = buildCategoryOptions(categories);
+  const categoryLabel = product.categoryId
+    ? categoryLabelMap(categories).get(product.categoryId) ?? null
+    : null;
+
   /** Linha de leitura: rótulo + valor (ou "—" quando vazio). */
   const Row = ({ label, value }: { label: string; value: React.ReactNode }) => (
     <div>
@@ -562,6 +579,7 @@ export function ProductDetail({
               <Row label="Fabricante" value={product.manufacturer} />
               <Row label="SKU (código interno)" value={product.sku} />
               <Row label="Código de barras (EAN)" value={product.ean} />
+              <Row label="Categoria" value={categoryLabel} />
               <Row label="Unidade de venda" value={unitTypeLabels[product.unit]} />
               <Row
                 label="Peso"
@@ -983,6 +1001,22 @@ export function ProductDetail({
                 {(Object.keys(unitTypeLabels) as UnitType[]).map((u) => (
                   <option key={u} value={u}>
                     {unitTypeLabels[u]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="sm:col-span-3">
+              <span className={labelCls}>Categoria</span>
+              <select
+                value={form.categoryId}
+                onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
+                className={`${inputCls} bg-white`}
+                aria-label="Categoria"
+              >
+                <option value="">— sem categoria —</option>
+                {categoryOptions.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
                   </option>
                 ))}
               </select>
