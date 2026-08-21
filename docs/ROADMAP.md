@@ -4,7 +4,7 @@
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
 > **Última atualização:** 2026-08-21 — **UI.Cadastros.Categorias — Tela de Categorias + seletor de
-> categoria no Produto — NO AR (web-only), aguardando E2E do Owner.** A feature de Categorias existia
+> categoria no Produto — NO AR e E2E DO OWNER VALIDADO. Fatia CONCLUÍDA.** A feature de Categorias existia
 > só no schema/API desde a Fase 1 e era **morta na UI**: não havia como criar categorias nem vincular
 > produtos a elas. Entregue **sem migration e sem deploy de API** — o banco (`Category` +
 > `Product.categoryId`), as rotas `/categories` e o `categoryId` em `POST`/`PATCH /products` já existiam
@@ -22,8 +22,11 @@
 > categoria) só era percebido depois; o `confirm()` genérico virou **painel com impacto ANTES** (N
 > subcategorias que sobem + M produtos afetados, contados sob demanda no clique). Padrão de mercado: e-commerce
 > promove filhas/apaga subárvore com aviso, ERP bloqueia/inativa; como já somos soft-delete, ficou o meio-termo
-> "excluir informado". Comportamento inalterado. **Falta: E2E do Owner.** Ver "UI.Cadastros.Categorias" no
-> registro.
+> "excluir informado". Comportamento inalterado. **E2E do Owner VALIDADO (2026-08-21)** — fatia + refino
+> testados com sucesso (criar pai/filha, buscar, editar/mudar pai anti-ciclo, excluir com impacto, vincular no
+> cadastro/edição/Copiar). **Fatia CONCLUÍDA.** Commits `f241403` + `4d08650` (locais em `main`, push do
+> Owner). Ver "UI.Cadastros.Categorias" no registro. **Próximo (cronograma):** ligar a Bluesoft Cosmos
+> (`wrangler secret put COSMOS_TOKEN`, free 25/dia) — ação do Owner.
 >
 > **Antes:** 2026-08-20 — **ADR-025 Fatia 2.B (conversão de unidade comercial +
 > idempotência forte) — IMPLEMENTADA, NO AR e E2E DO OWNER VALIDADO. Fatia 2.B CONCLUÍDA.** Os dois eixos do desenho aprovado

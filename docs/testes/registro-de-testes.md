@@ -5044,7 +5044,13 @@ core/shared/API. **NO AR:** web `3bcc79a9`; smoke pós-deploy ✅ (HTML no-store
 **Nota p/ o E2E:** a loja Demo não tem nenhuma categoria cadastrada (a UI nunca existiu) — a tela abre
 vazia e o seletor no Produto mostra só "— sem categoria —" até criar a primeira.
 
-**Checklist do E2E do Owner (pendente):**
+**E2E do Owner — VALIDADO (2026-08-21). Fatia CONCLUÍDA.** Os 8 passos abaixo passaram (o passo 5, exclusão,
+foi reconfirmado já com o refino da confirmação com impacto — ver abaixo). Achado de produto durante o teste,
+esclarecido e correto: o vínculo do produto é com a **categoria exata** escolhida, não com a árvore acima —
+excluir a pai só solta as filhas (viram principais) e NÃO desvincula os produtos das filhas; só excluir a
+categoria que está de fato no produto o deixa "sem categoria".
+
+**Checklist executado:**
 1. **Criar categoria principal** — em Cadastros › Categorias, criar "Elétrica" (sem pai) → aparece na lista.
 2. **Criar subcategoria** — criar "Fios e cabos" com pai "Elétrica" → aparece indentada sob "Elétrica".
 3. **Buscar** — a busca acha por nome e por caminho, ignorando acento.
@@ -5071,4 +5077,4 @@ com aviso (Magento); ERPs tendem a **bloquear/inativar**. Como o NexoLoja já é
 via `GET /products?includeInactive=true`, só os ligados àquela categoria exata). Singular/plural tratados;
 "nada afetado" e falha de rede na contagem têm mensagem própria. **Comportamento inalterado** (soft-delete,
 filhas viram principais) — é só um aviso. Sem migration/API. Gates: web typecheck + build (`/categorias`
-3.82 kB) ✅. **NO AR:** web `53819d8f`; smoke ✅. Falta reconfirmação do Owner no E2E.
+3.82 kB) ✅. **NO AR:** web `53819d8f`; smoke ✅. **E2E do Owner VALIDADO (2026-08-21):** exclusão com o painel de impacto (contagem de subcategorias e produtos afetados) reconfirmada com sucesso. Commit `4d08650`.
