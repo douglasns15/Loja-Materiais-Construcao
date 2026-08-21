@@ -5,7 +5,7 @@
 > e diagramas de arquitetura.
 >
 > **Produto:** ERP/PDV multi-tenant, modular e custo-zero (PWA única para Web/Android/iOS).
-> **Última atualização:** 2026-08-16 · **Fontes:** `docs/ARCHITECTURE.md`, `docs/adr/` (ADR-001…025), código do monorepo.
+> **Última atualização:** 2026-08-20 · **Fontes:** `docs/ARCHITECTURE.md`, `docs/adr/` (ADR-001…025), código do monorepo.
 
 ---
 
@@ -321,7 +321,7 @@ nexoloja/
 │   │   └── wrangler.jsonc    # config do Worker web
 │   └── api/                  # API Hono (Cloudflare Workers)
 │       └── src/
-│           ├── routes/       # 18 endpoints (orders, cashSessions, stock, catalog…)
+│           ├── routes/       # 19 grupos, ~80 endpoints (orders, cashSessions, stock, nfe, catalog…)
 │           ├── middleware/   # auth (valida JWT), tenant, erros
 │           └── lib/          # helpers de servidor
 ├── packages/
@@ -353,24 +353,162 @@ testável exaustivamente e compartilhada entre as duas apps.
 - **Padrão de erro:** sempre `try/catch` → mensagem amigável ao cliente + log detalhado no servidor.
 - **CORS:** libera as origens do web (dev + produção).
 
-**Rotas (`apps/api/src/routes/`):**
+### 8.1 Autenticação e escopo (vale para todos os endpoints)
 
-| Rota | Responsabilidade |
+- **Base:** `https://nexoloja-api.imortal.workers.dev`. Todas as rotas de negócio ficam sob um grupo montado (ex.: `/orders`, `/cash-sessions`).
+- **Token:** `Authorization: Bearer <JWT>` do Supabase Auth. O middleware valida (via `jose`), extrai `tenant_id`/`role` das claims e injeta no contexto. **Nunca** se confia em `tenantId` vindo do corpo.
+- **Guardas especiais:**
+  - `requireActiveTenant` — bloqueia escrita em loja inativa/suspensa (ADR-009). Marcado com 🔒 abaixo.
+  - `/catalog/*` usa o header `x-tenant-id` (leitura cross-tenant do catálogo global, ADR-025), não a claim.
+  - `/platform/*` exige **PlatformAdmin** (super-usuário da plataforma), não papel de loja.
+  - `/support/*` exige um **token de suporte** com escopo de uma loja específica; o `:tenantId` da URL precisa bater com o escopo do token (senão 403). Acesso **somente-leitura** (ADR-009, Fatia E).
+- **Erro:** sempre `{ ok: false, error: '<mensagem amigável>' }` + log detalhado no servidor.
+
+### 8.2 Referência de endpoints
+
+> Fonte de verdade = `apps/api/src/routes/`. **Ao criar/alterar qualquer rota, atualize esta tabela** (ver a nota de manutenção no fim da seção). 🔒 = exige loja ativa (`requireActiveTenant`).
+
+**Utilitárias (`index.ts`, sem auth de loja)**
+
+| Método · Rota | O que faz |
 |---|---|
-| `orders.ts` | Vendas: confirmação, cancelamento, devolução. |
-| `cashSessions.ts` | Abertura/fechamento de caixa (compartilhado por loja — ADR-018). |
-| `stock.ts` | Movimentação de estoque (transação atômica — ADR-001). |
-| `products.ts` · `categories.ts` | Catálogo de produtos e categorias. |
-| `catalog.ts` | Catálogo global por EAN (ADR-025). |
-| `customers.ts` · `suppliers.ts` | Clientes e fornecedores. |
-| `receivables.ts` | Contas a receber / fiado (ADR-019, ADR-022). |
-| `deliveries.ts` | Entregas / retirada futura (ADR-020). |
-| `quotes.ts` | Orçamentos salvos (ADR-024). |
-| `cart.ts` | Cesta persistente sincronizada (ADR-021). |
-| `reports.ts` | Relatórios. |
-| `users.ts` · `me.ts` | Usuários e perfil da sessão. |
-| `tenant.ts` | Dados da loja. |
-| `platform.ts` · `support.ts` | Administração da plataforma e suporte. |
+| `GET /health` | Liveness do Worker. |
+| `GET /db-check` | Sanidade da conexão com o banco. |
+| `GET /public/logo/:tenantId` | Redireciona para o logo público da loja no R2. |
+
+**`/orders` — Vendas (PDV)**
+
+| Método · Rota | O que faz |
+|---|---|
+| `GET /` | Lista vendas (paginação por cursor + filtro de período). |
+| `POST /` 🔒 | Confirma a venda: transação `Order` + `OrderItem` + `Payment` + `StockMovement` (ADR-001). |
+| `POST /:id/cancel` 🔒 | Cancela venda do caixa aberto (estorna estoque; sai do faturamento). |
+| `POST /:id/return` 🔒 | Devolução **total**: marca `RETURNED`, estorna estoque, saída no caixa. Exige caixa aberto. |
+| `POST /:id/return-items` 🔒 | Devolução **parcial** por item; excedente vira crédito na loja ou dinheiro no caixa (ADR-022). |
+
+**`/cash-sessions` — Caixa (compartilhado por loja, ADR-018)**
+
+| Método · Rota | O que faz |
+|---|---|
+| `GET /current` | Caixa aberto da loja (ou nenhum). |
+| `POST /open` 🔒 | Abre o caixa (fundo inicial). |
+| `POST /close` 🔒 | Fecha o caixa: conferência, contador de cédulas, mini-DRE. |
+| `GET /movements` | Extrato do caixa (vendas + sangrias/suprimentos). |
+| `POST /movement` 🔒 | Registra sangria/suprimento. |
+| `POST /movement/:id/reverse` 🔒 | Estorna uma movimentação. |
+
+**`/stock` — Estoque (transação atômica, ADR-001)**
+
+| Método · Rota | O que faz |
+|---|---|
+| `GET /movements` | Histórico de movimentações (livro-razão). |
+| `GET /summary` | Resumo/posição de estoque. |
+| `POST /movements` 🔒 | Entrada/saída manual (`StockMovement` + `stockQty`). |
+| `POST /adjust` 🔒 | Ajuste/inventário (acerta o saldo com auditoria). |
+
+**`/products` e `/categories` — Catálogo local**
+
+| Método · Rota | O que faz |
+|---|---|
+| `GET /products` · `GET /products/search` | Lista e busca de produtos (nome, SKU, `popularName`, EAN). |
+| `GET /products/:id` | Detalhe do produto. |
+| `POST /products` 🔒 · `PATCH /products/:id` 🔒 · `DELETE /products/:id` 🔒 | Cria / edita / remove (soft-delete). |
+| `GET /categories` · `GET /categories/:id` | Lista e detalhe de categorias. |
+| `POST /categories` 🔒 · `PATCH /categories/:id` 🔒 · `DELETE /categories/:id` 🔒 | CRUD de categorias. |
+
+**`/catalog` — Catálogo global por EAN (ADR-025)**
+
+| Método · Rota | O que faz |
+|---|---|
+| `GET /ean/:ean` | Resolve um EAN: acha produto existente da loja e/ou enriquece nome/marca do catálogo global. |
+
+**`/nfe` — Importação de XML de NF-e (ADR-025, Fatia 2)**
+
+| Método · Rota | O que faz |
+|---|---|
+| `POST /entry` 🔒 | Confirma o De-Para item-a-item → gera Entrada de estoque; cada linha em sua própria transação. |
+| `GET /imported` | Lista itens já importados de uma nota (por `chNFe`) — idempotência. |
+
+**`/customers` e `/suppliers` — Pessoas**
+
+| Método · Rota | O que faz |
+|---|---|
+| `GET /customers` · `GET /customers/:id` | Lista (busca no servidor) e detalhe. |
+| `GET /customers/:id/history` | Histórico de compras/fiado do cliente. |
+| `POST /customers` 🔒 · `PATCH /customers/:id` 🔒 · `DELETE /customers/:id` 🔒 | CRUD de clientes. |
+| `GET /suppliers` · `GET /suppliers/:id` | Lista e detalhe de fornecedores. |
+| `POST /suppliers` 🔒 · `PATCH /suppliers/:id` 🔒 · `DELETE /suppliers/:id` 🔒 | CRUD de fornecedores. |
+
+**`/receivables` — Fiado / contas a receber (ADR-019, ADR-022)**
+
+| Método · Rota | O que faz |
+|---|---|
+| `GET /` | Lista dívidas (contas a receber). |
+| `GET /accounts` | Saldo devedor **consolidado por cliente** (1 linha por pessoa). |
+| `GET /accounts/:customerId` | Extrato da conta de um cliente. |
+| `POST /accounts/:customerId/receive` 🔒 | Recebe pagamento **FIFO** distribuído nas dívidas abertas (um `CashMovement` pelo total). |
+| `GET /:id` | Detalhe de uma dívida. |
+| `PATCH /:id` 🔒 | Edita a dívida (ex.: notas, vencimento). |
+| `POST /:id/receive` 🔒 | Recebe pagamento de **uma** dívida específica. |
+
+**`/deliveries` — Entrega / retirada futura (ADR-020)**
+
+| Método · Rota | O que faz |
+|---|---|
+| `GET /` · `GET /:id` | Lista e detalhe de entregas/retiradas agendadas. |
+| `PATCH /:id` 🔒 | Atualiza status/dados da entrega. |
+| `POST /:id/deliver` 🔒 | Confirma entrega/retirada → efetiva a saída de estoque adiada. |
+
+**`/quotes` — Orçamentos salvos (ADR-024)**
+
+| Método · Rota | O que faz |
+|---|---|
+| `GET /` · `GET /:id` | Lista e detalhe de orçamentos (`O-000045`). |
+| `POST /` 🔒 · `PATCH /:id` 🔒 · `DELETE /:id` 🔒 | Cria / edita (ciclo de vida, validade, conversão em venda) / remove. |
+
+**`/cart` — Cesta persistente sincronizada (ADR-021)**
+
+| Método · Rota | O que faz |
+|---|---|
+| `GET /` | Carrega a cesta do usuário (entre dispositivos). |
+| `POST /` | Salva/substitui a cesta (rascunho; preços revalidados na venda). |
+| `DELETE /` | Limpa a cesta. |
+
+**`/reports` — Relatórios**
+
+| Método · Rota | O que faz |
+|---|---|
+| `GET /sales` | Vendas por período (faturamento CONFIRMED, canceladas à parte, total por forma de pagamento). |
+| `GET /cash-sessions` | Relatório de caixas (aberturas/fechamentos). |
+
+**`/tenant`, `/me`, `/users` — Loja, sessão e usuários**
+
+| Método · Rota | O que faz |
+|---|---|
+| `GET /tenant` · `PATCH /tenant` 🔒 | Dados da loja / edição. |
+| `POST /tenant/logo` 🔒 · `DELETE /tenant/logo` 🔒 | Upload (URL assinada R2) / remoção do logo. |
+| `GET /me` · `PATCH /me` | Perfil da sessão (+ memberships) / edição do próprio perfil. |
+| `GET /users` | Lista usuários da loja. |
+| `POST /users/invite` 🔒 · `PATCH /users/:id` 🔒 · `DELETE /users/:id` 🔒 | Convida / edita papel / remove usuário (RBAC, ADR-008). |
+
+**`/platform` — Administração da plataforma (super-usuário)**
+
+| Método · Rota | O que faz |
+|---|---|
+| `GET /me` | Dados do PlatformAdmin logado. |
+| `GET /tenants` · `POST /tenants` | Lista lojas / onboarding de nova loja. |
+| `PATCH /tenants/:id` · `PATCH /tenants/:id/modules` | Edita a loja / ativa-desativa módulos. |
+| `POST /tenants/:id/support` | Abre uma sessão de suporte (emite token com escopo da loja). |
+
+**`/support` — Painel de suporte (somente-leitura, token com escopo de loja)**
+
+| Método · Rota | O que faz |
+|---|---|
+| `POST /end` | Encerra a sessão de suporte. |
+| `GET /:tenantId/overview` | Visão geral da loja-alvo (contadores, caixa, estoque baixo, últimas vendas/auditoria). |
+| `GET /:tenantId/orders` · `GET /:tenantId/products` · `GET /:tenantId/stock-movements` | Leituras da loja-alvo para diagnóstico. |
+
+> 🛠️ **Nota de manutenção (obrigatória):** esta seção (8.2) é o espelho de `apps/api/src/routes/`. **Sempre que uma rota da API for criada, removida ou tiver o comportamento/contrato alterado, atualize esta tabela na mesma mudança** — método, rota, o que faz e guardas de auth. Mantém a documentação como fonte confiável (mesma disciplina do log de ADRs). Ver também a regra 7 do [`CLAUDE.md`](../CLAUDE.md).
 
 ---
 
@@ -531,8 +669,8 @@ Toda decisão técnica relevante vira um **ADR** em [`docs/adr/`](adr/). Índice
 | ADR | Tema | Status |
 |---|---|---|
 | **005** | Stack e arquitetura geral | Aceito |
-| **001** | Consistência de estoque (`stockQty` × `StockMovement`) | Proposto |
-| **004** | Soft-delete e auditoria seletiva | Proposto |
+| **001** | Consistência de estoque (`stockQty` × `StockMovement`) | Aceito (implementado) |
+| **004** | Soft-delete e auditoria seletiva | Aceito (implementado) |
 | **007** | Mídia no Cloudflare R2 (nunca BLOB no banco) | Aceito |
 | **008** | Papéis e RBAC dentro da loja | Aceito |
 | **009** | Multi-loja, onboarding e super-usuário | Aceito |
@@ -540,7 +678,7 @@ Toda decisão técnica relevante vira um **ADR** em [`docs/adr/`](adr/). Índice
 | **016** | Preço e margem por forma de pagamento | Aceito (implementado) |
 | **019 / 022** | Venda a prazo (fiado) e conta acumulada do cliente | Aceito (implementado) |
 | **024** | Orçamentos salvos | Aceito (implementado) |
-| **025** | Catálogo global por EAN | Aceito (Fatia 1 implementada) |
+| **025** | Catálogo global por EAN | Aceito (Fatias 1, 2.A e 2.B no ar) |
 
 > **Regra 1 do `CLAUDE.md`:** qualquer ADR que altere o banco só é aplicado após explicação de impacto e
 > **aprovação explícita**.

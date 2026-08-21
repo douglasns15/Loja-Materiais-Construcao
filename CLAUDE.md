@@ -25,6 +25,7 @@ ERP/PDV **multi-tenant, modular e custo-zero** (PWA única para web/Android/iOS)
 4. **Antes de mudança arquitetural** (novo pacote, nova dependência de infra, alteração de fluxo entre camadas, ou qualquer coisa que contrarie uma ADR), consulte `docs/adr/` e confirme.
 5. **Estoque:** toda mudança = transação atômica (insert em `StockMovement` + update em `Product.stockQty`). Fonte de verdade = `StockMovement`; `stockQty` é cache. Detalhes: [ADR-001](docs/adr/ADR-001-consistencia-de-estoque.md).
 6. **Persistência custo-zero:** nunca BLOB/Base64 no banco (só URL do R2); tipos leves (enum nativo, `VarChar` com limite); sem logs de navegação/cliques no Postgres; auditoria seletiva via `AuditEvent`. Convenções completas: `docs/ARCHITECTURE.md` §7.
+7. **API ↔ documentação:** sempre que criar, remover ou alterar o contrato de uma rota da API (`apps/api/src/routes/`), atualize a referência de endpoints em `docs/DOCUMENTACAO-TECNICA.md` §8.2 **na mesma mudança** — método, rota, o que faz e guardas de auth. A documentação técnica é fonte confiável, como o log de ADRs.
 
 ## Comandos
 ```bash
