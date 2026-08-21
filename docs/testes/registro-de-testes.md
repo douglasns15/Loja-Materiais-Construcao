@@ -5057,3 +5057,18 @@ vazia e o seletor no Produto mostra só "— sem categoria —" até criar a pri
 7. **Vincular na edição** — editar um produto existente, definir/trocar/limpar a categoria e salvar; "Salvar"
    só habilita com alteração real; conferir que persiste.
 8. **Copiar** — usar "Copiar" num produto com categoria → o formulário herda a categoria.
+
+### Refino (2026-08-21) — confirmação de exclusão com impacto (web `53819d8f`)
+
+Achado do E2E do Owner: ao excluir uma categoria-pai, as subcategorias ficavam soltas e os produtos só
+"perdiam" a categoria quando a categoria **exata** deles era excluída — comportamento **correto** (o vínculo
+é com a categoria escolhida, não com a árvore acima), mas o Owner só descobria o efeito **depois**, olhando
+os produtos. Pesquisado o padrão de mercado: e-commerce promove as filhas (WooCommerce) ou apaga a subárvore
+com aviso (Magento); ERPs tendem a **bloquear/inativar**. Como o NexoLoja já é soft-delete (filosofia
+"inativar"), adotado o meio-termo: **excluir com o impacto informado ANTES** (o `confirm()` genérico do
+`CategoryFormModal` virou painel inline). Ao clicar "Remover", mostra: **N subcategorias passam a principais**
+(contagem síncrona da lista) e **M produtos ficam sem categoria** (contados **sob demanda** só nesse clique,
+via `GET /products?includeInactive=true`, só os ligados àquela categoria exata). Singular/plural tratados;
+"nada afetado" e falha de rede na contagem têm mensagem própria. **Comportamento inalterado** (soft-delete,
+filhas viram principais) — é só um aviso. Sem migration/API. Gates: web typecheck + build (`/categorias`
+3.82 kB) ✅. **NO AR:** web `53819d8f`; smoke ✅. Falta reconfirmação do Owner no E2E.

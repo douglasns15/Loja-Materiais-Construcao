@@ -17,8 +17,13 @@
 > Anti-ciclo no seletor de pai (a API só barra o caso trivial `parentId===id`). Gates: web typecheck +
 > build (**23 rotas**, `/categorias` 3.31 kB, `/products` 15.5 kB) ✅; sem core/shared/API. **NO AR:** web
 > `3bcc79a9`; smoke ✅ (HTML no-store + CSS 200). **Nota:** a loja Demo não tem categorias cadastradas (a
-> UI nunca existiu) — a tela abre vazia até criar a primeira. **Falta: E2E do Owner.** Ver
-> "UI.Cadastros.Categorias" no registro.
+> UI nunca existiu) — a tela abre vazia até criar a primeira. **Refino (2026-08-21, web `53819d8f`):** achado
+> do E2E — o efeito de excluir uma categoria (filhas viram principais; produtos da categoria exata ficam sem
+> categoria) só era percebido depois; o `confirm()` genérico virou **painel com impacto ANTES** (N
+> subcategorias que sobem + M produtos afetados, contados sob demanda no clique). Padrão de mercado: e-commerce
+> promove filhas/apaga subárvore com aviso, ERP bloqueia/inativa; como já somos soft-delete, ficou o meio-termo
+> "excluir informado". Comportamento inalterado. **Falta: E2E do Owner.** Ver "UI.Cadastros.Categorias" no
+> registro.
 >
 > **Antes:** 2026-08-20 — **ADR-025 Fatia 2.B (conversão de unidade comercial +
 > idempotência forte) — IMPLEMENTADA, NO AR e E2E DO OWNER VALIDADO. Fatia 2.B CONCLUÍDA.** Os dois eixos do desenho aprovado

@@ -39,6 +39,18 @@ export function CategoryFormModal({
   const [saving, setSaving] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Confirmação de exclusão com impacto (subcategorias que sobem de nível + produtos afetados).
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  // `products < 0` = não foi possível contar (sem rede); a exclusão ainda pode prosseguir.
+  const [impact, setImpact] = useState<{ children: number; products: number } | null>(null);
+  const [loadingImpact, setLoadingImpact] = useState(false);
+
+  // Subcategorias diretas: contagem síncrona da lista já carregada (não precisa de rede). São as
+  // que "passam a ser principais" ao excluir (viram raiz, pois não repromovemos ao avô).
+  const directChildren = useMemo(
+    () => (categoryId ? categories.filter((c) => c.parentId === categoryId).length : 0),
+    [categories, categoryId],
+  );
 
   // Opções de categoria-pai: todas menos a própria e seus descendentes (na edição), para não
   // criar um ciclo. No modo criar, todas são candidatas a pai.
@@ -52,6 +64,9 @@ export function CategoryFormModal({
     if (!categoryId) return;
     let cancelled = false;
     setLoading(true);
+    // Recomeça em estado neutro (troca de categoria com o modal aberto não herda a confirmação).
+    setConfirmingDelete(false);
+    setImpact(null);
     apiGet<Category>(`/categories/${categoryId}`)
       .then((cat) => {
         if (cancelled) return;
@@ -94,9 +109,32 @@ export function CategoryFormModal({
     }
   }
 
-  async function onRemove() {
+  // Passo 1: abre a confirmação e calcula o impacto. Os produtos vinculados são contados **sob
+  // demanda** (só ao iniciar a exclusão) — a tela de Categorias não carrega o catálogo à toa.
+  async function startRemove() {
     if (!categoryId) return;
-    if (!confirm(`Remover a categoria "${name}"? Ela deixa de aparecer nas listas.`)) return;
+    setError(null);
+    setConfirmingDelete(true);
+    setLoadingImpact(true);
+    try {
+      // Só os produtos ligados a ESTA categoria ficam sem categoria (os das subcategorias seguem
+      // vinculados a elas). `includeInactive` p/ refletir o efeito real no banco.
+      const products = await apiGet<{ categoryId: string | null }[]>(
+        '/products?includeInactive=true',
+      );
+      const count = products.filter((p) => p.categoryId === categoryId).length;
+      setImpact({ children: directChildren, products: count });
+    } catch {
+      // Sem a contagem de produtos (falha de rede): ainda dá p/ excluir, mostrando só as subcategorias.
+      setImpact({ children: directChildren, products: -1 });
+    } finally {
+      setLoadingImpact(false);
+    }
+  }
+
+  // Passo 2: executa o soft-delete (ADR-004) de fato.
+  async function confirmRemove() {
+    if (!categoryId) return;
     setError(null);
     setRemoving(true);
     try {
@@ -169,28 +207,91 @@ export function CategoryFormModal({
 
             {error && <p className="text-sm text-red-600">{error}</p>}
 
-            <div className="flex items-center justify-between gap-3 pt-1">
-              {/* Remover só no modo edição (soft-delete, ADR-004). */}
-              {isEdit ? (
+            {confirmingDelete ? (
+              // Confirmação com impacto: mostra, ANTES de excluir, o que a exclusão afeta — em vez
+              // de a pessoa descobrir depois olhando os produtos. Mantém o soft-delete (ADR-004).
+              <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+                <p className="text-sm font-medium text-red-800">Excluir “{name}”?</p>
+                <div className="mt-2 space-y-1 text-xs text-red-700">
+                  {loadingImpact ? (
+                    <p>Verificando o que será afetado…</p>
+                  ) : (
+                    <>
+                      {impact && impact.children > 0 && (
+                        <p>
+                          • <strong>{impact.children}</strong>{' '}
+                          {impact.children === 1 ? 'subcategoria passa' : 'subcategorias passam'} a ser
+                          {impact.children === 1 ? ' categoria principal' : ' categorias principais'}.
+                        </p>
+                      )}
+                      {impact && impact.products > 0 && (
+                        <p>
+                          • <strong>{impact.products}</strong>{' '}
+                          {impact.products === 1 ? 'produto vinculado fica' : 'produtos vinculados ficam'}{' '}
+                          <strong>sem categoria</strong>.
+                        </p>
+                      )}
+                      {impact && impact.products === 0 && impact.children === 0 && (
+                        <p>Nenhuma subcategoria ou produto usa esta categoria.</p>
+                      )}
+                      {impact && impact.products < 0 && (
+                        <p>
+                          Não foi possível conferir os produtos vinculados agora — eles ficarão sem
+                          categoria se houver.
+                        </p>
+                      )}
+                      <p className="pt-1 text-red-600">
+                        Ela sai das listas (o histórico é preservado; pode recriar depois).
+                      </p>
+                    </>
+                  )}
+                </div>
+                <div className="mt-3 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConfirmingDelete(false);
+                      setImpact(null);
+                    }}
+                    disabled={removing}
+                    className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmRemove}
+                    disabled={removing || loadingImpact}
+                    className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60"
+                  >
+                    {removing ? 'Excluindo…' : 'Excluir'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between gap-3 pt-1">
+                {/* Remover só no modo edição (soft-delete, ADR-004). */}
+                {isEdit ? (
+                  <button
+                    type="button"
+                    onClick={startRemove}
+                    disabled={removing || saving}
+                    className="rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                  >
+                    Remover
+                  </button>
+                ) : (
+                  <span />
+                )}
                 <button
-                  type="button"
-                  onClick={onRemove}
-                  disabled={removing || saving}
-                  className="rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                  type="submit"
+                  disabled={saving || removing}
+                  className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
                 >
-                  {removing ? 'Removendo…' : 'Remover'}
+                  {saving ? 'Salvando…' : isEdit ? 'Salvar' : 'Cadastrar'}
                 </button>
-              ) : (
-                <span />
-              )}
-              <button
-                type="submit"
-                disabled={saving || removing}
-                className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
-              >
-                {saving ? 'Salvando…' : isEdit ? 'Salvar' : 'Cadastrar'}
-              </button>
-            </div>
+              </div>
+            )}
           </form>
         )}
       </div>
