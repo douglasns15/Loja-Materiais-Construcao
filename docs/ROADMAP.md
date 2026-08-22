@@ -3,7 +3,32 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-22 — **UI.PDV.PrazoTotalEObsItem — atalho "Tudo a prazo" +
+> **Última atualização:** 2026-08-22 — **UI.Shell.MenuRetratil — menu lateral retrátil
+> (trilho de ícones + flyout no hover) — NO AR, aguardando E2E do Owner. Fatia
+> IMPLEMENTADA.** Pedido do Owner: dar ao menu da loja o padrão moderno de mercado (VS
+> Code/Notion). O desktop antes só tinha "visível" (w-64, empurra) ou "recolhido =
+> `md:hidden`" (some por completo). Agora há **fixar × retrair**: o botão `‹`/`›` no topo do
+> menu alterna e a preferência fica salva (`localStorage` `nexoloja:sidebar-pinned`, default
+> **fixo**). **Retraído** vira um **trilho fino só com ícones** (`md:w-16`) sempre visível;
+> ao **passar o mouse** (ou focar via teclado — `onFocusCapture/BlurCapture`, a11y) ele
+> **expande para `md:w-64` por cima do conteúdo** (overlay `md:fixed` + sombra + `transition`)
+> mostrando ícone + texto para navegar — recolhe ao sair. O grupo "Cadastros" abre normal
+> dentro do flyout. **Decisões do Owner (antes de codar):** (1) modo retraído = **trilho de
+> ícones + hover** (não "esconder tudo"); (2) conteúdo **continua CENTRALIZADO** (mantém
+> `mx-auto max-w-*`) e re-centraliza no espaço maior — como o trilho ocupa só w-16 vs w-64
+> fixo, ganha respiro **sem ficar torto nem fora de padrão**; **nenhuma tela alterada**. Cada
+> item do menu ganhou um **ícone SVG inline** (sem dependência nova — regra 4); no trilho o
+> `title` vira tooltip. **Mobile/tablet inalterado** (gaveta pelo hambúrguer; trilho/hover são
+> desktop-only); removido só o botão desktop de "expandir" do topo (o trilho já fica sempre
+> visível). **Único arquivo:** `apps/web/app/(app)/layout.tsx`. **Sem API, migration, core ou
+> shared** ⇒ regras 1 e 7 não disparam. Gates: web `tsc` 0 erros + build (**23 rotas**,
+> tamanhos estáveis: `/venda` 18.5 kB, `/estoque` 15.1 kB). **NO AR:** web Version `7a1f40aa`;
+> smoke ✅ (HTML `no-store` + CSS 200). Commit `35057b0` (local em `main`; push do Owner).
+> **Falta: E2E do Owner** (exige login na loja Demo). Ver "UI.Shell.MenuRetratil" no registro.
+> **Próximo (Horizonte 1):** ver usuários da loja no painel, reset de senha (Super Usuário) ou
+> crédito parcelado.
+>
+> **Antes:** 2026-08-22 — **UI.PDV.PrazoTotalEObsItem — atalho "Tudo a prazo" +
 > Observação do produto no info do item — NO AR e E2E DO OWNER VALIDADO. Fatia CONCLUÍDA.** Dois pedidos
 > do Owner no PDV. **(1) Atalho "Tudo a prazo":** na venda a prazo (ADR-019), um link **"Tudo a prazo
 > (R$ X)"** ao lado do rótulo "A prazo" preenche o valor a prazo com o **total da venda** (`totals.total`)

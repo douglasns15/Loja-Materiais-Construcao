@@ -5248,3 +5248,47 @@ apresentação. **NO AR:** web Version `2b5cb7e0`; smoke ✅. Commit `f3bc828`.
 total; OBS do cadastro aparece no info do item; refino de posição (OBS por último) conferido.
 
 **Fatia CONCLUÍDA.**
+
+## UI.Shell.MenuRetratil — menu lateral retrátil (trilho de ícones + flyout no hover) (2026-08-22)
+
+**Pedido do Owner.** Dar ao menu da loja o padrão moderno de mercado (VS Code/Notion): um **modo retrátil** que,
+em vez de sumir por completo, vira um **trilho fino só com ícones**; ao passar o mouse ele **aparece** (expande)
+e dá pra navegar enquanto o cursor está sobre ele; e, com o menu retraído, as telas devem ocupar melhor o espaço
+**sem ficar tortas nem fora de padrão**.
+
+**Decisões de produto do Owner (antes de codar):**
+- Modo retraído = **trilho de ícones + flyout no hover** (não "esconder tudo") — exige 1 ícone por item do menu.
+- Conteúdo **continua CENTRALIZADO** (mantém `mx-auto max-w-*`): re-centraliza no espaço maior, margens
+  simétricas — ganha respiro, nunca torto. **Zero mudança nas telas.**
+
+**Comportamento (desktop, `md+`):**
+- **Fixar × retrair** substitui o antigo "recolher = `md:hidden`". O botão `‹`/`›` no topo do menu alterna;
+  a preferência fica salva em `localStorage` (`nexoloja:sidebar-pinned`, default **fixo** = igual a hoje).
+- **Fixo:** `<aside>` `md:static w-64` em fluxo, empurra o conteúdo.
+- **Retraído:** um **espaçador** `hidden md:block w-16` reserva a faixa; o `<aside>` vira `md:fixed` (overlay),
+  `md:w-16`, e com o mouse/foco em cima (`railHover`) cresce para `md:w-64` + sombra, `transition-all` — **por
+  cima** do conteúdo, então **não reflui**. `onFocusCapture/BlurCapture` expandem via teclado (a11y). O menu de
+  conta aberto (`menuOpen`) também mantém o flyout aberto.
+- Cada item do menu ganhou um **ícone SVG inline** (mesmo estilo do arquivo; **sem dependência nova** — regra 4).
+  No trilho o `title` de cada ícone vira tooltip. O grupo "Cadastros" mostra só a pasta no trilho e abre normal
+  no flyout.
+- **Mobile/tablet inalterado:** gaveta overlay pelo hambúrguer (trilho/hover são desktop-only). Removido só o
+  botão desktop de "expandir" do topo (o trilho já fica sempre visível).
+
+**Peças (web-only):** `apps/web/app/(app)/layout.tsx` — **único arquivo**. **Sem API, migration, core ou
+shared** ⇒ regras 1 e 7 não disparam.
+
+**Gates:** web `tsc --noEmit` 0 erros + `next build` (**23 rotas**, tamanhos estáveis: `/venda` 18.5 kB,
+`/estoque` 15.1 kB) ✅.
+
+**NO AR (2026-08-22):** web Version `7a1f40aa`; smoke ✅ (HTML `no-store` + CSS 200). Commit `35057b0`
+(local em `main`; push do Owner).
+
+**E2E do Owner — ⏳ PENDENTE** (exige login na loja Demo). Checklist sugerido no desktop:
+1. Fixo → botão `‹` retrai → vira trilho de ícones; conteúdo re-centraliza (mais respiro), nada torto.
+2. Passar o mouse no trilho → expande por cima (não empurra) com ícone+texto; navegar por um item e por um filho
+   de "Cadastros"; tirar o mouse → recolhe.
+3. Botão `›` ("Fixar menu") no flyout volta ao fixo; recarregar a página → a preferência persiste.
+4. Rota ativa destacada nos dois modos; tooltip (`title`) ao pairar sobre um ícone do trilho.
+5. Menu de conta (rodapé): abrir no trilho mantém o flyout aberto enquanto o popup está na tela.
+6. Estreitar a janela para `< md`: gaveta mobile intacta (hambúrguer abre/fecha; some ao navegar).
