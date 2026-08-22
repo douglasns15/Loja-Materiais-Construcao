@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { createPrismaClient } from '@nexoloja/db';
+import { createPrismaClient, Prisma } from '@nexoloja/db';
 import {
   applyItemReturn,
   applyReceivableReturn,
@@ -23,6 +23,7 @@ import {
   createReturnSchema,
   createSaleSchema,
   formatOrderNumber,
+  parseMoneyQuery,
   parseOrderNumberQuery,
   returnOrderSchema,
   STORE_CREDIT_METHOD,
@@ -36,6 +37,17 @@ orders.use('*', requireAuth);
 /** Tamanho de página do Histórico: default 20, teto 50 (evita respostas gigantes). */
 const ORDERS_PAGE_DEFAULT = 20;
 const ORDERS_PAGE_MAX = 50;
+
+/** Teto de clientes casados numa busca por nome (limita o `IN` do filtro de vendas; base pequena). */
+const CUSTOMER_MATCH_MAX = 500;
+
+/**
+ * Escapa os curingas do `LIKE`/`ILIKE` (`%`, `_`, `\`) para tratar o termo como texto literal
+ * (substring). Usa `\` como escape (default do Postgres). Espelha o helper de `customers.ts`.
+ */
+function likeEscape(s: string): string {
+  return s.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
 
 /**
  * Converte o intervalo AAAA-MM-DD (opcional) em filtro Prisma de data, nas bordas do
@@ -121,13 +133,48 @@ function keysetWhere(
 }
 
 /**
+ * Resolve os IDs dos clientes do tenant cujo NOME casa a busca (tokenizada AND, ordem-livre, e
+ * ACENTO-insensível via `extensions.unaccent` — "joao" acha "João"). Espelha o padrão de
+ * `GET /customers` (commit 003761f). Usado só para a busca do Histórico por cliente; devolve `[]`
+ * quando nada casa (⇒ a lista de vendas fica vazia). `Prisma.sql` parametrizado ⇒ à prova de injeção.
+ */
+async function resolveCustomerIdsByName(
+  prisma: ReturnType<typeof createPrismaClient>,
+  tenantId: string,
+  query: string,
+): Promise<string[]> {
+  const tokens = query.split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return [];
+  const textMatch = Prisma.join(
+    tokens.map((token) => {
+      const pat = `%${likeEscape(token)}%`;
+      return Prisma.sql`extensions.unaccent(c."name") ILIKE extensions.unaccent(${pat})`;
+    }),
+    ' AND ',
+  );
+  const rows = await prisma.$queryRaw<Array<{ id: string }>>(
+    Prisma.sql`
+      SELECT c."id" FROM "customers" c
+      WHERE c."tenantId" = ${tenantId}::uuid AND c."deletedAt" IS NULL AND (${textMatch})
+      LIMIT ${CUSTOMER_MATCH_MAX}
+    `,
+  );
+  return rows.map((r) => r.id);
+}
+
+/**
  * Lista as vendas com itens, pagamentos e status (mais recentes primeiro).
  *  - `?scope=all`: Histórico de Vendas — **paginado por cursor** (keyset). Aceita
  *    `limit`, `cursor` (opaco), `from`/`to` (AAAA-MM-DD, fuso da loja) e `sort`
  *    (`recent` default / `oldest` / `highest` / `lowest`) e responde
  *    `{ rows, nextCursor }` (`nextCursor: null` na última página). O keyset ordena pelo
- *    campo do `sort` (data ou total). Inclui o estado do caixa de cada venda para
- *    decidir entre cancelar e devolver. Sem exigir caixa aberto.
+ *    campo do `sort` (data ou total). Inclui o estado do caixa e o **nome do cliente**
+ *    (quando a venda tem cliente) de cada venda, para decidir entre cancelar/devolver e
+ *    exibir de quem é. Sem exigir caixa aberto.
+ *    **Busca (todas ignoram o período e varrem todo o histórico):** `number` (código
+ *    V-000128), `customer` (nome do cliente — só casa vendas com cliente vinculado:
+ *    fiado/crédito da loja/entrega futura) e `value` (total exato, tolerante ao formato).
+ *    Precedência quando mais de uma vem junto: `number` > `customer` > `value`.
  *  - padrão: vendas do caixa atualmente aberto do operador (base do cancelamento,
  *    restrito ao caixa aberto). Sem caixa aberto, retorna lista vazia (array cru,
  *    contrato antigo preservado).
@@ -156,20 +203,39 @@ orders.get('/', async (c) => {
       // ADR-023: busca por código de venda (V-000128). Aceita o código em qualquer forma; casa o
       // inteiro `orderNumber` (comparação indexada, sem cast de UUID). Exato ⇒ 0 ou 1 linha.
       const orderNumber = parseOrderNumberQuery(c.req.query('number'));
+      // Busca por CLIENTE (nome) e por VALOR (total exato). Precedência: número > cliente > valor
+      // (o cliente só manda uma por vez; a precedência é só uma trava de segurança no servidor).
+      const customerQuery = orderNumber ? '' : (c.req.query('customer')?.trim() ?? '');
+      const valueQuery = orderNumber || customerQuery ? null : parseMoneyQuery(c.req.query('value'));
+      // Qualquer busca ativa varre TODO o histórico (ignora o período), como já era com o código.
+      const hasSearch = !!orderNumber || !!customerQuery || valueQuery != null;
       const { field, dir } = sortConfig(c.req.query('sort'));
       const cursorParam = c.req.query('cursor');
       const cursor = cursorParam ? decodeCursor(cursorParam) : null;
 
-      // Keyset: só as linhas após o cursor na ordem escolhida (`field dir`, `id dir`). O
-      // filtro de período (createdAt gte/lte) e o cursor coexistem por AND.
+      // Busca por cliente: resolve os IDs por nome (unaccent+tokenizado). Sem cliente casado ⇒ a
+      // lista de vendas é vazia (o filtro `customerId IN []` nunca casaria; atalho explícito).
+      let customerFilter: object = {};
+      if (customerQuery) {
+        const ids = await resolveCustomerIdsByName(prisma, tenantId, customerQuery);
+        if (ids.length === 0) {
+          return c.json({ ok: true, data: { rows: [], nextCursor: null } });
+        }
+        customerFilter = { customerId: { in: ids } };
+      }
+
+      // Keyset: só as linhas após o cursor na ordem escolhida (`field dir`, `id dir`). Os filtros
+      // (período OU busca) e o cursor coexistem por AND.
       const keyset = cursor ? keysetWhere(field, dir, cursor) : {};
 
       // `take: limit + 1`: a linha extra só serve para saber se há próxima página.
       const list = await prisma.order.findMany({
         where: {
           tenantId,
-          ...(dateFilter ? { createdAt: dateFilter } : {}),
+          ...(hasSearch ? {} : dateFilter ? { createdAt: dateFilter } : {}),
           ...(orderNumber ? { orderNumber } : {}),
+          ...customerFilter,
+          ...(valueQuery != null ? { total: valueQuery } : {}),
           ...keyset,
         },
         orderBy: [{ [field]: dir }, { id: dir }],
@@ -178,6 +244,9 @@ orders.get('/', async (c) => {
           items: true,
           payments: true,
           cashSession: { select: { id: true, closedAt: true } },
+          // Nome do cliente (quando a venda tem um) para o Histórico exibir de quem é e casar a busca
+          // por cliente. Vendas de balcão à vista não têm cliente ⇒ `customer` vem null.
+          customer: { select: { name: true } },
           // Venda a prazo (ADR-019): expõe a conta a receber p/ o Histórico marcar o badge "A prazo"
           // e prever o abate da devolução (ADR-022 — `returnedAmount`).
           receivable: {

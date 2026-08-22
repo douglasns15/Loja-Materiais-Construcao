@@ -6,6 +6,7 @@ import {
   formatOrderNumber,
   formatPhoneBr,
   formatQuoteNumber,
+  parseMoneyQuery,
   parseOrderNumberQuery,
   parseQuoteNumberQuery,
 } from './format';
@@ -105,5 +106,45 @@ describe('formatQuoteNumber / parseQuoteNumberQuery', () => {
     expect(parseQuoteNumberQuery(parseQuoteNumberQuery('O-000045') === 45 ? formatQuoteNumber(45) : '')).toBe(45);
     expect(parseQuoteNumberQuery('O-')).toBeNull();
     expect(parseQuoteNumberQuery('O-000000')).toBeNull();
+  });
+});
+
+// Busca por VALOR no Histórico de Vendas (match exato, tolerante ao formato). Função pura.
+describe('parseMoneyQuery', () => {
+  it('inteiro simples', () => {
+    expect(parseMoneyQuery('150')).toBe(150);
+    expect(parseMoneyQuery('0')).toBe(0);
+  });
+
+  it('decimal com vírgula (padrão BR)', () => {
+    expect(parseMoneyQuery('150,00')).toBe(150);
+    expect(parseMoneyQuery('150,5')).toBe(150.5);
+    expect(parseMoneyQuery('1234,56')).toBe(1234.56);
+  });
+
+  it('milhar + decimal no padrão BR (1.234,56) e no americano (1,234.56)', () => {
+    expect(parseMoneyQuery('1.234,56')).toBe(1234.56);
+    expect(parseMoneyQuery('1.234.567,89')).toBe(1234567.89);
+    expect(parseMoneyQuery('1,234.56')).toBe(1234.56);
+  });
+
+  it('só ponto: 3 dígitos depois é milhar; 1–2 dígitos é decimal', () => {
+    expect(parseMoneyQuery('1.234')).toBe(1234); // milhar
+    expect(parseMoneyQuery('1.234.567')).toBe(1234567); // milhares
+    expect(parseMoneyQuery('150.00')).toBe(150); // decimal
+    expect(parseMoneyQuery('1.5')).toBe(1.5); // decimal
+  });
+
+  it('ignora R$, espaços e outros ruídos', () => {
+    expect(parseMoneyQuery('R$ 150,00')).toBe(150);
+    expect(parseMoneyQuery('  1.234,56  ')).toBe(1234.56);
+  });
+
+  it('sem dígito volta null', () => {
+    expect(parseMoneyQuery('')).toBeNull();
+    expect(parseMoneyQuery('R$')).toBeNull();
+    expect(parseMoneyQuery('abc')).toBeNull();
+    expect(parseMoneyQuery(null)).toBeNull();
+    expect(parseMoneyQuery(undefined)).toBeNull();
   });
 });

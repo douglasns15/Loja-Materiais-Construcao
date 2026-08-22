@@ -44,6 +44,9 @@ type Order = {
   createdAt: string;
   registeredByName: string | null;
   customerId?: string | null;
+  // Nome do cliente da venda (quando há um vinculado — fiado/crédito da loja/entrega futura). Vendas
+  // de balcão à vista não têm cliente ⇒ `customer` vem null. Usado para exibir e casar a busca.
+  customer?: { name: string } | null;
   // ADR-020: retirada futura (a devolução por item — ADR-022 — só vale para IMMEDIATE).
   deliveryMode?: 'IMMEDIATE' | 'SCHEDULED';
   cashSession: { id: string; closedAt: string | null } | null;
@@ -80,17 +83,33 @@ const SORT_LABELS: Record<Sort, string> = {
 /** Quantas vendas por página / clique em "Mostrar mais". */
 const PAGE_SIZE = 20;
 
+/** Tipo de busca do Histórico: por código (V-000128), por cliente (nome) ou por valor (total exato). */
+type SearchType = 'code' | 'customer' | 'value';
+const SEARCH_LABELS: Record<SearchType, string> = {
+  code: 'Código',
+  customer: 'Cliente',
+  value: 'Valor',
+};
+const SEARCH_PLACEHOLDERS: Record<SearchType, string> = {
+  code: 'Ex.: V-000128 ou 128',
+  customer: 'Ex.: João Silva',
+  value: 'Ex.: 150,00',
+};
+/** Busca aplicada (o que a lista está mostrando). `null` = sem busca (lista por período). */
+type Search = { type: SearchType; term: string };
+
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-/** Monta a query de `GET /orders?scope=all` com cursor, período, ordenação e busca por código.
- *  ADR-023: quando há `code` (busca por V-000128), procura em TODO o histórico — o período é
- *  ignorado (o servidor casa o inteiro `orderNumber`, exato ⇒ 0 ou 1 venda). */
-function ordersQuery(cursor: string | null, r: Range, sort: Sort, code = ''): string {
+/** Monta a query de `GET /orders?scope=all` com cursor, período, ordenação e busca.
+ *  Toda busca (código/cliente/valor) procura em TODO o histórico — o período é ignorado pelo
+ *  servidor. Código casa o inteiro `orderNumber` (0 ou 1 venda); cliente casa por nome
+ *  (unaccent+tokenizado, só vendas com cliente vinculado); valor casa o total exato. */
+function ordersQuery(cursor: string | null, r: Range, sort: Sort, search: Search | null): string {
   const p = new URLSearchParams({ scope: 'all', limit: String(PAGE_SIZE) });
   if (cursor) p.set('cursor', cursor);
-  const codeTrim = code.trim();
-  if (codeTrim) {
-    p.set('number', codeTrim);
+  const term = search?.term.trim() ?? '';
+  if (search && term) {
+    p.set(search.type === 'code' ? 'number' : search.type, term);
   } else {
     if (r.from) p.set('from', r.from);
     if (r.to) p.set('to', r.to);
@@ -116,10 +135,12 @@ export default function VendasPage() {
   const [range, setRange] = useState<Range>(() => defaultRange());
   // Ordenação aplicada no servidor (default = mais recentes primeiro).
   const [sort, setSort] = useState<Sort>('recent');
-  // Busca por código da venda (ADR-023). `codeInput` = o que está no campo; `codeSearch` = o
-  // código aplicado (o que a lista está mostrando). Busca no servidor, em todo o histórico.
-  const [codeInput, setCodeInput] = useState('');
-  const [codeSearch, setCodeSearch] = useState('');
+  // Busca do Histórico (código/cliente/valor). `searchType` = o tipo escolhido no seletor;
+  // `searchInput` = o que está no campo; `search` = a busca APLICADA (o que a lista mostra) ou
+  // null. Busca no servidor, em todo o histórico (ignora o período).
+  const [searchType, setSearchType] = useState<SearchType>('code');
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState<Search | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Modal de ação: qual venda e se é cancelamento ou devolução.
   const [action, setAction] = useState<{ id: string; mode: ActionMode } | null>(null);
@@ -154,8 +175,8 @@ export default function VendasPage() {
   // scope=all: histórico completo (inclui vendas de caixas já fechados), para
   // permitir a devolução de vendas fora do caixa aberto. Paginado por cursor: a 1ª
   // página substitui a lista; "Mostrar mais" anexa as seguintes.
-  async function loadOrders(r: Range = range, s: Sort = sort, code: string = codeSearch) {
-    const page = await apiGet<OrdersPage>(ordersQuery(null, r, s, code));
+  async function loadOrders(r: Range = range, s: Sort = sort, srch: Search | null = search) {
+    const page = await apiGet<OrdersPage>(ordersQuery(null, r, s, srch));
     setOrders(page.rows);
     setNextCursor(page.nextCursor);
   }
@@ -165,7 +186,7 @@ export default function VendasPage() {
     setLoadingMore(true);
     setError(null);
     try {
-      const page = await apiGet<OrdersPage>(ordersQuery(nextCursor, range, sort, codeSearch));
+      const page = await apiGet<OrdersPage>(ordersQuery(nextCursor, range, sort, search));
       setOrders((prev) => [...prev, ...page.rows]);
       setNextCursor(page.nextCursor);
     } catch (e) {
@@ -193,21 +214,22 @@ export default function VendasPage() {
     loadOrders(r).catch((e) => setError((e as Error).message));
   }
 
-  /** Busca por código da venda (ADR-023): recarrega do início mostrando só a venda do código
-   *  (V-000128, 000128 ou 128 — todos casam). Procura em todo o histórico, ignorando o período. */
-  function buscarCodigo(e: React.FormEvent) {
+  /** Aplica a busca (código/cliente/valor): recarrega do início varrendo todo o histórico (ignora o
+   *  período). Campo vazio limpa a busca e volta à lista por período. */
+  function buscar(e: React.FormEvent) {
     e.preventDefault();
-    const code = codeInput.trim();
-    setCodeSearch(code);
+    const term = searchInput.trim();
+    const next: Search | null = term ? { type: searchType, term } : null;
+    setSearch(next);
     setError(null);
-    loadOrders(range, sort, code).catch((err) => setError((err as Error).message));
+    loadOrders(range, sort, next).catch((err) => setError((err as Error).message));
   }
-  /** Limpa a busca por código e volta à lista normal (com o período/ordenação em vigor). */
+  /** Limpa a busca e volta à lista normal (com o período/ordenação em vigor). */
   function limparBusca() {
-    setCodeInput('');
-    setCodeSearch('');
+    setSearchInput('');
+    setSearch(null);
     setError(null);
-    loadOrders(range, sort, '').catch((err) => setError((err as Error).message));
+    loadOrders(range, sort, null).catch((err) => setError((err as Error).message));
   }
 
   useEffect(() => {
@@ -331,16 +353,31 @@ export default function VendasPage() {
             ))}
           </select>
         </label>
-        {/* Busca por código da venda (ADR-023): V-000128 / 000128 / 128. Procura todo o histórico. */}
-        <form onSubmit={buscarCodigo} className="mt-2 flex flex-wrap items-end gap-2 border-t border-gray-100 pt-2">
+        {/* Busca por código (V-000128), cliente (nome) ou valor (total exato). Procura todo o
+            histórico, ignorando o período. O seletor troca o tipo; um campo só, adaptável. */}
+        <form onSubmit={buscar} className="mt-2 flex flex-wrap items-end gap-2 border-t border-gray-100 pt-2">
           <label className="flex flex-col text-xs text-gray-600">
-            Buscar por código
+            Buscar por
+            <select
+              value={searchType}
+              onChange={(e) => setSearchType(e.target.value as SearchType)}
+              className="mt-1 rounded-lg border border-gray-300 px-2 py-1 text-sm"
+            >
+              {(Object.keys(SEARCH_LABELS) as SearchType[]).map((t) => (
+                <option key={t} value={t}>
+                  {SEARCH_LABELS[t]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-1 flex-col text-xs text-gray-600">
+            <span className="invisible">.</span>
             <input
               type="text"
-              inputMode="numeric"
-              value={codeInput}
-              onChange={(e) => setCodeInput(e.target.value)}
-              placeholder="Ex.: V-000128 ou 128"
+              inputMode={searchType === 'customer' ? 'text' : 'decimal'}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder={SEARCH_PLACEHOLDERS[searchType]}
               className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
             />
           </label>
@@ -350,7 +387,7 @@ export default function VendasPage() {
           >
             Buscar
           </button>
-          {codeSearch && (
+          {search && (
             <button
               type="button"
               onClick={limparBusca}
@@ -360,9 +397,20 @@ export default function VendasPage() {
             </button>
           )}
         </form>
-        {codeSearch && (
+        {search && (
           <p className="mt-2 text-xs text-gray-600">
-            Buscando pela venda <strong>{codeSearch}</strong> (em todo o histórico).
+            {search.type === 'code' && (
+              <>Buscando pela venda <strong>{search.term}</strong> (em todo o histórico).</>
+            )}
+            {search.type === 'customer' && (
+              <>
+                Buscando vendas do cliente <strong>{search.term}</strong> — só vendas com cliente
+                vinculado (a prazo, crédito da loja ou entrega futura).
+              </>
+            )}
+            {search.type === 'value' && (
+              <>Buscando vendas com total <strong>{search.term}</strong> (valor exato).</>
+            )}
           </p>
         )}
       </div>
@@ -384,9 +432,11 @@ export default function VendasPage() {
       <div className="space-y-3">
         {orders.length === 0 ? (
           <div className="rounded-2xl bg-white p-6 text-center text-gray-500 shadow-sm">
-            {range.from || range.to
-              ? 'Nenhuma venda no período selecionado.'
-              : 'Nenhuma venda registrada ainda.'}
+            {search
+              ? 'Nenhuma venda encontrada para a busca.'
+              : range.from || range.to
+                ? 'Nenhuma venda no período selecionado.'
+                : 'Nenhuma venda registrada ainda.'}
           </div>
         ) : (
           orders.map((o) => {
@@ -432,6 +482,13 @@ export default function VendasPage() {
                       )}
                     </div>
                     <div className="mt-0.5 text-xs text-gray-600">{time}</div>
+                    {/* Cliente da venda (quando vinculado — fiado/crédito/entrega futura). Balcão
+                        à vista não tem cliente ⇒ nada aqui. */}
+                    {o.customer?.name && (
+                      <div className="text-xs font-medium text-gray-700">
+                        Cliente: {o.customer.name}
+                      </div>
+                    )}
                     {o.registeredByName && (
                       <div className="text-xs text-gray-500">Registrado por {o.registeredByName}</div>
                     )}

@@ -3,7 +3,32 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-21 — **Integração.Cosmos — Bluesoft Cosmos ATIVADA (secret
+> **Última atualização:** 2026-08-22 — **UI.Vendas.BuscaClienteValor — busca do Histórico por
+> CLIENTE e por VALOR (além do código) — IMPLEMENTADA, gates ✅, aguardando deploy + push do Owner e
+> E2E.** Item do Horizonte 1 (`PRODUCT-ROADMAP.md`): o Histórico só buscava por **código** (`V-000128`);
+> faltava localizar venda **por cliente** e **por valor**. **Decisão de produto do Owner (antes de
+> codar):** UX = **seletor de tipo (Código · Cliente · Valor) + 1 campo adaptável** (evita a ambiguidade
+> "128" = nº da venda vs R$128); valor = **match exato tolerante ao formato**. **Achado levantado ao
+> Owner e por ele decidido:** hoje a venda **comum à vista NÃO guarda cliente** (o `customerId` só é
+> enviado no **fiado / crédito da loja / entrega futura**; `Order` nem tem snapshot de nome — só
+> `customerId`). O Owner escolheu o **escopo enxuto**: a busca por cliente cobre **só as vendas que já
+> têm cliente vinculado** (sem tocar o fluxo da venda comum no PDV); vendas comuns antigas seguem sem
+> cliente (dado nunca capturado). **shared:** `parseMoneyQuery` (BR-first: `150` / `150,00` / `1.234,56`
+> / `R$ 150` / `150.00`) — função pura **+20 testes → 42/42**. **API `GET /orders?scope=all`:** params
+> novos `customer` (nome — resolve IDs por **unaccent+tokenizado**, reusa o padrão do `GET /customers`,
+> depois `where customerId IN`) e `value` (total exato); toda busca **ignora o período** (varre o
+> histórico, como o código já fazia); precedência número > cliente > valor; as linhas passam a incluir
+> `customer.name`. **Sem migration; contrato de rota mudou ⇒ regra 7 cumprida** (`DOCUMENTACAO-TECNICA.md`
+> §8.2 atualizada na mesma mudança). **Web `/vendas`:** o campo único de código virou **seletor
+> Código·Cliente·Valor + campo adaptável**; o card do Histórico passa a **exibir o cliente** quando há;
+> aviso curto de que a busca por cliente cobre só vendas com cliente vinculado; estado vazio ciente da
+> busca. Gates: shared **42/42**, api tsc + `wrangler dry-run` ✅, web tsc + build (**23 rotas**,
+> `/vendas` 8.6 kB) ✅. ⚠️ **Deploy de API obrigatório** (params novos) — **ação do Owner**; push do
+> Owner. **Falta:** deploy + E2E do Owner (checklist no registro, "UI.Vendas.BuscaClienteValor").
+> **Próximo (Horizonte 1):** ver usuários da loja no painel, reset de senha (Super Usuário) ou crédito
+> parcelado.
+>
+> **Antes:** 2026-08-21 — **Integração.Cosmos — Bluesoft Cosmos ATIVADA (secret
 > `COSMOS_TOKEN`) + correção do secret truncado — NO AR e E2E DO OWNER VALIDADO.** O ramo da Cosmos na
 > rota de enriquecimento por EAN (`GET /catalog/ean`, ADR-025 Fatia 1) estava escrito mas **nunca fora
 > executado de verdade** — dormente desde 2026-08-15 por falta do token. O Owner provisionou o

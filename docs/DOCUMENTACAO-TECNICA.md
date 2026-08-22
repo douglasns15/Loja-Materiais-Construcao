@@ -380,7 +380,7 @@ testável exaustivamente e compartilhada entre as duas apps.
 
 | Método · Rota | O que faz |
 |---|---|
-| `GET /` | Lista vendas (paginação por cursor + filtro de período). |
+| `GET /` | Lista vendas (paginação por cursor + filtro de período). Busca no Histórico (`?scope=all`, ignora o período): `number` (código V-000128), `customer` (nome do cliente — só casa vendas com cliente vinculado) e `value` (total exato). As linhas incluem o nome do cliente quando há. |
 | `POST /` 🔒 | Confirma a venda: transação `Order` + `OrderItem` + `Payment` + `StockMovement` (ADR-001). |
 | `POST /:id/cancel` 🔒 | Cancela venda do caixa aberto (estorna estoque; sai do faturamento). |
 | `POST /:id/return` 🔒 | Devolução **total**: marca `RETURNED`, estorna estoque, saída no caixa. Exige caixa aberto. |

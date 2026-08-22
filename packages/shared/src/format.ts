@@ -104,6 +104,47 @@ export function parseQuoteNumberQuery(query: string | null | undefined): number 
 }
 
 /**
+ * Interpreta uma busca por VALOR monetário (Histórico de Vendas, busca por valor exato) e devolve o
+ * número com 2 casas, ou `null` se não houver dígito. **Tolerante ao formato** (BR primeiro): aceita
+ * `150`, `150,00`, `1.234,56`, `R$ 150` e também o ponto como decimal (`150.00`). Função PURA.
+ *
+ * Regras de separador (o balconista digita de qualquer jeito):
+ *  - Com `,` E `.`: o ÚLTIMO que aparece é o separador decimal; o outro é milhar (removido). Cobre o
+ *    padrão BR `1.234,56` e o americano `1,234.56`.
+ *  - Só `,`: é o decimal (convenção BR) → `150,00` = 150.
+ *  - Só `.`: ambíguo. Múltiplos pontos ⇒ todos são milhar (`1.234.567` = 1234567). Um ponto: 3 dígitos
+ *    depois ⇒ milhar (`1.234` = 1234); 1 ou 2 dígitos ⇒ decimal (`150.00` = 150, `1.5` = 1,50).
+ */
+export function parseMoneyQuery(query: string | null | undefined): number | null {
+  // Mantém só dígitos e os separadores; descarta "R$", espaços e qualquer outro ruído.
+  const cleaned = (query ?? '').replace(/[^\d.,]/g, '');
+  if (!/\d/.test(cleaned)) return null;
+
+  let normalized: string;
+  const hasComma = cleaned.includes(',');
+  const hasDot = cleaned.includes('.');
+  if (hasComma && hasDot) {
+    // O último separador é o decimal; o outro é milhar.
+    const decimalSep = cleaned.lastIndexOf(',') > cleaned.lastIndexOf('.') ? ',' : '.';
+    const thousandSep = decimalSep === ',' ? '.' : ',';
+    normalized = cleaned.split(thousandSep).join('').replace(decimalSep, '.');
+  } else if (hasComma) {
+    normalized = cleaned.replace(',', '.');
+  } else if (hasDot) {
+    const parts = cleaned.split('.');
+    const last = parts[parts.length - 1] ?? '';
+    // Múltiplos pontos ⇒ milhar; um ponto com 3 dígitos depois ⇒ milhar; senão o ponto é decimal.
+    normalized = parts.length > 2 || last.length === 3 ? parts.join('') : cleaned;
+  } else {
+    normalized = cleaned;
+  }
+
+  const n = Number.parseFloat(normalized);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.round(n * 100) / 100;
+}
+
+/**
  * Gera um identificador amigável (slug) a partir de um texto: remove acentos, baixa
  * a caixa e troca tudo que não é alfanumérico por hífen. Usado no onboarding para
  * derivar o `Tenant.slug` do nome da loja quando não informado (ADR-009). Função PURA.

@@ -5127,3 +5127,47 @@ para as próximas lojas/leituras (misses **não** são cacheados; sucessos sim).
 autenticação) e **quase certamente não contam** contra as ~25/dia — o sinal de limite estourado seria `429`,
 nunca observado. Só as chamadas `200` (o curl direto + o E2E) consomem. Conferência exata = painel da conta
 Cosmos (a resposta não traz header `X-RateLimit-Remaining`).
+
+---
+
+## UI.Vendas.BuscaClienteValor — Busca do Histórico por cliente e por valor (além do código) (2026-08-22)
+
+**Contexto (Horizonte 1 do `PRODUCT-ROADMAP.md`).** O Histórico de Vendas só buscava por **código**
+(`V-000128`, ADR-023). Faltava localizar uma venda **por cliente** e **por valor**.
+
+**Decisões de produto (Owner, antes de codar):**
+- **UX da busca:** seletor de tipo (**Código · Cliente · Valor**) + **um campo adaptável** — evita a
+  ambiguidade de "128" (nº da venda × R$128).
+- **Match do valor:** **exato**, tolerante ao formato (`150`, `150,00`, `1.234,56`, `R$ 150`, `150.00`).
+- **Escopo da busca por cliente (achado levantado ao Owner):** hoje a **venda comum à vista NÃO guarda
+  cliente** — o `customerId` só é enviado ao `POST /orders` no **fiado / crédito da loja / entrega futura**
+  (`apps/web/app/(app)/venda/page.tsx`), e o `Order` nem tem snapshot de nome (só `customerId`). O Owner
+  optou pelo **escopo enxuto**: a busca por cliente cobre **só as vendas que já têm cliente vinculado**, sem
+  tocar o fluxo da venda comum no PDV. Vendas comuns antigas seguem sem cliente (dado nunca capturado).
+
+**O que mudou (sem migration):**
+- **`packages/shared`** — `parseMoneyQuery` (função pura, BR-first; ponto como milhar quando há 3 dígitos
+  depois, decimal caso contrário) + **20 testes → pacote 42/42**.
+- **API `GET /orders?scope=all`** — params novos `customer` (nome; resolve IDs por **`unaccent`+tokenizado**
+  reusando o padrão do `GET /customers`, depois `where customerId IN`) e `value` (total exato). Toda busca
+  **ignora o período** e varre o histórico (como o código já fazia); precedência **número > cliente > valor**;
+  as linhas passam a incluir `customer.name`. **Regra 7 cumprida** (`DOCUMENTACAO-TECNICA.md` §8.2).
+- **Web `/vendas`** — o campo único de código virou **seletor Código·Cliente·Valor + campo adaptável**; o
+  card do Histórico **exibe o cliente** quando há; aviso de que a busca por cliente cobre só vendas com
+  cliente vinculado; estado vazio ciente da busca.
+
+**Gates:** shared **42/42** ✅ · api `tsc --noEmit` 0 erros + `wrangler deploy --dry-run` ✅ · web
+`tsc --noEmit` + `next build` (**23 rotas**, `/vendas` 8.6 kB) ✅. **Sem migration.** ⚠️ **Deploy de API
+obrigatório** (params novos) — **ação do Owner**; push do Owner.
+
+**E2E do Owner — ⏭️ PENDENTE (após o deploy da API).** Checklist sugerido:
+1. **Por código** (regressão): `V-000128` / `128` traz a venda; "Limpar busca" volta à lista por período.
+2. **Por cliente:** uma venda **fiado**/**crédito**/**entrega futura** de "João" aparece ao buscar "joao"
+   (acento-insensível) e "silva joao" (ordem-livre, AND).
+3. **Por cliente (escopo):** uma **venda comum à vista** feita para o mesmo balcão **não** aparece na busca
+   por cliente (esperado — não guarda cliente); o aviso explica.
+4. **Por cliente (card):** as vendas com cliente mostram "Cliente: <nome>" no card.
+5. **Por valor exato:** buscar `150` (e `150,00`, `R$ 150`) traz as vendas com total **exatamente** R$ 150;
+   um valor sem venda mostra "Nenhuma venda encontrada para a busca".
+6. **Paginação/ordenação sob busca:** com muitas vendas do mesmo cliente/valor, "Mostrar mais" e a
+   ordenação (maior/menor/data) continuam funcionando.
