@@ -136,17 +136,6 @@ export function CartItemInfo({
           </div>
         )}
 
-        {/* Observação (OBS) do cadastro — texto livre, pode ser longo; ocupa a largura toda e
-            quebra linha (não cabe numa Row alinhada à direita). Só aparece quando preenchida. */}
-        {product?.description && (
-          <div className="border-b border-gray-100 py-2">
-            <span className="text-sm text-gray-600">Observação</span>
-            <p className="mt-0.5 whitespace-pre-wrap break-words text-sm font-medium text-gray-900">
-              {product.description}
-            </p>
-          </div>
-        )}
-
         {/* Venda desta linha. */}
         <div className="divide-y divide-gray-100 border-b border-gray-100 py-1">
           <Row label="Modo de venda">{modo}</Row>
@@ -197,9 +186,21 @@ export function CartItemInfo({
 
         {/* Par (ADR-015). */}
         {item.pair && (
-          <div className="py-1">
+          <div className="border-b border-gray-100 py-1">
             <Row label="Par com">{item.pair.partnerName}</Row>
             <p className="text-xs text-emerald-600">Vende os dois juntos; baixa 1 de cada produto.</p>
+          </div>
+        )}
+
+        {/* Observação (OBS) do cadastro — texto livre, pode ser longo; ocupa a largura toda e
+            quebra linha (não cabe numa Row alinhada à direita). Fica por ÚLTIMO na lista (pedido
+            do Owner). Só aparece quando preenchida. */}
+        {product?.description && (
+          <div className="py-2">
+            <span className="text-sm text-gray-600">Observação</span>
+            <p className="mt-0.5 whitespace-pre-wrap break-words text-sm font-medium text-gray-900">
+              {product.description}
+            </p>
           </div>
         )}
       </div>
