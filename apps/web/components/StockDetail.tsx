@@ -149,6 +149,9 @@ export function StockDetail({
     unit: product.unit,
     conversionFactor: product.conversionFactor != null ? Number(product.conversionFactor) : null,
   });
+  // Artigo correto p/ os rótulos de custo/preço da unidade fechada (ADR-017): reflete a unidade
+  // REAL do produto (evita "Custo da barra" fixo quando o item é vendido em rolo).
+  const savedUnitArticle = product.unit === 'ROLL' ? 'do rolo' : 'da barra';
 
   const labelCls = 'text-xs font-medium text-gray-600';
   const Row = ({ label, value }: { label: string; value: React.ReactNode }) => (
@@ -196,8 +199,8 @@ export function StockDetail({
             label="Peso"
             value={product.weightKg === null ? null : `${QTY(product.weightKg)} kg`}
           />
-          <Row label={closed ? 'Custo da barra' : 'Custo'} value={BRL(product.costPrice)} />
-          <Row label={closed ? 'Preço da barra' : 'Venda'} value={BRL(product.salePrice)} />
+          <Row label={closed ? `Custo ${savedUnitArticle}` : 'Custo'} value={BRL(product.costPrice)} />
+          <Row label={closed ? `Preço ${savedUnitArticle}` : 'Venda'} value={BRL(product.salePrice)} />
           <Row label="Margem" value={`${product.marginPercent}%`} />
           {closed && (
             <Row

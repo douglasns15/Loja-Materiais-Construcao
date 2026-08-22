@@ -335,6 +335,9 @@ export function ProductDetail({
   // Artigo correto p/ os rótulos de custo/preço da unidade fechada (evita "Preço da Rolo"),
   // baseado na unidade que está sendo editada (form), não só na original.
   const unitArticle = form.unit === 'ROLL' ? 'do rolo' : 'da barra';
+  // Mesmo artigo, porém para a VISUALIZAÇÃO (read-only): reflete a unidade SALVA do produto,
+  // não a que estiver no form (que pode divergir se o usuário mexeu e cancelou sem salvar).
+  const savedUnitArticle = product.unit === 'ROLL' ? 'do rolo' : 'da barra';
   const barLen = product.conversionFactor != null ? Number(product.conversionFactor) : 0;
   const stockLabel = (() => {
     if (!closed) return `${QTY(product.stockQty)} ${unitTypeLabels[product.unit]}`;
@@ -585,12 +588,12 @@ export function ProductDetail({
                 label="Peso"
                 value={product.weightKg === null ? null : `${QTY(product.weightKg)} kg`}
               />
-              <Row label={closed ? 'Custo da barra' : 'Custo'} value={BRL(product.costPrice)} />
-              <Row label={closed ? 'Preço da barra' : 'Venda'} value={BRL(product.salePrice)} />
+              <Row label={closed ? `Custo ${savedUnitArticle}` : 'Custo'} value={BRL(product.costPrice)} />
+              <Row label={closed ? `Preço ${savedUnitArticle}` : 'Venda'} value={BRL(product.salePrice)} />
               <Row label="Margem" value={`${product.marginPercent}%`} />
               {closed && (
                 <Row
-                  label="Tamanho da barra"
+                  label={`Tamanho ${savedUnitArticle}`}
                   value={barLen > 0 ? `${QTY(barLen)} m` : null}
                 />
               )}
@@ -1080,8 +1083,11 @@ export function ProductDetail({
                   />
                 </div>
                 <p className="mt-2 text-xs text-gray-600">
-                  Custo e preço acima são da <strong>{unitTypeLabels[form.unit]} inteira</strong>. O
-                  estoque é contado em metros. Preço por metro vazio ⇒ só vende inteiro.
+                  Custo e preço acima são{' '}
+                  <strong>
+                    {unitArticle} {form.unit === 'ROLL' ? 'inteiro' : 'inteira'}
+                  </strong>
+                  . O estoque é contado em metros. Preço por metro vazio ⇒ só vende inteiro.
                 </p>
               </fieldset>
             ) : (

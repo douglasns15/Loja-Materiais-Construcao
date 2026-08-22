@@ -266,6 +266,9 @@ export default function ProductsPage() {
   const isClosedUnit = form.unit === 'BARRA' || form.unit === 'ROLL';
   // Artigo correto por unidade fechada (evita "Preço da Rolo"): rolo é masculino, barra feminino.
   const unitArticle = form.unit === 'ROLL' ? 'do rolo' : 'da barra';
+  // Substantivo da unidade fechada (singular/minúsculo) p/ rótulos que contam quantidade:
+  // "rolo"/"barra" → plural com "s" ("Estoque inicial (rolos)"). Evita "barra" fixo no Rolo.
+  const unitNoun = form.unit === 'ROLL' ? 'rolo' : 'barra';
 
   async function onCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -655,7 +658,7 @@ export default function ProductsPage() {
           />
         </Field>
         <Field
-          label={isClosedUnit ? 'Estoque inicial (barras)' : 'Estoque inicial (opcional)'}
+          label={isClosedUnit ? `Estoque inicial (${unitNoun}s)` : 'Estoque inicial (opcional)'}
           className="sm:col-span-2"
         >
           <input
@@ -709,9 +712,12 @@ export default function ProductsPage() {
               />
             </div>
             <p className="mt-2 text-xs text-gray-600">
-              Custo e preço acima são da <strong>{unitTypeLabels[form.unit]} inteira</strong>. O
-              estoque é contado em metros e mostrado como barras + sobra. Preço por metro vazio ⇒
-              só vende inteiro.
+              Custo e preço acima são{' '}
+              <strong>
+                {unitArticle} {form.unit === 'ROLL' ? 'inteiro' : 'inteira'}
+              </strong>
+              . O estoque é contado em metros e mostrado como {unitNoun}s + sobra. Preço por metro
+              vazio ⇒ só vende inteiro.
             </p>
           </fieldset>
         )}
