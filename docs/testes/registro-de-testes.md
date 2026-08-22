@@ -5212,3 +5212,39 @@ detalhes lê "Custo/Preço/Tamanho **do rolo**"; cadastro com Rolo mostra "Estoq
 quadro "são **do rolo inteiro** … mostrado como **rolos** + sobra". Barra segue "da barra".
 
 **Fatia CONCLUÍDA.**
+
+---
+
+## UI.PDV.PrazoTotalEObsItem — atalho "Tudo a prazo" + Observação do produto no info do item (2026-08-22)
+
+**Dois pedidos do Owner no PDV.**
+
+**(1) Atalho "Tudo a prazo".** Na venda a prazo (ADR-019), preencher o valor a prazo com o total da compra é
+o caso mais comum do fiado, mas exigia digitar o valor à mão. Agora há um link **"Tudo a prazo (R$ X)"** ao
+lado do rótulo "A prazo" que joga o `totals.total` no campo. O link **some** quando o campo já cobre o total
+(`creditValue >= totals.total`) e quando não há itens. O clamp já existente
+(`Math.min(creditValue, totals.total)`) garante a consistência; nada muda no envio ao servidor.
+
+**(2) Observação do produto no modal "ⓘ".** O modal de informações do item passou a exibir a
+**"Descrição / observação"** do cadastro (`Product.description`) — texto livre (até 500 chars), em bloco
+próprio de largura total com `whitespace-pre-wrap break-words`; só aparece quando preenchida. **O dado já
+vinha do `GET /products`** (`findMany` sem `select` ⇒ todas as colunas) — só foi ligado no front.
+
+**Peças (web-only, sem API/migration/core/shared):**
+- `apps/web/app/(app)/venda/page.tsx` — atalho "Tudo a prazo" no bloco a prazo; `description` no tipo `Product`.
+- `apps/web/components/CartItemInfo.tsx` — `description` no `InfoProduct` + bloco "Observação".
+- `apps/web/lib/catalog.ts` — `description` no `CachedProduct` + persistência (info do item funciona offline).
+
+**Gates:** web `tsc --noEmit` 0 erros + `next build` (**23 rotas**, `/venda` 18.5 kB) ✅.
+
+**NO AR (2026-08-22):** web Version `5615bf1b`; smoke ✅ (HTML `no-store` + CSS 34 KB com `.flex{`). Commit
+`94c12eb` (local em `main`; push do Owner).
+
+**Refino pós-E2E (pedido do Owner).** A **Observação** foi reposicionada para o **último** bloco do modal
+(antes vinha logo após a identificação); o bloco Par ganhou `border-b` quando seguido pela OBS. Só
+apresentação. **NO AR:** web Version `2b5cb7e0`; smoke ✅. Commit `f3bc828`.
+
+**E2E do Owner — ✅ VALIDADO (2026-08-22, "tudo validado com sucesso").** Atalho "Tudo a prazo" preenche o
+total; OBS do cadastro aparece no info do item; refino de posição (OBS por último) conferido.
+
+**Fatia CONCLUÍDA.**

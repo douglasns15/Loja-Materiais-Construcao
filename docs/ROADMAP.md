@@ -3,7 +3,27 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-22 — **🐞 UI.Produtos.RotuloUnidadeFechada — rótulos "barra"
+> **Última atualização:** 2026-08-22 — **UI.PDV.PrazoTotalEObsItem — atalho "Tudo a prazo" +
+> Observação do produto no info do item — NO AR e E2E DO OWNER VALIDADO. Fatia CONCLUÍDA.** Dois pedidos
+> do Owner no PDV. **(1) Atalho "Tudo a prazo":** na venda a prazo (ADR-019), um link **"Tudo a prazo
+> (R$ X)"** ao lado do rótulo "A prazo" preenche o valor a prazo com o **total da venda** (`totals.total`)
+> — o caso mais comum do fiado; o link some quando o campo já cobre o total (`creditValue >= totals.total`)
+> e quando não há itens. O clamp já existente (`Math.min(creditValue, totals.total)`) garante consistência.
+> **(2) OBS do produto no modal "ⓘ":** o modal de informações do item (`CartItemInfo.tsx`) passa a exibir a
+> **"Descrição / observação"** do cadastro (`Product.description`) como bloco próprio (largura total,
+> `whitespace-pre-wrap break-words` — texto pode ter até 500 chars), só quando preenchida. **O dado já vinha
+> do `GET /products`** (`findMany` sem `select` ⇒ retorna todas as colunas) — só foi ligado no tipo `Product`
+> do PDV, no `InfoProduct` do modal e no `CachedProduct` (`lib/catalog.ts`, p/ funcionar offline também).
+> **Sem API, sem migration, sem core/shared.** Gates: web `tsc` 0 erros + build (**23 rotas**, `/venda`
+> 18.5 kB) ✅. **NO AR:** web Version `5615bf1b`; smoke ✅ (HTML `no-store` + CSS 34 KB com `.flex{`).
+> **Refino pós-E2E (web `2b5cb7e0`):** pedido do Owner — a **Observação** foi reposicionada para o **último
+> bloco** do modal (antes vinha logo após a identificação); bloco Par ganhou `border-b` quando seguido pela
+> OBS. **E2E do Owner VALIDADO (2026-08-22):** "tudo validado com sucesso" (atalho a prazo + OBS no info do
+> item), mais o refino de posição. Commits `94c12eb` + `f3bc828` (locais em `main`; push do Owner). Ver
+> "UI.PDV.PrazoTotalEObsItem" no registro. **Próximo (Horizonte 1):** ver usuários da loja no painel, reset
+> de senha (Super Usuário) ou crédito parcelado.
+>
+> **Antes:** 2026-08-22 — **🐞 UI.Produtos.RotuloUnidadeFechada — rótulos "barra"
 > passam a respeitar o Rolo — NO AR e E2E DO OWNER VALIDADO. Fatia CONCLUÍDA.** Achado do Owner: um produto
 > vendido em **Rolo** (unidade fechada, ADR-017) exibia rótulos como **"barra"** fixo — no detalhe
 > "Custo/Preço/Tamanho **da barra**" e no cadastro "Estoque inicial **(barras)**", mesmo com "Rolo"
