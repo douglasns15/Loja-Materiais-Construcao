@@ -4,8 +4,8 @@
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
 > **Última atualização:** 2026-08-22 — **UI.Shell.MenuRetratil — menu lateral retrátil
-> (trilho de ícones + flyout no hover) — NO AR, aguardando E2E do Owner. Fatia
-> IMPLEMENTADA.** Pedido do Owner: dar ao menu da loja o padrão moderno de mercado (VS
+> (trilho de ícones + flyout no hover) — NO AR e E2E DO OWNER VALIDADO. Fatia
+> CONCLUÍDA.** Pedido do Owner: dar ao menu da loja o padrão moderno de mercado (VS
 > Code/Notion). O desktop antes só tinha "visível" (w-64, empurra) ou "recolhido =
 > `md:hidden`" (some por completo). Agora há **fixar × retrair**: o botão `‹`/`›` no topo do
 > menu alterna e a preferência fica salva (`localStorage` `nexoloja:sidebar-pinned`, default
@@ -24,7 +24,7 @@
 > shared** ⇒ regras 1 e 7 não disparam. Gates: web `tsc` 0 erros + build (**23 rotas**,
 > tamanhos estáveis: `/venda` 18.5 kB, `/estoque` 15.1 kB). **NO AR:** web Version `7a1f40aa`;
 > smoke ✅ (HTML `no-store` + CSS 200). Commit `35057b0` (local em `main`; push do Owner).
-> **Falta: E2E do Owner** (exige login na loja Demo). Ver "UI.Shell.MenuRetratil" no registro.
+> **E2E do Owner VALIDADO (2026-08-22, "tudo validado com sucesso").** Ver "UI.Shell.MenuRetratil" no registro.
 > **Próximo (Horizonte 1):** ver usuários da loja no painel, reset de senha (Super Usuário) ou
 > crédito parcelado.
 >

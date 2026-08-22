@@ -5284,7 +5284,7 @@ shared** ⇒ regras 1 e 7 não disparam.
 **NO AR (2026-08-22):** web Version `7a1f40aa`; smoke ✅ (HTML `no-store` + CSS 200). Commit `35057b0`
 (local em `main`; push do Owner).
 
-**E2E do Owner — ⏳ PENDENTE** (exige login na loja Demo). Checklist sugerido no desktop:
+**E2E do Owner — ✅ VALIDADO (2026-08-22, "tudo validado com sucesso").** Conferido no desktop:
 1. Fixo → botão `‹` retrai → vira trilho de ícones; conteúdo re-centraliza (mais respiro), nada torto.
 2. Passar o mouse no trilho → expande por cima (não empurra) com ícone+texto; navegar por um item e por um filho
    de "Cadastros"; tirar o mouse → recolhe.
@@ -5292,3 +5292,5 @@ shared** ⇒ regras 1 e 7 não disparam.
 4. Rota ativa destacada nos dois modos; tooltip (`title`) ao pairar sobre um ícone do trilho.
 5. Menu de conta (rodapé): abrir no trilho mantém o flyout aberto enquanto o popup está na tela.
 6. Estreitar a janela para `< md`: gaveta mobile intacta (hambúrguer abre/fecha; some ao navegar).
+
+**Fatia CONCLUÍDA.**
