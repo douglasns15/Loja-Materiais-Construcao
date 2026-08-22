@@ -3,7 +3,31 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-22 — **UI.Shell.MenuRetratil — menu lateral retrátil
+> **Última atualização:** 2026-08-22 — **UI.PDV.LayoutOpcaoA — repaginação do PDV (catálogo à
+> esquerda, checkout fixo à direita) — NO AR, aguardando E2E do Owner. Fatia IMPLEMENTADA.**
+> Com o menu retrátil liberando largura, o Owner pediu repaginar o PDV no padrão de mercado.
+> Foram apresentadas **3 direções em mockup** (Artifact) + pesquisa da **Olist/Tiny** (busca no
+> topo, itens agrupados) e **Shopify POS** (carrinho sempre visível ao lado da busca); o Owner
+> escolheu a **Opção A**. Antes o layout era o inverso: busca à DIREITA (sticky) e
+> carrinho+pagamento+totais empilhados à ESQUERDA em 3 cartões. Agora: **busca/catálogo na
+> coluna grande à ESQUERDA** (`lg:col-start-1`) e **checkout num painel único e FIXO à DIREITA**
+> (`lg:col-start-2 lg:sticky lg:top-4`, ~400px) — carrinho + pagamento + condições + total +
+> Concluir num só cartão, com bordas dividindo as seções. Container do PDV `max-w-6xl`→**`max-w-7xl`**
+> (aproveita o espaço do menu). No mobile (`<lg`) empilha na ordem do DOM (busca → checkout). **O
+> carrinho deixou de ser tabela de 5 colunas e virou LINHAS COMPACTAS** de 2 níveis (nome + ⓘ +
+> total/× em cima; selos embalagem/par/acréscimo + stepper − campo + · preço unitário embaixo),
+> para caber no painel estreito; a lista ganhou **rolagem própria** (`lg:max-h-[42vh]`) para o
+> Total não sair da tela num carrinho grande. **Só apresentação (JSX + classes):** todos os
+> handlers/memos/estados preservados — **motor de venda intocado** (par/embalagem/metro ADR-015/017,
+> pagamento dividido, a prazo ADR-019, crédito da loja ADR-022, retirada/entrega ADR-020, offline
+> ADR-011/012). **Único arquivo:** `apps/web/app/(app)/venda/page.tsx`. **Sem API, migration, core
+> ou shared** ⇒ regras 1 e 7 não disparam. Gates: web `tsc` 0 erros + build (**23 rotas**, `/venda`
+> 18.4 kB). **NO AR:** web Version `7abda232`; smoke ✅ (HTML `no-store` + CSS 200). Commit `d88d3eb`
+> (local em `main`; push do Owner). **Falta: E2E do Owner** (exige login na loja Demo). Ver
+> "UI.PDV.LayoutOpcaoA" no registro. **Próximo (Horizonte 1):** ver usuários da loja no painel,
+> reset de senha (Super Usuário) ou crédito parcelado.
+>
+> **Antes:** 2026-08-22 — **UI.Shell.MenuRetratil — menu lateral retrátil
 > (trilho de ícones + flyout no hover) — NO AR e E2E DO OWNER VALIDADO. Fatia
 > CONCLUÍDA.** Pedido do Owner: dar ao menu da loja o padrão moderno de mercado (VS
 > Code/Notion). O desktop antes só tinha "visível" (w-64, empurra) ou "recolhido =

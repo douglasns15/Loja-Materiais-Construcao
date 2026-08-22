@@ -5294,3 +5294,46 @@ shared** ⇒ regras 1 e 7 não disparam.
 6. Estreitar a janela para `< md`: gaveta mobile intacta (hambúrguer abre/fecha; some ao navegar).
 
 **Fatia CONCLUÍDA.**
+
+## UI.PDV.LayoutOpcaoA — repaginação do PDV: catálogo à esquerda, checkout fixo à direita (2026-08-22)
+
+**Pedido do Owner.** Com o menu lateral agora retrátil (liberando largura), repaginar a tela de venda no
+padrão dos grandes PDVs. Antes de codar, foram apresentadas **3 direções em mockup de alta fidelidade**
+(Artifact "Repaginação do PDV") + **pesquisa dos players**: **Olist / Tiny PDV** (busca no topo por
+descrição/SKU/GTIN/leitor, itens iguais agrupados) e **Shopify POS** ("split screen" — carrinho sempre
+visível ao lado da busca). **O Owner escolheu a Opção A.**
+
+**Antes × depois.** Antes: busca à DIREITA (sticky) + carrinho/pagamento/totais empilhados à ESQUERDA em 3
+cartões (`lg:col-start-1` linhas 1/2/3). Depois: **busca/catálogo na coluna grande à ESQUERDA**
+(`lg:col-start-1`) e **checkout num painel único e FIXO à DIREITA** (`lg:col-start-2 lg:sticky lg:top-4`,
+~400px), com carrinho + pagamento + condições + total + Concluir num só cartão dividido por bordas.
+
+**Mudanças (web-only, só apresentação):**
+- Grid do PDV: `lg:[grid-template-columns:minmax(0,1fr)_400px]`; container `max-w-6xl`→`max-w-7xl`.
+- Ordem no DOM = busca → checkout ⇒ no mobile (`<lg`, 1 coluna) empilha natural.
+- **Carrinho: tabela de 5 colunas → linhas compactas de 2 níveis** (nome + tooltip + ⓘ + total/× em cima;
+  selos embalagem/par ADR-015/acréscimo ADR-016 + stepper `− QtyInput +` e preço unitário embaixo). Lista com
+  rolagem própria no desktop (`lg:max-h-[42vh] overflow-y-auto`) para não empurrar o Total pra fora.
+- Pagamento, condições (a prazo/crédito da loja/retirada — opt-in, inalterados) e total/desconto/ações viram
+  **seções** do painel único (antes cartões separados).
+
+**Motor de venda intocado.** Todos os handlers/memos/estados preservados (`pricedCart`, `changeLineQty`,
+`removeFromCart`, `setInfoKey`, `itemTooltip`, `isMeterLine`, `payments`, `credit`/`storeCredit`/`schedule`,
+`totals`, `onConcluir`, `onOrcamento`). **Único arquivo:** `apps/web/app/(app)/venda/page.tsx`. **Sem API,
+migration, core ou shared** ⇒ regras 1 e 7 não disparam.
+
+**Gates:** web `tsc --noEmit` 0 erros + `next build` (**23 rotas**, `/venda` 18.4 kB) ✅.
+
+**NO AR (2026-08-22):** web Version `7abda232`; smoke ✅ (HTML `no-store` + CSS 200). Commit `d88d3eb`
+(local em `main`; push do Owner).
+
+**E2E do Owner — ⏳ PENDENTE** (exige login na loja Demo). Checklist:
+1. Busca/catálogo à esquerda ocupa o espaço; resultados só ao digitar; adicionar por unidade, embalagem
+   fechada, por metro (ADR-017) e par (ADR-015).
+2. Checkout fixo à direita rola junto (`sticky`); carrinho em linhas compactas com ⓘ, selos, stepper (− campo +),
+   preço unitário e total da linha; remover (×); "Limpar carrinho" com confirmação.
+3. Pagamento dividido (+ Adicionar forma; principal reprecifica ADR-016); "Tudo a prazo" + cliente; crédito
+   da loja; retirada/entrega; desconto; Falta/Troco/Pago.
+4. Concluir venda e Orçamento; nota/comprovante.
+5. Carrinho grande: a lista rola dentro do painel e o Total/Concluir seguem visíveis.
+6. Responsivo `<lg`: empilha busca → checkout. Offline: aviso + fila intactos.
