@@ -68,6 +68,8 @@ type Product = {
   popularName: string | null;
   /** Fabricante/marca — também entra na busca do PDV (ex.: digitar "Votoran"). */
   manufacturer: string | null;
+  /** Descrição/observação livre do cadastro (OBS) — exibida no modal de info do item. */
+  description: string | null;
   sku: string;
   salePrice: string;
   costPrice: string;
@@ -2441,9 +2443,23 @@ export default function VendaPage() {
           ) : (
             <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
               <div className="flex items-center justify-between gap-2">
-                <label htmlFor="credit" className="text-sm font-semibold text-amber-900">
-                  A prazo
-                </label>
+                <div className="flex items-baseline gap-2">
+                  <label htmlFor="credit" className="text-sm font-semibold text-amber-900">
+                    A prazo
+                  </label>
+                  {/* Atalho: joga o TOTAL da venda no valor a prazo (dívida = compra inteira, o
+                      caso mais comum do fiado). Some quando o campo já cobre o total. */}
+                  {totals.total > 0 && creditValue < totals.total && (
+                    <button
+                      type="button"
+                      onClick={() => setCreditInput(String(totals.total))}
+                      className="text-xs font-medium text-blue-600 hover:text-blue-700"
+                      title="Deixar o valor total da compra a prazo"
+                    >
+                      Tudo a prazo ({BRL(totals.total)})
+                    </button>
+                  )}
+                </div>
                 <div className="flex items-center gap-1">
                   <MoneyInput
                     id="credit"

@@ -23,6 +23,8 @@ export type InfoProduct = {
   popularName: string | null;
   manufacturer: string | null;
   sku: string;
+  /** Descrição/observação livre do cadastro (OBS). Exibida quando preenchida. */
+  description: string | null;
   stockQty: string;
   unit: UnitType;
 };
@@ -131,6 +133,17 @@ export function CartItemInfo({
             {product.popularName && <Row label="Nome popular">{product.popularName}</Row>}
             {product.manufacturer && <Row label="Fabricante">{product.manufacturer}</Row>}
             {product.sku && <Row label="SKU / código">{product.sku}</Row>}
+          </div>
+        )}
+
+        {/* Observação (OBS) do cadastro — texto livre, pode ser longo; ocupa a largura toda e
+            quebra linha (não cabe numa Row alinhada à direita). Só aparece quando preenchida. */}
+        {product?.description && (
+          <div className="border-b border-gray-100 py-2">
+            <span className="text-sm text-gray-600">Observação</span>
+            <p className="mt-0.5 whitespace-pre-wrap break-words text-sm font-medium text-gray-900">
+              {product.description}
+            </p>
           </div>
         )}
 

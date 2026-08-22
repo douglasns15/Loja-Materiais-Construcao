@@ -26,6 +26,8 @@ export interface CachedProduct {
   popularName: string | null;
   /** Fabricante/marca — também é campo de busca, então acompanha o espelho offline. */
   manufacturer: string | null;
+  /** Descrição/observação livre (OBS) — espelhada p/ o modal de info do item funcionar offline. */
+  description: string | null;
   sku: string;
   salePrice: string;
   costPrice: string;
@@ -65,6 +67,7 @@ export async function cacheProducts(products: CachedProduct[]): Promise<void> {
         name: p.name,
         popularName: p.popularName ?? null,
         manufacturer: p.manufacturer ?? null,
+        description: p.description ?? null,
         sku: p.sku,
         salePrice: p.salePrice,
         costPrice: p.costPrice,
