@@ -50,6 +50,8 @@ http://localhost:3000/
 
 <> Estudar opção de subir o xml e escolher atualizar só o EAN dos produtos;
 
+<> Todas as telas que possuam filtro, mostrar um contador simples com o número de linhas retornadas
+
 ## Subir servidor
 
 cd C:\Users\Douglas\Documents\GitHub\Loja-Materiais-Construcao
