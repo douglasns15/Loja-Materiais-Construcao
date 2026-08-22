@@ -5157,17 +5157,22 @@ Cosmos (a resposta não traz header `X-RateLimit-Remaining`).
   cliente vinculado; estado vazio ciente da busca.
 
 **Gates:** shared **42/42** ✅ · api `tsc --noEmit` 0 erros + `wrangler deploy --dry-run` ✅ · web
-`tsc --noEmit` + `next build` (**23 rotas**, `/vendas` 8.6 kB) ✅. **Sem migration.** ⚠️ **Deploy de API
-obrigatório** (params novos) — **ação do Owner**; push do Owner.
+`tsc --noEmit` + `next build` (**23 rotas**, `/vendas` 8.6 kB) ✅. **Sem migration.**
 
-**E2E do Owner — ⏭️ PENDENTE (após o deploy da API).** Checklist sugerido:
-1. **Por código** (regressão): `V-000128` / `128` traz a venda; "Limpar busca" volta à lista por período.
-2. **Por cliente:** uma venda **fiado**/**crédito**/**entrega futura** de "João" aparece ao buscar "joao"
-   (acento-insensível) e "silva joao" (ordem-livre, AND).
-3. **Por cliente (escopo):** uma **venda comum à vista** feita para o mesmo balcão **não** aparece na busca
-   por cliente (esperado — não guarda cliente); o aviso explica.
-4. **Por cliente (card):** as vendas com cliente mostram "Cliente: <nome>" no card.
-5. **Por valor exato:** buscar `150` (e `150,00`, `R$ 150`) traz as vendas com total **exatamente** R$ 150;
-   um valor sem venda mostra "Nenhuma venda encontrada para a busca".
-6. **Paginação/ordenação sob busca:** com muitas vendas do mesmo cliente/valor, "Mostrar mais" e a
-   ordenação (maior/menor/data) continuam funcionando.
+**NO AR (2026-08-22):** API Version `e78a35b1` + web Version `4aa215b8`; smokes ✅ (`/health` 200;
+`/orders?scope=all&customer=…` sem token → 401; web HTML `no-store` + CSS 200). Commit `abce982`
+(local em `main`; push do Owner).
+
+**E2E do Owner — ✅ VALIDADO (2026-08-22, "tudo validado com sucesso").** Casos cobertos:
+1. **Por código** (regressão): `V-000128` / `128` traz a venda; "Limpar busca" volta à lista por período. ✅
+2. **Por cliente:** venda **fiado**/**crédito**/**entrega futura** aparece ao buscar por "joao"
+   (acento-insensível) e "silva joao" (ordem-livre, AND). ✅
+3. **Por cliente (escopo):** uma **venda comum à vista** **não** aparece na busca por cliente (esperado —
+   não guarda cliente); o aviso explica. ✅
+4. **Por cliente (card):** as vendas com cliente mostram "Cliente: <nome>" no card. ✅
+5. **Por valor exato:** `150` (e `150,00`, `R$ 150`) traz as vendas com total **exatamente** R$ 150; valor
+   sem venda mostra "Nenhuma venda encontrada para a busca". ✅
+6. **Paginação/ordenação sob busca:** "Mostrar mais" e a ordenação (maior/menor/data) seguem funcionando
+   com a busca ativa. ✅
+
+**Fatia CONCLUÍDA.**

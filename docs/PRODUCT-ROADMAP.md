@@ -2,7 +2,7 @@
 
 > **O que é este documento.** A visão de **produto**: o que queremos que o NexoLoja faça, por quê e em que ordem. É deliberadamente especulativo — itens aqui **não** são compromissos, e mudam conforme aprendemos com as lojas reais.
 >
-> **Última atualização:** 2026-08-20
+> **Última atualização:** 2026-08-22
 
 ## Como este documento se relaciona com os outros
 
@@ -26,7 +26,6 @@ Foco: **tornar o dia a dia do balcão impecável**. Origem: pedidos do Owner em 
 | Tema | Valor para o lojista |
 |---|---|
 | **Modernização visual** | Percepção de produto profissional; legibilidade no balcão |
-| **Busca e filtro no histórico de vendas** | Localizar uma venda específica (por nota, cliente, valor) e filtrar por coluna. *Hoje há período, ordenação e busca por código (V-000128); falta busca por cliente/valor.* |
 | **Gestão de senha pelo Super Usuário** | Destravar lojista que esqueceu a senha, sem depender de e-mail. *Não implementado no painel de plataforma.* |
 | **Ver usuários de cada loja no painel** | Clicar no número de usuários e listar quem são |
 | **Crédito parcelado** | Parcelamento sobre o total, com campo para valor extra |
@@ -34,7 +33,7 @@ Foco: **tornar o dia a dia do balcão impecável**. Origem: pedidos do Owner em 
 
 ### Entregues recentemente (não repetir aqui)
 
-Pagamento dividido · paginação por cursor + filtro de período no histórico · ordenação (maior/menor valor, data) · botão "voltar ao topo" · sangria/suprimento e extrato do caixa · contador de cédulas e mini-DRE · troco e formas no comprovante · busca no servidor em Clientes/Produtos · numeração sequencial de vendas (`V-000128`) e busca por código · orçamentos salvos (`O-000045`, ciclo de vida, converter em venda) · correção do logo que sumia do comprovante ao ser trocado · valor recebido e troco por venda (Histórico + comprovante) · navegação ‹ Hoje › + default "Hoje" nos filtros por data (Relatórios/Vendas/Movimentações) · fiado / contas a receber ([ADR-019](adr/ADR-019-venda-a-prazo-contas-a-receber.md)) e conta do cliente com devolução por item + crédito ([ADR-022](adr/ADR-022-conta-do-cliente-fiado-acumulado.md)) · cadastro por código de barras via catálogo global + importação de XML de NF-e ([ADR-025](adr/ADR-025-catalogo-global-ean.md)).
+Pagamento dividido · paginação por cursor + filtro de período no histórico · ordenação (maior/menor valor, data) · botão "voltar ao topo" · sangria/suprimento e extrato do caixa · contador de cédulas e mini-DRE · troco e formas no comprovante · busca no servidor em Clientes/Produtos · numeração sequencial de vendas (`V-000128`) e busca por código · orçamentos salvos (`O-000045`, ciclo de vida, converter em venda) · correção do logo que sumia do comprovante ao ser trocado · valor recebido e troco por venda (Histórico + comprovante) · navegação ‹ Hoje › + default "Hoje" nos filtros por data (Relatórios/Vendas/Movimentações) · fiado / contas a receber ([ADR-019](adr/ADR-019-venda-a-prazo-contas-a-receber.md)) e conta do cliente com devolução por item + crédito ([ADR-022](adr/ADR-022-conta-do-cliente-fiado-acumulado.md)) · cadastro por código de barras via catálogo global + importação de XML de NF-e ([ADR-025](adr/ADR-025-catalogo-global-ean.md)) · busca do histórico de vendas por cliente e por valor, além do código (só vendas com cliente vinculado).
 
 ---
 

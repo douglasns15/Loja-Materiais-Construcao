@@ -4,8 +4,8 @@
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
 > **Última atualização:** 2026-08-22 — **UI.Vendas.BuscaClienteValor — busca do Histórico por
-> CLIENTE e por VALOR (além do código) — IMPLEMENTADA, gates ✅, aguardando deploy + push do Owner e
-> E2E.** Item do Horizonte 1 (`PRODUCT-ROADMAP.md`): o Histórico só buscava por **código** (`V-000128`);
+> CLIENTE e por VALOR (além do código) — NO AR e E2E DO OWNER VALIDADO. Fatia CONCLUÍDA.** Item do
+> Horizonte 1 (`PRODUCT-ROADMAP.md`): o Histórico só buscava por **código** (`V-000128`);
 > faltava localizar venda **por cliente** e **por valor**. **Decisão de produto do Owner (antes de
 > codar):** UX = **seletor de tipo (Código · Cliente · Valor) + 1 campo adaptável** (evita a ambiguidade
 > "128" = nº da venda vs R$128); valor = **match exato tolerante ao formato**. **Achado levantado ao
@@ -23,10 +23,14 @@
 > Código·Cliente·Valor + campo adaptável**; o card do Histórico passa a **exibir o cliente** quando há;
 > aviso curto de que a busca por cliente cobre só vendas com cliente vinculado; estado vazio ciente da
 > busca. Gates: shared **42/42**, api tsc + `wrangler dry-run` ✅, web tsc + build (**23 rotas**,
-> `/vendas` 8.6 kB) ✅. ⚠️ **Deploy de API obrigatório** (params novos) — **ação do Owner**; push do
-> Owner. **Falta:** deploy + E2E do Owner (checklist no registro, "UI.Vendas.BuscaClienteValor").
-> **Próximo (Horizonte 1):** ver usuários da loja no painel, reset de senha (Super Usuário) ou crédito
-> parcelado.
+> `/vendas` 8.6 kB) ✅. **Sem migration.** **NO AR:** API Version `e78a35b1` + web Version `4aa215b8`;
+> smokes ✅ (health 200; `/orders` com `customer` sem token 401; web HTML no-store + CSS 200). **E2E do
+> Owner VALIDADO (2026-08-22):** "tudo validado com sucesso" — busca por código (regressão), por cliente
+> (acento-insensível + AND, só vendas com cliente vinculado), escopo (venda comum à vista não aparece),
+> cliente no card, valor exato (`150`/`150,00`/`R$ 150`) e paginação/ordenação sob busca. Commit
+> `abce982` (local em `main`; push do Owner). **Fatia CONCLUÍDA.** Ver "UI.Vendas.BuscaClienteValor" no
+> registro. **Próximo (Horizonte 1):** ver usuários da loja no painel, reset de senha (Super Usuário) ou
+> crédito parcelado.
 >
 > **Antes:** 2026-08-21 — **Integração.Cosmos — Bluesoft Cosmos ATIVADA (secret
 > `COSMOS_TOKEN`) + correção do secret truncado — NO AR e E2E DO OWNER VALIDADO.** O ramo da Cosmos na
