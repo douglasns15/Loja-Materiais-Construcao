@@ -3,7 +3,31 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-21 — **UI.Cadastros.Categorias — Tela de Categorias + seletor de
+> **Última atualização:** 2026-08-21 — **Integração.Cosmos — Bluesoft Cosmos ATIVADA (secret
+> `COSMOS_TOKEN`) + correção do secret truncado — NO AR e E2E DO OWNER VALIDADO.** O ramo da Cosmos na
+> rota de enriquecimento por EAN (`GET /catalog/ean`, ADR-025 Fatia 1) estava escrito mas **nunca fora
+> executado de verdade** — dormente desde 2026-08-15 por falta do token. O Owner provisionou o
+> `COSMOS_TOKEN` no Worker `nexoloja-api` (`wrangler secret put`; plano free ~25 consultas/dia). **A
+> primeira execução real revelou dois problemas, ambos resolvidos:** **(1)** o `wrangler secret put`
+> **interativo** neste terminal **truncava a colagem do token para 1 caractere** (`tokenLen=1` no log de
+> diagnóstico) ⇒ a Cosmos respondia `400` e a UI mostrava "sem ficha técnica nas fontes gratuitas".
+> Contornado gravando o secret **por variável + pipe** (`$tok='…'; $tok | npx wrangler secret put
+> COSMOS_TOKEN`) — colar num *prompt oculto* falhava, mas colar na *linha de comando* funcionava
+> (comprimento conferido: 22). **(2)** Correção defensiva permanente no código
+> (`apps/api/src/routes/catalog.ts`, `fetchCosmos`): **`token.trim()`** (blinda contra espaço/quebra
+> invisível no secret) + **`console.warn` de diagnóstico** (status HTTP + `tokenLen`, **nunca** o token)
+> nos status ≠404, visível via `wrangler tail`. **Sem migration; não muda contrato de rota (regra 7 não
+> dispara).** Gates: api typecheck 0 erros + `wrangler dry-run` ✅. **NO AR:** API Version `68116d67`.
+> **E2E do Owner VALIDADO (2026-08-21):** EAN `7897321117271` (NEUTROL 900ML VEDACIT ACQUA) retornou
+> `source:cosmos` — Nome preenchido no cadastro; **NCM `27150000` capturado no cache global**
+> (`ProductCatalog.ncm`). **Achado de produto esclarecido:** o `Product` do lojista **não tem campo de
+> NCM** — o "Preencher" do card só grava Nome/Fabricante/Foto; o NCM vive só no catálogo global,
+> reservado p/ emissão fiscal futura (Horizonte 2). O cache global segue como motor: esse EAN, agora
+> cacheado, sai de graça p/ as próximas lojas. Ver "Integração.Cosmos" no registro. **Próximo (fatia de
+> código):** item do Horizonte 1 do `PRODUCT-ROADMAP.md` (busca cliente/valor no Histórico, reset de
+> senha pelo Super Usuário, ver usuários da loja no painel, ou crédito parcelado).
+>
+> **Antes:** 2026-08-21 — **UI.Cadastros.Categorias — Tela de Categorias + seletor de
 > categoria no Produto — NO AR e E2E DO OWNER VALIDADO. Fatia CONCLUÍDA.** A feature de Categorias existia
 > só no schema/API desde a Fase 1 e era **morta na UI**: não havia como criar categorias nem vincular
 > produtos a elas. Entregue **sem migration e sem deploy de API** — o banco (`Category` +

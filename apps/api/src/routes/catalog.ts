@@ -62,11 +62,22 @@ function orNull(v: unknown): string | null {
  * cobertura p/ construção) e o resultado vai pro cache, evitando repetir a chamada.
  */
 async function fetchCosmos(ean: string, token: string): Promise<ExternalCatalog | null> {
+  // Defensivo: um secret provisionado por colagem interativa (`wrangler secret put`) costuma carregar
+  // um espaço/quebra de linha invisível no fim — o header sairia sujo e a Cosmos responde 401. O
+  // `.trim()` blinda contra isso (e contra futuras rotações do token).
+  const cleanToken = token.trim();
   try {
     const res = await fetchWithTimeout(`https://api.cosmos.bluesoft.com.br/gtins/${ean}`, {
-      headers: { 'X-Cosmos-Token': token, 'Content-Type': 'application/json' },
+      headers: { 'X-Cosmos-Token': cleanToken, 'Content-Type': 'application/json' },
     });
-    if (!res.ok) return null; // 404 (não achou) / 429 (limite) → sem enriquecimento, sem erro
+    if (!res.ok) {
+      // 404 = produto inexistente (normal). Outros status (401 token / 429 limite) são operacionalmente
+      // úteis: logamos status + TAMANHO do token (nunca o token) p/ inspeção via `wrangler tail`.
+      if (res.status !== 404) {
+        console.warn(`[cosmos] gtin=${ean} status=${res.status} tokenLen=${cleanToken.length}`);
+      }
+      return null; // 404 (não achou) / 429 (limite) / 401 (token) → sem enriquecimento, sem erro
+    }
     const j = (await res.json().catch(() => null)) as Record<string, unknown> | null;
     if (!j) return null;
     const brand = (j.brand as Record<string, unknown> | null) ?? null;

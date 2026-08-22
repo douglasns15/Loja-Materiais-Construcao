@@ -5078,3 +5078,52 @@ via `GET /products?includeInactive=true`, só os ligados àquela categoria exata
 "nada afetado" e falha de rede na contagem têm mensagem própria. **Comportamento inalterado** (soft-delete,
 filhas viram principais) — é só um aviso. Sem migration/API. Gates: web typecheck + build (`/categorias`
 3.82 kB) ✅. **NO AR:** web `53819d8f`; smoke ✅. **E2E do Owner VALIDADO (2026-08-21):** exclusão com o painel de impacto (contagem de subcategorias e produtos afetados) reconfirmada com sucesso. Commit `4d08650`.
+
+## Integração.Cosmos — Bluesoft Cosmos ativada (COSMOS_TOKEN) + fix do secret truncado (2026-08-21)
+
+**Contexto.** O enriquecimento por EAN (`GET /catalog/ean/:ean`, ADR-025 Fatia 1) tenta as fontes externas
+na ordem **Cosmos → Open Food Facts**, mas o ramo da Cosmos só roda quando o secret `COSMOS_TOKEN` está
+provisionado. Ele ficou **dormente desde 2026-08-15** (só cache global + OFF ativos) — logo, o código de
+`fetchCosmos` **nunca tinha executado de verdade** em produção. O Owner decidiu ligar a Cosmos (plano free
+Bluesoft, ~25 consultas/dia, sem cartão).
+
+**Ativação (ação do Owner, sem deploy de código para ligar).** `wrangler secret put COSMOS_TOKEN` no Worker
+`nexoloja-api`. Secrets do Worker aplicam **na hora** (o binding `env.COSMOS_TOKEN` já era lido pelo código
+no ar) — não é `.env` (credencial de produção mora em secret do Worker, como o `SUPABASE_SERVICE_ROLE_KEY`).
+
+**Dois problemas na primeira execução real, ambos resolvidos:**
+
+1. **Secret truncado para 1 caractere.** Apesar de o `wrangler secret put` reportar sucesso 3×, a Cosmos
+   respondia `400` e a UI mostrava "sem ficha técnica nas fontes gratuitas". O teste do token **direto** na
+   Cosmos (`curl.exe -H "X-Cosmos-Token: <token real>" …/gtins/7897321117271`) voltou **`200`** com a ficha
+   — provando que o **token era válido** e o problema estava do nosso lado. O log de diagnóstico (item 2)
+   revelou a causa: **`tokenLen=1`** — o `wrangler secret put` **interativo, neste terminal, capturava só o
+   1º caractere da colagem** (colar em *prompt oculto* falha). **Contorno:** gravar o secret por
+   **variável + pipe** na linha de comando (`$tok='…'; $tok=$tok.Trim(); $tok | npx wrangler secret put
+   COSMOS_TOKEN`) — colar na *linha de comando* funciona (o mesmo caminho pelo qual o curl fora colado);
+   comprimento conferido = **22**. (Plano B documentado: token num arquivo + `Get-Content -Raw | wrangler…`.)
+
+2. **Fix defensivo permanente (código).** `apps/api/src/routes/catalog.ts`, `fetchCosmos`:
+   **`const cleanToken = token.trim()`** antes de montar o header `X-Cosmos-Token` (blinda contra
+   espaço/quebra invisível no secret — footgun clássico do `wrangler secret put` e de rotações futuras) +
+   **`console.warn` de diagnóstico** nos status **≠404** (`[cosmos] gtin=… status=… tokenLen=…` — status HTTP
+   + **tamanho** do token, **nunca** o token; 404 = "produto inexistente" normal, não loga). Visível via
+   `wrangler tail nexoloja-api`. **Sem migration; não altera contrato de rota (regra 7 não dispara).**
+
+**Gates:** api typecheck 0 erros + `wrangler deploy --dry-run` ✅ (bindings Hyperdrive/R2/SUPABASE_URL
+intactos). **NO AR:** API Version `68116d67` (o `.trim()` + log). O secret foi regravado depois do deploy.
+
+**E2E do Owner — VALIDADO (2026-08-21).** Leitura do EAN **`7897321117271`** (NEUTROL 900ML VEDACIT ACQUA)
+num cadastro novo → o card de enriquecimento trouxe a ficha (`source:cosmos`), com o **Nome** preenchido.
+Infra smoke pós-ativação ✅ (`/health` 200; `/catalog/ean` guardada 401 sem token).
+
+**Achado de produto (esclarecido, correto):** o `Product` do lojista **não tem campo de NCM** — o "Preencher"
+do card grava só **Nome/Fabricante/Foto** (`Product.name`/`manufacturer`/`imageUrl`). O **NCM** (aqui,
+`27150000`) e a ficha completa são gravados **só no cache global** (`ProductCatalog.ncm`), reservado para
+**emissão fiscal futura** (Horizonte 2). Comportamento cost-zero: o mesmo EAN, agora cacheado, sai de graça
+para as próximas lojas/leituras (misses **não** são cacheados; sucessos sim).
+
+**Nota sobre consumo do free tier:** as tentativas com o token truncado voltaram `400`/`401` (rejeitadas na
+autenticação) e **quase certamente não contam** contra as ~25/dia — o sinal de limite estourado seria `429`,
+nunca observado. Só as chamadas `200` (o curl direto + o E2E) consomem. Conferência exata = painel da conta
+Cosmos (a resposta não traz header `X-RateLimit-Remaining`).
