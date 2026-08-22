@@ -3,7 +3,25 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-22 — **UI.Vendas.BuscaClienteValor — busca do Histórico por
+> **Última atualização:** 2026-08-22 — **🐞 UI.Produtos.RotuloUnidadeFechada — rótulos "barra"
+> passam a respeitar o Rolo — NO AR e E2E DO OWNER VALIDADO. Fatia CONCLUÍDA.** Achado do Owner: um produto
+> vendido em **Rolo** (unidade fechada, ADR-017) exibia rótulos como **"barra"** fixo — no detalhe
+> "Custo/Preço/Tamanho **da barra**" e no cadastro "Estoque inicial **(barras)**", mesmo com "Rolo"
+> selecionado. **Causa raiz:** as duas unidades fechadas (`BARRA`/`ROLL`) dividem a apresentação, mas alguns
+> rótulos tinham "barra" **hard-coded** em vez de derivar da unidade real (a esteira de preço já derivava via
+> `unitArticle`; faltava a **visualização** e alguns textos do cadastro). Havia ainda concordância errada:
+> "são **da** Rolo **inteira**" (feminino) → corrigido p/ "são **do rolo inteiro**". **Correção (web-only):**
+> `ProductDetail.tsx` (visualização usa `savedUnitArticle` de `product.unit`), `StockDetail.tsx` (mesma
+> correção), `products/page.tsx` (cadastro: `unitNoun` → "Estoque inicial (rolos)", "mostrado como rolos +
+> sobra") + a concordância nos dois quadros. Barra e unidades não-fechadas inalteradas. **Sem API, sem
+> migration, sem core/shared.** Gates: web `tsc` + build (**22 rotas**, `/products` 15.5 kB, `/estoque` 15.1
+> kB) ✅. **NO AR:** web Version `d2e20854`; smoke ✅ (HTML `no-store` + CSS 200). **E2E do Owner VALIDADO
+> (2026-08-22):** "tudo validado com sucesso" — produto Arame (Rolo) lê "do rolo" no detalhe e "(rolos)" no
+> cadastro; Barra segue "da barra". Commit `b2a56a2` (local em `main`; push do Owner). Ver
+> "UI.Produtos.RotuloUnidadeFechada" no registro. **Próximo (Horizonte 1):** ver usuários da loja no painel,
+> reset de senha (Super Usuário) ou crédito parcelado.
+>
+> **Antes:** 2026-08-22 — **UI.Vendas.BuscaClienteValor — busca do Histórico por
 > CLIENTE e por VALOR (além do código) — NO AR e E2E DO OWNER VALIDADO. Fatia CONCLUÍDA.** Item do
 > Horizonte 1 (`PRODUCT-ROADMAP.md`): o Histórico só buscava por **código** (`V-000128`);
 > faltava localizar venda **por cliente** e **por valor**. **Decisão de produto do Owner (antes de

@@ -5176,3 +5176,39 @@ Cosmos (a resposta não traz header `X-RateLimit-Remaining`).
    com a busca ativa. ✅
 
 **Fatia CONCLUÍDA.**
+
+---
+
+## 🐞 UI.Produtos.RotuloUnidadeFechada — rótulos "barra/rolo" respeitam a unidade real (2026-08-22)
+
+**Achado do Owner (no cadastro/detalhe de Produtos):** um produto vendido em **Rolo** (unidade fechada,
+ADR-017) exibia vários rótulos como **"barra"** fixo — ex.: no modal de detalhes "Custo/Preço/Tamanho
+**da barra**" e no cadastro "Estoque inicial **(barras)**", mesmo com "Rolo" selecionado.
+
+**Causa raiz:** as duas unidades fechadas (`BARRA` e `ROLL`) compartilham a mesma apresentação, mas alguns
+rótulos tinham o substantivo **"barra" hard-coded** em vez de derivar da unidade do produto. A esteira de
+preço (custo/preço na edição) já derivava via `unitArticle`; faltava fazer o mesmo nos rótulos de
+**visualização** e em alguns textos do cadastro. Havia ainda um **erro de concordância**: o texto "são **da**
+{Rolo} **inteira**" (feminino) ficava errado para Rolo (masculino).
+
+**Correção (web-only, sem API/migration/core/shared):**
+- `apps/web/components/ProductDetail.tsx` — visualização: "Custo/Preço/Tamanho da barra" → `savedUnitArticle`
+  baseado em `product.unit` (unidade **salva**, não a do form) → "do rolo" quando `ROLL`.
+- `apps/web/components/StockDetail.tsx` — detalhe no Estoque: mesma correção em Custo/Preço.
+- `apps/web/app/(app)/products/page.tsx` — cadastro: "Estoque inicial (barras)" → "(rolos)" (novo
+  `unitNoun`); texto "mostrado como barras + sobra" → usa `unitNoun`.
+- **Concordância:** "são da Rolo inteira" → **"são do rolo inteiro"** / "da barra inteira" (artigo + adjetivo
+  corretos), no cadastro e na edição.
+- **Barra** e unidades não-fechadas (Unidade, Metro, etc.) **inalteradas**.
+
+**Gates:** web `tsc --noEmit` + `next build` (**22 rotas**, `/products` 15.5 kB, `/estoque` 15.1 kB) ✅.
+Sem API, sem migration, sem core/shared.
+
+**NO AR (2026-08-22):** web Version `d2e20854`; smoke ✅ (HTML `no-store` + CSS 200). Commit `b2a56a2`
+(local em `main`; push do Owner).
+
+**E2E do Owner — ✅ VALIDADO (2026-08-22, "tudo validado com sucesso").** Produto **Arame (Rolo)**: modal de
+detalhes lê "Custo/Preço/Tamanho **do rolo**"; cadastro com Rolo mostra "Estoque inicial **(rolos)**" e o
+quadro "são **do rolo inteiro** … mostrado como **rolos** + sobra". Barra segue "da barra".
+
+**Fatia CONCLUÍDA.**
