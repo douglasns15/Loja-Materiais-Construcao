@@ -5375,7 +5375,8 @@ para retirar a mercadoria.*" **Comportamento adaptativo:** quando a venda tem **
 novo no detalhe).
 
 **NO AR (2026-08-24):** API Version `e3cab730` (smoke ✅ health 200, `/deliveries/:id` sem token 401); web
-Version `29d5616c` (smoke ✅ HTML no-store + CSS 200). **E2E do Owner — ⏳ PENDENTE.** Checklist:
+Version `29d5616c` (smoke ✅ HTML no-store + CSS 200). **E2E do Owner — ✅ VALIDADO (2026-08-24, "tudo
+validado com sucesso"). Fatia CONCLUÍDA.** Checklist coberto:
 1. PDV: venda comum (sem retirada) → tela final mostra **só** "Imprimir" (sem o 2º botão).
 2. PDV: venda **com retirada/entrega posterior** → aparece "Comprovante de retirada"; imprime cupom + faixa
    "✔ PAGO — FALTA RETIRAR"; "Imprimir" comum continua sem a faixa; PDF nomeado V-000128.

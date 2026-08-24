@@ -4,7 +4,8 @@
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
 > **Última atualização:** 2026-08-24 — **UI.PDV.ComprovanteRetirada — comprovante "para retirar
-> depois" (PDV + Entregas) — IMPLEMENTADA, gates verdes; aguardando deploy + E2E do Owner.** Pedido do
+> depois" (PDV + Entregas) — NO AR e E2E DO OWNER VALIDADO (2026-08-24, "tudo validado com sucesso").
+> Fatia CONCLUÍDA.** Pedido do
 > Owner: nas vendas com **retirada/entrega posterior** (ADR-020) faltava imprimir uma nota específica. Na
 > tela final do pagamento agora há um **2º botão "Comprovante de retirada"** (aparece só quando a venda foi
 > marcada como retirada futura) = o **mesmo cupom + uma faixa em destaque**; e a **mesma impressão também na
