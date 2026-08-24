@@ -145,6 +145,28 @@ type CartItem = {
 
 /** Rótulo curto de uma unidade (sem o parêntese): "Metro (m)" → "Metro"; "Rolo" → "Rolo". */
 const unitShort = (u: UnitType) => unitTypeLabels[u].replace(/\s*\(.*\)$/, '');
+
+/** Miniatura do produto no catálogo do PDV: iniciais em bloco tingido com a cor da marca.
+ *  Realce visual (Opção A) custo-zero — não depende de foto cadastrada; puramente decorativa. */
+function ProductThumb({ name }: { name: string }) {
+  const initials =
+    name
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((w) => w[0] ?? '')
+      .join('')
+      .toUpperCase() || '?';
+  return (
+    <span
+      aria-hidden="true"
+      className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-indigo-50 text-xs font-bold text-indigo-700"
+    >
+      {initials}
+    </span>
+  );
+}
 /** Uma parcela de pagamento na tela: a forma + o valor digitado (string do MoneyInput). */
 type PayLine = { method: PaymentMethod; amount: string };
 /** Parcela já resolvida/persistida: forma + valor numérico (as parcelas somam o total). */
@@ -1938,7 +1960,9 @@ export default function VendaPage() {
   // --- PDV (carrinho) ---
   return (
     <div className="mx-auto max-w-7xl">
-      <h1 className="mb-6 text-2xl font-bold">Venda</h1>
+      <h1 className="mb-6 w-fit bg-gradient-to-r from-indigo-700 to-indigo-500 bg-clip-text text-2xl font-bold text-transparent">
+        Venda
+      </h1>
 
       {/* ADR-024 (2.B): o PDV foi aberto a partir de um orçamento — "Gerar venda" (converte ao
           concluir) ou "Editar rascunho" (Salvar grava por cima do mesmo O-…). */}
@@ -2003,7 +2027,7 @@ export default function VendaPage() {
           ENCOLHER abaixo do conteúdo; a do checkout é fixa em `400px`. No mobile vira coluna única
           `minmax(0,1fr)`. */}
       <div className="grid items-start gap-4 [grid-template-columns:minmax(0,1fr)] lg:[grid-template-columns:minmax(0,1fr)_400px]">
-      <div className="min-w-0 rounded-2xl bg-white p-4 shadow-sm lg:col-start-1 lg:row-start-1">
+      <div className="min-w-0 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm lg:col-start-1 lg:row-start-1">
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex basis-full gap-2">
             <input
@@ -2063,12 +2087,15 @@ export default function VendaPage() {
                 return (
                   <li key={p.id} className="px-3 py-2">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="min-w-0">
-                        <span className="block truncate font-medium">{p.name}</span>
-                        <span className="block truncate text-xs text-gray-500">
-                          {p.popularName ? `${p.popularName} · ` : ''}
-                          {p.manufacturer ? `${p.manufacturer} · ` : ''}
-                          {p.sku}
+                      <span className="flex min-w-0 items-center gap-2.5">
+                        <ProductThumb name={p.name} />
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium">{p.name}</span>
+                          <span className="block truncate text-xs text-gray-500">
+                            {p.popularName ? `${p.popularName} · ` : ''}
+                            {p.manufacturer ? `${p.manufacturer} · ` : ''}
+                            {p.sku}
+                          </span>
                         </span>
                       </span>
                       <span className={`shrink-0 text-xs ${out ? 'text-red-500' : 'text-gray-500'}`}>
@@ -2115,12 +2142,15 @@ export default function VendaPage() {
                       disabled={out}
                       className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      <span className="min-w-0">
-                        <span className="block truncate font-medium">{p.name}</span>
-                        <span className="block truncate text-xs text-gray-500">
-                          {p.popularName ? `${p.popularName} · ` : ''}
-                          {p.manufacturer ? `${p.manufacturer} · ` : ''}
-                          {p.sku}
+                      <span className="flex min-w-0 items-center gap-2.5">
+                        <ProductThumb name={p.name} />
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium">{p.name}</span>
+                          <span className="block truncate text-xs text-gray-500">
+                            {p.popularName ? `${p.popularName} · ` : ''}
+                            {p.manufacturer ? `${p.manufacturer} · ` : ''}
+                            {p.sku}
+                          </span>
                         </span>
                       </span>
                       <span className="shrink-0 text-right">
@@ -2148,12 +2178,15 @@ export default function VendaPage() {
               return (
                 <li key={p.id} className="px-3 py-2">
                   <div className="flex items-center justify-between gap-3">
-                    <span className="min-w-0">
-                      <span className="block truncate font-medium">{p.name}</span>
-                      <span className="block truncate text-xs text-gray-500">
-                        {p.popularName ? `${p.popularName} · ` : ''}
-                        {p.manufacturer ? `${p.manufacturer} · ` : ''}
-                        {p.sku}
+                    <span className="flex min-w-0 items-center gap-2.5">
+                      <ProductThumb name={p.name} />
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium">{p.name}</span>
+                        <span className="block truncate text-xs text-gray-500">
+                          {p.popularName ? `${p.popularName} · ` : ''}
+                          {p.manufacturer ? `${p.manufacturer} · ` : ''}
+                          {p.sku}
+                        </span>
                       </span>
                     </span>
                     <span className={`shrink-0 text-xs ${out ? 'text-red-500' : 'text-gray-500'}`}>
@@ -2218,30 +2251,36 @@ export default function VendaPage() {
           total/Concluir num cartão único e FIXO (sticky) ao rolar. Cada seção é dividida por
           borda (antes eram 3 cartões separados). */}
       <div className="min-w-0 lg:col-start-2 lg:row-start-1 lg:sticky lg:top-4">
-      <div className="flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm">
+      <div className="flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-md">
       {/* Seção: carrinho (topo do painel). */}
       <div className="min-w-0">
         {/* Cabeçalho do carrinho: título + botão "Limpar carrinho" (só com itens). */}
-        <div className="flex items-center justify-between gap-2 border-b border-gray-100 px-4 py-2">
-          <span className="text-sm font-medium text-gray-700">
+        <div className="flex items-center justify-between gap-2 bg-indigo-600 px-4 py-2.5 text-white">
+          <span className="flex items-center gap-2 text-sm font-semibold">
+            {/* Ícone de carrinho inline (sem dependência nova — mesmo padrão do menu). */}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4" aria-hidden="true">
+              <circle cx="9" cy="20" r="1" />
+              <circle cx="18" cy="20" r="1" />
+              <path d="M2 3h2l2.4 12.4a1 1 0 0 0 1 .8h9.7a1 1 0 0 0 1-.8L21 7H5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
             Carrinho
-            {cart.length > 0 && <span className="ml-1 text-gray-500">· {cart.length}</span>}
+            {cart.length > 0 && <span className="ml-0.5 text-indigo-100">· {cart.length}</span>}
           </span>
           {cart.length > 0 &&
             (confirmClear ? (
               <span className="flex items-center gap-2 text-xs">
-                <span className="text-gray-600">Limpar tudo?</span>
+                <span className="text-indigo-100">Limpar tudo?</span>
                 <button
                   type="button"
                   onClick={limparCarrinho}
-                  className="rounded-lg bg-red-600 px-2 py-1 font-medium text-white hover:bg-red-700"
+                  className="rounded-lg bg-white px-2 py-1 font-semibold text-red-600 hover:bg-red-50"
                 >
                   Sim, limpar
                 </button>
                 <button
                   type="button"
                   onClick={() => setConfirmClear(false)}
-                  className="rounded-lg border border-gray-300 px-2 py-1 font-medium text-gray-600 hover:bg-gray-100"
+                  className="rounded-lg border border-white/40 px-2 py-1 font-medium text-white hover:bg-white/10"
                 >
                   Cancelar
                 </button>
@@ -2250,7 +2289,7 @@ export default function VendaPage() {
               <button
                 type="button"
                 onClick={() => setConfirmClear(true)}
-                className="text-sm font-medium text-red-600 hover:text-red-700"
+                className="text-sm font-medium text-indigo-100 hover:text-white"
               >
                 Limpar carrinho
               </button>
@@ -2739,14 +2778,15 @@ export default function VendaPage() {
             Total e "Concluir" ficam visíveis no caso comum. */}
         <div className="min-w-0 border-t border-gray-100 bg-gray-50 p-4">
           <div>
-            <div className="space-y-1 text-sm">
+            <div className="space-y-2 text-sm">
               <div className="flex justify-between text-gray-600">
                 <span>Subtotal</span>
-                <span>{BRL(totals.subtotal)}</span>
+                <span className="tabular-nums">{BRL(totals.subtotal)}</span>
               </div>
-              <div className="flex justify-between text-lg font-bold">
-                <span>Total</span>
-                <span>{BRL(totals.total)}</span>
+              {/* Total = herói do checkout: faixa destacada na cor da marca, número grande. */}
+              <div className="flex items-center justify-between rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2.5">
+                <span className="text-sm font-bold text-indigo-700">Total</span>
+                <span className="text-2xl font-extrabold tabular-nums text-indigo-700">{BRL(totals.total)}</span>
               </div>
             </div>
             <div className="mt-3 flex items-center justify-between gap-2 border-t border-gray-100 pt-3">
@@ -2775,14 +2815,14 @@ export default function VendaPage() {
                 nonCashOverpaid ||
                 (isCredit && (!customerId || !online))
               }
-              className="rounded-lg bg-gray-900 py-2 font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+              className="rounded-lg bg-emerald-600 py-2.5 font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50 disabled:shadow-none"
             >
               Concluir venda
             </button>
             <button
               onClick={onOrcamento}
               disabled={cart.length === 0 || discountTooHigh}
-              className="rounded-lg border border-gray-300 py-2 font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+              className="rounded-lg border border-gray-300 py-2.5 font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
             >
               Orçamento
             </button>

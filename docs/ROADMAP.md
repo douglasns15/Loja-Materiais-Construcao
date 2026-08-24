@@ -3,7 +3,27 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-24 — **UI.PDV.ComprovanteRetirada — comprovante "para retirar
+> **Última atualização:** 2026-08-24 — **UI.PDV.RealceModerado — repaginação visual do PDV (mesma
+> Opção A, com cor e profundidade) — NO AR e E2E DO OWNER VALIDADO (2026-08-24, "Validado com sucesso").
+> Fatia CONCLUÍDA.** Achado do Owner: o novo layout (Opção A) agradou, mas a tela ficou **"um pouco
+> apagada"** — paleta quase toda monocromática de baixo contraste (branco sobre cinza-claro, `shadow-sm`
+> fraca, cor da marca só em links de texto). Direção escolhida entre 3 níveis: **realce moderado** (mantém a
+> estrutura, adiciona cor/profundidade nos pontos-chave). Aprovado via **mockup antes×depois** (Artifact
+> "PDV · Realce Moderado") — inclui refino pedido em comentário do Artifact (reforçar a divisória Carrinho ▸
+> Forma de pagamento e o contorno das caixinhas). Mudanças (**só apresentação**, JSX+classes Tailwind, um só
+> arquivo `apps/web/app/(app)/venda/page.tsx`): (1) **cabeçalho do carrinho na cor da marca** (indigo-600 +
+> ícone SVG inline, controles "Limpar" ajustados p/ contraste); (2) **Total em faixa destacada** (bloco
+> indigo-50/100, número 2xl); (3) **"Concluir venda"** em **emerald-600** + sombra, botões mais altos
+> (`py-2.5`); (4) **contorno mais nítido** (cartões catálogo/checkout ganham `border`, checkout sobe p/
+> `shadow-md`); (5) **miniatura colorida** (iniciais tingidas, novo `ProductThumb` — custo-zero, sem foto)
+> nos 3 ramos do catálogo; (6) título **"Venda"** com leve gradiente da marca. **Motor de venda intocado**
+> (todos handlers/memos/estados preservados) ⇒ **sem API, migration, core ou shared** (regras 1 e 7 não
+> disparam). Gates: web `tsc` 0 erros + `next build` (**23 rotas**, `/venda` 18.7→**19.2 kB**). **NO AR
+> (2026-08-24):** web Version `bc033abb`; smoke ✅ (HTML `no-store` + CSS 200). Commit local em `main` (push
+> do Owner). **E2E do Owner VALIDADO (2026-08-24, "Validado com sucesso").** **Próximo:** repaginar a tela de
+> **Produtos** com a mesma identidade visual + melhorar a disposição dos campos no cadastro (pedido do Owner).
+>
+> **Antes:** 2026-08-24 — **UI.PDV.ComprovanteRetirada — comprovante "para retirar
 > depois" (PDV + Entregas) — NO AR e E2E DO OWNER VALIDADO (2026-08-24, "tudo validado com sucesso").
 > Fatia CONCLUÍDA.** Pedido do
 > Owner: nas vendas com **retirada/entrega posterior** (ADR-020) faltava imprimir uma nota específica. Na
