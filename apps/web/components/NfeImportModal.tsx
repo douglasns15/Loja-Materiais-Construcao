@@ -312,25 +312,33 @@ export function NfeImportModal({
         role="dialog"
         aria-label="Importar NF-e"
         onClick={(e) => e.stopPropagation()}
-        className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-2xl"
+        className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:rounded-2xl"
       >
-        <div className="mb-4 flex items-start justify-between gap-3">
+        {/* Cabeçalho do painel na cor da marca (identidade do PDV / Produtos). */}
+        <div className="flex items-start justify-between gap-3 bg-indigo-600 px-5 py-4 text-white">
           <div>
-            <h2 className="text-lg font-bold">Importar NF-e (XML)</h2>
-            <p className="text-xs text-gray-600">
+            <h2 className="flex items-center gap-2 text-lg font-bold">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5" aria-hidden="true">
+                <path d="M14 2v6h6M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Importar NF-e (XML)
+            </h2>
+            <p className="text-xs text-indigo-100">
               Leia o XML da nota de compra e dê entrada no estoque casando cada item com o cadastro.
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded-lg px-2 py-1 text-gray-500 hover:bg-gray-100"
+            className="shrink-0 rounded-lg px-2 py-1 text-indigo-100 hover:bg-white/10 hover:text-white"
             aria-label="Fechar"
           >
             ✕
           </button>
         </div>
 
+        {/* Corpo rolável (o cabeçalho fica fixo no topo do painel). */}
+        <div className="overflow-y-auto p-5">
         {error && <p className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
         {summary && (
           <p className="mb-3 rounded-lg bg-green-50 p-3 text-sm text-green-800">{summary}</p>
@@ -349,7 +357,7 @@ export function NfeImportModal({
               type="button"
               onClick={() => fileRef.current?.click()}
               disabled={loading}
-              className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
             >
               {loading ? 'Lendo…' : 'Escolher XML da NF-e'}
             </button>
@@ -582,7 +590,7 @@ export function NfeImportModal({
                   type="button"
                   onClick={onConfirm}
                   disabled={saving || selectedCount === 0}
-                  className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+                  className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50 disabled:shadow-none"
                 >
                   {saving ? 'Lançando…' : 'Confirmar entrada'}
                 </button>
@@ -590,6 +598,7 @@ export function NfeImportModal({
             </div>
           </>
         )}
+        </div>
       </div>
     </div>
   );

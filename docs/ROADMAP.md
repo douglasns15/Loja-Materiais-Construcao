@@ -3,7 +3,27 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-24 — **UI.Produtos.RepaginacaoVisual — cadastro/edição/lista de
+> **Última atualização:** 2026-08-24 — **UI.Estoque.RepaginacaoVisual — tela de Estoque (página + 2
+> modais) com a identidade do PDV — NO AR e E2E DO OWNER VALIDADO (2026-08-24, "tudo validado com
+> sucesso"). Fatia CONCLUÍDA.** Terceira tela da onda de repaginação (PDV → Produtos → Estoque),
+> **só apresentação**. **(Página `apps/web/app/(app)/estoque/page.tsx`):** título com gradiente da marca;
+> formulários **"Entrada de estoque"** (CTA **emerald** "Registrar entrada") e **"Ajuste de inventário"**
+> (botão secundário neutro) com **cabeçalho indigo** (+ ícone) + rodapé; tabelas **"Estoque atual"** e
+> **"Movimentações recentes"** com **cabeçalho `bg-indigo-600`** (cliques de ordenação legíveis em branco,
+> `text-indigo-100`/`text-white`); painel **"Reposição"** mantém o **âmbar** (alerta semântico) com mais
+> profundidade. **(Modais, 2ª sub-fatia mesmo dia):** **`StockDetail`** (detalhe do produto ao clicar num
+> item de "Estoque atual") e **`NfeImportModal`** ("Importar NF-e") ganharam **cabeçalho indigo + corpo
+> rolável** (header fixo no topo); a tabela interna do StockDetail virou indigo; no NF-e "Escolher XML"
+> ficou indigo e "Confirmar entrada" **emerald** ("Trocar arquivo" neutro). **Motor de estoque intocado**
+> (handlers/validação/ADR-001 preservados) ⇒ **sem API, migration, core ou shared** (regras 1 e 7 não
+> disparam). Gates: web `tsc` 0 erros + `next build` (**23 rotas**, `/estoque` 15.1→**15.5 kB**). **NO AR
+> (2026-08-24):** web Version `5a787bbf` (página) → `bab55b99` (modais); smokes ✅ (HTML `no-store` + CSS
+> 200). Commit local em `main` (push do Owner). **E2E do Owner VALIDADO (2026-08-24, "tudo validado com
+> sucesso")** — página e os dois modais. **Próximo (outra sessão): seguir a repaginação nas demais telas
+> (Clientes, Fornecedores, Vendas/Histórico, Contas a Receber, Caixa, Relatórios, Entregas) ou retomar
+> itens funcionais do Horizonte 1.**
+>
+> **Antes:** 2026-08-24 — **UI.Produtos.RepaginacaoVisual — cadastro/edição/lista de
 > Produtos com a identidade do PDV + campos agrupados — NO AR e E2E DO OWNER VALIDADO (2026-08-24,
 > "tudo validado com sucesso em Produtos"). Fatia CONCLUÍDA.** Sequência natural do realce do PDV: o
 > Owner apontou que o **cadastro de produto** tinha a disposição dos campos "ruim ao visual" — era um

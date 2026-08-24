@@ -466,7 +466,9 @@ export default function EstoquePage() {
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">Estoque</h1>
+        <h1 className="w-fit bg-gradient-to-r from-indigo-700 to-indigo-500 bg-clip-text text-2xl font-bold text-transparent">
+          Estoque
+        </h1>
         {/* Importar NF-e (ADR-025, Fatia 2): dá entrada de vários itens de uma nota de compra. */}
         <button
           type="button"
@@ -487,7 +489,7 @@ export default function EstoquePage() {
       {/* Painel de reposição (EF-2): tudo que está no ponto de reposição num lugar só, com a
           sugestão de compra (quanto falta para voltar ao mínimo). Só aparece quando há itens. */}
       {replenish.length > 0 && (
-        <div className="mb-6 overflow-hidden rounded-2xl border border-amber-200 bg-amber-50 shadow-sm">
+        <div className="mb-6 overflow-hidden rounded-2xl border border-amber-200 bg-amber-50 shadow-md">
           <button
             type="button"
             onClick={toggleReplenish}
@@ -558,9 +560,14 @@ export default function EstoquePage() {
         {me?.tenantActive === false ? (
           <StoreDisabledNotice message="A entrada de estoque está bloqueada. Fale com o suporte para reativar a loja." />
         ) : (
-        <form onSubmit={onEntry} className="rounded-2xl bg-white p-4 shadow-sm">
-          <h2 className="mb-3 font-semibold">Entrada de estoque</h2>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <form onSubmit={onEntry} className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-md">
+          <h2 className="flex items-center gap-2 bg-indigo-600 px-4 py-3 font-semibold text-white">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-[18px] w-[18px]" aria-hidden="true">
+              <path d="M12 3v12m0 0l4-4m-4 4l-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            Entrada de estoque
+          </h2>
+          <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
               <ProductPicker
                 products={products}
@@ -607,20 +614,27 @@ export default function EstoquePage() {
               className="rounded-lg border border-gray-300 px-3 py-2 sm:col-span-2"
             />
           </div>
+          <div className="border-t border-gray-200 bg-gray-50 p-4">
           <button
             type="submit"
             disabled={savingEntry}
-            className="mt-3 w-full rounded-lg bg-gray-900 py-2 font-medium text-white hover:bg-gray-800 disabled:opacity-60"
+            className="w-full rounded-lg bg-emerald-600 py-2.5 font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60 disabled:shadow-none"
           >
             {savingEntry ? 'Registrando…' : 'Registrar entrada'}
           </button>
+          </div>
         </form>
         )}
 
         {/* Ajuste de inventário */}
-        <form onSubmit={onAdjust} className="rounded-2xl bg-white p-4 shadow-sm">
-          <h2 className="mb-3 font-semibold">Ajuste de inventário</h2>
-          <div className="grid grid-cols-1 gap-3">
+        <form onSubmit={onAdjust} className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-md">
+          <h2 className="flex items-center gap-2 bg-indigo-600 px-4 py-3 font-semibold text-white">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-[18px] w-[18px]" aria-hidden="true">
+              <path d="M4 6h11M4 12h7M4 18h13M17 4v4M11 10v4M20 16v4" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            Ajuste de inventário
+          </h2>
+          <div className="grid grid-cols-1 gap-3 p-4">
             <ProductPicker
               products={products}
               value={adjust.productId}
@@ -651,21 +665,23 @@ export default function EstoquePage() {
               className="rounded-lg border border-gray-300 px-3 py-2"
             />
           </div>
+          <div className="border-t border-gray-200 bg-gray-50 p-4">
           <button
             type="submit"
             disabled={savingAdjust}
-            className="mt-3 w-full rounded-lg border border-gray-900 py-2 font-medium text-gray-900 hover:bg-gray-50 disabled:opacity-60"
+            className="w-full rounded-lg border border-gray-300 py-2.5 font-semibold text-gray-700 hover:bg-gray-100 disabled:opacity-60"
           >
             {savingAdjust ? 'Ajustando…' : 'Ajustar estoque'}
           </button>
           <p className="mt-2 text-xs text-gray-500">
             O ajuste manual é registrado na auditoria (ADR-004).
           </p>
+          </div>
         </form>
       </div>
 
       {/* Estoque atual por produto */}
-      <div className="mt-6 overflow-hidden rounded-2xl bg-white shadow-sm">
+      <div className="mt-6 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-md">
         <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
           <button
             type="button"
@@ -704,7 +720,7 @@ export default function EstoquePage() {
         {stockOpen && (
         <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-blue-200 text-left text-blue-900">
+          <thead className="bg-indigo-600 text-left text-white">
             <tr>
               {(
                 [
@@ -722,8 +738,8 @@ export default function EstoquePage() {
                     type="button"
                     onClick={() => sortBy(key)}
                     title={`Ordenar por ${label}`}
-                    className={`font-medium hover:text-gray-900 ${
-                      sort.key === key ? 'text-gray-900' : ''
+                    className={`font-medium hover:text-white ${
+                      sort.key === key ? 'text-white underline' : 'text-indigo-100'
                     }`}
                   >
                     {label}
@@ -831,7 +847,7 @@ export default function EstoquePage() {
       </div>
 
       {/* Histórico de movimentações */}
-      <div className="mt-6 overflow-hidden rounded-2xl bg-white shadow-sm">
+      <div className="mt-6 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-md">
         <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
           <button
             type="button"
@@ -908,7 +924,7 @@ export default function EstoquePage() {
 
         <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-blue-200 text-left text-blue-900">
+          <thead className="bg-indigo-600 text-left text-white">
             <tr>
               {(
                 [
@@ -925,8 +941,8 @@ export default function EstoquePage() {
                     type="button"
                     onClick={() => movSortBy(key)}
                     title={`Ordenar por ${label}`}
-                    className={`font-medium hover:text-gray-900 ${
-                      movSort.key === key ? 'text-gray-900' : ''
+                    className={`font-medium hover:text-white ${
+                      movSort.key === key ? 'text-white underline' : 'text-indigo-100'
                     }`}
                   >
                     {label}

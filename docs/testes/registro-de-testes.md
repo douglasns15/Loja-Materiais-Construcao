@@ -5384,3 +5384,50 @@ validado com sucesso"). Fatia CONCLUÍDA.** Checklist coberto:
 4. Entregas → abrir o pedido → "Imprimir comprovante" → cupom com itens/valores + faixa; "Pago" coerente com
    o saldo (venda paga = "PAGO — FALTA RETIRAR"; a prazo = só "FALTA RETIRAR").
 5. 80mm e A4; logo aparece; código/itens/total corretos.
+
+---
+
+## UI.Repaginacao — identidade visual unificada (PDV → Produtos → Estoque) (2026-08-24)
+
+Sequência de fatias **só de apresentação** (JSX + classes Tailwind), sem tocar em API/migration/core/shared,
+motores de venda/produto/estoque intactos. Direção: o PDV (Opção A) ficou "apagado"/monocromático; o Owner
+pediu realce e depois a mesma identidade nas demais telas. **Linguagem visual comum:** cabeçalho de
+seção/tabela/painel `bg-indigo-600 text-white`; CTA primário `bg-emerald-600` (+ sombra); cartões
+`rounded-2xl border border-gray-200 shadow-md`; título com gradiente `from-indigo-700 to-indigo-500`
+(bg-clip-text); alertas seguem a cor semântica (âmbar). Fluxo por tela: **mockup (Artifact) → Owner aprova →
+aplico → deploy web → E2E do Owner → commit + docs**.
+
+### 1) UI.PDV.RealceModerado — `apps/web/app/(app)/venda/page.tsx`
+
+Cabeçalho do carrinho indigo (+ ícone), **Total em faixa destacada** (indigo), "Concluir venda" emerald,
+contorno mais nítido (border nos cartões, shadow-md no checkout), **miniatura colorida** por produto no
+catálogo (novo `ProductThumb`, iniciais — custo-zero), título "Venda" com gradiente. Refino via comentário do
+Artifact: reforçar a divisória Carrinho ▸ Forma de pagamento e o contorno das caixinhas.
+Gates: web `tsc` 0 erros + `next build` (23 rotas, `/venda` 18.7→19.2 kB). **NO AR:** web `bc033abb`
+(smoke ✅). Commit `7452485`. **E2E do Owner ✅ VALIDADO (2026-08-24, "Validado com sucesso").**
+
+### 2) UI.Produtos.RepaginacaoVisual — `products/page.tsx` + `components/ProductDetail.tsx`
+
+Achado do Owner: o cadastro era um "paredão" de 6 colunas. **Cadastro/edição** reorganizados em **4 seções
+numeradas** (Identificação → Preço → Unidade/categoria/estoque → Descrição) via novo `SectionTitle`; **"Opções
+avançadas" recolhível** (`<details>`: unidade alternativa, par, acréscimo) — na edição **abre sozinha** quando
+o produto já tem esses dados (`initialAdvancedOpen` + estado `advOpen` sincronizado por `onToggle`); a config
+de **barra/rolo** fica VISÍVEL (essencial p/ unidade fechada). Cabeçalho indigo "Novo produto"/painel de
+edição; "Adicionar/Salvar" emerald, "Editar" indigo; **lista** com cabeçalho de tabela indigo.
+Gates: web `tsc` 0 erros + `next build` (23 rotas, `/products` 15.5→16.4 kB). **NO AR:** web `513f996b`
+(smoke ✅). Commit `f69fb6a`. **E2E do Owner ✅ VALIDADO (2026-08-24, "tudo validado com sucesso em Produtos").**
+
+### 3) UI.Estoque.RepaginacaoVisual — `estoque/page.tsx` + `components/StockDetail.tsx` + `components/NfeImportModal.tsx`
+
+Página: título com gradiente; formulários **Entrada** (CTA emerald) e **Ajuste** (secundário neutro) com
+cabeçalho indigo + rodapé; tabelas **Estoque atual** e **Movimentações** com cabeçalho indigo (ordenação por
+clique legível em branco); painel **Reposição** mantém o âmbar (alerta semântico), com mais profundidade.
+Modais (2ª sub-fatia, mesmo dia): **StockDetail** (detalhe do produto) e **NfeImportModal** (Importar NF-e)
+ganharam cabeçalho indigo + corpo rolável (header fixo); tabela interna do StockDetail indigo; no NF-e
+"Escolher XML" indigo e "Confirmar entrada" emerald ("Trocar arquivo" neutro).
+Gates: web `tsc` 0 erros + `next build` (23 rotas, `/estoque` 15.1→15.5 kB). **NO AR:** web `5a787bbf` (página)
+→ `bab55b99` (modais); smokes ✅. **E2E do Owner ✅ VALIDADO (2026-08-24, "tudo validado com sucesso")** —
+página e os dois modais. **Fatia CONCLUÍDA.**
+
+**Próximo (outra sessão):** seguir a repaginação nas demais telas (ex.: Clientes, Fornecedores, Vendas/
+Histórico, Contas a Receber, Caixa, Relatórios, Entregas) OU retomar itens funcionais do Horizonte 1.
