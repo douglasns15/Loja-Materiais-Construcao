@@ -3,7 +3,29 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-24 — **UI.PDV.RealceModerado — repaginação visual do PDV (mesma
+> **Última atualização:** 2026-08-24 — **UI.Produtos.RepaginacaoVisual — cadastro/edição/lista de
+> Produtos com a identidade do PDV + campos agrupados — NO AR e E2E DO OWNER VALIDADO (2026-08-24,
+> "tudo validado com sucesso em Produtos"). Fatia CONCLUÍDA.** Sequência natural do realce do PDV: o
+> Owner apontou que o **cadastro de produto** tinha a disposição dos campos "ruim ao visual" — era um
+> "paredão" num grid de 6 colunas, sem agrupamento nem a identidade da tela de Vendas. Aprovado via
+> **mockup** (Artifact "Cadastro de Produto · Repaginado") + 2 decisões do Owner: (a) opções avançadas
+> **recolhidas** por padrão; (b) escopo = **cadastro + edição + lista**. Mudanças (**só apresentação**;
+> `apps/web/app/(app)/products/page.tsx` + `apps/web/components/ProductDetail.tsx`): **(cadastro)** cartão
+> com cabeçalho **indigo "Novo produto"**, campos em **4 seções numeradas** (Identificação → Preço →
+> Unidade/categoria/estoque → Descrição) via novo helper `SectionTitle`, bloco **"Opções avançadas"
+> recolhível** (`<details>`) com unidade alternativa/par/acréscimo (a config de **barra/rolo** fica
+> VISÍVEL — essencial p/ unidade fechada), botão **"Adicionar produto" verde** num rodapé; **(edição)**
+> mesmo cabeçalho indigo (foto+nome+SKU) + corpo rolável, mesmas seções, "Opções avançadas" recolhidas
+> mas **abrindo sozinhas** quando o produto já tem par/embalagem/acréscimo (`initialAdvancedOpen` +
+> estado `advOpen` sincronizado por `onToggle`), "Editar" indigo e "Salvar alterações" verde; **(lista)**
+> cartão com borda/sombra + **cabeçalho da tabela indigo** + botão utilitário alinhado. **Motor de produto
+> intocado** (handlers/estados/validação/`buildPatch` preservados) ⇒ **sem API, migration, core ou shared**
+> (regras 1 e 7 não disparam). Gates: web `tsc` 0 erros + `next build` (**23 rotas**, `/products`
+> 15.5→**16.4 kB**). **NO AR (2026-08-24):** web Version `513f996b`; smoke ✅ (HTML `no-store` + CSS 200).
+> Commit local em `main` (push do Owner). **E2E do Owner VALIDADO (2026-08-24, "tudo validado com sucesso
+> em Produtos").** **Próximo (em curso): mesma identidade visual na tela de ESTOQUE (pedido do Owner).**
+>
+> **Antes:** 2026-08-24 — **UI.PDV.RealceModerado — repaginação visual do PDV (mesma
 > Opção A, com cor e profundidade) — NO AR e E2E DO OWNER VALIDADO (2026-08-24, "Validado com sucesso").
 > Fatia CONCLUÍDA.** Achado do Owner: o novo layout (Opção A) agradou, mas a tela ficou **"um pouco
 > apagada"** — paleta quase toda monocromática de baixo contraste (branco sobre cinza-claro, `shadow-sm`

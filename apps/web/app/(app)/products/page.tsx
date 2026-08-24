@@ -72,6 +72,22 @@ function Field({
   );
 }
 
+/**
+ * Título de uma seção do cadastro (repaginação 2026-08-24): número + nome, na cor da marca.
+ * Agrupa os campos em blocos (Identificação → Preço → Estoque → Descrição) em vez do
+ * "paredão" de 6 colunas — mesma identidade visual do PDV.
+ */
+function SectionTitle({ n, children }: { n: number; children: React.ReactNode }) {
+  return (
+    <p className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-indigo-700">
+      <span className="grid h-5 w-5 place-items-center rounded-full bg-indigo-50 text-[11px] font-extrabold text-indigo-700">
+        {n}
+      </span>
+      {children}
+    </p>
+  );
+}
+
 export default function ProductsPage() {
   const online = useOnline();
   const [products, setProducts] = useState<Product[]>([]);
@@ -477,17 +493,26 @@ export default function ProductsPage() {
 
   return (
     <div className="mx-auto max-w-6xl">
-      <h1 className="mb-6 text-2xl font-bold">Produtos</h1>
+      <h1 className="mb-6 w-fit bg-gradient-to-r from-indigo-700 to-indigo-500 bg-clip-text text-2xl font-bold text-transparent">
+        Produtos
+      </h1>
 
       {/* Tela online-only (ADR-012 (c)): offline mostra o aviso de rede, não o erro cru. */}
       <OfflineNotice />
 
       <form
         onSubmit={onCreate}
-        className="mb-6 grid grid-cols-1 gap-3 rounded-2xl bg-white p-4 shadow-sm sm:grid-cols-6"
+        className="mb-6 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-md"
       >
+        {/* Cabeçalho do cartão na cor da marca (mesma identidade do PDV). */}
+        <div className="flex items-center gap-2 bg-indigo-600 px-4 py-3 font-semibold text-white">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-[18px] w-[18px]" aria-hidden="true">
+            <path d="M12 5v14M5 12h14" strokeLinecap="round" />
+          </svg>
+          Novo produto
+        </div>
         {copiedFromName && (
-          <div className="flex items-start justify-between gap-2 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700 sm:col-span-6">
+          <div className="m-4 mb-0 flex items-start justify-between gap-2 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700">
             <span>
               Copiado de <strong>{copiedFromName}</strong> como base. Defina um <strong>SKU</strong>{' '}
               novo (código de barras é único) e ajuste o que precisar. Estoque inicial e par não são
@@ -503,6 +528,10 @@ export default function ProductsPage() {
             </button>
           </div>
         )}
+        {/* 1 · Identificação */}
+        <section className="p-4">
+          <SectionTitle n={1}>Identificação</SectionTitle>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Nome" className="sm:col-span-2">
           <input
             ref={nameRef}
@@ -511,7 +540,7 @@ export default function ProductsPage() {
             className="w-full rounded-lg border border-gray-300 px-3 py-2"
           />
         </Field>
-        <Field label="Nome popular (opcional)" className="sm:col-span-2">
+        <Field label="Nome popular (opcional)">
           <input
             value={form.popularName}
             onChange={(e) => setForm({ ...form, popularName: e.target.value })}
@@ -519,7 +548,7 @@ export default function ProductsPage() {
             className="w-full rounded-lg border border-gray-300 px-3 py-2"
           />
         </Field>
-        <Field label="Fabricante (opcional)" className="sm:col-span-2">
+        <Field label="Fabricante (opcional)">
           <input
             value={form.manufacturer}
             onChange={(e) => setForm({ ...form, manufacturer: e.target.value })}
@@ -529,7 +558,7 @@ export default function ProductsPage() {
           />
         </Field>
         {/* SKU = código INTERNO da loja (distinto do código de barras/EAN abaixo). */}
-        <div className="flex flex-col gap-1 sm:col-span-2">
+        <div className="flex flex-col gap-1">
           <span className="text-xs font-medium text-gray-600">SKU (código interno)</span>
           <div className="flex gap-2">
             <input
@@ -545,7 +574,7 @@ export default function ProductsPage() {
           </div>
         </div>
         {/* Código de barras (EAN/GTIN) — dispara o enriquecimento automático (ADR-025). */}
-        <div className="flex flex-col gap-1 sm:col-span-2">
+        <div className="flex flex-col gap-1">
           <span className="text-xs font-medium text-gray-600">Código de barras (EAN)</span>
           <div className="flex gap-2">
             <input
@@ -564,7 +593,7 @@ export default function ProductsPage() {
         </div>
         {/* Resultado da busca inteligente de EAN: ficha (foto/nome/marca/NCM) + "Preencher". */}
         {(eanLookup.loading || eanLookup.result) && (
-          <div className="sm:col-span-6">
+          <div className="sm:col-span-2">
             <EanEnrichmentCard
               state={eanLookup}
               onApply={(data) => {
@@ -579,9 +608,13 @@ export default function ProductsPage() {
             />
           </div>
         )}
-        {/* Esteira de precificação sincronizada (Custo · Markup · Preço · Margem). A verdade
-            continua sendo costPrice/salePrice; markup e margem são derivados (sem loop). */}
-        <div className="sm:col-span-6">
+          </div>
+        </section>
+        {/* 2 · Preço e margem */}
+        <section className="border-t border-gray-200 p-4">
+          <SectionTitle n={2}>Preço e margem</SectionTitle>
+          {/* Esteira de precificação sincronizada (Custo · Markup · Preço · Margem). A verdade
+              continua sendo costPrice/salePrice; markup e margem são derivados (sem loop). */}
           <PricingEsteira
             costPrice={form.costPrice}
             salePrice={form.salePrice}
@@ -589,9 +622,13 @@ export default function ProductsPage() {
             costLabel={isClosedUnit ? `Custo ${unitArticle}` : 'Custo'}
             priceLabel={isClosedUnit ? `Preço ${unitArticle}` : 'Preço de venda'}
           />
-        </div>
+        </section>
+        {/* 3 · Classificação e estoque */}
+        <section className="border-t border-gray-200 p-4">
+          <SectionTitle n={3}>Unidade, categoria e estoque</SectionTitle>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {/* Unidade de venda (UnitType) — como o produto é vendido/medido. */}
-        <Field label="Unidade de venda" className="sm:col-span-2">
+        <Field label="Unidade de venda">
           <select
             value={form.unit}
             onChange={(e) => setForm({ ...form, unit: e.target.value as UnitType })}
@@ -607,7 +644,7 @@ export default function ProductsPage() {
           </select>
         </Field>
         {/* Categoria (opcional) — organiza o catálogo. Cadastre categorias em Cadastros › Categorias. */}
-        <Field label="Categoria (opcional)" className="sm:col-span-2">
+        <Field label="Categoria (opcional)">
           <select
             value={form.categoryId}
             onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
@@ -624,7 +661,7 @@ export default function ProductsPage() {
           </select>
         </Field>
         {/* Peso: digita em kg ou g; guardamos canônico em kg (banco). Opcional. */}
-        <div className="flex flex-col gap-1 sm:col-span-2">
+        <div className="flex flex-col gap-1">
           <span className="text-xs font-medium text-gray-600">Peso (opcional)</span>
           <div className="flex gap-2">
             <input
@@ -675,8 +712,13 @@ export default function ProductsPage() {
             className="w-full rounded-lg border border-gray-300 px-3 py-2"
           />
         </Field>
+          </div>
+        </section>
+        {/* 4 · Descrição */}
+        <section className="border-t border-gray-200 p-4">
+          <SectionTitle n={4}>Descrição / observação</SectionTitle>
         {/* Descrição/observação (opcional, até 500 caracteres). */}
-        <Field label="Descrição / observação (opcional)" className="sm:col-span-4">
+        <Field label="Descrição / observação (opcional)">
           <textarea
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
@@ -686,9 +728,12 @@ export default function ProductsPage() {
             className="w-full resize-y rounded-lg border border-gray-300 px-3 py-2"
           />
         </Field>
-        {/* ADR-017: barra/rolo como principal — tamanho da barra + preço por metro (opcional). */}
+        </section>
+        {/* ADR-017: barra/rolo como principal — tamanho da barra + preço por metro (opcional).
+            Fica VISÍVEL (não nas avançadas): para unidade fechada o tamanho é essencial. */}
         {isClosedUnit && (
-          <fieldset className="rounded-xl border border-dashed border-indigo-300 bg-indigo-50/40 p-3 sm:col-span-6">
+          <section className="border-t border-gray-200 p-4">
+          <fieldset className="rounded-xl border border-dashed border-indigo-300 bg-indigo-50/40 p-3">
             <legend className="px-1 text-xs font-medium text-indigo-700">
               {unitTypeLabels[form.unit]} — tamanho e venda por metro
             </legend>
@@ -720,10 +765,26 @@ export default function ProductsPage() {
               vazio ⇒ só vende inteiro.
             </p>
           </fieldset>
+          </section>
         )}
+        {/* Opções avançadas — recolhidas por padrão (unidade alternativa, par, acréscimo no cartão).
+            No cadastro comum quase nunca são usadas; ficam a 1 clique para não poluir o formulário. */}
+        <details className="group border-t border-gray-200">
+          <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-4 text-sm font-semibold text-gray-700 [&::-webkit-details-marker]:hidden">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4 text-gray-500" aria-hidden="true">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V22a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 6 20.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 3 15" strokeLinecap="round" />
+            </svg>
+            Opções avançadas
+            <span className="font-normal text-gray-400">— unidade alternativa, par, acréscimo no cartão</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="ml-auto h-[18px] w-[18px] text-gray-400 transition group-open:rotate-180" aria-hidden="true">
+              <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </summary>
+          <div className="space-y-3 px-4 pb-4">
         {/* Venda em unidade alternativa (EF-3, ADR-013): embalagem fechada com preço próprio. */}
         {!isClosedUnit && (
-        <fieldset className="rounded-xl border border-dashed border-gray-300 p-3 sm:col-span-6">
+        <fieldset className="rounded-xl border border-dashed border-gray-300 p-3">
           <legend className="px-1 text-xs font-medium text-gray-600">
             Venda em unidade alternativa (opcional) — ex.: fio por metro OU rolo fechado
           </legend>
@@ -766,7 +827,7 @@ export default function ProductsPage() {
         </fieldset>
         )}
         {/* Produto agregado — venda em par (ADR-015). Ex.: parafuso nº10 + bucha nº10. */}
-        <fieldset className="rounded-xl border border-dashed border-gray-300 p-3 sm:col-span-6">
+        <fieldset className="rounded-xl border border-dashed border-gray-300 p-3">
           <legend className="px-1 text-xs font-medium text-gray-600">
             Vendido em par (opcional) — ex.: parafuso + bucha, com preço do par
           </legend>
@@ -807,7 +868,7 @@ export default function ProductsPage() {
         </fieldset>
         {/* Acréscimo por forma de pagamento (ADR-016). Opt-in: só sobe o preço de quem for
             preenchido aqui — nunca é derivado da taxa da maquininha da loja. */}
-        <fieldset className="rounded-xl border border-dashed border-gray-300 p-3 sm:col-span-6">
+        <fieldset className="rounded-xl border border-dashed border-gray-300 p-3">
           <legend className="px-1 text-xs font-medium text-gray-600">
             Acréscimo por forma de pagamento (opcional) — quanto o preço SOBE no cartão
           </legend>
@@ -843,13 +904,18 @@ export default function ProductsPage() {
             </p>
           )}
         </fieldset>
-        <button
-          type="submit"
-          disabled={saving}
-          className="rounded-lg bg-gray-900 py-2 font-medium text-white hover:bg-gray-800 disabled:opacity-60 sm:col-span-6"
-        >
-          {saving ? 'Salvando…' : 'Adicionar produto'}
-        </button>
+          </div>
+        </details>
+        {/* Rodapé de ações do cadastro. */}
+        <div className="border-t border-gray-200 bg-gray-50 p-4">
+          <button
+            type="submit"
+            disabled={saving}
+            className="w-full rounded-lg bg-emerald-600 py-2.5 font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60 disabled:shadow-none"
+          >
+            {saving ? 'Salvando…' : 'Adicionar produto'}
+          </button>
+        </div>
       </form>
 
       {/* Erro cru só quando online (offline vira "Failed to fetch" — o aviso acima já explica). */}
@@ -868,9 +934,9 @@ export default function ProductsPage() {
         <BarcodeScanButton onScan={handleScannedCode} label="Escanear para buscar ou cadastrar" />
       </div>
 
-      <div className="overflow-x-auto rounded-2xl bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-md">
         <table className="w-full text-sm">
-          <thead className="bg-blue-200 text-left text-blue-900">
+          <thead className="bg-indigo-600 text-left text-white">
             <tr>
               <th className="px-4 py-2">Nome</th>
               <th className="px-4 py-2">Fabricante</th>
@@ -952,7 +1018,7 @@ export default function ProductsPage() {
                           type="button"
                           onClick={() => saveMin(p)}
                           disabled={!changed || savingMinId === p.id}
-                          className="rounded bg-gray-900 px-2 py-1 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-30"
+                          className="rounded bg-indigo-600 px-2 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-30"
                         >
                           {savingMinId === p.id ? '…' : 'Salvar'}
                         </button>
