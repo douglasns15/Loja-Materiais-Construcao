@@ -80,6 +80,24 @@
   font-size: 0.95em;
   margin-bottom: 2px;
 }
+/* Aviso de retirada (ADR-020) — faixa em destaque no comprovante "para retirar depois":
+   moldura grossa + texto centralizado ("PAGO — FALTA RETIRAR / Traga esta nota…"). */
+#print-area .rc-notice {
+  border: 2px solid #000;
+  border-radius: 4px;
+  padding: 6px 8px;
+  margin: 8px 0;
+  text-align: center;
+}
+#print-area .rc-notice .rc-notice-title {
+  font-weight: 800;
+  font-size: 1.05em;
+  letter-spacing: 0.03em;
+}
+#print-area .rc-notice .rc-notice-text {
+  font-size: 0.85em;
+  margin-top: 2px;
+}
 #print-area .rc-table {
   width: 100%;
   border-collapse: collapse;

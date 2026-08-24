@@ -171,6 +171,9 @@ type View =
       /** Crédito da loja usado nesta venda (ADR-022, Fatia C) — mostrado como forma no comprovante. */
       storeCredit?: number;
       customerName?: string | null;
+      /** Venda com retirada/entrega futura (ADR-020): habilita o 2º botão "Imprimir comprovante de
+       *  retirada" na tela final (cupom + faixa "FALTA RETIRAR"). */
+      scheduled?: boolean;
     }
   | {
       kind: 'quote';
@@ -373,6 +376,9 @@ export default function VendaPage() {
     cardFeeCreditPercent: number | null;
   } | null>(null);
   const [printModel, setPrintModel] = useState<'80mm' | 'A4'>('80mm');
+  // Retirada/entrega futura (ADR-020): quando `true`, a próxima impressão sai como COMPROVANTE DE
+  // RETIRADA (cupom + faixa "FALTA RETIRAR"). O botão de retirada liga; o "Imprimir" comum desliga.
+  const [printPickup, setPrintPickup] = useState(false);
   // Salvar orçamento (ADR-024): validade default = +7 dias (editável antes de salvar) + estado de save.
   const [quoteValidity, setQuoteValidity] = useState(() => {
     const d = new Date();
@@ -583,7 +589,11 @@ export default function VendaPage() {
 
   /** Abre o diálogo de impressão. O PDF sai nomeado pelo código do documento (venda V-000128 /
    *  orçamento O-000045) em vez do genérico "NexoLoja.pdf". Ver lib/print.ts. */
-  async function imprimir() {
+  async function imprimir(pickup = false) {
+    // Liga/desliga a faixa "FALTA RETIRAR" antes de abrir o diálogo e deixa o React aplicar a mudança
+    // ao #print-area (rAF) — assim o cupom impresso reflete o modo escolhido (retirada × normal).
+    setPrintPickup(pickup);
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
     const fileName =
       view?.kind === 'quote'
         ? formatQuoteNumber(view.quoteNumber)
@@ -1237,6 +1247,8 @@ export default function VendaPage() {
       date: new Date().toLocaleString('pt-BR'),
       ...(isCredit ? { credit: creditValue, customerName } : {}),
       ...(storeCreditUsed > 0 ? { storeCredit: storeCreditUsed, customerName } : {}),
+      // Retirada/entrega futura (ADR-020): liga o botão "Imprimir comprovante de retirada" na prévia.
+      ...(isScheduled ? { scheduled: true } : {}),
     };
 
     // --- Offline: enfileira a venda (só com o recurso OFFLINE_SALES ligado) ---
@@ -1797,7 +1809,7 @@ export default function VendaPage() {
             </div>
           ) : null}
 
-          <div className="flex items-center gap-2 border-t border-gray-200 pt-3">
+          <div className="flex flex-wrap items-center gap-2 border-t border-gray-200 pt-3">
             <span className="text-sm text-gray-600">Imprimir:</span>
             <select
               value={printModel}
@@ -1808,11 +1820,21 @@ export default function VendaPage() {
               <option value="A4">A4</option>
             </select>
             <button
-              onClick={imprimir}
+              onClick={() => imprimir(false)}
               className="rounded-lg border border-gray-300 px-3 py-1 text-sm font-medium hover:bg-gray-100"
             >
               Imprimir
             </button>
+            {/* Retirada/entrega futura (ADR-020): 2º comprovante com a faixa "FALTA RETIRAR" para o
+                cliente trazer na retirada. Só aparece quando a venda foi marcada como retirada futura. */}
+            {view.kind === 'done' && view.scheduled ? (
+              <button
+                onClick={() => imprimir(true)}
+                className="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-1 text-sm font-medium text-indigo-700 hover:bg-indigo-100"
+              >
+                Comprovante de retirada
+              </button>
+            ) : null}
           </div>
 
           {/* ADR-024 (refino de UX): validade + "Salvar orçamento" na prévia. Só enquanto a cotação é
@@ -1905,6 +1927,9 @@ export default function VendaPage() {
           orderNumber={view.kind === 'done' ? view.orderNumber : undefined} // ADR-023
           quoteNumber={view.kind === 'quote' ? view.quoteNumber : undefined} // ADR-024
           validUntil={view.kind === 'quote' ? view.validUntil : undefined} // ADR-024
+          pickupNotice={printPickup} // ADR-020: faixa "FALTA RETIRAR" no comprovante de retirada
+          // "Pago" só quando não sobrou saldo a prazo (venda a prazo ⇒ só "FALTA RETIRAR").
+          pickupPaid={!(view.kind === 'done' && (view.credit ?? 0) > 0)}
         />
       </div>
     );

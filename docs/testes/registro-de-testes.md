@@ -5327,7 +5327,8 @@ migration, core ou shared** ⇒ regras 1 e 7 não disparam.
 **NO AR (2026-08-22):** web Version `7abda232`; smoke ✅ (HTML `no-store` + CSS 200). Commit `d88d3eb`
 (local em `main`; push do Owner).
 
-**E2E do Owner — ⏳ PENDENTE** (exige login na loja Demo). Checklist:
+**E2E do Owner — ✅ VALIDADO (2026-08-24, "passaram com sucesso… funcionando corretamente").** Fatia
+CONCLUÍDA. Conferido na loja Demo (checklist abaixo):
 1. Busca/catálogo à esquerda ocupa o espaço; resultados só ao digitar; adicionar por unidade, embalagem
    fechada, por metro (ADR-017) e par (ADR-015).
 2. Checkout fixo à direita rola junto (`sticky`); carrinho em linhas compactas com ⓘ, selos, stepper (− campo +),
@@ -5337,3 +5338,48 @@ migration, core ou shared** ⇒ regras 1 e 7 não disparam.
 4. Concluir venda e Orçamento; nota/comprovante.
 5. Carrinho grande: a lista rola dentro do painel e o Total/Concluir seguem visíveis.
 6. Responsivo `<lg`: empilha busca → checkout. Offline: aviso + fila intactos.
+
+---
+
+## UI.PDV.ComprovanteRetirada — comprovante "para retirar depois" (PDV + Entregas) (2026-08-24)
+
+**Pedido do Owner.** Nas vendas com **retirada/entrega posterior** (ADR-020) faltava imprimir uma nota
+específica para essa situação. Na tela final do pagamento só havia "Imprimir" (cupom comum). Agora há um
+**2º botão** que gera um **comprovante de retirada** = o mesmo cupom + uma **faixa em destaque**. **A mesma
+impressão também na tela de Entregas** (para reimprimir quando o cliente volta / perdeu a via).
+
+**Frase escolhida pelo Owner (entre 3 opções):** faixa "**✔ PAGO — FALTA RETIRAR**" + "*Traga esta nota
+para retirar a mercadoria.*" **Comportamento adaptativo:** quando a venda tem **saldo a prazo em aberto**
+(fiado, ADR-019), a faixa mostra só "**FALTA RETIRAR**" (sem afirmar "Pago", que seria impreciso).
+
+**Superfícies:**
+- **`ReceiptPrint`** (`apps/web/components/ReceiptPrint.tsx`): novas props `pickupNotice` (liga a faixa) e
+  `pickupPaid` ("PAGO —" só quando não há saldo a prazo). Faixa `.rc-notice` (nova classe em `globals.css`,
+  moldura grossa centralizada). Reusado nas DUAS telas — sem componente novo.
+- **PDV** (`apps/web/app/(app)/venda/page.tsx`): `done` view ganhou `scheduled?`; botão "Comprovante de
+  retirada" aparece só quando a venda foi marcada como retirada futura. `imprimir(pickup)` liga/desliga a
+  faixa antes do diálogo (rAF p/ o `#print-area` refletir a escolha); "Imprimir" comum segue `pickup=false`.
+  `pickupPaid = !(credit > 0)`.
+- **Entregas** (`apps/web/components/DeliveryDetailModal.tsx`): busca o `/tenant` (cabeçalho da loja), seletor
+  80mm/A4 + botão "Imprimir comprovante", render oculto do `ReceiptPrint` (cupom das quantidades **vendidas**
+  + faixa). PDF nomeado pelo código da venda (V-000128.pdf).
+- **shared** (`packages/shared/src/delivery.ts`): `DeliveryItem` ganhou `unitPrice`/`total`; `DeliveryDetail`
+  ganhou `orderNumber`, `discountAmount`, `outstandingBalance`.
+- **API** (`apps/api/src/routes/deliveries.ts`, `GET /deliveries/:id`): `orderNumber`/`discountAmount` e os
+  preços de item **já vinham** (`include` sem `select`); adicionado só o **`outstandingBalance`** (saldo a
+  prazo DERIVADO do `Receivable`: `original − recebido − devolvido`, nunca negativo; `0` quando 100% pago).
+  Doc §8.2 atualizada (regra 7). **Sem migration.**
+
+**Gates:** shared **42/42** ✅; tsc shared/api/web 0 erros ✅; `next build` (**23 rotas**, `/venda` 18.7 kB,
+`/entregas` 5.66 kB) ✅; api `wrangler dry-run` ✅. ⚠️ **Deploy de API obrigatório** (`outstandingBalance`
+novo no detalhe).
+
+**NO AR (2026-08-24):** API Version `e3cab730` (smoke ✅ health 200, `/deliveries/:id` sem token 401); web
+Version `29d5616c` (smoke ✅ HTML no-store + CSS 200). **E2E do Owner — ⏳ PENDENTE.** Checklist:
+1. PDV: venda comum (sem retirada) → tela final mostra **só** "Imprimir" (sem o 2º botão).
+2. PDV: venda **com retirada/entrega posterior** → aparece "Comprovante de retirada"; imprime cupom + faixa
+   "✔ PAGO — FALTA RETIRAR"; "Imprimir" comum continua sem a faixa; PDF nomeado V-000128.
+3. PDV: retirada **+ a prazo** (fiado) → faixa mostra só "FALTA RETIRAR" (sem "Pago").
+4. Entregas → abrir o pedido → "Imprimir comprovante" → cupom com itens/valores + faixa; "Pago" coerente com
+   o saldo (venda paga = "PAGO — FALTA RETIRAR"; a prazo = só "FALTA RETIRAR").
+5. 80mm e A4; logo aparece; código/itens/total corretos.

@@ -2,12 +2,15 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import {
+  formatOrderNumber,
   FULFILLMENT_STATUS_LABELS,
   unitTypeLabels,
   type DeliveryDetail,
   type UnitType,
 } from '@nexoloja/shared';
 import { apiGet, apiPatch, apiPost } from '@/lib/api';
+import { printArea } from '@/lib/print';
+import { ReceiptPrint, type Store } from '@/components/ReceiptPrint';
 
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -49,6 +52,10 @@ export function DeliveryDetailModal({
   const [orderNote, setOrderNote] = useState('');
   const [savingNote, setSavingNote] = useState(false);
   const [noteSaved, setNoteSaved] = useState(false);
+  // Comprovante de retirada (ADR-020): cabeçalho da loja (buscado aqui p/ o modal ser autossuficiente)
+  // + modelo de papel. Espelha o `ReceivableDetailModal`.
+  const [store, setStore] = useState<Store | null>(null);
+  const [printModel, setPrintModel] = useState<'80mm' | 'A4'>('80mm');
 
   const load = useCallback(async () => {
     try {
@@ -73,6 +80,22 @@ export function DeliveryDetailModal({
   useEffect(() => {
     load();
   }, [load]);
+
+  // Cabeçalho da loja para o comprovante de retirada (uma vez ao abrir).
+  useEffect(() => {
+    apiGet<Store>('/tenant').then(setStore).catch(() => {});
+  }, []);
+
+  /** Imprime o COMPROVANTE DE RETIRADA (ADR-020): cupom da venda + faixa "FALTA RETIRAR", para o
+   *  cliente trazer na retirada. O PDF sai nomeado pelo código da venda (V-000128.pdf). */
+  async function imprimir() {
+    if (!detail) return;
+    await printArea({
+      model: printModel,
+      logoUrl: store?.logoUrl,
+      fileName: formatOrderNumber(detail.orderNumber),
+    });
+  }
 
   async function deliver(items: { orderItemId: string; quantity: number }[]) {
     if (items.length === 0) return;
@@ -191,6 +214,27 @@ export function DeliveryDetailModal({
             </div>
 
             {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+
+            {/* Comprovante de retirada (ADR-020): reimpressão do cupom com a faixa "FALTA RETIRAR"
+                para o cliente trazer na retirada da mercadoria. */}
+            <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 px-3 py-2">
+              <span className="text-sm text-gray-600">Comprovante de retirada:</span>
+              <select
+                value={printModel}
+                onChange={(e) => setPrintModel(e.target.value as '80mm' | 'A4')}
+                className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
+              >
+                <option value="80mm">Térmica 80mm</option>
+                <option value="A4">A4</option>
+              </select>
+              <button
+                type="button"
+                onClick={imprimir}
+                className="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-1 text-sm font-medium text-indigo-700 hover:bg-indigo-100"
+              >
+                Imprimir comprovante
+              </button>
+            </div>
 
             {/* Observação livre do pedido (editável) — informações gerais p/ quem separa/entrega
                 (ex.: "quem retira não é quem comprou"). Distinta da observação por retirada (log). */}
@@ -339,6 +383,26 @@ export function DeliveryDetailModal({
                 </ul>
               )}
             </div>
+
+            {/* Documento imprimível (oculto na tela) — cupom da venda + faixa "FALTA RETIRAR".
+                Mostra as quantidades VENDIDAS (cupom igual ao da venda); a faixa cobre o "falta
+                retirar". "Pago" só quando não há saldo a prazo em aberto (`outstandingBalance`). */}
+            <ReceiptPrint
+              kind="sale"
+              store={store}
+              items={detail.items.map((it) => ({
+                name: it.productName,
+                quantity: Number(it.quantity),
+                unitPrice: Number(it.unitPrice),
+              }))}
+              total={Number(detail.total)}
+              discount={Number(detail.discountAmount)}
+              date={dateTime(detail.createdAt)}
+              customerName={detail.customer?.name ?? null}
+              orderNumber={detail.orderNumber}
+              pickupNotice
+              pickupPaid={detail.outstandingBalance <= 0}
+            />
           </>
         )}
       </div>

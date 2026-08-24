@@ -155,6 +155,10 @@ deliveries.get('/:id', async (c) => {
         customer: { select: { id: true, name: true, phone: true } },
         items: { orderBy: { productName: 'asc' } },
         itemDeliveries: { orderBy: { deliveredAt: 'desc' } },
+        // Saldo a prazo (ADR-019) — 0 quando a venda foi 100% paga. O comprovante de retirada usa
+        // isto para decidir entre "PAGO — FALTA RETIRAR" e só "FALTA RETIRAR". O saldo é DERIVADO
+        // (não há coluna `balance`): originalAmount − settledAmount − returnedAmount.
+        receivable: { select: { originalAmount: true, settledAmount: true, returnedAmount: true } },
       },
     });
     if (!order) {
@@ -171,7 +175,23 @@ deliveries.get('/:id', async (c) => {
       };
     });
 
-    return c.json({ ok: true, data: { ...order, items } });
+    // Não vaza o objeto `receivable` cru; expõe só o saldo em aberto como `outstandingBalance`.
+    // Saldo devedor derivado (ADR-019): original − recebido − devolvido, nunca negativo.
+    const { receivable, ...orderRest } = order;
+    const outstandingBalance = receivable
+      ? Math.max(
+          0,
+          Number(
+            (
+              Number(receivable.originalAmount) -
+              Number(receivable.settledAmount) -
+              Number(receivable.returnedAmount)
+            ).toFixed(2),
+          ),
+        )
+      : 0;
+
+    return c.json({ ok: true, data: { ...orderRest, items, outstandingBalance } });
   } catch (err) {
     console.error('GET /deliveries/:id falhou:', err);
     return c.json({ ok: false, error: 'Falha ao abrir o pedido.' }, 500);

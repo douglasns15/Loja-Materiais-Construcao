@@ -3,8 +3,29 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-22 — **UI.PDV.LayoutOpcaoA — repaginação do PDV (catálogo à
-> esquerda, checkout fixo à direita) — NO AR, aguardando E2E do Owner. Fatia IMPLEMENTADA.**
+> **Última atualização:** 2026-08-24 — **UI.PDV.ComprovanteRetirada — comprovante "para retirar
+> depois" (PDV + Entregas) — IMPLEMENTADA, gates verdes; aguardando deploy + E2E do Owner.** Pedido do
+> Owner: nas vendas com **retirada/entrega posterior** (ADR-020) faltava imprimir uma nota específica. Na
+> tela final do pagamento agora há um **2º botão "Comprovante de retirada"** (aparece só quando a venda foi
+> marcada como retirada futura) = o **mesmo cupom + uma faixa em destaque**; e a **mesma impressão também na
+> tela de Entregas** (reimpressão quando o cliente volta / perdeu a via). **Frase escolhida pelo Owner entre
+> 3 opções:** "**✔ PAGO — FALTA RETIRAR** / Traga esta nota para retirar a mercadoria" — **adaptativa:** com
+> saldo a prazo em aberto (fiado, ADR-019) mostra só "**FALTA RETIRAR**" (não afirma "Pago"). **Reuso:** o
+> `ReceiptPrint` ganhou `pickupNotice`/`pickupPaid` + classe `.rc-notice` — **sem componente novo**; usado nas
+> duas telas. **PDV:** `done` view ganhou `scheduled?`; `imprimir(pickup)` liga/desliga a faixa antes do
+> diálogo (rAF). **Entregas** (`DeliveryDetailModal`): busca `/tenant`, seletor 80mm/A4, cupom oculto, PDF
+> nomeado V-000128. **shared:** `DeliveryItem`+`unitPrice`/`total`; `DeliveryDetail`+`orderNumber`/
+> `discountAmount`/`outstandingBalance`. **API `GET /deliveries/:id`:** os preços/código **já vinham**
+> (`include` sem `select`); adicionado só o **`outstandingBalance`** (saldo a prazo DERIVADO do `Receivable`),
+> doc §8.2 atualizada (regra 7). **Sem migration.** Gates: shared 42/42, tsc 0 erros, `next build` (23 rotas,
+> `/venda` 18.7 kB, `/entregas` 5.66 kB), `wrangler dry-run` ✅. **NO AR (2026-08-24):** API Version
+> `e3cab730` + web Version `29d5616c`; smokes ✅ (health 200, `/deliveries/:id` sem token 401; web HTML
+> no-store + CSS 200). Commit local em `main` (push do Owner). **Falta: E2E do Owner.** Ver
+> "UI.PDV.ComprovanteRetirada" no registro.
+>
+> **Antes:** 2026-08-24 — **UI.PDV.LayoutOpcaoA — repaginação do PDV (catálogo à
+> esquerda, checkout fixo à direita) — NO AR e E2E DO OWNER VALIDADO (2026-08-24, "passaram com sucesso…
+> funcionando corretamente"). Fatia CONCLUÍDA.**
 > Com o menu retrátil liberando largura, o Owner pediu repaginar o PDV no padrão de mercado.
 > Foram apresentadas **3 direções em mockup** (Artifact) + pesquisa da **Olist/Tiny** (busca no
 > topo, itens agrupados) e **Shopify POS** (carrinho sempre visível ao lado da busca); o Owner
