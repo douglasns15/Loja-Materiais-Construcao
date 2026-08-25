@@ -3,9 +3,11 @@ import {
   formatCnpj,
   formatCpf,
   formatCpfCnpj,
+  formatDebtNumber,
   formatOrderNumber,
   formatPhoneBr,
   formatQuoteNumber,
+  parseDebtNumberQuery,
   parseMoneyQuery,
   parseOrderNumberQuery,
   parseQuoteNumberQuery,
@@ -106,6 +108,30 @@ describe('formatQuoteNumber / parseQuoteNumberQuery', () => {
     expect(parseQuoteNumberQuery(parseQuoteNumberQuery('O-000045') === 45 ? formatQuoteNumber(45) : '')).toBe(45);
     expect(parseQuoteNumberQuery('O-')).toBeNull();
     expect(parseQuoteNumberQuery('O-000000')).toBeNull();
+  });
+});
+
+// ADR-026 — código humano da dívida do cliente (D-0001). Mesmo motor, prefixo D-, 4 dígitos.
+describe('formatDebtNumber / parseDebtNumberQuery', () => {
+  it('formata com prefixo D- e 4 dígitos', () => {
+    expect(formatDebtNumber(1)).toBe('D-0001');
+    expect(formatDebtNumber(14)).toBe('D-0014');
+    expect(formatDebtNumber(9999)).toBe('D-9999');
+    expect(formatDebtNumber(0)).toBe('');
+    expect(formatDebtNumber(null)).toBe('');
+  });
+
+  it('acima de 9999 só cresce (nunca trunca)', () => {
+    expect(formatDebtNumber(10000)).toBe('D-10000');
+  });
+
+  it('interpreta a busca em qualquer forma e faz ida-e-volta', () => {
+    expect(parseDebtNumberQuery('D-0001')).toBe(1);
+    expect(parseDebtNumberQuery('0014')).toBe(14);
+    expect(parseDebtNumberQuery('14')).toBe(14);
+    expect(parseDebtNumberQuery(formatDebtNumber(14))).toBe(14);
+    expect(parseDebtNumberQuery('D-')).toBeNull();
+    expect(parseDebtNumberQuery('D-0000')).toBeNull();
   });
 });
 

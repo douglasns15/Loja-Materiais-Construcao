@@ -62,6 +62,15 @@ enum ReceivableStatus {
   CANCELLED // Cancelada (a venda de origem foi cancelada/devolvida antes de qualquer recebimento)
 }
 
+/// Estado da DÍVIDA do cliente (ADR-026 — conta-corrente com código D-0001). OPEN enquanto há saldo
+/// devedor somando as vendas a prazo que a compõem; PAID quando o saldo zera (por recebimento e/ou
+/// devolução). Sem CANCELLED próprio: uma dívida vazia (todas as vendas canceladas) simplesmente
+/// fica sem recebíveis ativos — o estado é derivado do saldo.
+enum DebtStatus {
+  OPEN // Em aberto (há saldo devedor)
+  PAID // Quitada (saldo zerado) — arquivada na aba "Quitadas"
+}
+
 /// Destino do EXCEDENTE de uma devolução (ADR-022) — o que sobra depois de abater a dívida da
 /// venda: vira crédito na loja (abatido numa próxima compra) OU devolução em dinheiro pelo caixa.
 /// Escolha do operador no momento da devolução.
@@ -151,6 +160,10 @@ model Tenant {
   // mecânica atômica do `lastOrderNumber`; sequência SEPARADA (o prefixo O-/V- distingue). 0 = sem
   // orçamentos ainda (migration 0022 nasce assim para todas as lojas — sem backfill, tabelas vazias).
   lastQuoteNumber      Int      @default(0)
+  // Contador de DÍVIDAS da loja (ADR-026): último nº emitido, exibido como "D-0001". Mesma mecânica
+  // atômica do `lastOrderNumber`; sequência SEPARADA (prefixo D-). Alocado ao ABRIR uma dívida (1ª
+  // venda a prazo de um cliente sem dívida aberta). Backfill na migration 0030 acerta cada loja.
+  lastDebtNumber       Int      @default(0)
   isActive             Boolean  @default(true)
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
@@ -171,6 +184,7 @@ model Tenant {
   auditEvents         AuditEvent[]
   receivables         Receivable[]
   receivablePayments  ReceivablePayment[]
+  debts               Debt[]
   orderItemDeliveries OrderItemDelivery[]
   carts               Cart[]
   orderReturns        OrderReturn[]
@@ -435,6 +449,7 @@ model Customer {
   orders      Order[]
   deliveries  Delivery[]
   receivables Receivable[]
+  debts       Debt[]
   returns     OrderReturn[]
   credits     CustomerCredit[]
   quotes      Quote[]
@@ -624,6 +639,11 @@ model Receivable {
   tenantId       String           @db.Uuid // Denormalizado para isolamento multi-tenant (ADR-003)
   orderId        String           @unique @db.Uuid // A venda que originou a dívida (1 conta por venda)
   customerId     String           @db.Uuid // O devedor (obrigatório — não há fiado anônimo)
+  // Dívida do cliente (ADR-026) que AGREGA esta venda a prazo — a conta-corrente "D-0001". Nullable só
+  // por causa do backfill (migration 0030): vendas novas SEMPRE preenchem (a venda resolve/cria a
+  // dívida aberta do cliente sob a transação). O saldo da dívida = Σ dos saldos devedores dos seus
+  // recebíveis; a dívida é a unidade de quitação (recebe-se a dívida, não a venda nem o item).
+  debtId         String?          @db.Uuid
   originalAmount Decimal          @db.Decimal(12, 2) // Valor a prazo original da venda
   settledAmount  Decimal          @default(0) @db.Decimal(12, 2) // Quanto já foi recebido (corrente)
   /// Quanto da dívida foi abatido por DEVOLUÇÃO de itens (ADR-022) — distinto de `settledAmount`
@@ -641,12 +661,43 @@ model Receivable {
   tenant   Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   order    Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
   customer Customer            @relation(fields: [customerId], references: [id])
+  debt     Debt?               @relation(fields: [debtId], references: [id], onDelete: SetNull)
   payments ReceivablePayment[]
 
   @@index([tenantId, status])
   @@index([tenantId, customerId])
   @@index([tenantId, dueDate])
+  @@index([debtId])
   @@map("receivables")
+}
+
+/// Dívida do cliente (ADR-026) — a conta-corrente do fiado, com identidade "D-0001". Agrega 1+ vendas
+/// a prazo (`receivables`) do mesmo cliente e é a UNIDADE DE QUITAÇÃO: recebe-se o saldo da dívida
+/// (distribuído FIFO entre os recebíveis), não a venda nem o item. Regra de aplicação: no máximo UMA
+/// `OPEN` por (tenant, customer) — a venda a prazo resolve/abre a dívida aberta sob a transação. O
+/// saldo/estado é DERIVADO dos recebíveis (Σ saldos devedores); `status`/`closedAt` são cache do ciclo.
+model Debt {
+  id            String     @id @default(uuid()) @db.Uuid
+  tenantId      String     @db.Uuid // Denormalizado para RLS (ADR-003)
+  customerId    String     @db.Uuid // O devedor
+  // Código sequencial POR LOJA (ADR-023/ADR-026), exibido "D-0001" (`formatDebtNumber`). Único por
+  // loja; alocado atômico (`Tenant.lastDebtNumber` UPDATE ... RETURNING) ao ABRIR a dívida.
+  debtNumber    Int
+  status        DebtStatus @default(OPEN)
+  openedAt      DateTime   @default(now())
+  closedAt      DateTime? // Quando o saldo zerou (dívida quitada/arquivada)
+  // Autoria (ADR-010): quem abriu (1ª venda a prazo). Referência solta; snapshot do nome.
+  createdById   String?    @db.Uuid
+  createdByName String?    @db.VarChar(100)
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer    Customer     @relation(fields: [customerId], references: [id])
+  receivables Receivable[]
+
+  @@unique([tenantId, debtNumber]) // Código sequencial por loja (ADR-026)
+  @@index([tenantId, customerId, status]) // Achar a dívida aberta do cliente
+  @@index([tenantId, status])
+  @@map("debts")
 }
 
 /// Recebimento contra uma conta a receber (ADR-019): cada baixa (total ou parcial) da dívida.

@@ -31,6 +31,8 @@ import {
   maxStoreCreditForSale,
   customerAccountBalance,
   distributeAccountPayment,
+  debtBalance,
+  debtStatusAfter,
   returnableBaseQty,
   isValidPartialReturn,
   applyItemReturn,
@@ -617,6 +619,26 @@ describe('customerAccountBalance / distributeAccountPayment (conta do cliente �
     const recs = [{ id: 'a', balance: 33.33 }, { id: 'b', balance: 66.67 }];
     const alloc = distributeAccountPayment(100, recs);
     expect(alloc.reduce((s, a) => s + a.amount, 0)).toBe(100);
+  });
+});
+
+describe('dívida do cliente como entidade — D-0001 (ADR-026)', () => {
+  it('debtBalance: soma os saldos devedores das vendas a prazo da dívida', () => {
+    expect(debtBalance([{ id: 'a', balance: 6 }, { id: 'b', balance: 6.5 }])).toBe(12.5);
+    expect(debtBalance([{ id: 'a', balance: 0 }])).toBe(0);
+    expect(debtBalance([])).toBe(0);
+  });
+
+  it('debtBalance: sem erro de ponto flutuante (centavos)', () => {
+    expect(debtBalance([{ id: 'a', balance: 0.1 }, { id: 'b', balance: 0.2 }])).toBe(0.3);
+  });
+
+  it('debtStatusAfter: PAID quando o saldo zera, senão OPEN', () => {
+    expect(debtStatusAfter(0)).toBe('PAID');
+    expect(debtStatusAfter(0.004)).toBe('PAID'); // < meio centavo ⇒ quitada (arredondamento)
+    expect(debtStatusAfter(-0.01)).toBe('PAID'); // nunca negativo na prática, mas robusto
+    expect(debtStatusAfter(0.01)).toBe('OPEN');
+    expect(debtStatusAfter(6)).toBe('OPEN');
   });
 });
 

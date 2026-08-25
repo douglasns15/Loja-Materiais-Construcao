@@ -657,15 +657,44 @@ orders.post('/', requireActiveTenant, async (c) => {
       // (o fiado adia o pagamento, não a entrega — o estoque não muda); só o dinheiro fica
       // pendente. `customerId` garantido não-nulo pela validação de `credit > 0`.
       if (credit > 0) {
+        // Dívida do cliente (ADR-026): esta venda a prazo entra na dívida ABERTA do cliente; se ele
+        // não tiver nenhuma, abre uma nova alocando o próximo código `D-000X` (incremento atômico do
+        // `lastDebtNumber`, mesma mecânica do `lastOrderNumber`). A invariante "1 aberta por cliente"
+        // fica garantida SEM constraint: o lock da linha do tenant, já tomado no início desta
+        // transação para numerar a venda, serializa as vendas da loja — duas vendas simultâneas do
+        // mesmo cliente não conseguem abrir duas dívidas.
+        const userName = c.get('userName');
+        let debt = await tx.debt.findFirst({
+          where: { tenantId, customerId: sale.customerId!, status: 'OPEN' },
+          select: { id: true },
+        });
+        if (!debt) {
+          const { lastDebtNumber } = await tx.tenant.update({
+            where: { id: tenantId },
+            data: { lastDebtNumber: { increment: 1 } },
+            select: { lastDebtNumber: true },
+          });
+          debt = await tx.debt.create({
+            data: {
+              tenantId,
+              customerId: sale.customerId!,
+              debtNumber: lastDebtNumber,
+              createdById: userId, // autoria (ADR-010)
+              createdByName: userName,
+            },
+            select: { id: true },
+          });
+        }
         await tx.receivable.create({
           data: {
             tenantId,
             orderId: created.id,
             customerId: sale.customerId!,
+            debtId: debt.id, // liga a venda a prazo à dívida do cliente (ADR-026)
             originalAmount: credit,
             dueDate: sale.dueDate ? new Date(sale.dueDate) : null,
             createdById: userId, // autoria (ADR-010)
-            createdByName: c.get('userName'),
+            createdByName: userName,
           },
         });
       }

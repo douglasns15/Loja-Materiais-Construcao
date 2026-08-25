@@ -52,18 +52,20 @@ export function formatPhoneBr(value: string | null | undefined): string {
   return d;
 }
 
-/** Prefixo do código humano da venda (ADR-023) e do orçamento (ADR-024). O prefixo separa as duas
- *  sequências sequenciais por loja (venda `V-000128`, orçamento `O-000045`). */
+/** Prefixo do código humano da venda (ADR-023), do orçamento (ADR-024) e da dívida (ADR-026). O
+ *  prefixo separa as sequências sequenciais por loja (venda `V-000128`, orçamento `O-000045`,
+ *  dívida `D-0001`). */
 export const ORDER_CODE_PREFIX = 'V-';
 export const QUOTE_CODE_PREFIX = 'O-';
+export const DEBT_CODE_PREFIX = 'D-';
 
-/** Formata um número sequencial como `<prefixo>000128`: prefixo + inteiro com zeros à esquerda até 6
- *  dígitos (acima de 999999 só cresce, nunca trunca). Nula/≤0 volta string vazia. Base de
- *  `formatOrderNumber` (ADR-023) e `formatQuoteNumber` (ADR-024). */
-function formatSeqCode(prefix: string, n: number | null | undefined): string {
+/** Formata um número sequencial como `<prefixo>000128`: prefixo + inteiro com zeros à esquerda até
+ *  `pad` dígitos (acima disso só cresce, nunca trunca). Nula/≤0 volta string vazia. Base de
+ *  `formatOrderNumber`/`formatQuoteNumber` (6 díg.) e `formatDebtNumber` (4 díg. — `D-0001`). */
+function formatSeqCode(prefix: string, n: number | null | undefined, pad = 6): string {
   const num = Number(n);
   if (!Number.isFinite(num) || num <= 0) return '';
-  return `${prefix}${String(Math.floor(num)).padStart(6, '0')}`;
+  return `${prefix}${String(Math.floor(num)).padStart(pad, '0')}`;
 }
 
 /** Extrai os dígitos de uma busca por código e devolve o inteiro, ou `null` se não houver dígito
@@ -100,6 +102,19 @@ export function formatQuoteNumber(n: number | null | undefined): string {
 
 /** Busca por código de orçamento (ADR-024): `O-000045`/`000045`/`45` → 45. Alias de `parseSeqNumberQuery`. */
 export function parseQuoteNumberQuery(query: string | null | undefined): number | null {
+  return parseSeqNumberQuery(query);
+}
+
+/**
+ * Formata o número sequencial da dívida do cliente (ADR-026) como `D-0001` (4 dígitos). É
+ * APRESENTAÇÃO — o banco guarda o inteiro (`debts.debtNumber`). Entrada nula/≤0 volta string vazia.
+ */
+export function formatDebtNumber(n: number | null | undefined): string {
+  return formatSeqCode(DEBT_CODE_PREFIX, n, 4);
+}
+
+/** Busca por código de dívida (ADR-026): `D-0001`/`0001`/`1` → 1. Alias de `parseSeqNumberQuery`. */
+export function parseDebtNumberQuery(query: string | null | undefined): number | null {
   return parseSeqNumberQuery(query);
 }
 

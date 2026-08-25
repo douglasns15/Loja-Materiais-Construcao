@@ -339,6 +339,30 @@ export function distributeAccountPayment(
 }
 
 // ---------------------------------------------------------------------------
+// Dívida do cliente como entidade — conta-corrente "D-0001" (ADR-026)
+// ---------------------------------------------------------------------------
+
+/**
+ * Saldo devedor de uma DÍVIDA do cliente (ADR-026): a soma dos saldos devedores das vendas a prazo
+ * (`receivables`) que a compõem. Reúso do `customerAccountBalance` — a dívida é o mesmo agregado da
+ * "conta implícita" da ADR-022, agora com identidade. Recebe os saldos já calculados (via
+ * `receivableBalance`) e soma em centavos (sem erro de ponto flutuante). Fonte única para o servidor
+ * e a UI mostrarem o mesmo saldo.
+ */
+export function debtBalance(receivables: AccountReceivable[]): number {
+  return customerAccountBalance(receivables);
+}
+
+/**
+ * Estado da dívida (ADR-026) derivado do saldo: `PAID` quando zera (quitada — arquiva na aba
+ * "Quitadas"), senão `OPEN`. Comparação em centavos para tolerar arredondamento. Fonte única da
+ * transição, para o servidor não divergir do que a tela mostra ao receber/devolver.
+ */
+export function debtStatusAfter(balance: number): 'OPEN' | 'PAID' {
+  return toCents(balance) <= 0 ? 'PAID' : 'OPEN';
+}
+
+// ---------------------------------------------------------------------------
 // Devolução/troca por item + crédito do cliente (ADR-022, Fatia B/C)
 // ---------------------------------------------------------------------------
 
