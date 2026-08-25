@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
+  formatDateBr,
   formatDebtNumber,
   formatOrderNumber,
   PAYMENT_METHOD_LABELS,
@@ -248,6 +249,7 @@ export function CustomerAccountModal({
                       {detail.debtOpenedAt
                         ? ` · desde ${new Date(detail.debtOpenedAt).toLocaleDateString('pt-BR')}`
                         : ''}
+                      {detail.debtDueDate ? ` · vence ${formatDateBr(detail.debtDueDate)}` : ''}
                     </span>
                   </span>
                 )}

@@ -185,10 +185,11 @@ export type AccountCreditEvent = {
 export type CustomerAccountDetail = {
   customerId: string;
   customerName: string | null;
-  /** Dívida ABERTA do cliente (ADR-026) — código `D-000X` + quando abriu. `null` se não há aberta. */
+  /** Dívida ABERTA do cliente (ADR-026) — código `D-000X` + quando abriu + vencimento (Opção A). */
   debtId?: string | null;
   debtNumber?: number | null;
   debtOpenedAt?: string | null;
+  debtDueDate?: string | null;
   /** Observação da DÍVIDA/conta (ADR-022) — uma só nota por cliente, compartilhada por todas as
    * vendas dele. Separada da nota do cadastro/perfil (`Customer.notes`). */
   debtNotes: string | null;
@@ -216,6 +217,7 @@ export type DebtListRow = {
   debtId: string;
   debtNumber: number; // exibido D-000X (`formatDebtNumber`)
   status: DebtStatus;
+  dueDate: string | null; // vencimento da dívida (ADR-026, Opção A)
   customerName: string | null;
   originalTotal: number;
   balance: number;
@@ -250,6 +252,7 @@ export type DebtDetail = {
   debtId: string;
   debtNumber: number;
   status: DebtStatus;
+  dueDate: string | null; // vencimento da dívida (ADR-026, Opção A)
   openedAt: string;
   closedAt: string | null;
   customerId: string | null;

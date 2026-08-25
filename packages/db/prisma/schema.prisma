@@ -684,6 +684,10 @@ model Debt {
   // loja; alocado atômico (`Tenant.lastDebtNumber` UPDATE ... RETURNING) ao ABRIR a dívida.
   debtNumber    Int
   status        DebtStatus @default(OPEN)
+  // Vencimento da DÍVIDA (ADR-026, Opção A): UM vencimento por dívida, ATUALIZADO a cada venda a
+  // prazo que informa uma data (a última digitada vence). Omitir a data numa venda seguinte NÃO
+  // limpa o que já havia. Data-only (meia-noite UTC do dia) — a UI formata em UTC (`formatDateBr`).
+  dueDate       DateTime?
   openedAt      DateTime   @default(now())
   closedAt      DateTime? // Quando o saldo zerou (dívida quitada/arquivada)
   // Autoria (ADR-010): quem abriu (1ª venda a prazo). Referência solta; snapshot do nome.

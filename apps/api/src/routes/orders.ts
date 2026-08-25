@@ -664,6 +664,9 @@ orders.post('/', requireActiveTenant, async (c) => {
         // transação para numerar a venda, serializa as vendas da loja — duas vendas simultâneas do
         // mesmo cliente não conseguem abrir duas dívidas.
         const userName = c.get('userName');
+        // Vencimento (ADR-026, Opção A): mora na DÍVIDA. A data desta venda, se informada, vira o
+        // vencimento da dívida (a última digitada vence); omitir NÃO limpa o que já havia.
+        const dueDate = sale.dueDate ? new Date(sale.dueDate) : null;
         let debt = await tx.debt.findFirst({
           where: { tenantId, customerId: sale.customerId!, status: 'OPEN' },
           select: { id: true },
@@ -679,11 +682,15 @@ orders.post('/', requireActiveTenant, async (c) => {
               tenantId,
               customerId: sale.customerId!,
               debtNumber: lastDebtNumber,
+              dueDate, // vencimento inicial da dívida (ADR-026, Opção A)
               createdById: userId, // autoria (ADR-010)
               createdByName: userName,
             },
             select: { id: true },
           });
+        } else if (dueDate) {
+          // Dívida já aberta: só atualiza o vencimento quando a venda informa uma data nova.
+          await tx.debt.update({ where: { id: debt.id }, data: { dueDate } });
         }
         await tx.receivable.create({
           data: {
@@ -692,7 +699,7 @@ orders.post('/', requireActiveTenant, async (c) => {
             customerId: sale.customerId!,
             debtId: debt.id, // liga a venda a prazo à dívida do cliente (ADR-026)
             originalAmount: credit,
-            dueDate: sale.dueDate ? new Date(sale.dueDate) : null,
+            dueDate, // mantém no recebível também (histórico da venda); a dívida é a fonte exibida
             createdById: userId, // autoria (ADR-010)
             createdByName: userName,
           },

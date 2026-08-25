@@ -332,12 +332,19 @@ receivables.get('/accounts', async (c) => {
     // cliente, um mapa customerId → { debtId, debtNumber } cobre a lista inteira numa query.
     const openDebts = await prisma.debt.findMany({
       where: { tenantId, status: 'OPEN', customerId: { in: filtered.map((a) => a.customerId) } },
-      select: { id: true, customerId: true, debtNumber: true },
+      select: { id: true, customerId: true, debtNumber: true, dueDate: true },
     });
     const debtByCustomer = new Map(openDebts.map((d) => [d.customerId, d]));
     const rows = filtered.map((a) => {
       const d = debtByCustomer.get(a.customerId);
-      return { ...a, debtId: d?.id ?? null, debtNumber: d?.debtNumber ?? null };
+      return {
+        ...a,
+        debtId: d?.id ?? null,
+        debtNumber: d?.debtNumber ?? null,
+        // ADR-026 (Opção A): o vencimento vem da DÍVIDA (a última data digitada), não do mín. dos
+        // recebíveis. Mantém o fallback só p/ contas sem dívida (só crédito a favor).
+        nextDueDate: d ? d.dueDate : a.nextDueDate,
+      };
     });
 
     return c.json({ ok: true, data: { rows } });
@@ -542,7 +549,7 @@ receivables.get('/accounts/:customerId', async (c) => {
     // ADR-026: a dívida ABERTA do cliente (código D-000X + quando abriu) para o cabeçalho da tela.
     const openDebt = await prisma.debt.findFirst({
       where: { tenantId, customerId, status: 'OPEN' },
-      select: { id: true, debtNumber: true, openedAt: true },
+      select: { id: true, debtNumber: true, openedAt: true, dueDate: true },
     });
 
     const list = await prisma.receivable.findMany({
@@ -721,6 +728,7 @@ receivables.get('/accounts/:customerId', async (c) => {
         debtId: openDebt?.id ?? null, // ADR-026: identidade da dívida aberta (D-000X)
         debtNumber: openDebt?.debtNumber ?? null,
         debtOpenedAt: openDebt?.openedAt ?? null,
+        debtDueDate: openDebt?.dueDate ?? null, // vencimento da dívida (ADR-026, Opção A)
         debtNotes: customer.debtNotes, // observação da DÍVIDA (separada do cadastro — ADR-022)
         creditBalance: Number(customer.creditBalance), // crédito a favor (ADR-022 Fatia B)
         totalBalance,
@@ -790,6 +798,7 @@ receivables.get('/debts', async (c) => {
         id: true,
         debtNumber: true,
         status: true,
+        dueDate: true,
         openedAt: true,
         closedAt: true,
         customer: { select: { name: true } },
@@ -814,6 +823,7 @@ receivables.get('/debts', async (c) => {
         debtId: d.id,
         debtNumber: d.debtNumber,
         status: d.status,
+        dueDate: d.dueDate, // vencimento da dívida (ADR-026, Opção A)
         customerName: d.customer?.name ?? null,
         originalTotal: Number(originalTotal.toFixed(2)),
         balance,
@@ -859,6 +869,7 @@ receivables.get('/debts/:id', async (c) => {
         id: true,
         debtNumber: true,
         status: true,
+        dueDate: true,
         openedAt: true,
         closedAt: true,
         customer: { select: { id: true, name: true, debtNotes: true } },
@@ -954,6 +965,7 @@ receivables.get('/debts/:id', async (c) => {
         debtId: debt.id,
         debtNumber: debt.debtNumber, // ADR-026: D-000X
         status: debt.status,
+        dueDate: debt.dueDate, // vencimento da dívida (ADR-026, Opção A)
         openedAt: debt.openedAt,
         closedAt: debt.closedAt,
         customerId: debt.customer?.id ?? null,
