@@ -4,6 +4,7 @@ import { createPrismaClient } from '@nexoloja/db';
 import { isAdminRole } from '@nexoloja/shared';
 import { type Env, getConnectionString } from '../lib/request';
 import { verifySupportToken } from '../lib/supportToken';
+import { withDbRetry } from '../lib/dbRetry';
 
 // O conjunto de chaves públicas (JWKS) do Supabase é cacheado no isolate do Worker.
 let jwks: ReturnType<typeof createRemoteJWKSet> | undefined;
@@ -55,16 +56,20 @@ export const requireAuth = createMiddleware<Env>(async (c, next) => {
 
   try {
     const prisma = createPrismaClient(connectionString);
-    const user = await prisma.user.findUnique({
-      where: { id: sub },
-      select: {
-        tenantId: true,
-        role: true,
-        name: true,
-        isActive: true,
-        tenant: { select: { isActive: true } },
-      },
-    });
+    // Retry curto: o cold start do free tier faz esta leitura estourar na 1ª chamada depois de
+    // ociosa e devolver 500 ("Falha na autenticação." abaixo). Re-tentar a leitura é seguro.
+    const user = await withDbRetry('requireAuth.user', () =>
+      prisma.user.findUnique({
+        where: { id: sub },
+        select: {
+          tenantId: true,
+          role: true,
+          name: true,
+          isActive: true,
+          tenant: { select: { isActive: true } },
+        },
+      }),
+    );
     if (!user || !user.isActive) {
       return c.json({ ok: false, error: 'Usuário sem acesso a este sistema.' }, 403);
     }
@@ -152,10 +157,12 @@ export const requirePlatformAuth = createMiddleware<Env>(async (c, next) => {
 
   try {
     const prisma = createPrismaClient(connectionString);
-    const admin = await prisma.platformAdmin.findUnique({
-      where: { id: sub },
-      select: { id: true, name: true, email: true, isActive: true },
-    });
+    const admin = await withDbRetry('requirePlatformAuth.admin', () =>
+      prisma.platformAdmin.findUnique({
+        where: { id: sub },
+        select: { id: true, name: true, email: true, isActive: true },
+      }),
+    );
     if (!admin || !admin.isActive) {
       return c.json({ ok: false, error: 'Acesso restrito à administração da plataforma.' }, 403);
     }
@@ -207,10 +214,12 @@ export const requireSupportSession = createMiddleware<Env>(async (c, next) => {
     // Revalida o super usuário na fonte de verdade (a tabela, não o token): se foi desativado,
     // a sessão de suporte deixa de valer na hora — mesmo antes de o token expirar.
     const prisma = createPrismaClient(connectionString);
-    const admin = await prisma.platformAdmin.findUnique({
-      where: { id: scope.platformAdminId },
-      select: { isActive: true },
-    });
+    const admin = await withDbRetry('requireSupportSession.admin', () =>
+      prisma.platformAdmin.findUnique({
+        where: { id: scope.platformAdminId },
+        select: { isActive: true },
+      }),
+    );
     if (!admin || !admin.isActive) {
       return c.json({ ok: false, error: 'Acesso de suporte revogado.' }, 403);
     }

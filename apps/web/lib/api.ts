@@ -51,6 +51,17 @@ const RETRIES = 2; // tentativas totais = 1 + RETRIES
 const BACKOFF_MS = [400, 1200];
 const TIMEOUT_MS = 12000;
 
+/**
+ * Status HTTP tratados como **falha transitória do servidor** (não erro de negócio). O cold start do
+ * free tier (Supabase/Supavisor/Hyperdrive frios) faz a 1ª consulta ao banco estourar e a API devolver
+ * um 5xx — inclusive um 500 do próprio middleware de auth ("Falha na autenticação.", que é a query do
+ * usuário lançando, NÃO o token inválido). Como esses métodos são idempotentes, re-tentar é seguro e
+ * evita que um soluço do banco vire "erro de autenticação" ou o fallback "offline" na cara do operador.
+ * 502/503/504 = gateway/indisponível/timeout na borda; 500 = falha interna transitória. Um 5xx real e
+ * persistente ainda propaga após esgotar as tentativas.
+ */
+const RETRYABLE_STATUS = new Set([500, 502, 503, 504]);
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
@@ -127,6 +138,15 @@ async function sendIdempotent<T>(
           attempt--; // esta volta não conta como tentativa de rede
           continue;
         }
+      }
+      // 5xx transitório (cold start do banco no free tier volta como 500/503, ver RETRYABLE_STATUS):
+      // trata como falha de rede — dorme o backoff e re-tenta, consumindo o mesmo orçamento. Só aqui,
+      // porque GET/PATCH/DELETE são idempotentes. Na ÚLTIMA tentativa, cai no `handle` abaixo e propaga
+      // o erro real do servidor (mensagem amigável do próprio corpo, ex.: "Falha na autenticação.").
+      if (RETRYABLE_STATUS.has(res.status) && attempt < RETRIES) {
+        console.warn(`api ${method} ${path}: HTTP ${res.status} transitório, re-tentando (${attempt + 1}/${RETRIES})`);
+        await sleep(BACKOFF_MS[attempt] ?? 1200);
+        continue;
       }
       return await handle<T>(res);
     } catch (err) {
