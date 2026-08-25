@@ -1,0 +1,14 @@
+# =============================================================================
+# NexoLoja — serviço fiscal (apps/fiscal). Copie para `.dev.vars`.
+# =============================================================================
+# O `.dev.vars` alimenta os bindings do Worker durante `wrangler dev`.
+# Em produção os equivalentes são provisionados com `wrangler secret put`.
+# Já coberto pelo .gitignore da raiz.
+# =============================================================================
+
+# Token compartilhado que a API de negócio usa para chamar este serviço.
+# Qualquer string longa e aleatória serve em dev.
+FISCAL_SERVICE_TOKEN="dev-token-trocar-em-producao"
+
+# Credencial do provedor fiscal. Vazio enquanto o provedor for o "fake".
+# FISCAL_PROVIDER_TOKEN=""
