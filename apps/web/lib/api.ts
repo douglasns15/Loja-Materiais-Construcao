@@ -39,17 +39,27 @@ async function handle<T>(res: Response): Promise<T> {
   return json.data;
 }
 
-// --- Resiliência de leitura (só GET) -----------------------------------------------------------
+// --- Resiliência de rede -----------------------------------------------------------------------
 // A stack no free tier tem cold start (Supabase pausa/esfria + Hyperdrive/Worker frios): a 1ª
 // requisição depois de ociosa pode falhar no nível de REDE ("Failed to fetch") ou estourar o
 // tempo, e a seguinte já funciona (conexão quente). Um retry curto com backoff mascara isso.
-// Só re-tentamos GET (idempotente) e SÓ em falha de rede/timeout — erro HTTP (401/403/404/409/
-// 500) é resposta válida do servidor e NÃO deve ser re-tentado.
-const GET_RETRIES = 2; // tentativas totais = 1 + GET_RETRIES
-const GET_BACKOFF_MS = [400, 1200];
-const GET_TIMEOUT_MS = 12000;
+// Só re-tentamos métodos IDEMPOTENTES (GET/PATCH/DELETE) e SÓ em falha de rede/timeout — erro
+// HTTP (401/403/404/409/500) é resposta válida do servidor e NÃO deve ser re-tentado. O POST
+// (criar venda/produto) fica FORA do retry de propósito: não é idempotente e re-tentar poderia
+// duplicar o recurso.
+const RETRIES = 2; // tentativas totais = 1 + RETRIES
+const BACKOFF_MS = [400, 1200];
+const TIMEOUT_MS = 12000;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Mensagem amigável para o usuário quando a falha é de REDE (o `fetch` nem completou). Substitui
+ * o "Failed to fetch" cru do navegador, que assusta e não distingue "sem internet" de "servidor
+ * engasgou". Erros de negócio/HTTP (ex.: "Estoque insuficiente", "Erro 409") passam intactos.
+ */
+const NETWORK_ERROR_MSG =
+  'Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente em instantes.';
 
 /** `true` quando o próprio `fetch` falhou (rede) ou a requisição foi abortada por timeout. */
 function isNetworkError(err: unknown): boolean {
@@ -60,10 +70,16 @@ function isNetworkError(err: unknown): boolean {
   );
 }
 
+/** Converte falha de rede/timeout na mensagem amigável; qualquer outro erro passa sem alteração. */
+function toFriendly(err: unknown): Error {
+  if (isNetworkError(err)) return new Error(NETWORK_ERROR_MSG);
+  return err instanceof Error ? err : new Error(String(err));
+}
+
 /** `fetch` com timeout (AbortController) para converter um hang em erro re-tentável. */
 async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), GET_TIMEOUT_MS);
+  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
     return await fetch(url, { ...init, signal: ctrl.signal });
   } finally {
@@ -71,14 +87,30 @@ async function fetchWithTimeout(url: string, init: RequestInit): Promise<Respons
   }
 }
 
-export async function apiGet<T>(path: string): Promise<T> {
+/**
+ * Envia uma requisição IDEMPOTENTE (GET/PATCH/DELETE) com timeout, retry curto em falha de rede e
+ * renovação de token no 401. Centraliza a resiliência que antes era só do GET: como repetir esses
+ * métodos produz o mesmo efeito, o retry é seguro. O POST tem função própria (`apiPost`) e fica de
+ * fora daqui. DELETE re-tentado após um sucesso perdido na volta pode ver um 404 (recurso já foi):
+ * é uma resposta válida do servidor, então o `handle` propaga — trade-off aceito (evento raríssimo).
+ */
+async function sendIdempotent<T>(
+  method: 'GET' | 'PATCH' | 'DELETE',
+  path: string,
+  body?: unknown,
+): Promise<T> {
   let lastErr: unknown;
   let authRetried = false; // só uma tentativa de renovar o token por chamada
-  for (let attempt = 0; attempt <= GET_RETRIES; attempt++) {
+  for (let attempt = 0; attempt <= RETRIES; attempt++) {
     try {
       // Recalcula o header a cada volta: se renovamos o token no 401 abaixo, a próxima já o usa.
-      const headers = await authHeaders();
-      const res = await fetchWithTimeout(`${API_URL}${path}`, { headers });
+      const headers: Record<string, string> = { ...(await authHeaders()) };
+      const init: RequestInit = { method, headers };
+      if (body !== undefined) {
+        headers['Content-Type'] = 'application/json';
+        init.body = JSON.stringify(body);
+      }
+      const res = await fetchWithTimeout(`${API_URL}${path}`, init);
       // 401 numa corrida de renovação (token expirado/ausente por PWA ociosa + cold start): força
       // um refresh e re-tenta UMA vez, sem consumir o orçamento de retry de rede. Se o refresh não
       // trouxer token, deixa o `handle` propagar o erro normalmente (sessão realmente perdida).
@@ -98,23 +130,33 @@ export async function apiGet<T>(path: string): Promise<T> {
       }
       return await handle<T>(res);
     } catch (err) {
-      // Erro HTTP (handle lançou) ou última tentativa: propaga sem re-tentar.
-      if (!isNetworkError(err) || attempt === GET_RETRIES) throw err;
+      // Erro HTTP (handle lançou) ou última tentativa: propaga com mensagem amigável se for rede.
+      if (!isNetworkError(err) || attempt === RETRIES) throw toFriendly(err);
       lastErr = err;
-      console.warn(`apiGet ${path}: falha de rede, re-tentando (${attempt + 1}/${GET_RETRIES})`);
-      await sleep(GET_BACKOFF_MS[attempt] ?? 1200);
+      console.warn(`api ${method} ${path}: falha de rede, re-tentando (${attempt + 1}/${RETRIES})`);
+      await sleep(BACKOFF_MS[attempt] ?? 1200);
     }
   }
-  throw lastErr;
+  throw toFriendly(lastErr);
+}
+
+export async function apiGet<T>(path: string): Promise<T> {
+  return sendIdempotent<T>('GET', path);
 }
 
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
-    body: JSON.stringify(body),
-  });
-  return handle<T>(res);
+  // POST NÃO é re-tentado (não idempotente — poderia duplicar a venda/produto), mas ainda
+  // convertemos a falha de rede na mensagem amigável para não vazar "Failed to fetch" cru.
+  try {
+    const res = await fetch(`${API_URL}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+      body: JSON.stringify(body),
+    });
+    return await handle<T>(res);
+  } catch (err) {
+    throw toFriendly(err);
+  }
 }
 
 /**
@@ -133,20 +175,11 @@ export async function apiPostForSync(path: string, body: unknown): Promise<{ sta
 }
 
 export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
-    body: JSON.stringify(body),
-  });
-  return handle<T>(res);
+  return sendIdempotent<T>('PATCH', path, body);
 }
 
 export async function apiDelete<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    method: 'DELETE',
-    headers: await authHeaders(),
-  });
-  return handle<T>(res);
+  return sendIdempotent<T>('DELETE', path);
 }
 
 /**
@@ -155,28 +188,40 @@ export async function apiDelete<T>(path: string): Promise<T> {
  * de suporte emitido pela API, não com a própria sessão. Sem retry (chamadas pontuais do painel).
  */
 export async function apiGetWithToken<T>(path: string, token: string): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  return handle<T>(res);
+  try {
+    const res = await fetch(`${API_URL}${path}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return await handle<T>(res);
+  } catch (err) {
+    throw toFriendly(err);
+  }
 }
 
 /** POST com Bearer token explícito (ex.: encerrar a sessão de suporte). Corpo opcional. */
 export async function apiPostWithToken<T>(path: string, token: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  return handle<T>(res);
+  try {
+    const res = await fetch(`${API_URL}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    return await handle<T>(res);
+  } catch (err) {
+    throw toFriendly(err);
+  }
 }
 
 /** Envia um arquivo como corpo cru da requisição (ex.: upload de logo, ADR-007). */
 export async function apiUpload<T>(path: string, file: File): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': file.type, ...(await authHeaders()) },
-    body: file,
-  });
-  return handle<T>(res);
+  try {
+    const res = await fetch(`${API_URL}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': file.type, ...(await authHeaders()) },
+      body: file,
+    });
+    return await handle<T>(res);
+  } catch (err) {
+    throw toFriendly(err);
+  }
 }
