@@ -1,8 +1,9 @@
-# 🚀 Plano de corte para produção — Infra (pooler) + Supabase Pro
+# 🚀 Plano de corte para produção — Infra (pooler), Supabase Pro e dependências
 
 > **Pendência 3 do pós-EF-3.** Levantamento e plano — **nada aqui foi aplicado em produção**; é análise
 > para decidir *quando* e *como* endurecer a infra ao migrar de dev/demo para uma loja real.
-> **Última atualização:** 2026-07-16.
+> **Última atualização:** 2026-08-25 — acrescentada a **§4, triagem de vulnerabilidades de
+> dependências**.
 
 ## TL;DR
 
@@ -15,6 +16,10 @@
 - **Item 3b (Supabase Pro):** o gatilho **não é tamanho** (o banco tem **12 MB de 500 MB**; a 500 MB só se
   chega depois de ~150 mil vendas — anos para uma loja pequena). O gatilho é **confiabilidade**: ir ao ar
   com uma loja real pagante (backups diários, sem auto-pause, e-mail com marca própria).
+- **§4 (dependências, 2026-08-25):** das "17 vulnerabilidades" do `npm install`, só **8** afetam o que vai
+  a produção e **1** é de fato explorável: o **ReDoS no CORS do Hono**, numa API pública. Resolve-se com
+  `npm audit fix` (sem `--force`) + deploy da API. **Nunca rodar `--force`** aqui: ele faria *downgrade*
+  do Prisma para 6.12.0.
 
 ---
 
@@ -114,7 +119,62 @@ sem-pause + marca no e-mail), não de volume. Enquanto for dev/demo, o free tier
 - Reavaliar 3a **junto** (o Pro muda o teto de conexões e habilita IPv4 direto → pode mudar a string ideal).
 - Habilitar backups e, se quiser e-mail com marca, configurar Custom SMTP (destrava o template do convite).
 
-## 4. Checklist de corte para produção (para o dia do go-live)
+## 4. Vulnerabilidades de dependências — triagem de 2026-08-25
+
+> Levantada após um `npm install` reportar "17 vulnerabilities". **O número assusta mais do que
+> deveria:** o `npm audit` audita a árvore inteira, incluindo ferramenta de build que nunca chega ao
+> edge. Com `npm audit --omit=dev` sobram **8** (1 moderate, 7 high) — e destas, **uma** é de fato
+> explorável na nossa arquitetura.
+
+### O que realmente vai para produção
+
+Só 11 pacotes de runtime: `next`, `react`, `react-dom`, `@supabase/supabase-js`, `@zxing/library`
+(web); `hono`, `jose` (api); `hono` (fiscal); `@prisma/client`, `@prisma/adapter-pg`, `pg` (db);
+`zod` (shared). Todo o resto — turbo, wrangler, esbuild, OpenNext, tailwind/postcss, vitest, CLI do
+Prisma, sharp — é **build-time**.
+
+### Triagem item a item
+
+| Pacote | Severidade | Aplica-se a nós? | Ação |
+|---|---|---|---|
+| **hono** ≤4.12.33 | moderate | **SIM — ReDoS no middleware de CORS**, e o `apps/api` usa `cors()` numa API pública. Um `Access-Control-Request-Headers` malicioso queima CPU do Worker. As outras 3 advisories (proxy helper, language middleware, `hono/jsx` memo) **não se aplicam** — não usamos nenhum | **Corrigir — é a mais urgente, apesar de "moderate"** |
+| **next** 15.5.19 | high | Baixo. 7 das 8 advisories exigem **Server Actions**, **rewrites** ou **Image Optimization**; verificado no código: zero `'use server'`, zero `next/image`, sem `rewrites`. A PWA fala com a API por `fetch` | Corrigir (é o app público; correção não-breaking) |
+| **postcss** 8.5.15 | high | Baixo — processa **nosso** CSS em build. Os ataques exigem CSS malicioso na entrada | Corrigir junto |
+| **nanoid** 3.3.15 | high | Baixo — transitivo de build; o loop exige `size` controlado pelo atacante | Corrigir junto |
+| **sharp** 0.34.5 | high | Baixo — CVEs do libvips via imagem maliciosa; sem `next/image`, a superfície é mínima | Corrigir junto |
+| **deepmerge-ts** (via `@prisma/config` → `prisma`) | high | **Não** — o CLI do Prisma é build-time, nunca vai ao edge; exigiria alguém controlando a config local | **NÃO corrigir — ver abaixo** |
+
+### ⚠️ Por que NÃO corrigir o `deepmerge-ts`
+
+O `npm audit fix --force` propõe instalar **`prisma@6.12.0`** — isto é um **downgrade** a partir do
+6.19.3, que deixaria o CLI dessincronizado do `@prisma/client` 6.19.3. Soma-se a isso a decisão já
+registrada no ROADMAP de manter o **Prisma 6 fixado** por estabilidade de conexão pela edge.
+
+**Regra:** nunca rodar `npm audit fix --force` neste repositório. Ele sobe/baixa versões major e pode
+quebrar o deploy (Prisma, wrangler, Next, OpenNext).
+
+### Procedimento
+
+```bash
+npm audit fix          # SEM --force — resolve 7 dos 8, sem mudança de major
+npm run test           # 320 testes (core + fiscal)
+npm run build
+cd apps/api && npx wrangler deploy --dry-run
+```
+
+> **Deploy da API é obrigatório** para a correção do CORS do Hono valer — atualizar o lock não basta,
+> o middleware vive no Worker em execução.
+
+### Encaminhamento
+
+Correção pontual não é a resposta sustentável. O que resolve de verdade é **`npm audit` no CI +
+Dependabot**, para novos avisos aparecerem como sinal monitorado em vez de susto num `npm install`.
+Entra junto com o item de CI do bloco de confiabilidade
+([`PRODUCT-ROADMAP.md`](PRODUCT-ROADMAP.md) — Horizonte 0, bloco B).
+
+---
+
+## 5. Checklist de corte para produção (para o dia do go-live)
 
 - [ ] Assinar Supabase Pro (sem auto-pause + backups diários).
 - [ ] Confirmar/ajustar `origin_connection_limit` do Hyperdrive sob carga real.
@@ -122,6 +182,8 @@ sem-pause + marca no e-mail), não de volume. Enquanto for dev/demo, o free tier
 - [ ] Custom SMTP + template PT-BR do convite (branding) — destrava a melhoria de e-mail da Fase 2.
 - [ ] Rever CORS da API para a origem de produção da PWA (não só `localhost`).
 - [ ] Corrigir o comentário do `apps/api/wrangler.toml` se a origem do Hyperdrive mudar.
+- [ ] Rodar `npm audit fix` (sem `--force`) e **deployar a API** — corrige o ReDoS do CORS (§4).
+- [ ] Testar a **restauração** de um backup (backup não testado não é backup).
 
 ---
 
