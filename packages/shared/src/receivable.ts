@@ -91,6 +91,10 @@ export type CustomerAccountRow = {
   /** Crédito a favor do cliente (ADR-022, Fatia C) — sobra de devolução guardada. Pode haver
    * crédito SEM dívida (a conta aparece só quando o filtro inclui crédito). 0 quando não há. */
   creditBalance: number;
+  /** Dívida ABERTA do cliente (ADR-026) — código `D-000X`. `null` quando a conta aparece só por
+   * crédito a favor (sem dívida aberta). */
+  debtId?: string | null;
+  debtNumber?: number | null;
 };
 
 /** Filtro da visão "Por cliente" (ADR-022, Fatia C): quem deve, quem tem crédito, ou todos. */
@@ -181,6 +185,10 @@ export type AccountCreditEvent = {
 export type CustomerAccountDetail = {
   customerId: string;
   customerName: string | null;
+  /** Dívida ABERTA do cliente (ADR-026) — código `D-000X` + quando abriu. `null` se não há aberta. */
+  debtId?: string | null;
+  debtNumber?: number | null;
+  debtOpenedAt?: string | null;
   /** Observação da DÍVIDA/conta (ADR-022) — uma só nota por cliente, compartilhada por todas as
    * vendas dele. Separada da nota do cadastro/perfil (`Customer.notes`). */
   debtNotes: string | null;
@@ -197,6 +205,62 @@ export type CustomerAccountDetail = {
   /** Livro-razão do crédito do cliente (ADR-022, Fatia C) — entradas/saídas do crédito a favor. A
    * UI mostra os usos/estornos na timeline (a geração já aparece no evento de devolução). */
   credits: AccountCreditEvent[];
+};
+
+/** Situação de uma DÍVIDA do cliente (ADR-026). Espelha o enum `DebtStatus` do Prisma. */
+export type DebtStatus = 'OPEN' | 'PAID';
+
+/** Uma linha da lista de DÍVIDAS (ADR-026) — `GET /receivables/debts`. Usada na aba **Quitadas**
+ * (dívidas `PAID`). `originalTotal` é o quanto a dívida somou; `balance` deve ser 0 nas quitadas. */
+export type DebtListRow = {
+  debtId: string;
+  debtNumber: number; // exibido D-000X (`formatDebtNumber`)
+  status: DebtStatus;
+  customerName: string | null;
+  originalTotal: number;
+  balance: number;
+  salesCount: number;
+  openedAt: string;
+  closedAt: string | null;
+};
+
+/** Página da lista de dívidas (cursor keyset) — `GET /receivables/debts`. */
+export type DebtsPage = { rows: DebtListRow[]; nextCursor: string | null };
+
+/** Uma venda a prazo que compõe uma dívida (ADR-026), no detalhe `GET /receivables/debts/:id`. */
+export type DebtReceivable = {
+  id: string;
+  orderId: string;
+  orderNumber: number | null; // ADR-023 — atalho para ver a venda
+  originalAmount: string;
+  settledAmount: string;
+  returnedAmount: string;
+  balance: number;
+  status: ReceivableStatus;
+  dueDate: string | null;
+  createdAt: string;
+  orderTotal: string | null;
+  items: { productName: string; unit: string; quantity: string; unitPrice: string; total: string; pairGroup: number | null }[];
+  payments: ReceivablePaymentRow[];
+};
+
+/** Detalhe de UMA dívida (ADR-026) — `GET /receivables/debts/:id`. Cabeçalho + resumo + as vendas a
+ * prazo (com itens e recebimentos) + as devoluções; a UI monta a timeline. Serve à aba Quitadas. */
+export type DebtDetail = {
+  debtId: string;
+  debtNumber: number;
+  status: DebtStatus;
+  openedAt: string;
+  closedAt: string | null;
+  customerId: string | null;
+  customerName: string | null;
+  debtNotes: string | null;
+  originalTotal: number;
+  settledTotal: number;
+  returnedTotal: number;
+  balance: number;
+  receivables: DebtReceivable[];
+  returns: AccountReturnEvent[];
 };
 
 /** Um item da venda que originou a dívida (para o detalhe da conta a receber). */

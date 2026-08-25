@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
+  formatDebtNumber,
   formatOrderNumber,
   PAYMENT_METHOD_LABELS,
   RETURN_TARGET_LABELS,
@@ -236,9 +237,21 @@ export function CustomerAccountModal({
         ) : (
           <>
             <div className="flex items-start justify-between">
-              <div>
+              <div className="flex flex-col gap-1.5">
+                {detail.debtNumber != null && (
+                  <span className="inline-flex w-fit items-center gap-2">
+                    <span className="rounded-full bg-gradient-to-r from-indigo-700 to-indigo-500 px-2.5 py-0.5 text-xs font-extrabold tracking-wide text-white">
+                      {formatDebtNumber(detail.debtNumber)}
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      Em aberto
+                      {detail.debtOpenedAt
+                        ? ` · desde ${new Date(detail.debtOpenedAt).toLocaleDateString('pt-BR')}`
+                        : ''}
+                    </span>
+                  </span>
+                )}
                 <h2 className="text-xl font-bold">{detail.customerName ?? 'Cliente'}</h2>
-                <p className="text-xs text-gray-600">Conta do cliente · extrato</p>
               </div>
               <button
                 type="button"

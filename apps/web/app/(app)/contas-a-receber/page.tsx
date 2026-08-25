@@ -2,40 +2,37 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  formatOrderNumber,
+  formatDebtNumber,
   PAYMENT_METHOD_LABELS,
-  RECEIVABLE_STATUS_LABELS,
   receiveReceivableSchema,
   type AccountFilter,
   type CustomerAccountDetail,
   type CustomerAccountRow,
   type CustomerAccountsResponse,
+  type DebtListRow,
+  type DebtsPage,
   type PaymentMethod,
-  type ReceivableDetail,
   type ReceivableItem,
-  type ReceivableRow,
-  type ReceivablesPage,
   type ReceiveAccountResult,
 } from '@nexoloja/shared';
 import { apiGet, apiPost } from '@/lib/api';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { MoneyInput } from '@/components/MoneyInput';
-import { ReceivableDetailModal } from '@/components/ReceivableDetailModal';
 import { CustomerAccountModal } from '@/components/CustomerAccountModal';
+import { DebtDetailModal } from '@/components/DebtDetailModal';
 
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-type StatusFilter = 'open' | 'paid' | 'all';
-/** Visão: por CLIENTE (conta que soma — ADR-022) ou por VENDA (dívida a dívida, o histórico). */
-type View = 'accounts' | 'debts';
+/** Aba: dívidas EM ABERTO (a conta do cliente = a dívida aberta — ADR-026) ou QUITADAS (arquivadas). */
+type Tab = 'open' | 'paid';
 
 /** Formas de cartão — as que podem ter acréscimo do produto (ADR-016 × ADR-022, Fatia C.3). */
 function isCardMethod(m: PaymentMethod): boolean {
   return m === 'DEBIT_CARD' || m === 'CREDIT_CARD';
 }
 
-/** Uma conta/dívida está VENCIDA quando tem vencimento e ele já passou (comparando só a data). */
+/** `true` quando a data já passou (comparando só o dia). */
 function isOverdue(dueDate: string | null): boolean {
   if (!dueDate) return false;
   const today = new Date();
@@ -44,48 +41,41 @@ function isOverdue(dueDate: string | null): boolean {
 }
 
 /**
- * Contas a Receber — venda a prazo (ADR-019) + conta do cliente (ADR-022, Fatia A). Duas visões:
- * **Por cliente** (padrão): a "conta" implícita de cada cliente — o saldo somado de todas as suas
- * dívidas em aberto; "Receber" abate a conta inteira do mais antigo pro mais novo (FIFO). **Por
- * venda**: a lista dívida a dívida (paginada, com em aberto/quitadas/todas e o detalhe da venda).
- * Em dinheiro, o recebimento vira Suprimento no caixa (feito no servidor). Online-only nesta fatia.
+ * Contas a Receber — a DÍVIDA do cliente como conta-corrente (ADR-026, código `D-000X`). Visão
+ * única por cliente, com abas **Em aberto** (a dívida aberta de cada cliente — soma as vendas a
+ * prazo; "Receber" abate o saldo do mais antigo pro mais novo, FIFO) e **Quitadas** (dívidas
+ * arquivadas — todas as vendas que a compunham juntas). O detalhe (resumo + extrato) abre num
+ * painel. Em dinheiro, o recebimento vira Suprimento no caixa. Online-only nesta fatia.
  */
 export default function ContasAReceberPage() {
-  const [view, setView] = useState<View>('accounts');
+  const [tab, setTab] = useState<Tab>('open');
   const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
-  // ---- Visão POR CLIENTE (contas) ----
+  // ---- Aba EM ABERTO (a conta/dívida aberta de cada cliente) ----
   const [accounts, setAccounts] = useState<CustomerAccountRow[]>([]);
   const [accountsLoaded, setAccountsLoaded] = useState(false);
-  // Filtro da conta (ADR-022, Fatia C): com dívida (default) / com crédito / todos.
+  // Filtro (ADR-022, Fatia C): com dívida (default) / com crédito a favor / todos.
   const [acctFilter, setAcctFilter] = useState<AccountFilter>('debt');
-  const [acctSelected, setAcctSelected] = useState<CustomerAccountRow | null>(null);
-  // Extrato consolidado da conta (ao clicar no cliente): customerId aberto + sinal de recarga.
   const [accountDetailId, setAccountDetailId] = useState<string | null>(null);
   const [accountReload, setAccountReload] = useState(0);
 
-  // ---- Visão POR VENDA (dívidas) — comportamento anterior, preservado ----
-  const [rows, setRows] = useState<ReceivableRow[]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [debtsLoaded, setDebtsLoaded] = useState(false);
+  // ---- Aba QUITADAS (dívidas arquivadas — ADR-026) ----
+  const [paidDebts, setPaidDebts] = useState<DebtListRow[]>([]);
+  const [paidLoaded, setPaidLoaded] = useState(false);
+  const [paidCursor, setPaidCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [status, setStatus] = useState<StatusFilter>('open');
-  const [selected, setSelected] = useState<ReceivableRow | null>(null);
+  const [paidDebtId, setPaidDebtId] = useState<string | null>(null);
 
-  // Campos do recebimento (compartilhados: só um painel aberto por vez).
+  // ---- Painel de recebimento (abate a conta/dívida inteira, FIFO) ----
+  const [acctSelected, setAcctSelected] = useState<CustomerAccountRow | null>(null);
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState<PaymentMethod>('CASH');
   const [busy, setBusy] = useState(false);
-  // Acréscimo de cartão ao receber (ADR-022, Fatia C.3): itens da dívida (p/ o aviso) + valor MANUAL
-  // digitado pelo operador. Só no recebimento de UMA dívida (produtos conhecidos).
+  // Acréscimo de cartão ao receber (ADR-022, Fatia C.3): itens da dívida (p/ o aviso) + valor MANUAL.
   const [debtItems, setDebtItems] = useState<ReceivableItem[]>([]);
   const [surchargeInput, setSurchargeInput] = useState('');
-
-  // Detalhe da dívida (ao clicar): id aberto + sinal de recarga (após um recebimento).
-  const [detailId, setDetailId] = useState<string | null>(null);
-  const [detailReload, setDetailReload] = useState(0);
 
   const loadAccounts = useCallback(async () => {
     try {
@@ -101,33 +91,33 @@ export default function ContasAReceberPage() {
     }
   }, [search, acctFilter]);
 
-  const debtsQuery = useCallback(
+  const paidQuery = useCallback(
     (cursor: string | null) => {
-      const p = new URLSearchParams({ status });
+      const p = new URLSearchParams({ status: 'paid' });
       if (search.trim()) p.set('q', search.trim());
       if (cursor) p.set('cursor', cursor);
-      return `/receivables?${p.toString()}`;
+      return `/receivables/debts?${p.toString()}`;
     },
-    [status, search],
+    [search],
   );
 
-  const loadDebts = useCallback(async () => {
+  const loadPaid = useCallback(async () => {
     try {
-      const page = await apiGet<ReceivablesPage>(debtsQuery(null));
-      setRows(page.rows);
-      setNextCursor(page.nextCursor);
+      const page = await apiGet<DebtsPage>(paidQuery(null));
+      setPaidDebts(page.rows);
+      setPaidCursor(page.nextCursor);
       setError(null);
     } catch (e) {
       setError((e as Error).message);
     } finally {
-      setDebtsLoaded(true);
+      setPaidLoaded(true);
     }
-  }, [debtsQuery]);
+  }, [paidQuery]);
 
-  // Recarrega a visão ativa ao trocar de aba/filtro/busca (debounce na busca).
+  // Recarrega a aba ativa ao trocar de aba/filtro/busca (debounce na busca).
   const first = useRef(true);
   useEffect(() => {
-    const run = () => (view === 'accounts' ? loadAccounts() : loadDebts());
+    const run = () => (tab === 'open' ? loadAccounts() : loadPaid());
     if (first.current) {
       first.current = false;
       run();
@@ -135,15 +125,15 @@ export default function ContasAReceberPage() {
     }
     const t = setTimeout(run, 300);
     return () => clearTimeout(t);
-  }, [view, loadAccounts, loadDebts]);
+  }, [tab, loadAccounts, loadPaid]);
 
-  async function loadMore() {
-    if (!nextCursor || loadingMore) return;
+  async function loadMorePaid() {
+    if (!paidCursor || loadingMore) return;
     setLoadingMore(true);
     try {
-      const page = await apiGet<ReceivablesPage>(debtsQuery(nextCursor));
-      setRows((prev) => [...prev, ...page.rows]);
-      setNextCursor(page.nextCursor);
+      const page = await apiGet<DebtsPage>(paidQuery(paidCursor));
+      setPaidDebts((prev) => [...prev, ...page.rows]);
+      setPaidCursor(page.nextCursor);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -151,29 +141,10 @@ export default function ContasAReceberPage() {
     }
   }
 
-  const totalOwedPage = useMemo(
-    () => accounts.reduce((acc, a) => acc + a.totalBalance, 0),
-    [accounts],
-  );
+  const totalOwed = useMemo(() => accounts.reduce((acc, a) => acc + a.totalBalance, 0), [accounts]);
 
-  // --- Abrir painéis de recebimento ---
-  function openReceiveDebt(r: ReceivableRow) {
-    setSelected(r);
-    setAcctSelected(null);
-    setAmount(String(r.balance));
-    setMethod('CASH');
-    setSurchargeInput('');
-    setDebtItems([]);
-    setError(null);
-    setInfo(null);
-    // Busca os itens da dívida para o aviso de acréscimo por cartão (ADR-022, Fatia C.3).
-    apiGet<ReceivableDetail>(`/receivables/${r.id}`)
-      .then((d) => setDebtItems(d.items ?? []))
-      .catch(() => setDebtItems([]));
-  }
   function openReceiveAccount(a: CustomerAccountRow) {
     setAcctSelected(a);
-    setSelected(null);
     setAmount(String(a.totalBalance));
     setMethod('CASH');
     setSurchargeInput('');
@@ -184,47 +155,6 @@ export default function ContasAReceberPage() {
     apiGet<CustomerAccountDetail>(`/receivables/accounts/${a.customerId}`)
       .then((d) => setDebtItems(d.receivables.flatMap((r) => r.items)))
       .catch(() => setDebtItems([]));
-  }
-
-  async function onReceiveDebt(e: React.FormEvent) {
-    e.preventDefault();
-    if (!selected) return;
-    setError(null);
-    // Acréscimo só vale para cartão (ADR-022, Fatia C.3); em dinheiro/PIX é ignorado.
-    const surcharge = isCardMethod(method) ? Math.max(0, Number(surchargeInput) || 0) : 0;
-    const parsed = receiveReceivableSchema.safeParse({
-      amount: Number(amount),
-      method,
-      ...(surcharge > 0 ? { surcharge } : {}),
-    });
-    if (!parsed.success) {
-      setError('Informe um valor de recebimento válido.');
-      return;
-    }
-    if (parsed.data.amount > selected.balance + 0.005) {
-      setError(`O valor não pode passar do saldo devedor (${BRL(selected.balance)}).`);
-      return;
-    }
-    setBusy(true);
-    try {
-      const res = await apiPost<{ fullyPaid: boolean; balance: number }>(
-        `/receivables/${selected.id}/receive`,
-        parsed.data,
-      );
-      setInfo(
-        res.fullyPaid
-          ? `Conta quitada. ✅${method === 'CASH' ? ' O valor entrou no caixa como suprimento.' : ''}`
-          : `Recebimento registrado. Saldo restante: ${BRL(res.balance)}.`,
-      );
-      setSelected(null);
-      setAmount('');
-      await loadDebts();
-      setDetailReload((n) => n + 1);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
   }
 
   async function onReceiveAccount(e: React.FormEvent) {
@@ -242,7 +172,7 @@ export default function ContasAReceberPage() {
       return;
     }
     if (parsed.data.amount > acctSelected.totalBalance + 0.005) {
-      setError(`O valor não pode passar do saldo da conta (${BRL(acctSelected.totalBalance)}).`);
+      setError(`O valor não pode passar do saldo da dívida (${BRL(acctSelected.totalBalance)}).`);
       return;
     }
     setBusy(true);
@@ -254,9 +184,9 @@ export default function ContasAReceberPage() {
       const cashNote = method === 'CASH' ? ' O valor entrou no caixa como suprimento.' : '';
       setInfo(
         res.accountCleared
-          ? `Conta de ${acctSelected.customerName ?? 'cliente'} quitada. ✅${cashNote}`
+          ? `Dívida de ${acctSelected.customerName ?? 'cliente'} quitada. ✅${cashNote}`
           : `Recebido ${BRL(res.received)} (abateu ${res.debtsTouched} ${
-              res.debtsTouched === 1 ? 'dívida' : 'dívidas'
+              res.debtsTouched === 1 ? 'venda' : 'vendas'
             }). Saldo restante: ${BRL(res.remainingBalance)}.${cashNote}`,
       );
       setAcctSelected(null);
@@ -272,79 +202,65 @@ export default function ContasAReceberPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <h1 className="mb-6 text-2xl font-bold">Contas a Receber</h1>
+      <h1 className="mb-1 w-fit bg-gradient-to-r from-indigo-700 to-indigo-500 bg-clip-text text-2xl font-bold text-transparent">
+        Contas a Receber
+      </h1>
+      <p className="mb-5 text-sm text-gray-500">
+        A dívida de cada cliente — soma as vendas a prazo, recebe o saldo, e o histórico fica todo aqui.
+      </p>
 
       <OfflineNotice />
 
       {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
       {info && <p className="mb-4 rounded-lg bg-gray-100 px-3 py-2 text-sm">{info}</p>}
 
-      {/* Alternância de visão: por cliente (conta que soma) × por venda (dívida a dívida). */}
-      <div className="mb-4 inline-flex rounded-lg border border-gray-300 p-0.5">
-        {(['accounts', 'debts'] as View[]).map((v) => (
-          <button
-            key={v}
-            type="button"
-            onClick={() => setView(v)}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-              view === v ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-50'
-            }`}
-          >
-            {v === 'accounts' ? 'Por cliente' : 'Por venda'}
-          </button>
-        ))}
-      </div>
-
-      {/* Busca + (na visão por venda) filtro de situação. */}
-      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+      {/* Abas: Em aberto × Quitadas. */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex gap-0.5 rounded-xl bg-gray-100 p-1">
+          {(['open', 'paid'] as Tab[]).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTab(t)}
+              className={`rounded-lg px-4 py-1.5 text-sm font-semibold ${
+                tab === t ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-white/60'
+              }`}
+            >
+              {t === 'open' ? 'Em aberto' : 'Quitadas'}
+            </button>
+          ))}
+        </div>
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar por cliente…"
-          className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          placeholder="Buscar cliente…"
+          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm sm:max-w-xs"
         />
-        {view === 'debts' ? (
-          <div className="flex gap-1">
-            {(['open', 'paid', 'all'] as StatusFilter[]).map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => setStatus(s)}
-                className={`rounded-lg px-3 py-2 text-sm font-medium ${
-                  status === s
-                    ? 'bg-gray-900 text-white'
-                    : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                {s === 'open' ? 'Em aberto' : s === 'paid' ? 'Quitadas' : 'Todas'}
-              </button>
-            ))}
-          </div>
-        ) : (
-          <div className="flex gap-1">
-            {(['debt', 'credit', 'all'] as AccountFilter[]).map((f) => (
-              <button
-                key={f}
-                type="button"
-                onClick={() => setAcctFilter(f)}
-                className={`rounded-lg px-3 py-2 text-sm font-medium ${
-                  acctFilter === f
-                    ? 'bg-gray-900 text-white'
-                    : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                {f === 'debt' ? 'Com dívida' : f === 'credit' ? 'Com crédito' : 'Todos'}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
-      {view === 'accounts'
-        ? renderAccounts()
-        : renderDebts()}
+      {/* Filtro da conta (só na aba Em aberto): com dívida / com crédito / todos. */}
+      {tab === 'open' && (
+        <div className="mb-4 flex gap-1">
+          {(['debt', 'credit', 'all'] as AccountFilter[]).map((f) => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => setAcctFilter(f)}
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
+                acctFilter === f
+                  ? 'bg-indigo-600 text-white'
+                  : 'border border-gray-300 text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              {f === 'debt' ? 'Com dívida' : f === 'credit' ? 'Com crédito' : 'Todos'}
+            </button>
+          ))}
+        </div>
+      )}
 
-      {/* Painel de recebimento da CONTA inteira (FIFO — ADR-022). */}
+      {tab === 'open' ? renderOpen() : renderPaid()}
+
+      {/* Painel de recebimento da dívida inteira (FIFO — ADR-022/026). */}
       {acctSelected && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
@@ -356,16 +272,11 @@ export default function ContasAReceberPage() {
             className="w-full max-w-sm space-y-4 rounded-2xl bg-white p-5 shadow-lg"
           >
             <div>
-              <h2 className="text-lg font-bold">
-                Receber de {acctSelected.customerName ?? 'cliente'}
-              </h2>
+              <h2 className="text-lg font-bold">Receber de {acctSelected.customerName ?? 'cliente'}</h2>
               <p className="text-sm text-gray-600">
-                Saldo da conta: <strong>{BRL(acctSelected.totalBalance)}</strong>
+                Saldo da dívida: <strong>{BRL(acctSelected.totalBalance)}</strong>
                 {acctSelected.openCount > 1 ? (
-                  <span className="text-gray-500">
-                    {' '}
-                    · {acctSelected.openCount} dívidas (abate da mais antiga)
-                  </span>
+                  <span className="text-gray-500"> · {acctSelected.openCount} vendas (abate da mais antiga)</span>
                 ) : null}
               </p>
             </div>
@@ -384,7 +295,7 @@ export default function ContasAReceberPage() {
               <button
                 type="button"
                 onClick={() => setAmount(String(acctSelected.totalBalance))}
-                className="mt-1 text-xs font-medium text-blue-600 hover:underline"
+                className="mt-1 text-xs font-medium text-indigo-600 hover:underline"
               >
                 Receber tudo ({BRL(acctSelected.totalBalance)})
               </button>
@@ -407,14 +318,10 @@ export default function ContasAReceberPage() {
                 ))}
               </select>
               {method === 'CASH' && (
-                <p className="mt-1 text-xs text-gray-500">
-                  Em dinheiro, entra no caixa aberto como suprimento.
-                </p>
+                <p className="mt-1 text-xs text-gray-500">Em dinheiro, entra no caixa aberto como suprimento.</p>
               )}
             </div>
 
-            {/* Acréscimo de cartão (ADR-022, Fatia C.3) — também no recebimento da conta: o valor é
-                manual, então o rateio entre dívidas não é problema (o operador decide). */}
             {renderSurchargeBlock()}
 
             <div className="grid grid-cols-2 gap-2">
@@ -428,7 +335,7 @@ export default function ContasAReceberPage() {
               <button
                 type="submit"
                 disabled={busy}
-                className="rounded-lg bg-gray-900 py-2 font-medium text-white hover:bg-gray-800 disabled:opacity-60"
+                className="rounded-lg bg-emerald-600 py-2 font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60"
               >
                 {busy ? 'Recebendo…' : 'Receber'}
               </button>
@@ -437,90 +344,7 @@ export default function ContasAReceberPage() {
         </div>
       )}
 
-      {/* Painel de recebimento de UMA dívida (ADR-019). */}
-      {selected && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
-          onClick={() => setSelected(null)}
-        >
-          <form
-            onSubmit={onReceiveDebt}
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-sm space-y-4 rounded-2xl bg-white p-5 shadow-lg"
-          >
-            <div>
-              <h2 className="text-lg font-bold">Receber de {selected.customerName ?? 'cliente'}</h2>
-              <p className="text-sm text-gray-600">
-                Saldo devedor: <strong>{BRL(selected.balance)}</strong>
-              </p>
-            </div>
-
-            <div>
-              <label htmlFor="valor" className="mb-1 block text-sm text-gray-600">
-                Valor a receber
-              </label>
-              <MoneyInput
-                id="valor"
-                value={amount}
-                onChange={setAmount}
-                placeholder="0,00"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2"
-              />
-              <button
-                type="button"
-                onClick={() => setAmount(String(selected.balance))}
-                className="mt-1 text-xs font-medium text-blue-600 hover:underline"
-              >
-                Receber tudo ({BRL(selected.balance)})
-              </button>
-            </div>
-
-            <div>
-              <label htmlFor="forma" className="mb-1 block text-sm text-gray-600">
-                Forma de pagamento
-              </label>
-              <select
-                id="forma"
-                value={method}
-                onChange={(e) => setMethod(e.target.value as PaymentMethod)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2"
-              >
-                {(Object.keys(PAYMENT_METHOD_LABELS) as PaymentMethod[]).map((m) => (
-                  <option key={m} value={m}>
-                    {PAYMENT_METHOD_LABELS[m]}
-                  </option>
-                ))}
-              </select>
-              {method === 'CASH' && (
-                <p className="mt-1 text-xs text-gray-500">
-                  Em dinheiro, entra no caixa aberto como suprimento.
-                </p>
-              )}
-            </div>
-
-            {renderSurchargeBlock()}
-
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setSelected(null)}
-                className="rounded-lg border border-gray-300 py-2 font-medium text-gray-700 hover:bg-gray-100"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                disabled={busy}
-                className="rounded-lg bg-gray-900 py-2 font-medium text-white hover:bg-gray-800 disabled:opacity-60"
-              >
-                {busy ? 'Recebendo…' : 'Receber'}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* Extrato consolidado da conta (visão por cliente): timeline de vendas + recebimentos. */}
+      {/* Detalhe da dívida ABERTA (extrato consolidado + receber). */}
       {accountDetailId && (
         <CustomerAccountModal
           customerId={accountDetailId}
@@ -530,15 +354,8 @@ export default function ContasAReceberPage() {
         />
       )}
 
-      {/* Detalhe da dívida (componente reutilizável): itens, recebimentos e observação. */}
-      {detailId && (
-        <ReceivableDetailModal
-          receivableId={detailId}
-          onClose={() => setDetailId(null)}
-          onReceive={openReceiveDebt}
-          reloadSignal={detailReload}
-        />
-      )}
+      {/* Detalhe da dívida QUITADA (só leitura). */}
+      {paidDebtId && <DebtDetailModal debtId={paidDebtId} onClose={() => setPaidDebtId(null)} />}
     </div>
   );
 
@@ -546,9 +363,8 @@ export default function ContasAReceberPage() {
   // Render helpers (fecham sobre o estado do componente)
   // -------------------------------------------------------------------------
 
-  /** Bloco de acréscimo de cartão (ADR-022, Fatia C.3), reusado nos dois recebimentos (dívida e
-   *  conta). Só aparece com forma de cartão E algum item da dívida/conta com acréscimo naquela forma;
-   *  o valor é MANUAL (o operador decide). Fecha sobre `method`/`debtItems`/`surchargeInput`/`amount`. */
+  /** Bloco de acréscimo de cartão (ADR-022, Fatia C.3): só com forma de cartão E item da dívida com
+   *  acréscimo naquela forma; valor MANUAL. Fecha sobre `method`/`debtItems`/`surchargeInput`/`amount`. */
   function renderSurchargeBlock() {
     if (!isCardMethod(method)) return null;
     const perUnit = (it: ReceivableItem) =>
@@ -556,9 +372,7 @@ export default function ContasAReceberPage() {
     const items = debtItems.filter((it) => perUnit(it) > 0);
     if (items.length === 0) return null;
     const label = method === 'DEBIT_CARD' ? 'débito' : 'crédito';
-    const suggested = Number(
-      items.reduce((s, it) => s + perUnit(it) * Number(it.quantity), 0).toFixed(2),
-    );
+    const suggested = Number(items.reduce((s, it) => s + perUnit(it) * Number(it.quantity), 0).toFixed(2));
     const surcharge = Math.max(0, Number(surchargeInput) || 0);
     return (
       <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
@@ -585,7 +399,7 @@ export default function ContasAReceberPage() {
             <button
               type="button"
               onClick={() => setSurchargeInput(String(suggested))}
-              className="shrink-0 rounded-lg px-2 py-1 text-xs font-medium text-blue-600 hover:underline"
+              className="shrink-0 rounded-lg px-2 py-1 text-xs font-medium text-indigo-600 hover:underline"
               title={`Sugerido: ${BRL(suggested)}`}
             >
               usar sug.
@@ -602,188 +416,141 @@ export default function ContasAReceberPage() {
     );
   }
 
-  function renderAccounts() {
+  /** Aba EM ABERTO: cards de dívida por cliente (código D-000X, saldo, nº de vendas, vencimento). */
+  function renderOpen() {
     if (!accountsLoaded) return <p className="text-gray-600">Carregando…</p>;
     if (accounts.length === 0) {
-      const emptyMsg = search.trim()
-        ? 'Nenhuma conta para essa busca.'
+      const msg = search.trim()
+        ? 'Nenhuma dívida para essa busca.'
         : acctFilter === 'credit'
           ? 'Nenhum cliente com crédito a favor. Créditos de devolução aparecem aqui.'
           : acctFilter === 'all'
-            ? 'Nenhuma conta com dívida ou crédito.'
-            : 'Nenhuma conta em aberto. As vendas a prazo aparecem aqui, somadas por cliente.';
-      return (
-        <p className="rounded-2xl bg-white p-6 text-center text-gray-600 shadow-sm">{emptyMsg}</p>
-      );
+            ? 'Nenhuma dívida ou crédito.'
+            : 'Nenhuma dívida em aberto. As vendas a prazo aparecem aqui, somadas por cliente.';
+      return <p className="rounded-2xl bg-white p-6 text-center text-gray-600 shadow-sm">{msg}</p>;
     }
     return (
-      <>
-        {acctFilter !== 'credit' && (
-          <div className="mb-4 rounded-2xl bg-white p-4 shadow-sm">
-            <p className="text-xs text-gray-600">Total a receber ({accounts.length} clientes)</p>
-            <p className="mt-1 text-2xl font-bold">{BRL(totalOwedPage)}</p>
+      <div className="flex flex-col gap-2.5">
+        {accounts.map((a) => {
+          const overdue = isOverdue(a.nextDueDate);
+          return (
+            <div
+              key={a.customerId}
+              className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition hover:border-indigo-300"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => a.debtId && setAccountDetailId(a.customerId)}
+                  className="min-w-0 text-left"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-bold text-gray-900">{a.customerName ?? '—'}</span>
+                    {a.debtNumber != null && (
+                      <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-bold text-indigo-600">
+                        {formatDebtNumber(a.debtNumber)}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-xs text-gray-500">
+                    {a.openCount > 0
+                      ? `${a.openCount} ${a.openCount === 1 ? 'venda' : 'vendas'}${
+                          a.oldestCreatedAt
+                            ? ` · desde ${new Date(a.oldestCreatedAt).toLocaleDateString('pt-BR')}`
+                            : ''
+                        }`
+                      : 'Sem dívida em aberto'}
+                  </p>
+                  {a.nextDueDate && (
+                    <span
+                      className={`mt-1.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                        overdue ? 'bg-red-50 text-red-700' : 'bg-gray-100 text-gray-600'
+                      }`}
+                    >
+                      ● {overdue ? 'vencida' : 'vence'} {new Date(a.nextDueDate).toLocaleDateString('pt-BR')}
+                    </span>
+                  )}
+                </button>
+                <div className="flex shrink-0 flex-col items-end gap-1.5">
+                  {a.totalBalance > 0 ? (
+                    <span className="text-lg font-extrabold tabular-nums text-gray-900">
+                      {BRL(a.totalBalance)}
+                    </span>
+                  ) : a.creditBalance > 0 ? (
+                    <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-bold text-green-800">
+                      crédito {BRL(a.creditBalance)}
+                    </span>
+                  ) : null}
+                  {a.totalBalance > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => openReceiveAccount(a)}
+                      className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700"
+                    >
+                      Receber
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+
+        {acctFilter !== 'credit' && totalOwed > 0 && (
+          <div className="mt-1 flex items-center justify-between rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+            <span className="text-xs font-bold uppercase tracking-wide text-gray-500">Total a receber</span>
+            <span className="text-xl font-extrabold tabular-nums text-gray-900">{BRL(totalOwed)}</span>
           </div>
         )}
-
-        <div className="overflow-x-auto rounded-2xl bg-white shadow-sm">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-100 text-left text-gray-600">
-                <th className="px-4 py-3">Cliente</th>
-                <th className="px-4 py-3">Vencimento mais próximo</th>
-                <th className="px-4 py-3 text-right">Dívidas</th>
-                <th className="px-4 py-3 text-right">Saldo da conta</th>
-                <th className="px-4 py-3 text-right">Crédito</th>
-                <th className="px-4 py-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {accounts.map((a) => {
-                const overdue = isOverdue(a.nextDueDate);
-                return (
-                  <tr key={a.customerId} className="border-b border-gray-50">
-                    <td className="px-4 py-3">
-                      {/* Clicar no cliente abre o extrato consolidado da conta. */}
-                      <button
-                        type="button"
-                        onClick={() => setAccountDetailId(a.customerId)}
-                        className="font-medium text-blue-700 hover:underline"
-                      >
-                        {a.customerName ?? '—'}
-                      </button>
-                    </td>
-                    <td className="px-4 py-3">
-                      {a.nextDueDate ? (
-                        <span className={overdue ? 'font-medium text-red-600' : 'text-gray-600'}>
-                          {new Date(a.nextDueDate).toLocaleDateString('pt-BR')}
-                          {overdue ? ' · vencida' : ''}
-                        </span>
-                      ) : (
-                        <span className="text-gray-500">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-gray-600">{a.openCount}</td>
-                    <td className="px-4 py-3 text-right font-semibold tabular-nums">
-                      {a.totalBalance > 0 ? BRL(a.totalBalance) : <span className="text-gray-400">—</span>}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums">
-                      {a.creditBalance > 0 ? (
-                        <span className="font-medium text-green-700">{BRL(a.creditBalance)}</span>
-                      ) : (
-                        <span className="text-gray-400">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {a.totalBalance > 0 ? (
-                        <button
-                          type="button"
-                          onClick={() => openReceiveAccount(a)}
-                          className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800"
-                        >
-                          Receber
-                        </button>
-                      ) : (
-                        <span className="text-xs text-gray-400">—</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </>
+      </div>
     );
   }
 
-  function renderDebts() {
-    if (!debtsLoaded) return <p className="text-gray-600">Carregando…</p>;
-    if (rows.length === 0) {
+  /** Aba QUITADAS: cards de dívidas arquivadas (código D-000X, total, nº de vendas, quitação). */
+  function renderPaid() {
+    if (!paidLoaded) return <p className="text-gray-600">Carregando…</p>;
+    if (paidDebts.length === 0) {
       return (
         <p className="rounded-2xl bg-white p-6 text-center text-gray-600 shadow-sm">
-          {search.trim()
-            ? 'Nenhuma conta encontrada para essa busca.'
-            : status === 'open'
-              ? 'Nenhuma conta a receber em aberto. As vendas a prazo aparecem aqui.'
-              : 'Nenhuma conta nesta situação.'}
+          {search.trim() ? 'Nenhuma dívida quitada para essa busca.' : 'Nenhuma dívida quitada ainda.'}
         </p>
       );
     }
     return (
-      <>
-        <div className="overflow-x-auto rounded-2xl bg-white shadow-sm">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-100 text-left text-gray-600">
-                <th className="px-4 py-3">Cliente</th>
-                <th className="px-4 py-3">Vencimento</th>
-                <th className="px-4 py-3 text-right">Original</th>
-                <th className="px-4 py-3 text-right">Recebido</th>
-                <th className="px-4 py-3 text-right">Saldo</th>
-                <th className="px-4 py-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => {
-                const overdue = r.status === 'OPEN' && isOverdue(r.dueDate);
-                return (
-                  <tr key={r.id} className="border-b border-gray-50">
-                    <td className="px-4 py-3">
-                      <button
-                        type="button"
-                        onClick={() => setDetailId(r.id)}
-                        className="font-medium text-blue-700 hover:underline"
-                      >
-                        {r.customerName ?? '—'}
-                      </button>
-                      <span className="block text-xs text-gray-500">
-                        {formatOrderNumber(r.orderNumber) || `#${r.orderId.slice(0, 8)}`} ·{' '}
-                        {new Date(r.createdAt).toLocaleDateString('pt-BR')}
-                        {r.status !== 'OPEN' ? ` · ${RECEIVABLE_STATUS_LABELS[r.status]}` : ''}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      {r.dueDate ? (
-                        <span className={overdue ? 'font-medium text-red-600' : 'text-gray-600'}>
-                          {new Date(r.dueDate).toLocaleDateString('pt-BR')}
-                          {overdue ? ' · vencida' : ''}
-                        </span>
-                      ) : (
-                        <span className="text-gray-500">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums">{BRL(r.originalAmount)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums text-green-700">
-                      {BRL(r.settledAmount)}
-                    </td>
-                    <td className="px-4 py-3 text-right font-semibold tabular-nums">
-                      {BRL(r.balance)}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {r.status === 'OPEN' ? (
-                        <button
-                          type="button"
-                          onClick={() => openReceiveDebt(r)}
-                          className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800"
-                        >
-                          Receber
-                        </button>
-                      ) : (
-                        <span className="text-xs text-gray-500">quitada</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+      <div className="flex flex-col gap-2.5">
+        {paidDebts.map((d) => (
+          <button
+            key={d.debtId}
+            type="button"
+            onClick={() => setPaidDebtId(d.debtId)}
+            className="rounded-2xl border border-gray-200 bg-white p-4 text-left shadow-sm transition hover:border-indigo-300"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-bold text-gray-900">{d.customerName ?? '—'}</span>
+                  <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-bold text-indigo-600">
+                    {formatDebtNumber(d.debtNumber)}
+                  </span>
+                  <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-bold text-green-800">
+                    Quitada
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-gray-500">
+                  {d.salesCount} {d.salesCount === 1 ? 'venda' : 'vendas'}
+                  {d.closedAt ? ` · quitada em ${new Date(d.closedAt).toLocaleDateString('pt-BR')}` : ''}
+                </p>
+              </div>
+              <span className="shrink-0 font-bold tabular-nums text-gray-700">{BRL(d.originalTotal)}</span>
+            </div>
+          </button>
+        ))}
 
-        {nextCursor && (
-          <div className="mt-4 text-center">
+        {paidCursor && (
+          <div className="mt-1 text-center">
             <button
               type="button"
-              onClick={loadMore}
+              onClick={loadMorePaid}
               disabled={loadingMore}
               className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
             >
@@ -791,7 +558,7 @@ export default function ContasAReceberPage() {
             </button>
           </div>
         )}
-      </>
+      </div>
     );
   }
 }
