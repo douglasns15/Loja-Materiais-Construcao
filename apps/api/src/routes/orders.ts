@@ -1196,7 +1196,14 @@ orders.post('/:id/return-items', async (c) => {
       include: {
         items: true,
         receivable: {
-          select: { id: true, originalAmount: true, settledAmount: true, returnedAmount: true, status: true },
+          select: {
+            id: true,
+            debtId: true, // ADR-026: fechar a dívida se a devolução zerar o saldo
+            originalAmount: true,
+            settledAmount: true,
+            returnedAmount: true,
+            status: true,
+          },
         },
       },
     });
@@ -1322,6 +1329,19 @@ orders.post('/:id/return-items', async (c) => {
           Number(rec.settledAmount),
           applied.returnedAmount,
         );
+        // ADR-026: se a devolução quitou o recebível e era o último em aberto da dívida, fecha-a
+        // (vai para "Quitadas"). Mesmo critério do recebimento — dívida sem recebível OPEN = quitada.
+        if (applied.status === 'PAID' && rec.debtId) {
+          const openLeft = await tx.receivable.count({
+            where: { tenantId, debtId: rec.debtId, status: 'OPEN' },
+          });
+          if (openLeft === 0) {
+            await tx.debt.updateMany({
+              where: { id: rec.debtId, tenantId, status: 'OPEN' },
+              data: { status: 'PAID', closedAt: new Date() },
+            });
+          }
+        }
       }
 
       // 3) Excedente → dinheiro (caixa) OU crédito (livro-razão + cache).

@@ -439,17 +439,19 @@ testável exaustivamente e compartilhada entre as duas apps.
 | `GET /suppliers` · `GET /suppliers/:id` | Lista e detalhe de fornecedores. |
 | `POST /suppliers` 🔒 · `PATCH /suppliers/:id` 🔒 · `DELETE /suppliers/:id` 🔒 | CRUD de fornecedores. |
 
-**`/receivables` — Fiado / contas a receber (ADR-019, ADR-022)**
+**`/receivables` — Fiado / contas a receber (ADR-019, ADR-022, ADR-026)**
 
 | Método · Rota | O que faz |
 |---|---|
 | `GET /` | Lista dívidas (contas a receber). |
-| `GET /accounts` | Saldo devedor **consolidado por cliente** (1 linha por pessoa). |
-| `GET /accounts/:customerId` | Extrato da conta de um cliente. |
-| `POST /accounts/:customerId/receive` 🔒 | Recebe pagamento **FIFO** distribuído nas dívidas abertas (um `CashMovement` pelo total). |
+| `GET /accounts` | Saldo devedor **consolidado por cliente** (1 linha por pessoa) — aba **Em aberto**. Cada linha inclui `debtId`/`debtNumber` da dívida ABERTA do cliente (ADR-026, código `D-000X`). |
+| `GET /accounts/:customerId` | Extrato da conta (dívida aberta) de um cliente; inclui `debtId`/`debtNumber`/`debtOpenedAt` (ADR-026). |
+| `POST /accounts/:customerId/receive` 🔒 | Recebe pagamento **FIFO** distribuído nas dívidas abertas (um `CashMovement` pelo total). Ao zerar, fecha a **dívida** (ADR-026: `PAID`+`closedAt`). |
+| `GET /debts` | Lista de **dívidas** por status (ADR-026) — default `paid` (aba **Quitadas**), paginada por `closedAt`. Cada linha: `debtNumber`, cliente, `originalTotal`, `salesCount`, `openedAt`/`closedAt`. |
+| `GET /debts/:id` | Extrato de **uma dívida** pelo id (ADR-026): cabeçalho (código/status/datas), resumo (original/recebido/devolvido/saldo) e as vendas a prazo com itens + recebimentos + devoluções. Usado no detalhe da aba Quitadas. |
 | `GET /:id` | Detalhe de uma dívida. |
 | `PATCH /:id` 🔒 | Edita a dívida (ex.: notas, vencimento). |
-| `POST /:id/receive` 🔒 | Recebe pagamento de **uma** dívida específica. |
+| `POST /:id/receive` 🔒 | Recebe pagamento de **uma** dívida específica. Ao quitar o último recebível, fecha a **dívida** (ADR-026). |
 
 **`/deliveries` — Entrega / retirada futura (ADR-020)**
 

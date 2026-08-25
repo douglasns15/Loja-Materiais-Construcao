@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { createPrismaClient } from '@nexoloja/db';
+import { createPrismaClient, type Prisma } from '@nexoloja/db';
 import {
   applyReceivablePayment,
   customerAccountBalance,
@@ -94,6 +94,28 @@ function mapReturnEvent(rt: {
       };
     }),
   };
+}
+
+/**
+ * Fecha a DÍVIDA (ADR-026) quando ela não tem mais nenhum recebível EM ABERTO — some o saldo (por
+ * recebimento e/ou devolução), a dívida vira `PAID` e ganha `closedAt` (arquiva na aba "Quitadas").
+ * Idempotente e à prova de corrida: o `updateMany` condicional (`status: 'OPEN'`) só age uma vez.
+ * Chamado DENTRO da transação que quitou o último recebível. `debtId` nulo (venda a prazo pré-ADR-026
+ * ainda sem backfill, ou recebível avulso) é no-op.
+ */
+async function closeDebtIfSettled(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  debtId: string | null | undefined,
+): Promise<void> {
+  if (!debtId) return;
+  const openLeft = await tx.receivable.count({ where: { tenantId, debtId, status: 'OPEN' } });
+  if (openLeft === 0) {
+    await tx.debt.updateMany({
+      where: { id: debtId, tenantId, status: 'OPEN' },
+      data: { status: 'PAID', closedAt: new Date() },
+    });
+  }
 }
 
 /** Lista as contas a receber (venda a prazo — ADR-019), **paginada por cursor keyset** (como as
@@ -293,7 +315,7 @@ receivables.get('/accounts', async (c) => {
       }
     }
 
-    const rows = [...accById.values()]
+    const filtered = [...accById.values()]
       // Filtro final: "debt" só quem tem saldo devedor; "credit" só quem tem crédito; "all" ambos.
       .filter((a) =>
         filter === 'debt' ? a.totalBalance > 0 : filter === 'credit' ? a.creditBalance > 0 : true,
@@ -305,6 +327,18 @@ receivables.get('/accounts', async (c) => {
           b.creditBalance - a.creditBalance ||
           (a.customerName ?? '').localeCompare(b.customerName ?? '', 'pt-BR'),
       );
+
+    // ADR-026: identidade da dívida ABERTA de cada cliente (código D-000X). Como é 1 aberta por
+    // cliente, um mapa customerId → { debtId, debtNumber } cobre a lista inteira numa query.
+    const openDebts = await prisma.debt.findMany({
+      where: { tenantId, status: 'OPEN', customerId: { in: filtered.map((a) => a.customerId) } },
+      select: { id: true, customerId: true, debtNumber: true },
+    });
+    const debtByCustomer = new Map(openDebts.map((d) => [d.customerId, d]));
+    const rows = filtered.map((a) => {
+      const d = debtByCustomer.get(a.customerId);
+      return { ...a, debtId: d?.id ?? null, debtNumber: d?.debtNumber ?? null };
+    });
 
     return c.json({ ok: true, data: { rows } });
   } catch (err) {
@@ -351,6 +385,7 @@ receivables.post('/accounts/:customerId/receive', requireActiveTenant, async (c)
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       select: {
         id: true,
+        debtId: true, // ADR-026: fechar a dívida quando o último recebível dela zerar
         originalAmount: true,
         settledAmount: true,
         returnedAmount: true,
@@ -448,6 +483,10 @@ receivables.post('/accounts/:customerId/receive', requireActiveTenant, async (c)
         if (next.fullyPaid) fullyPaidCount += 1;
       }
 
+      // ADR-026: como "1 dívida aberta por cliente", todas as dívidas OPEN carregadas pertencem à
+      // MESMA dívida; se o recebimento zerou todas, fecha a dívida (vai para "Quitadas").
+      await closeDebtIfSettled(tx, tenantId, open[0]?.debtId ?? null);
+
       return { fullyPaidCount };
     });
 
@@ -499,6 +538,12 @@ receivables.get('/accounts/:customerId', async (c) => {
     if (!customer) {
       return c.json({ ok: false, error: 'Cliente não encontrado.' }, 404);
     }
+
+    // ADR-026: a dívida ABERTA do cliente (código D-000X + quando abriu) para o cabeçalho da tela.
+    const openDebt = await prisma.debt.findFirst({
+      where: { tenantId, customerId, status: 'OPEN' },
+      select: { id: true, debtNumber: true, openedAt: true },
+    });
 
     const list = await prisma.receivable.findMany({
       // ADR-022: o extrato é a CONTA ATUAL — só dívidas EM ABERTO. Uma vez QUITADA, a dívida sai do
@@ -673,6 +718,9 @@ receivables.get('/accounts/:customerId', async (c) => {
       data: {
         customerId: customer.id,
         customerName: customer.name,
+        debtId: openDebt?.id ?? null, // ADR-026: identidade da dívida aberta (D-000X)
+        debtNumber: openDebt?.debtNumber ?? null,
+        debtOpenedAt: openDebt?.openedAt ?? null,
         debtNotes: customer.debtNotes, // observação da DÍVIDA (separada do cadastro — ADR-022)
         creditBalance: Number(customer.creditBalance), // crédito a favor (ADR-022 Fatia B)
         totalBalance,
@@ -686,6 +734,242 @@ receivables.get('/accounts/:customerId', async (c) => {
   } catch (err) {
     console.error('GET /receivables/accounts/:customerId falhou:', err);
     return c.json({ ok: false, error: 'Falha ao buscar a conta do cliente.' }, 500);
+  }
+});
+
+/**
+ * Lista de DÍVIDAS por status (ADR-026), para a aba **Quitadas** (default `paid`). As dívidas em
+ * aberto continuam vindo de `/accounts` (a conta do cliente = a dívida aberta). Paginada por cursor
+ * keyset em `closedAt desc, id desc` (a quitada mais recente primeiro). Cada linha: código D-000X,
+ * cliente, total original, nº de vendas, abertura e quitação. `q` busca por nome do cliente.
+ */
+receivables.get('/debts', async (c) => {
+  const tenantId = getTenantId(c);
+  const connectionString = getConnectionString(c.env);
+  if (!tenantId || !connectionString) {
+    return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
+  }
+  const status = c.req.query('status') === 'open' ? ('OPEN' as const) : ('PAID' as const);
+  const q = (c.req.query('q') ?? '').trim();
+  const qWhere = q ? { customer: { name: { contains: q, mode: 'insensitive' as const } } } : {};
+  const limitRaw = Number(c.req.query('limit'));
+  const limit =
+    Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(Math.floor(limitRaw), PAGE_MAX) : PAGE_DEFAULT;
+  const cursor = c.req.query('cursor') ? decodeCursor(c.req.query('cursor') as string) : null;
+  // A quitada ordena/pagina por `closedAt`; a variante aberta, por `openedAt`. Chaves explícitas
+  // (não computadas) para o Prisma tipar corretamente o where/orderBy.
+  const cursorDate = cursor ? new Date(cursor.createdAt) : null;
+  const keyset =
+    cursor && cursorDate
+      ? status === 'PAID'
+        ? {
+            OR: [
+              { closedAt: { lt: cursorDate } },
+              { closedAt: cursorDate, id: { lt: cursor.id } },
+            ],
+          }
+        : {
+            OR: [
+              { openedAt: { lt: cursorDate } },
+              { openedAt: cursorDate, id: { lt: cursor.id } },
+            ],
+          }
+      : {};
+  const orderBy =
+    status === 'PAID'
+      ? ([{ closedAt: 'desc' }, { id: 'desc' }] as const)
+      : ([{ openedAt: 'desc' }, { id: 'desc' }] as const);
+
+  try {
+    const prisma = createPrismaClient(connectionString);
+    const list = await prisma.debt.findMany({
+      where: { tenantId, status, ...qWhere, ...keyset },
+      orderBy: [...orderBy],
+      take: limit + 1,
+      select: {
+        id: true,
+        debtNumber: true,
+        status: true,
+        openedAt: true,
+        closedAt: true,
+        customer: { select: { name: true } },
+        receivables: { select: { originalAmount: true, settledAmount: true, returnedAmount: true } },
+      },
+    });
+    const hasMore = list.length > limit;
+    const page = hasMore ? list.slice(0, limit) : list;
+    const rows = page.map((d) => {
+      const originalTotal = d.receivables.reduce((s, r) => s + Number(r.originalAmount), 0);
+      const balance = customerAccountBalance(
+        d.receivables.map((r, i) => ({
+          id: String(i),
+          balance: receivableBalance(
+            Number(r.originalAmount),
+            Number(r.settledAmount),
+            Number(r.returnedAmount),
+          ),
+        })),
+      );
+      return {
+        debtId: d.id,
+        debtNumber: d.debtNumber,
+        status: d.status,
+        customerName: d.customer?.name ?? null,
+        originalTotal: Number(originalTotal.toFixed(2)),
+        balance,
+        salesCount: d.receivables.length,
+        openedAt: d.openedAt,
+        closedAt: d.closedAt,
+      };
+    });
+    const last = page[page.length - 1];
+    const nextCursor =
+      hasMore && last
+        ? encodeCursor({ createdAt: (last.closedAt ?? last.openedAt) as Date, id: last.id })
+        : null;
+    return c.json({ ok: true, data: { rows, nextCursor } });
+  } catch (err) {
+    console.error('GET /receivables/debts falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao buscar as dívidas.' }, 500);
+  }
+});
+
+/**
+ * Extrato de UMA dívida (ADR-026) pelo seu id — usado no detalhe da aba **Quitadas** (também serve
+ * a uma aberta). Traz o cabeçalho (código, status, abertura/quitação, cliente), o resumo
+ * (original/recebido/devolvido/saldo) e as vendas a prazo que a compõem com itens e recebimentos +
+ * as devoluções — a UI monta a timeline. Só leitura.
+ */
+receivables.get('/debts/:id', async (c) => {
+  const tenantId = getTenantId(c);
+  const connectionString = getConnectionString(c.env);
+  if (!tenantId || !connectionString) {
+    return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
+  }
+  const id = c.req.param('id');
+  if (!UUID_RE.test(id)) {
+    return c.json({ ok: false, error: 'Dívida não encontrada.' }, 404);
+  }
+
+  try {
+    const prisma = createPrismaClient(connectionString);
+    const debt = await prisma.debt.findFirst({
+      where: { id, tenantId },
+      select: {
+        id: true,
+        debtNumber: true,
+        status: true,
+        openedAt: true,
+        closedAt: true,
+        customer: { select: { id: true, name: true, debtNotes: true } },
+        receivables: {
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          select: {
+            id: true,
+            orderId: true,
+            originalAmount: true,
+            settledAmount: true,
+            returnedAmount: true,
+            status: true,
+            dueDate: true,
+            createdAt: true,
+            order: {
+              select: {
+                total: true,
+                orderNumber: true, // ADR-023
+                items: {
+                  select: {
+                    productName: true,
+                    unit: true,
+                    quantity: true,
+                    unitPrice: true,
+                    total: true,
+                    pairGroup: true,
+                  },
+                },
+              },
+            },
+            payments: {
+              orderBy: { paidAt: 'asc' },
+              select: {
+                id: true,
+                amount: true,
+                surcharge: true,
+                method: true,
+                paidAt: true,
+                receivedByName: true,
+                reference: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!debt) {
+      return c.json({ ok: false, error: 'Dívida não encontrada.' }, 404);
+    }
+
+    // Devoluções das vendas desta dívida (ADR-022) — eventos próprios da timeline.
+    const orderIds = debt.receivables.map((r) => r.orderId);
+    const returnRows = orderIds.length
+      ? await prisma.orderReturn.findMany({
+          where: { tenantId, orderId: { in: orderIds } },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          take: 200,
+          select: RETURN_SELECT,
+        })
+      : [];
+    const returns = returnRows.map(mapReturnEvent);
+
+    const receivables = debt.receivables.map((r) => ({
+      id: r.id,
+      orderId: r.orderId,
+      orderNumber: r.order?.orderNumber ?? null, // ADR-023 (atalho p/ ver a venda)
+      originalAmount: r.originalAmount,
+      settledAmount: r.settledAmount,
+      returnedAmount: r.returnedAmount,
+      balance: receivableBalance(
+        Number(r.originalAmount),
+        Number(r.settledAmount),
+        Number(r.returnedAmount),
+      ),
+      status: r.status,
+      dueDate: r.dueDate,
+      createdAt: r.createdAt,
+      orderTotal: r.order?.total ?? null,
+      items: r.order?.items ?? [],
+      payments: r.payments.map((p) => ({ ...p, surcharge: String(p.surcharge ?? 0) })),
+    }));
+
+    const originalTotal = receivables.reduce((s, r) => s + Number(r.originalAmount), 0);
+    const settledTotal = receivables.reduce((s, r) => s + Number(r.settledAmount), 0);
+    const returnedTotal = receivables.reduce((s, r) => s + Number(r.returnedAmount), 0);
+    const balance = customerAccountBalance(
+      receivables.map((r) => ({ id: r.id, balance: r.balance })),
+    );
+
+    return c.json({
+      ok: true,
+      data: {
+        debtId: debt.id,
+        debtNumber: debt.debtNumber, // ADR-026: D-000X
+        status: debt.status,
+        openedAt: debt.openedAt,
+        closedAt: debt.closedAt,
+        customerId: debt.customer?.id ?? null,
+        customerName: debt.customer?.name ?? null,
+        debtNotes: debt.customer?.debtNotes ?? null,
+        originalTotal: Number(originalTotal.toFixed(2)),
+        settledTotal: Number(settledTotal.toFixed(2)),
+        returnedTotal: Number(returnedTotal.toFixed(2)),
+        balance,
+        receivables,
+        returns,
+      },
+    });
+  } catch (err) {
+    console.error('GET /receivables/debts/:id falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao buscar a dívida.' }, 500);
   }
 });
 
@@ -871,6 +1155,7 @@ receivables.post('/:id/receive', requireActiveTenant, async (c) => {
       select: {
         id: true,
         orderId: true,
+        debtId: true, // ADR-026: fechar a dívida se este for o último recebível a zerar
         originalAmount: true,
         settledAmount: true,
         returnedAmount: true,
@@ -959,6 +1244,9 @@ receivables.post('/:id/receive', requireActiveTenant, async (c) => {
         data: { settledAmount: next.settledAmount, status: next.status },
         select: { id: true, originalAmount: true, settledAmount: true, status: true },
       });
+
+      // ADR-026: se este recebimento quitou o recebível e era o último em aberto da dívida, fecha-a.
+      if (next.fullyPaid) await closeDebtIfSettled(tx, tenantId, receivable.debtId);
 
       return { payment, updated };
     });
