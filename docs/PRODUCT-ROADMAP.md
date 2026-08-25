@@ -110,7 +110,7 @@ Foco: **tornar o dia a dia impecável**. Origem: pedidos do Owner em `Uteis_Proj
 
 ### Entregues recentemente (não repetir aqui)
 
-Pagamento dividido · paginação por cursor + filtro de período no histórico · ordenação (maior/menor valor, data) · botão "voltar ao topo" · sangria/suprimento e extrato do caixa · contador de cédulas e mini-DRE · troco e formas no comprovante · busca no servidor em Clientes/Produtos · numeração sequencial de vendas (`V-000128`) e busca por código · orçamentos salvos (`O-000045`, ciclo de vida, converter em venda) · correção do logo que sumia do comprovante ao ser trocado · valor recebido e troco por venda (Histórico + comprovante) · navegação ‹ Hoje › + default "Hoje" nos filtros por data (Relatórios/Vendas/Movimentações) · fiado / contas a receber ([ADR-019](adr/ADR-019-venda-a-prazo-contas-a-receber.md)) e conta do cliente com devolução por item + crédito ([ADR-022](adr/ADR-022-conta-do-cliente-fiado-acumulado.md)) · cadastro por código de barras via catálogo global + importação de XML de NF-e ([ADR-025](adr/ADR-025-catalogo-global-ean.md)) · busca do histórico de vendas por cliente e por valor · cadastro de fornecedores · esteira de precificação · retirada/entrega futura ([ADR-020](adr/ADR-020-retirada-entrega-futura.md)) · cesta persistente entre dispositivos ([ADR-021](adr/ADR-021-cesta-persistente-sincronizada.md)).
+Pagamento dividido · paginação por cursor + filtro de período no histórico · ordenação (maior/menor valor, data) · botão "voltar ao topo" · sangria/suprimento e extrato do caixa · contador de cédulas e mini-DRE · troco e formas no comprovante · busca no servidor em Clientes/Produtos · numeração sequencial de vendas (`V-000128`) e busca por código · orçamentos salvos (`O-000045`, ciclo de vida, converter em venda) · correção do logo que sumia do comprovante ao ser trocado · valor recebido e troco por venda (Histórico + comprovante) · navegação ‹ Hoje › + default "Hoje" nos filtros por data (Relatórios/Vendas/Movimentações) · fiado / contas a receber ([ADR-019](adr/ADR-019-venda-a-prazo-contas-a-receber.md)) e conta do cliente com devolução por item + crédito ([ADR-022](adr/ADR-022-conta-do-cliente-fiado-acumulado.md)) · **dívida do cliente como conta-corrente** (`D-0001`, visão unificada Em aberto/Quitadas, vencimento na dívida — [ADR-026](adr/ADR-026-divida-do-cliente-como-entidade.md)) · cadastro por código de barras via catálogo global + importação de XML de NF-e ([ADR-025](adr/ADR-025-catalogo-global-ean.md)) · busca do histórico de vendas por cliente e por valor · cadastro de fornecedores · esteira de precificação · retirada/entrega futura ([ADR-020](adr/ADR-020-retirada-entrega-futura.md)) · cesta persistente entre dispositivos ([ADR-021](adr/ADR-021-cesta-persistente-sincronizada.md)).
 
 ---
 
@@ -172,7 +172,7 @@ Cada item abaixo é uma decisão real com trade-offs — exatamente o material d
 
 **Go-live**
 
-- **Emissão fiscal:** qual provedor? Onde guardar o certificado A1 com segurança? Como a contingência offline conversa com a fila de sincronização? → candidato a **ADR-026**.
+- **Emissão fiscal:** qual provedor? Onde guardar o certificado A1 com segurança? Como a contingência offline conversa com a fila de sincronização? → candidato a **nova ADR** (ADR-027+; o número ADR-026 já é a dívida do cliente).
 - **Monetização:** quantos planos? O que entra no plano de entrada? A nota fiscal é cobrada à parte (custo variável) ou embutida?
 - **Importação de catálogo:** formato livre com De-Para (como na NF-e) ou template fixo?
 

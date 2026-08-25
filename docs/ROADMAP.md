@@ -3,7 +3,30 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-24 — **UI.Estoque.RepaginacaoVisual — tela de Estoque (página + 2
+> **Última atualização:** 2026-08-25 — **CR.DividaDoCliente — Contas a Receber unificada no modelo de
+> DÍVIDA (conta-corrente `D-0001`) — NO AR e E2E DO OWNER VALIDADO (2026-08-25, "tudo validado com
+> sucesso"). ADR-026, Fatias 1+2 + vencimento na dívida. CONCLUÍDA.** Evolui a "conta implícita" da
+> ADR-022 para uma **entidade `debts`** com código sequencial por loja (`D-0001`), **1 dívida aberta por
+> cliente**, que agrega 1+ vendas a prazo e é a **unidade de quitação** (recebe-se a dívida, não a venda/
+> item — FIFO). **Fatia 1** (migration **`0030`** aditiva + backfill: `debts`, `tenants.lastDebtNumber`,
+> `receivables.debtId`; a venda a prazo abre/liga na dívida aberta, `D-000X` atômico). **Fatia 2A** (API:
+> `closeDebtIfSettled` fecha a dívida em `PAID`+`closedAt` ao zerar — nos 2 receive e na devolução; rotas
+> `GET /receivables/debts` [aba Quitadas] e `GET /receivables/debts/:id` [extrato da dívida]; `debtNumber`
+> nas contas). **Fatia 2B** (web: `contas-a-receber/page.tsx` repaginado na identidade do app — título
+> gradiente índigo, abas **Em aberto × Quitadas**, cards `D-000X` com saldo/vencimento, Total ao pé,
+> Receber FIFO; detalhe da aberta reusa `CustomerAccountModal` [+código no cabeçalho], da quitada abre
+> `DebtDetailModal` novo). **Correções pós-E2E (mesmo dia):** (1) **off-by-one do vencimento** — data-only
+> guardada meia-noite UTC e exibida no fuso do navegador voltava um dia → `formatDateBr`/`isDatePast`
+> (shared, formatam/comparam em UTC) aplicados em 4 telas; (2) **vencimento na DÍVIDA (Opção A do Owner,
+> migration `0031`)** — `debts.dueDate` atualizado a cada venda a prazo que informa data (a última vence;
+> omitir não limpa), fonte única do vencimento exibido. Migrations 0030/0031 aplicadas em produção com
+> **dry-run + rollback** antes. Gates: core/shared **321→48** testes, api/web `tsc` 0 + build (**23
+> rotas**, `/contas-a-receber` 7.3 kB). **NO AR:** API `a2302289`→`ed3786b3`→`17fda214`, web (smokes ✅).
+> Commits `64b6d58`/`ae2a4df`/`0f6560d`/`875231c`/`c0f4b93` (locais em `main`, push do Owner). **E2E do
+> Owner VALIDADO (2026-08-25).** **Próximo (outra sessão):** refino possível — detalhe INLINE em 2 colunas
+> como no mockup (hoje é modal); ou seguir itens do Horizonte 1 / repaginação das demais telas.
+>
+> **Antes:** 2026-08-24 — **UI.Estoque.RepaginacaoVisual — tela de Estoque (página + 2
 > modais) com a identidade do PDV — NO AR e E2E DO OWNER VALIDADO (2026-08-24, "tudo validado com
 > sucesso"). Fatia CONCLUÍDA.** Terceira tela da onda de repaginação (PDV → Produtos → Estoque),
 > **só apresentação**. **(Página `apps/web/app/(app)/estoque/page.tsx`):** título com gradiente da marca;

@@ -1,6 +1,6 @@
 # ADR-026: Dívida do cliente como entidade (conta-corrente com código D-0001)
 
-**Status:** Proposto — Owner aprovou o modelo (1 dívida aberta por cliente) em 2026-08-25; **a migration `0030` aguarda aprovação explícita antes de codar (regra 1)**
+**Status:** Aceito — **implementado e E2E do Owner VALIDADO (2026-08-25)**. Fatias 1 e 2 no ar (migrations `0030` aplicada + backfill). Refino aprovado pelo Owner: **vencimento na DÍVIDA** (Opção A, migration `0031`) — um vencimento por dívida, atualizado a cada venda a prazo que informa uma data. Correção junto: off-by-one de data-only por fuso (`formatDateBr`, formata em UTC).
 **Data:** 2026-08-25
 **Deciders:** Owner do produto
 **Relacionados:** [ADR-019](ADR-019-venda-a-prazo-contas-a-receber.md) (o fiado), [ADR-022](ADR-022-conta-do-cliente-fiado-acumulado.md) (**este ADR SUPERA a decisão 1 dela** — conta implícita → entidade), [ADR-023](ADR-023-numeracao-sequencial-de-vendas.md) (contador sequencial por loja), [ADR-006](ADR-006-devolucao-e-movimentacoes-de-caixa.md) (devolução)
