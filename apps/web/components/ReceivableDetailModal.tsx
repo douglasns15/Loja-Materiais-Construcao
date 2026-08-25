@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import {
+  formatDateBr,
   formatOrderNumber,
   PAYMENT_METHOD_LABELS,
   RECEIVABLE_STATUS_LABELS,
@@ -183,7 +184,7 @@ export function ReceivableDetailModal({
               </span>
               {detail.dueDate && (
                 <span className="ml-2 text-gray-600">
-                  Vence em {new Date(detail.dueDate).toLocaleDateString('pt-BR')}
+                  Vence em {formatDateBr(detail.dueDate)}
                 </span>
               )}
             </p>

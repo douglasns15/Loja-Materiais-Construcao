@@ -3,10 +3,12 @@ import {
   formatCnpj,
   formatCpf,
   formatCpfCnpj,
+  formatDateBr,
   formatDebtNumber,
   formatOrderNumber,
   formatPhoneBr,
   formatQuoteNumber,
+  isDatePast,
   parseDebtNumberQuery,
   parseMoneyQuery,
   parseOrderNumberQuery,
@@ -132,6 +134,29 @@ describe('formatDebtNumber / parseDebtNumberQuery', () => {
     expect(parseDebtNumberQuery(formatDebtNumber(14))).toBe(14);
     expect(parseDebtNumberQuery('D-')).toBeNull();
     expect(parseDebtNumberQuery('D-0000')).toBeNull();
+  });
+});
+
+// Vencimento (date-only) — formatação estável ao fuso: o servidor manda meia-noite UTC do dia; NÃO
+// pode voltar um dia no navegador a oeste de UTC (bug off-by-one corrigido).
+describe('formatDateBr / isDatePast', () => {
+  it('formata o dia em UTC, sem deslocar por fuso', () => {
+    expect(formatDateBr('2026-08-27T00:00:00.000Z')).toBe('27/08/2026');
+    // Mesmo com hora perto da virada, o dia UTC manda (não volta pro 26).
+    expect(formatDateBr('2026-08-27T02:00:00.000Z')).toBe('27/08/2026');
+    expect(formatDateBr('2026-01-05T00:00:00.000Z')).toBe('05/01/2026');
+  });
+
+  it('vazio/nulo/inválido volta string vazia', () => {
+    expect(formatDateBr(null)).toBe('');
+    expect(formatDateBr(undefined)).toBe('');
+    expect(formatDateBr('nao-e-data')).toBe('');
+  });
+
+  it('isDatePast: passado é true, futuro é false, nulo é false', () => {
+    expect(isDatePast('2000-01-01T00:00:00.000Z')).toBe(true);
+    expect(isDatePast('2999-12-31T00:00:00.000Z')).toBe(false);
+    expect(isDatePast(null)).toBe(false);
   });
 });
 

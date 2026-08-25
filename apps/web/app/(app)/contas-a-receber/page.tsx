@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  formatDateBr,
   formatDebtNumber,
+  isDatePast,
   PAYMENT_METHOD_LABELS,
   receiveReceivableSchema,
   type AccountFilter,
@@ -30,14 +32,6 @@ type Tab = 'open' | 'paid';
 /** Formas de cartão — as que podem ter acréscimo do produto (ADR-016 × ADR-022, Fatia C.3). */
 function isCardMethod(m: PaymentMethod): boolean {
   return m === 'DEBIT_CARD' || m === 'CREDIT_CARD';
-}
-
-/** `true` quando a data já passou (comparando só o dia). */
-function isOverdue(dueDate: string | null): boolean {
-  if (!dueDate) return false;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return new Date(dueDate) < today;
 }
 
 /**
@@ -432,7 +426,7 @@ export default function ContasAReceberPage() {
     return (
       <div className="flex flex-col gap-2.5">
         {accounts.map((a) => {
-          const overdue = isOverdue(a.nextDueDate);
+          const overdue = isDatePast(a.nextDueDate);
           return (
             <div
               key={a.customerId}
@@ -467,7 +461,7 @@ export default function ContasAReceberPage() {
                         overdue ? 'bg-red-50 text-red-700' : 'bg-gray-100 text-gray-600'
                       }`}
                     >
-                      ● {overdue ? 'vencida' : 'vence'} {new Date(a.nextDueDate).toLocaleDateString('pt-BR')}
+                      ● {overdue ? 'vencida' : 'vence'} {formatDateBr(a.nextDueDate)}
                     </span>
                   )}
                 </button>

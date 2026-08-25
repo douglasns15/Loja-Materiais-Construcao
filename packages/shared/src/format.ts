@@ -160,6 +160,33 @@ export function parseMoneyQuery(query: string | null | undefined): number | null
 }
 
 /**
+ * Formata uma data que representa um DIA (date-only, ex.: vencimento) como `DD/MM/AAAA` em pt-BR,
+ * SEM deslocar por fuso. O servidor guarda o vencimento como **meia-noite UTC** do dia pretendido;
+ * exibir com o fuso do navegador (BRT = UTC−3, ou mais a oeste) voltaria um dia (bug off-by-one).
+ * Por isso formatamos em `timeZone: 'UTC'`, mantendo o dia do calendário em qualquer fuso. Função PURA.
+ */
+export function formatDateBr(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+}
+
+/**
+ * `true` quando uma data-only (vencimento) já passou — comparando só o DIA, estável ao fuso. Usa o
+ * dia UTC do vencimento (como guardado) contra o dia LOCAL de hoje. Fonte única do "vencida". PURA.
+ */
+export function isDatePast(iso: string | null | undefined): boolean {
+  if (!iso) return false;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return false;
+  const now = new Date();
+  const todayUtc = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  const dueUtc = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  return dueUtc < todayUtc;
+}
+
+/**
  * Gera um identificador amigável (slug) a partir de um texto: remove acentos, baixa
  * a caixa e troca tudo que não é alfanumérico por hífen. Usado no onboarding para
  * derivar o `Tenant.slug` do nome da loja quando não informado (ADR-009). Função PURA.

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import {
   formatCpfCnpj,
+  formatDateBr,
   formatOrderNumber,
   formatPhoneBr,
   RECEIVABLE_STATUS_LABELS,
@@ -247,7 +248,7 @@ export function CustomerProfile({
                         </span>
                         <span className="block text-xs text-gray-500">
                           Saldo {BRL(r.balance)}
-                          {r.dueDate ? ` · vence ${new Date(r.dueDate).toLocaleDateString('pt-BR')}` : ''}
+                          {r.dueDate ? ` · vence ${formatDateBr(r.dueDate)}` : ''}
                         </span>
                       </div>
                       <button

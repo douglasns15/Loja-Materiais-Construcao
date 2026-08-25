@@ -2,6 +2,7 @@
 
 import {
   formatCnpj,
+  formatDateBr,
   formatOrderNumber,
   formatPhoneBr,
   PAYMENT_METHOD_LABELS,
@@ -74,7 +75,7 @@ export function ReceivablePrint({ store, detail }: { store: Store | null; detail
         {detail.dueDate ? (
           <div>
             <span>Vencimento</span>
-            <span>{new Date(detail.dueDate).toLocaleDateString('pt-BR')}</span>
+            <span>{formatDateBr(detail.dueDate)}</span>
           </div>
         ) : null}
       </div>
