@@ -1,0 +1,36 @@
+name = "nexoloja-fiscal"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+# =============================================================================
+# Serviço de emissão fiscal (NFC-e) — ADR-026 (em elaboração)
+# =============================================================================
+# Worker SEPARADO da API de negócio (`nexoloja-api`) de propósito:
+#  - isola o certificado digital A1 e as credenciais do provedor fiscal, que são
+#    os segredos mais sensíveis do produto;
+#  - deploy independente (a emissão fiscal muda por motivos legais, não de produto);
+#  - reduz conflito de código durante o desenvolvimento em paralelo.
+#
+# NADA aqui toca o banco da aplicação ainda: a persistência do documento fiscal
+# é uma PORTA (`src/store`) com implementação em memória. A tabela definitiva
+# exige migration e, portanto, aprovação explícita do Owner (regra 1 do CLAUDE.md).
+# =============================================================================
+
+[vars]
+# Provedor ativo. Hoje só existe o adaptador "fake" (sandbox determinístico,
+# sem rede). Ao contratar o provedor real, trocar por "focus" | "nuvemfiscal" |
+# "plugnotas" e implementar o adaptador correspondente em src/providers/.
+FISCAL_PROVIDER = "fake"
+
+# Ambiente da SEFAZ: "homologacao" | "producao".
+# Em homologação a nota NÃO tem valor fiscal — é o padrão, de propósito.
+FISCAL_ENVIRONMENT = "homologacao"
+
+# --- Secrets (NÃO commitar; use `wrangler secret put`) -----------------------
+# FISCAL_SERVICE_TOKEN      -> token compartilhado que autentica a API de negócio
+#                              chamando este serviço (ver src/middleware/auth.ts).
+# FISCAL_PROVIDER_TOKEN     -> credencial do provedor fiscal (quando houver).
+#
+# Em desenvolvimento local, defina-os em `apps/fiscal/.dev.vars`
+# (copie de `.dev.vars.example`).
