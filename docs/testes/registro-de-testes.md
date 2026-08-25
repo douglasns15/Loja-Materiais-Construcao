@@ -5248,3 +5248,186 @@ apresentação. **NO AR:** web Version `2b5cb7e0`; smoke ✅. Commit `f3bc828`.
 total; OBS do cadastro aparece no info do item; refino de posição (OBS por último) conferido.
 
 **Fatia CONCLUÍDA.**
+
+## UI.Shell.MenuRetratil — menu lateral retrátil (trilho de ícones + flyout no hover) (2026-08-22)
+
+**Pedido do Owner.** Dar ao menu da loja o padrão moderno de mercado (VS Code/Notion): um **modo retrátil** que,
+em vez de sumir por completo, vira um **trilho fino só com ícones**; ao passar o mouse ele **aparece** (expande)
+e dá pra navegar enquanto o cursor está sobre ele; e, com o menu retraído, as telas devem ocupar melhor o espaço
+**sem ficar tortas nem fora de padrão**.
+
+**Decisões de produto do Owner (antes de codar):**
+- Modo retraído = **trilho de ícones + flyout no hover** (não "esconder tudo") — exige 1 ícone por item do menu.
+- Conteúdo **continua CENTRALIZADO** (mantém `mx-auto max-w-*`): re-centraliza no espaço maior, margens
+  simétricas — ganha respiro, nunca torto. **Zero mudança nas telas.**
+
+**Comportamento (desktop, `md+`):**
+- **Fixar × retrair** substitui o antigo "recolher = `md:hidden`". O botão `‹`/`›` no topo do menu alterna;
+  a preferência fica salva em `localStorage` (`nexoloja:sidebar-pinned`, default **fixo** = igual a hoje).
+- **Fixo:** `<aside>` `md:static w-64` em fluxo, empurra o conteúdo.
+- **Retraído:** um **espaçador** `hidden md:block w-16` reserva a faixa; o `<aside>` vira `md:fixed` (overlay),
+  `md:w-16`, e com o mouse/foco em cima (`railHover`) cresce para `md:w-64` + sombra, `transition-all` — **por
+  cima** do conteúdo, então **não reflui**. `onFocusCapture/BlurCapture` expandem via teclado (a11y). O menu de
+  conta aberto (`menuOpen`) também mantém o flyout aberto.
+- Cada item do menu ganhou um **ícone SVG inline** (mesmo estilo do arquivo; **sem dependência nova** — regra 4).
+  No trilho o `title` de cada ícone vira tooltip. O grupo "Cadastros" mostra só a pasta no trilho e abre normal
+  no flyout.
+- **Mobile/tablet inalterado:** gaveta overlay pelo hambúrguer (trilho/hover são desktop-only). Removido só o
+  botão desktop de "expandir" do topo (o trilho já fica sempre visível).
+
+**Peças (web-only):** `apps/web/app/(app)/layout.tsx` — **único arquivo**. **Sem API, migration, core ou
+shared** ⇒ regras 1 e 7 não disparam.
+
+**Gates:** web `tsc --noEmit` 0 erros + `next build` (**23 rotas**, tamanhos estáveis: `/venda` 18.5 kB,
+`/estoque` 15.1 kB) ✅.
+
+**NO AR (2026-08-22):** web Version `7a1f40aa`; smoke ✅ (HTML `no-store` + CSS 200). Commit `35057b0`
+(local em `main`; push do Owner).
+
+**E2E do Owner — ✅ VALIDADO (2026-08-22, "tudo validado com sucesso").** Conferido no desktop:
+1. Fixo → botão `‹` retrai → vira trilho de ícones; conteúdo re-centraliza (mais respiro), nada torto.
+2. Passar o mouse no trilho → expande por cima (não empurra) com ícone+texto; navegar por um item e por um filho
+   de "Cadastros"; tirar o mouse → recolhe.
+3. Botão `›` ("Fixar menu") no flyout volta ao fixo; recarregar a página → a preferência persiste.
+4. Rota ativa destacada nos dois modos; tooltip (`title`) ao pairar sobre um ícone do trilho.
+5. Menu de conta (rodapé): abrir no trilho mantém o flyout aberto enquanto o popup está na tela.
+6. Estreitar a janela para `< md`: gaveta mobile intacta (hambúrguer abre/fecha; some ao navegar).
+
+**Fatia CONCLUÍDA.**
+
+## UI.PDV.LayoutOpcaoA — repaginação do PDV: catálogo à esquerda, checkout fixo à direita (2026-08-22)
+
+**Pedido do Owner.** Com o menu lateral agora retrátil (liberando largura), repaginar a tela de venda no
+padrão dos grandes PDVs. Antes de codar, foram apresentadas **3 direções em mockup de alta fidelidade**
+(Artifact "Repaginação do PDV") + **pesquisa dos players**: **Olist / Tiny PDV** (busca no topo por
+descrição/SKU/GTIN/leitor, itens iguais agrupados) e **Shopify POS** ("split screen" — carrinho sempre
+visível ao lado da busca). **O Owner escolheu a Opção A.**
+
+**Antes × depois.** Antes: busca à DIREITA (sticky) + carrinho/pagamento/totais empilhados à ESQUERDA em 3
+cartões (`lg:col-start-1` linhas 1/2/3). Depois: **busca/catálogo na coluna grande à ESQUERDA**
+(`lg:col-start-1`) e **checkout num painel único e FIXO à DIREITA** (`lg:col-start-2 lg:sticky lg:top-4`,
+~400px), com carrinho + pagamento + condições + total + Concluir num só cartão dividido por bordas.
+
+**Mudanças (web-only, só apresentação):**
+- Grid do PDV: `lg:[grid-template-columns:minmax(0,1fr)_400px]`; container `max-w-6xl`→`max-w-7xl`.
+- Ordem no DOM = busca → checkout ⇒ no mobile (`<lg`, 1 coluna) empilha natural.
+- **Carrinho: tabela de 5 colunas → linhas compactas de 2 níveis** (nome + tooltip + ⓘ + total/× em cima;
+  selos embalagem/par ADR-015/acréscimo ADR-016 + stepper `− QtyInput +` e preço unitário embaixo). Lista com
+  rolagem própria no desktop (`lg:max-h-[42vh] overflow-y-auto`) para não empurrar o Total pra fora.
+- Pagamento, condições (a prazo/crédito da loja/retirada — opt-in, inalterados) e total/desconto/ações viram
+  **seções** do painel único (antes cartões separados).
+
+**Motor de venda intocado.** Todos os handlers/memos/estados preservados (`pricedCart`, `changeLineQty`,
+`removeFromCart`, `setInfoKey`, `itemTooltip`, `isMeterLine`, `payments`, `credit`/`storeCredit`/`schedule`,
+`totals`, `onConcluir`, `onOrcamento`). **Único arquivo:** `apps/web/app/(app)/venda/page.tsx`. **Sem API,
+migration, core ou shared** ⇒ regras 1 e 7 não disparam.
+
+**Gates:** web `tsc --noEmit` 0 erros + `next build` (**23 rotas**, `/venda` 18.4 kB) ✅.
+
+**NO AR (2026-08-22):** web Version `7abda232`; smoke ✅ (HTML `no-store` + CSS 200). Commit `d88d3eb`
+(local em `main`; push do Owner).
+
+**E2E do Owner — ✅ VALIDADO (2026-08-24, "passaram com sucesso… funcionando corretamente").** Fatia
+CONCLUÍDA. Conferido na loja Demo (checklist abaixo):
+1. Busca/catálogo à esquerda ocupa o espaço; resultados só ao digitar; adicionar por unidade, embalagem
+   fechada, por metro (ADR-017) e par (ADR-015).
+2. Checkout fixo à direita rola junto (`sticky`); carrinho em linhas compactas com ⓘ, selos, stepper (− campo +),
+   preço unitário e total da linha; remover (×); "Limpar carrinho" com confirmação.
+3. Pagamento dividido (+ Adicionar forma; principal reprecifica ADR-016); "Tudo a prazo" + cliente; crédito
+   da loja; retirada/entrega; desconto; Falta/Troco/Pago.
+4. Concluir venda e Orçamento; nota/comprovante.
+5. Carrinho grande: a lista rola dentro do painel e o Total/Concluir seguem visíveis.
+6. Responsivo `<lg`: empilha busca → checkout. Offline: aviso + fila intactos.
+
+---
+
+## UI.PDV.ComprovanteRetirada — comprovante "para retirar depois" (PDV + Entregas) (2026-08-24)
+
+**Pedido do Owner.** Nas vendas com **retirada/entrega posterior** (ADR-020) faltava imprimir uma nota
+específica para essa situação. Na tela final do pagamento só havia "Imprimir" (cupom comum). Agora há um
+**2º botão** que gera um **comprovante de retirada** = o mesmo cupom + uma **faixa em destaque**. **A mesma
+impressão também na tela de Entregas** (para reimprimir quando o cliente volta / perdeu a via).
+
+**Frase escolhida pelo Owner (entre 3 opções):** faixa "**✔ PAGO — FALTA RETIRAR**" + "*Traga esta nota
+para retirar a mercadoria.*" **Comportamento adaptativo:** quando a venda tem **saldo a prazo em aberto**
+(fiado, ADR-019), a faixa mostra só "**FALTA RETIRAR**" (sem afirmar "Pago", que seria impreciso).
+
+**Superfícies:**
+- **`ReceiptPrint`** (`apps/web/components/ReceiptPrint.tsx`): novas props `pickupNotice` (liga a faixa) e
+  `pickupPaid` ("PAGO —" só quando não há saldo a prazo). Faixa `.rc-notice` (nova classe em `globals.css`,
+  moldura grossa centralizada). Reusado nas DUAS telas — sem componente novo.
+- **PDV** (`apps/web/app/(app)/venda/page.tsx`): `done` view ganhou `scheduled?`; botão "Comprovante de
+  retirada" aparece só quando a venda foi marcada como retirada futura. `imprimir(pickup)` liga/desliga a
+  faixa antes do diálogo (rAF p/ o `#print-area` refletir a escolha); "Imprimir" comum segue `pickup=false`.
+  `pickupPaid = !(credit > 0)`.
+- **Entregas** (`apps/web/components/DeliveryDetailModal.tsx`): busca o `/tenant` (cabeçalho da loja), seletor
+  80mm/A4 + botão "Imprimir comprovante", render oculto do `ReceiptPrint` (cupom das quantidades **vendidas**
+  + faixa). PDF nomeado pelo código da venda (V-000128.pdf).
+- **shared** (`packages/shared/src/delivery.ts`): `DeliveryItem` ganhou `unitPrice`/`total`; `DeliveryDetail`
+  ganhou `orderNumber`, `discountAmount`, `outstandingBalance`.
+- **API** (`apps/api/src/routes/deliveries.ts`, `GET /deliveries/:id`): `orderNumber`/`discountAmount` e os
+  preços de item **já vinham** (`include` sem `select`); adicionado só o **`outstandingBalance`** (saldo a
+  prazo DERIVADO do `Receivable`: `original − recebido − devolvido`, nunca negativo; `0` quando 100% pago).
+  Doc §8.2 atualizada (regra 7). **Sem migration.**
+
+**Gates:** shared **42/42** ✅; tsc shared/api/web 0 erros ✅; `next build` (**23 rotas**, `/venda` 18.7 kB,
+`/entregas` 5.66 kB) ✅; api `wrangler dry-run` ✅. ⚠️ **Deploy de API obrigatório** (`outstandingBalance`
+novo no detalhe).
+
+**NO AR (2026-08-24):** API Version `e3cab730` (smoke ✅ health 200, `/deliveries/:id` sem token 401); web
+Version `29d5616c` (smoke ✅ HTML no-store + CSS 200). **E2E do Owner — ✅ VALIDADO (2026-08-24, "tudo
+validado com sucesso"). Fatia CONCLUÍDA.** Checklist coberto:
+1. PDV: venda comum (sem retirada) → tela final mostra **só** "Imprimir" (sem o 2º botão).
+2. PDV: venda **com retirada/entrega posterior** → aparece "Comprovante de retirada"; imprime cupom + faixa
+   "✔ PAGO — FALTA RETIRAR"; "Imprimir" comum continua sem a faixa; PDF nomeado V-000128.
+3. PDV: retirada **+ a prazo** (fiado) → faixa mostra só "FALTA RETIRAR" (sem "Pago").
+4. Entregas → abrir o pedido → "Imprimir comprovante" → cupom com itens/valores + faixa; "Pago" coerente com
+   o saldo (venda paga = "PAGO — FALTA RETIRAR"; a prazo = só "FALTA RETIRAR").
+5. 80mm e A4; logo aparece; código/itens/total corretos.
+
+---
+
+## UI.Repaginacao — identidade visual unificada (PDV → Produtos → Estoque) (2026-08-24)
+
+Sequência de fatias **só de apresentação** (JSX + classes Tailwind), sem tocar em API/migration/core/shared,
+motores de venda/produto/estoque intactos. Direção: o PDV (Opção A) ficou "apagado"/monocromático; o Owner
+pediu realce e depois a mesma identidade nas demais telas. **Linguagem visual comum:** cabeçalho de
+seção/tabela/painel `bg-indigo-600 text-white`; CTA primário `bg-emerald-600` (+ sombra); cartões
+`rounded-2xl border border-gray-200 shadow-md`; título com gradiente `from-indigo-700 to-indigo-500`
+(bg-clip-text); alertas seguem a cor semântica (âmbar). Fluxo por tela: **mockup (Artifact) → Owner aprova →
+aplico → deploy web → E2E do Owner → commit + docs**.
+
+### 1) UI.PDV.RealceModerado — `apps/web/app/(app)/venda/page.tsx`
+
+Cabeçalho do carrinho indigo (+ ícone), **Total em faixa destacada** (indigo), "Concluir venda" emerald,
+contorno mais nítido (border nos cartões, shadow-md no checkout), **miniatura colorida** por produto no
+catálogo (novo `ProductThumb`, iniciais — custo-zero), título "Venda" com gradiente. Refino via comentário do
+Artifact: reforçar a divisória Carrinho ▸ Forma de pagamento e o contorno das caixinhas.
+Gates: web `tsc` 0 erros + `next build` (23 rotas, `/venda` 18.7→19.2 kB). **NO AR:** web `bc033abb`
+(smoke ✅). Commit `7452485`. **E2E do Owner ✅ VALIDADO (2026-08-24, "Validado com sucesso").**
+
+### 2) UI.Produtos.RepaginacaoVisual — `products/page.tsx` + `components/ProductDetail.tsx`
+
+Achado do Owner: o cadastro era um "paredão" de 6 colunas. **Cadastro/edição** reorganizados em **4 seções
+numeradas** (Identificação → Preço → Unidade/categoria/estoque → Descrição) via novo `SectionTitle`; **"Opções
+avançadas" recolhível** (`<details>`: unidade alternativa, par, acréscimo) — na edição **abre sozinha** quando
+o produto já tem esses dados (`initialAdvancedOpen` + estado `advOpen` sincronizado por `onToggle`); a config
+de **barra/rolo** fica VISÍVEL (essencial p/ unidade fechada). Cabeçalho indigo "Novo produto"/painel de
+edição; "Adicionar/Salvar" emerald, "Editar" indigo; **lista** com cabeçalho de tabela indigo.
+Gates: web `tsc` 0 erros + `next build` (23 rotas, `/products` 15.5→16.4 kB). **NO AR:** web `513f996b`
+(smoke ✅). Commit `f69fb6a`. **E2E do Owner ✅ VALIDADO (2026-08-24, "tudo validado com sucesso em Produtos").**
+
+### 3) UI.Estoque.RepaginacaoVisual — `estoque/page.tsx` + `components/StockDetail.tsx` + `components/NfeImportModal.tsx`
+
+Página: título com gradiente; formulários **Entrada** (CTA emerald) e **Ajuste** (secundário neutro) com
+cabeçalho indigo + rodapé; tabelas **Estoque atual** e **Movimentações** com cabeçalho indigo (ordenação por
+clique legível em branco); painel **Reposição** mantém o âmbar (alerta semântico), com mais profundidade.
+Modais (2ª sub-fatia, mesmo dia): **StockDetail** (detalhe do produto) e **NfeImportModal** (Importar NF-e)
+ganharam cabeçalho indigo + corpo rolável (header fixo); tabela interna do StockDetail indigo; no NF-e
+"Escolher XML" indigo e "Confirmar entrada" emerald ("Trocar arquivo" neutro).
+Gates: web `tsc` 0 erros + `next build` (23 rotas, `/estoque` 15.1→15.5 kB). **NO AR:** web `5a787bbf` (página)
+→ `bab55b99` (modais); smokes ✅. **E2E do Owner ✅ VALIDADO (2026-08-24, "tudo validado com sucesso")** —
+página e os dois modais. **Fatia CONCLUÍDA.**
+
+**Próximo (outra sessão):** seguir a repaginação nas demais telas (ex.: Clientes, Fornecedores, Vendas/
+Histórico, Contas a Receber, Caixa, Relatórios, Entregas) OU retomar itens funcionais do Horizonte 1.

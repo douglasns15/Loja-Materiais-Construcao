@@ -49,6 +49,12 @@ type Props = {
   quoteNumber?: number | null;
   /** Validade do orçamento (ADR-024), já formatada (ex.: "07/08/2026"). Imprime "Válido até …". */
   validUntil?: string | null;
+  /** Retirada/entrega futura (ADR-020): imprime a faixa em destaque "FALTA RETIRAR — traga esta nota
+   *  para retirar a mercadoria". Usado no comprovante de retirada (PDV e tela de Entregas). */
+  pickupNotice?: boolean;
+  /** Quando o comprovante de retirada é de uma venda 100% paga (sem saldo a prazo), a faixa mostra
+   *  "PAGO — FALTA RETIRAR"; numa venda a prazo (saldo em aberto) mostra só "FALTA RETIRAR". */
+  pickupPaid?: boolean;
 };
 
 const BRL = (v: number) =>
@@ -59,7 +65,7 @@ const BRL = (v: number) =>
  * e só aparece na impressão (ver regras @media print em globals.css). O modelo
  * (80mm / A4) é controlado pelo atributo data-model, definido antes de imprimir.
  */
-export function ReceiptPrint({ kind, store, items, total, date, discount, payments, method, change, creditAmount, storeCreditAmount, customerName, orderNumber, quoteNumber, validUntil }: Props) {
+export function ReceiptPrint({ kind, store, items, total, date, discount, payments, method, change, creditAmount, storeCreditAmount, customerName, orderNumber, quoteNumber, validUntil, pickupNotice, pickupPaid }: Props) {
   const isQuote = kind === 'quote';
   const subtotal = items.reduce((acc, i) => acc + i.unitPrice * i.quantity, 0);
   const hasDiscount = (discount ?? 0) > 0;
@@ -101,6 +107,16 @@ export function ReceiptPrint({ kind, store, items, total, date, discount, paymen
       )}
       <div className="rc-date">{date}</div>
       {isQuote && validUntil ? <div className="rc-date">Válido até {validUntil}</div> : null}
+
+      {/* Comprovante de retirada (ADR-020): faixa em destaque. "Pago" só quando não há saldo a prazo. */}
+      {pickupNotice ? (
+        <div className="rc-notice">
+          <div className="rc-notice-title">
+            {pickupPaid ? '✔ PAGO — FALTA RETIRAR' : 'FALTA RETIRAR'}
+          </div>
+          <div className="rc-notice-text">Traga esta nota para retirar a mercadoria.</div>
+        </div>
+      ) : null}
 
       <table className="rc-table">
         <thead>

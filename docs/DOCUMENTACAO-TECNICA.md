@@ -455,7 +455,7 @@ testável exaustivamente e compartilhada entre as duas apps.
 
 | Método · Rota | O que faz |
 |---|---|
-| `GET /` · `GET /:id` | Lista e detalhe de entregas/retiradas agendadas. |
+| `GET /` · `GET /:id` | Lista e detalhe de entregas/retiradas agendadas. O detalhe (`GET /:id`) inclui `orderNumber`, `discountAmount`, os itens com `unitPrice`/`total` e `outstandingBalance` (saldo a prazo em aberto, `0` quando 100% pago) — usados para reimprimir o **comprovante de retirada** ("PAGO — FALTA RETIRAR" quando saldo `0`; só "FALTA RETIRAR" quando há saldo a prazo). |
 | `PATCH /:id` 🔒 | Atualiza status/dados da entrega. |
 | `POST /:id/deliver` 🔒 | Confirma entrega/retirada → efetiva a saída de estoque adiada. |
 

@@ -3,7 +3,140 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-22 — **UI.PDV.PrazoTotalEObsItem — atalho "Tudo a prazo" +
+> **Última atualização:** 2026-08-24 — **UI.Estoque.RepaginacaoVisual — tela de Estoque (página + 2
+> modais) com a identidade do PDV — NO AR e E2E DO OWNER VALIDADO (2026-08-24, "tudo validado com
+> sucesso"). Fatia CONCLUÍDA.** Terceira tela da onda de repaginação (PDV → Produtos → Estoque),
+> **só apresentação**. **(Página `apps/web/app/(app)/estoque/page.tsx`):** título com gradiente da marca;
+> formulários **"Entrada de estoque"** (CTA **emerald** "Registrar entrada") e **"Ajuste de inventário"**
+> (botão secundário neutro) com **cabeçalho indigo** (+ ícone) + rodapé; tabelas **"Estoque atual"** e
+> **"Movimentações recentes"** com **cabeçalho `bg-indigo-600`** (cliques de ordenação legíveis em branco,
+> `text-indigo-100`/`text-white`); painel **"Reposição"** mantém o **âmbar** (alerta semântico) com mais
+> profundidade. **(Modais, 2ª sub-fatia mesmo dia):** **`StockDetail`** (detalhe do produto ao clicar num
+> item de "Estoque atual") e **`NfeImportModal`** ("Importar NF-e") ganharam **cabeçalho indigo + corpo
+> rolável** (header fixo no topo); a tabela interna do StockDetail virou indigo; no NF-e "Escolher XML"
+> ficou indigo e "Confirmar entrada" **emerald** ("Trocar arquivo" neutro). **Motor de estoque intocado**
+> (handlers/validação/ADR-001 preservados) ⇒ **sem API, migration, core ou shared** (regras 1 e 7 não
+> disparam). Gates: web `tsc` 0 erros + `next build` (**23 rotas**, `/estoque` 15.1→**15.5 kB**). **NO AR
+> (2026-08-24):** web Version `5a787bbf` (página) → `bab55b99` (modais); smokes ✅ (HTML `no-store` + CSS
+> 200). Commit local em `main` (push do Owner). **E2E do Owner VALIDADO (2026-08-24, "tudo validado com
+> sucesso")** — página e os dois modais. **Próximo (outra sessão): seguir a repaginação nas demais telas
+> (Clientes, Fornecedores, Vendas/Histórico, Contas a Receber, Caixa, Relatórios, Entregas) ou retomar
+> itens funcionais do Horizonte 1.**
+>
+> **Antes:** 2026-08-24 — **UI.Produtos.RepaginacaoVisual — cadastro/edição/lista de
+> Produtos com a identidade do PDV + campos agrupados — NO AR e E2E DO OWNER VALIDADO (2026-08-24,
+> "tudo validado com sucesso em Produtos"). Fatia CONCLUÍDA.** Sequência natural do realce do PDV: o
+> Owner apontou que o **cadastro de produto** tinha a disposição dos campos "ruim ao visual" — era um
+> "paredão" num grid de 6 colunas, sem agrupamento nem a identidade da tela de Vendas. Aprovado via
+> **mockup** (Artifact "Cadastro de Produto · Repaginado") + 2 decisões do Owner: (a) opções avançadas
+> **recolhidas** por padrão; (b) escopo = **cadastro + edição + lista**. Mudanças (**só apresentação**;
+> `apps/web/app/(app)/products/page.tsx` + `apps/web/components/ProductDetail.tsx`): **(cadastro)** cartão
+> com cabeçalho **indigo "Novo produto"**, campos em **4 seções numeradas** (Identificação → Preço →
+> Unidade/categoria/estoque → Descrição) via novo helper `SectionTitle`, bloco **"Opções avançadas"
+> recolhível** (`<details>`) com unidade alternativa/par/acréscimo (a config de **barra/rolo** fica
+> VISÍVEL — essencial p/ unidade fechada), botão **"Adicionar produto" verde** num rodapé; **(edição)**
+> mesmo cabeçalho indigo (foto+nome+SKU) + corpo rolável, mesmas seções, "Opções avançadas" recolhidas
+> mas **abrindo sozinhas** quando o produto já tem par/embalagem/acréscimo (`initialAdvancedOpen` +
+> estado `advOpen` sincronizado por `onToggle`), "Editar" indigo e "Salvar alterações" verde; **(lista)**
+> cartão com borda/sombra + **cabeçalho da tabela indigo** + botão utilitário alinhado. **Motor de produto
+> intocado** (handlers/estados/validação/`buildPatch` preservados) ⇒ **sem API, migration, core ou shared**
+> (regras 1 e 7 não disparam). Gates: web `tsc` 0 erros + `next build` (**23 rotas**, `/products`
+> 15.5→**16.4 kB**). **NO AR (2026-08-24):** web Version `513f996b`; smoke ✅ (HTML `no-store` + CSS 200).
+> Commit local em `main` (push do Owner). **E2E do Owner VALIDADO (2026-08-24, "tudo validado com sucesso
+> em Produtos").** **Próximo (em curso): mesma identidade visual na tela de ESTOQUE (pedido do Owner).**
+>
+> **Antes:** 2026-08-24 — **UI.PDV.RealceModerado — repaginação visual do PDV (mesma
+> Opção A, com cor e profundidade) — NO AR e E2E DO OWNER VALIDADO (2026-08-24, "Validado com sucesso").
+> Fatia CONCLUÍDA.** Achado do Owner: o novo layout (Opção A) agradou, mas a tela ficou **"um pouco
+> apagada"** — paleta quase toda monocromática de baixo contraste (branco sobre cinza-claro, `shadow-sm`
+> fraca, cor da marca só em links de texto). Direção escolhida entre 3 níveis: **realce moderado** (mantém a
+> estrutura, adiciona cor/profundidade nos pontos-chave). Aprovado via **mockup antes×depois** (Artifact
+> "PDV · Realce Moderado") — inclui refino pedido em comentário do Artifact (reforçar a divisória Carrinho ▸
+> Forma de pagamento e o contorno das caixinhas). Mudanças (**só apresentação**, JSX+classes Tailwind, um só
+> arquivo `apps/web/app/(app)/venda/page.tsx`): (1) **cabeçalho do carrinho na cor da marca** (indigo-600 +
+> ícone SVG inline, controles "Limpar" ajustados p/ contraste); (2) **Total em faixa destacada** (bloco
+> indigo-50/100, número 2xl); (3) **"Concluir venda"** em **emerald-600** + sombra, botões mais altos
+> (`py-2.5`); (4) **contorno mais nítido** (cartões catálogo/checkout ganham `border`, checkout sobe p/
+> `shadow-md`); (5) **miniatura colorida** (iniciais tingidas, novo `ProductThumb` — custo-zero, sem foto)
+> nos 3 ramos do catálogo; (6) título **"Venda"** com leve gradiente da marca. **Motor de venda intocado**
+> (todos handlers/memos/estados preservados) ⇒ **sem API, migration, core ou shared** (regras 1 e 7 não
+> disparam). Gates: web `tsc` 0 erros + `next build` (**23 rotas**, `/venda` 18.7→**19.2 kB**). **NO AR
+> (2026-08-24):** web Version `bc033abb`; smoke ✅ (HTML `no-store` + CSS 200). Commit local em `main` (push
+> do Owner). **E2E do Owner VALIDADO (2026-08-24, "Validado com sucesso").** **Próximo:** repaginar a tela de
+> **Produtos** com a mesma identidade visual + melhorar a disposição dos campos no cadastro (pedido do Owner).
+>
+> **Antes:** 2026-08-24 — **UI.PDV.ComprovanteRetirada — comprovante "para retirar
+> depois" (PDV + Entregas) — NO AR e E2E DO OWNER VALIDADO (2026-08-24, "tudo validado com sucesso").
+> Fatia CONCLUÍDA.** Pedido do
+> Owner: nas vendas com **retirada/entrega posterior** (ADR-020) faltava imprimir uma nota específica. Na
+> tela final do pagamento agora há um **2º botão "Comprovante de retirada"** (aparece só quando a venda foi
+> marcada como retirada futura) = o **mesmo cupom + uma faixa em destaque**; e a **mesma impressão também na
+> tela de Entregas** (reimpressão quando o cliente volta / perdeu a via). **Frase escolhida pelo Owner entre
+> 3 opções:** "**✔ PAGO — FALTA RETIRAR** / Traga esta nota para retirar a mercadoria" — **adaptativa:** com
+> saldo a prazo em aberto (fiado, ADR-019) mostra só "**FALTA RETIRAR**" (não afirma "Pago"). **Reuso:** o
+> `ReceiptPrint` ganhou `pickupNotice`/`pickupPaid` + classe `.rc-notice` — **sem componente novo**; usado nas
+> duas telas. **PDV:** `done` view ganhou `scheduled?`; `imprimir(pickup)` liga/desliga a faixa antes do
+> diálogo (rAF). **Entregas** (`DeliveryDetailModal`): busca `/tenant`, seletor 80mm/A4, cupom oculto, PDF
+> nomeado V-000128. **shared:** `DeliveryItem`+`unitPrice`/`total`; `DeliveryDetail`+`orderNumber`/
+> `discountAmount`/`outstandingBalance`. **API `GET /deliveries/:id`:** os preços/código **já vinham**
+> (`include` sem `select`); adicionado só o **`outstandingBalance`** (saldo a prazo DERIVADO do `Receivable`),
+> doc §8.2 atualizada (regra 7). **Sem migration.** Gates: shared 42/42, tsc 0 erros, `next build` (23 rotas,
+> `/venda` 18.7 kB, `/entregas` 5.66 kB), `wrangler dry-run` ✅. **NO AR (2026-08-24):** API Version
+> `e3cab730` + web Version `29d5616c`; smokes ✅ (health 200, `/deliveries/:id` sem token 401; web HTML
+> no-store + CSS 200). Commit local em `main` (push do Owner). **Falta: E2E do Owner.** Ver
+> "UI.PDV.ComprovanteRetirada" no registro.
+>
+> **Antes:** 2026-08-24 — **UI.PDV.LayoutOpcaoA — repaginação do PDV (catálogo à
+> esquerda, checkout fixo à direita) — NO AR e E2E DO OWNER VALIDADO (2026-08-24, "passaram com sucesso…
+> funcionando corretamente"). Fatia CONCLUÍDA.**
+> Com o menu retrátil liberando largura, o Owner pediu repaginar o PDV no padrão de mercado.
+> Foram apresentadas **3 direções em mockup** (Artifact) + pesquisa da **Olist/Tiny** (busca no
+> topo, itens agrupados) e **Shopify POS** (carrinho sempre visível ao lado da busca); o Owner
+> escolheu a **Opção A**. Antes o layout era o inverso: busca à DIREITA (sticky) e
+> carrinho+pagamento+totais empilhados à ESQUERDA em 3 cartões. Agora: **busca/catálogo na
+> coluna grande à ESQUERDA** (`lg:col-start-1`) e **checkout num painel único e FIXO à DIREITA**
+> (`lg:col-start-2 lg:sticky lg:top-4`, ~400px) — carrinho + pagamento + condições + total +
+> Concluir num só cartão, com bordas dividindo as seções. Container do PDV `max-w-6xl`→**`max-w-7xl`**
+> (aproveita o espaço do menu). No mobile (`<lg`) empilha na ordem do DOM (busca → checkout). **O
+> carrinho deixou de ser tabela de 5 colunas e virou LINHAS COMPACTAS** de 2 níveis (nome + ⓘ +
+> total/× em cima; selos embalagem/par/acréscimo + stepper − campo + · preço unitário embaixo),
+> para caber no painel estreito; a lista ganhou **rolagem própria** (`lg:max-h-[42vh]`) para o
+> Total não sair da tela num carrinho grande. **Só apresentação (JSX + classes):** todos os
+> handlers/memos/estados preservados — **motor de venda intocado** (par/embalagem/metro ADR-015/017,
+> pagamento dividido, a prazo ADR-019, crédito da loja ADR-022, retirada/entrega ADR-020, offline
+> ADR-011/012). **Único arquivo:** `apps/web/app/(app)/venda/page.tsx`. **Sem API, migration, core
+> ou shared** ⇒ regras 1 e 7 não disparam. Gates: web `tsc` 0 erros + build (**23 rotas**, `/venda`
+> 18.4 kB). **NO AR:** web Version `7abda232`; smoke ✅ (HTML `no-store` + CSS 200). Commit `d88d3eb`
+> (local em `main`; push do Owner). **Falta: E2E do Owner** (exige login na loja Demo). Ver
+> "UI.PDV.LayoutOpcaoA" no registro. **Próximo (Horizonte 1):** ver usuários da loja no painel,
+> reset de senha (Super Usuário) ou crédito parcelado.
+>
+> **Antes:** 2026-08-22 — **UI.Shell.MenuRetratil — menu lateral retrátil
+> (trilho de ícones + flyout no hover) — NO AR e E2E DO OWNER VALIDADO. Fatia
+> CONCLUÍDA.** Pedido do Owner: dar ao menu da loja o padrão moderno de mercado (VS
+> Code/Notion). O desktop antes só tinha "visível" (w-64, empurra) ou "recolhido =
+> `md:hidden`" (some por completo). Agora há **fixar × retrair**: o botão `‹`/`›` no topo do
+> menu alterna e a preferência fica salva (`localStorage` `nexoloja:sidebar-pinned`, default
+> **fixo**). **Retraído** vira um **trilho fino só com ícones** (`md:w-16`) sempre visível;
+> ao **passar o mouse** (ou focar via teclado — `onFocusCapture/BlurCapture`, a11y) ele
+> **expande para `md:w-64` por cima do conteúdo** (overlay `md:fixed` + sombra + `transition`)
+> mostrando ícone + texto para navegar — recolhe ao sair. O grupo "Cadastros" abre normal
+> dentro do flyout. **Decisões do Owner (antes de codar):** (1) modo retraído = **trilho de
+> ícones + hover** (não "esconder tudo"); (2) conteúdo **continua CENTRALIZADO** (mantém
+> `mx-auto max-w-*`) e re-centraliza no espaço maior — como o trilho ocupa só w-16 vs w-64
+> fixo, ganha respiro **sem ficar torto nem fora de padrão**; **nenhuma tela alterada**. Cada
+> item do menu ganhou um **ícone SVG inline** (sem dependência nova — regra 4); no trilho o
+> `title` vira tooltip. **Mobile/tablet inalterado** (gaveta pelo hambúrguer; trilho/hover são
+> desktop-only); removido só o botão desktop de "expandir" do topo (o trilho já fica sempre
+> visível). **Único arquivo:** `apps/web/app/(app)/layout.tsx`. **Sem API, migration, core ou
+> shared** ⇒ regras 1 e 7 não disparam. Gates: web `tsc` 0 erros + build (**23 rotas**,
+> tamanhos estáveis: `/venda` 18.5 kB, `/estoque` 15.1 kB). **NO AR:** web Version `7a1f40aa`;
+> smoke ✅ (HTML `no-store` + CSS 200). Commit `35057b0` (local em `main`; push do Owner).
+> **E2E do Owner VALIDADO (2026-08-22, "tudo validado com sucesso").** Ver "UI.Shell.MenuRetratil" no registro.
+> **Próximo (Horizonte 1):** ver usuários da loja no painel, reset de senha (Super Usuário) ou
+> crédito parcelado.
+>
+> **Antes:** 2026-08-22 — **UI.PDV.PrazoTotalEObsItem — atalho "Tudo a prazo" +
 > Observação do produto no info do item — NO AR e E2E DO OWNER VALIDADO. Fatia CONCLUÍDA.** Dois pedidos
 > do Owner no PDV. **(1) Atalho "Tudo a prazo":** na venda a prazo (ADR-019), um link **"Tudo a prazo
 > (R$ X)"** ao lado do rótulo "A prazo" preenche o valor a prazo com o **total da venda** (`totals.total`)

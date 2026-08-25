@@ -8,6 +8,16 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 SUPABASE_URL = "https://esxssekaflzewibbklpu.supabase.co"
 
+# --- Observabilidade (Workers Logs) ---
+# Retém logs/exceções do Worker (~3 dias no dashboard, incluído no free tier) para que um
+# incidente transitório (cold start do pool, 5xx pontual, "Failed to fetch" do cliente) possa
+# ser investigado DEPOIS que acontece. Sem isto, `wrangler tail` só mostra eventos ao vivo e o
+# passado se perde. `head_sampling_rate = 1` = registra 100% das requisições (volume baixo).
+# Ver no dashboard: Workers & Pages → nexoloja-api → Logs. Só passa a valer após o deploy.
+[observability]
+enabled = true
+head_sampling_rate = 1
+
 # --- Hyperdrive → Supabase (ADR-005) ---
 # Conexão poolada na edge. A origem configurada é o POOLER do Supabase (Supavisor) em
 # MODO SESSÃO — host `aws-1-us-west-2.pooler.supabase.com`, porta 5432, user

@@ -254,6 +254,40 @@ function buildPatch(original: ProductFull, f: FormState): Record<string, unknown
   return patch;
 }
 
+/**
+ * Título de uma seção do formulário de edição (repaginação 2026-08-24): número + nome, na cor da
+ * marca — mesma linguagem do cadastro de novo produto e do PDV.
+ */
+function SectionTitle({ n, children }: { n: number; children: React.ReactNode }) {
+  return (
+    <p className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-indigo-700">
+      <span className="grid h-5 w-5 place-items-center rounded-full bg-indigo-50 text-[11px] font-extrabold text-indigo-700">
+        {n}
+      </span>
+      {children}
+    </p>
+  );
+}
+
+/**
+ * Deve o bloco "Opções avançadas" da edição nascer ABERTO? Sim quando o produto já tem algo
+ * configurado ali (embalagem alternativa não-fechada, par, ou acréscimo por forma) — para não
+ * esconder informação preenchida. A unidade fechada (barra/rolo) usa `altUnit='METER'` internamente
+ * e tem seção própria visível, então não conta aqui.
+ */
+function initialAdvancedOpen(p: ProductFull): boolean {
+  const isClosed = isClosedPrimary({
+    unit: p.unit,
+    conversionFactor: p.conversionFactor != null ? Number(p.conversionFactor) : null,
+  });
+  return (
+    (!isClosed && !!p.altUnit) ||
+    !!p.pairedProductId ||
+    p.surchargeDebit != null ||
+    p.surchargeCredit != null
+  );
+}
+
 export function ProductDetail({
   product,
   allProducts,
@@ -275,6 +309,8 @@ export function ProductDetail({
 }) {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<FormState>(() => toForm(product));
+  // "Opções avançadas" da edição: nasce aberta se o produto já tem algo configurado lá.
+  const [advOpen, setAdvOpen] = useState<boolean>(() => initialAdvancedOpen(product));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Passo de confirmação da exclusão (ação destrutiva → deliberada, sem window.confirm).
@@ -297,6 +333,7 @@ export function ProductDetail({
     setEditing(false);
     setError(null);
     setConfirmingDelete(false);
+    setAdvOpen(initialAdvancedOpen(product));
     // Descarta propostas/aviso de sincronização do produto anterior (eram de outro EAN).
     setSyncProposals(null);
     setSyncMsg(null);
@@ -531,9 +568,10 @@ export function ProductDetail({
         role="dialog"
         aria-label={`Cadastro de ${product.name}`}
         onClick={(e) => e.stopPropagation()}
-        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-2xl"
+        className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:rounded-2xl"
       >
-        <div className="mb-4 flex items-start justify-between gap-3">
+        {/* Cabeçalho do painel na cor da marca (identidade do PDV / cadastro). */}
+        <div className="flex items-start justify-between gap-3 bg-indigo-600 px-5 py-4 text-white">
           <div className="flex min-w-0 items-start gap-3">
             {/* Foto do produto (hotlink; ADR-025). onError esconde link externo quebrado. */}
             {product.imageUrl && (
@@ -541,7 +579,7 @@ export function ProductDetail({
               <img
                 src={product.imageUrl}
                 alt={`Foto de ${product.name}`}
-                className="h-14 w-14 shrink-0 rounded-lg border border-gray-200 bg-white object-contain"
+                className="h-14 w-14 shrink-0 rounded-lg border border-white/30 bg-white object-contain"
                 onError={(e) => {
                   (e.currentTarget as HTMLImageElement).style.display = 'none';
                 }}
@@ -556,7 +594,7 @@ export function ProductDetail({
                 </span>
               )}
             </div>
-            <p className="truncate text-xs text-gray-600">
+            <p className="truncate text-xs text-indigo-100">
               {product.sku}
               {product.manufacturer ? ` · ${product.manufacturer}` : ''}
             </p>
@@ -565,13 +603,15 @@ export function ProductDetail({
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded-lg px-2 py-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+            className="shrink-0 rounded-lg px-2 py-1 text-indigo-100 hover:bg-white/10 hover:text-white"
             aria-label="Fechar"
           >
             ✕
           </button>
         </div>
 
+        {/* Corpo rolável (o cabeçalho fica fixo no topo do painel). */}
+        <div className="overflow-y-auto p-5">
         {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
 
         {!editing ? (
@@ -905,7 +945,7 @@ export function ProductDetail({
                   <button
                     type="button"
                     onClick={() => setEditing(true)}
-                    className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+                    className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
                   >
                     Editar
                   </button>
@@ -919,9 +959,13 @@ export function ProductDetail({
               e.preventDefault();
               void onSave();
             }}
-            className="grid grid-cols-1 gap-3 sm:grid-cols-6"
+            className="space-y-5"
           >
-            <label className="sm:col-span-3">
+            {/* 1 · Identificação */}
+            <div>
+              <SectionTitle n={1}>Identificação</SectionTitle>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="sm:col-span-2">
               <span className={labelCls}>Nome</span>
               <input
                 value={form.name}
@@ -929,7 +973,7 @@ export function ProductDetail({
                 className={inputCls}
               />
             </label>
-            <label className="sm:col-span-3">
+            <label>
               <span className={labelCls}>Nome popular</span>
               <input
                 value={form.popularName}
@@ -937,7 +981,7 @@ export function ProductDetail({
                 className={inputCls}
               />
             </label>
-            <label className="sm:col-span-3">
+            <label>
               <span className={labelCls}>Fabricante</span>
               <input
                 value={form.manufacturer}
@@ -947,7 +991,7 @@ export function ProductDetail({
                 className={inputCls}
               />
             </label>
-            <label className="sm:col-span-3">
+            <label>
               <span className={labelCls}>SKU (código interno)</span>
               <input
                 value={form.sku}
@@ -956,7 +1000,7 @@ export function ProductDetail({
               />
             </label>
             {/* Código de barras (EAN) — leitura pela câmera (mesmo padrão do cadastro novo). */}
-            <div className="flex flex-col gap-1 sm:col-span-3">
+            <div className="flex flex-col gap-1">
               <span className={labelCls}>Código de barras (EAN)</span>
               <div className="flex gap-2">
                 <input
@@ -972,9 +1016,13 @@ export function ProductDetail({
                 />
               </div>
             </div>
-            {/* Esteira de precificação sincronizada (Custo · Markup · Preço · Margem).
-                A verdade continua sendo costPrice/salePrice; markup e margem são derivados. */}
-            <div className="sm:col-span-6">
+              </div>
+            </div>
+            {/* 2 · Preço e margem */}
+            <div className="border-t border-gray-200 pt-4">
+              <SectionTitle n={2}>Preço e margem</SectionTitle>
+              {/* Esteira de precificação sincronizada (Custo · Markup · Preço · Margem).
+                  A verdade continua sendo costPrice/salePrice; markup e margem são derivados. */}
               <PricingEsteira
                 costPrice={form.costPrice}
                 salePrice={form.salePrice}
@@ -983,7 +1031,11 @@ export function ProductDetail({
                 priceLabel={closed ? `Preço ${unitArticle}` : 'Venda'}
               />
             </div>
-            <label className="sm:col-span-2">
+            {/* 3 · Classificação e estoque */}
+            <div className="border-t border-gray-200 pt-4">
+              <SectionTitle n={3}>Unidade, categoria e estoque</SectionTitle>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label>
               <span className={labelCls}>Estoque mínimo</span>
               <input
                 type="number"
@@ -994,7 +1046,7 @@ export function ProductDetail({
                 className={inputCls}
               />
             </label>
-            <label className="sm:col-span-3">
+            <label>
               <span className={labelCls}>Unidade de venda</span>
               <select
                 value={form.unit}
@@ -1008,7 +1060,7 @@ export function ProductDetail({
                 ))}
               </select>
             </label>
-            <label className="sm:col-span-3">
+            <label>
               <span className={labelCls}>Categoria</span>
               <select
                 value={form.categoryId}
@@ -1024,7 +1076,7 @@ export function ProductDetail({
                 ))}
               </select>
             </label>
-            <div className="sm:col-span-3">
+            <div>
               <span className={labelCls}>Peso (vazio = sem peso)</span>
               <div className="flex gap-2">
                 <input
@@ -1048,7 +1100,12 @@ export function ProductDetail({
                 </select>
               </div>
             </div>
-            <label className="sm:col-span-6">
+              </div>
+            </div>
+            {/* 4 · Descrição */}
+            <div className="border-t border-gray-200 pt-4">
+              <SectionTitle n={4}>Descrição / observação</SectionTitle>
+            <label className="block">
               <span className={labelCls}>Descrição / observação</span>
               <textarea
                 value={form.description}
@@ -1059,9 +1116,12 @@ export function ProductDetail({
               />
             </label>
 
-            {/* ADR-017: unidade fechada (barra/rolo) — tamanho + preço por metro (opcional). */}
-            {closed ? (
-              <fieldset className="rounded-xl border border-dashed border-indigo-300 bg-indigo-50/40 p-3 sm:col-span-6">
+            </div>
+            {/* ADR-017: unidade fechada (barra/rolo) — tamanho + preço por metro (opcional).
+                Fica VISÍVEL (não nas avançadas): para unidade fechada o tamanho é essencial. */}
+            {closed && (
+              <div className="border-t border-gray-200 pt-4">
+              <fieldset className="rounded-xl border border-dashed border-indigo-300 bg-indigo-50/40 p-3">
                 <legend className="px-1 text-xs font-medium text-indigo-700">
                   {unitTypeLabels[form.unit]} — tamanho e venda por metro
                 </legend>
@@ -1090,8 +1150,28 @@ export function ProductDetail({
                   . O estoque é contado em metros. Preço por metro vazio ⇒ só vende inteiro.
                 </p>
               </fieldset>
-            ) : (
-              <fieldset className="rounded-xl border border-dashed border-gray-300 p-3 sm:col-span-6">
+              </div>
+            )}
+            {/* Opções avançadas — recolhíveis; nascem abertas se o produto já tiver dados aqui. */}
+            <details
+              open={advOpen}
+              onToggle={(e) => setAdvOpen((e.currentTarget as HTMLDetailsElement).open)}
+              className="group border-t border-gray-200"
+            >
+              <summary className="flex cursor-pointer list-none items-center gap-2 py-4 text-sm font-semibold text-gray-700 [&::-webkit-details-marker]:hidden">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4 text-gray-500" aria-hidden="true">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V22a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 6 20.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 3 15" strokeLinecap="round" />
+                </svg>
+                Opções avançadas
+                <span className="font-normal text-gray-400">— unidade alternativa, par, acréscimo</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="ml-auto h-[18px] w-[18px] text-gray-400 transition group-open:rotate-180" aria-hidden="true">
+                  <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </summary>
+              <div className="space-y-3 pb-1">
+              {!closed && (
+              <fieldset className="rounded-xl border border-dashed border-gray-300 p-3">
                 <legend className="px-1 text-xs font-medium text-gray-600">
                   Venda em unidade alternativa (opcional)
                 </legend>
@@ -1131,7 +1211,7 @@ export function ProductDetail({
             )}
 
             {/* Produto agregado — venda em par (ADR-015). */}
-            <fieldset className="rounded-xl border border-dashed border-gray-300 p-3 sm:col-span-6">
+            <fieldset className="rounded-xl border border-dashed border-gray-300 p-3">
               <legend className="px-1 text-xs font-medium text-gray-600">
                 Vendido em par (opcional) — ex.: parafuso + bucha
               </legend>
@@ -1190,7 +1270,7 @@ export function ProductDetail({
             </fieldset>
 
             {/* Acréscimo por forma de pagamento (ADR-016) — opt-in por produto. */}
-            <fieldset className="rounded-xl border border-dashed border-gray-300 p-3 sm:col-span-6">
+            <fieldset className="rounded-xl border border-dashed border-gray-300 p-3">
               <legend className="px-1 text-xs font-medium text-gray-600">
                 Acréscimo por forma de pagamento — quanto o preço SOBE no cartão
               </legend>
@@ -1231,7 +1311,9 @@ export function ProductDetail({
               )}
             </fieldset>
 
-            <div className="flex justify-end gap-2 sm:col-span-6">
+              </div>
+            </details>
+            <div className="flex justify-end gap-2 border-t border-gray-200 pt-4">
               <button
                 type="button"
                 onClick={() => {
@@ -1246,13 +1328,14 @@ export function ProductDetail({
               <button
                 type="submit"
                 disabled={!changed || saving}
-                className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-40"
+                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-700 disabled:opacity-40 disabled:shadow-none"
               >
                 {saving ? 'Salvando…' : 'Salvar alterações'}
               </button>
             </div>
           </form>
         )}
+        </div>
       </div>
     </div>
   );

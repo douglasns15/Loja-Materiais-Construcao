@@ -45,6 +45,9 @@ export type DeliveryItem = {
   remainingBaseQty: number;
   scheduledPickupAt: string | null;
   pairGroup: number | null;
+  /** Preço e total da linha (Decimal em string) — usados no comprovante de retirada reimpresso. */
+  unitPrice: string;
+  total: string;
 };
 
 /** Um evento de retirada parcial (o log): quanto saiu, quando e por quem. */
@@ -63,7 +66,14 @@ export type DeliveryLogRow = {
  */
 export type DeliveryDetail = {
   id: string;
+  /** Código sequencial da venda (ADR-023) — impresso como "V-000128" no comprovante de retirada. */
+  orderNumber: number;
   total: string;
+  /** Desconto do pedido (Decimal em string) — imprime a linha "Subtotal/Desconto" no comprovante. */
+  discountAmount: string;
+  /** Saldo a prazo em aberto (0 quando 100% pago). Decide se a faixa mostra "PAGO — FALTA RETIRAR"
+   *  (pago) ou só "FALTA RETIRAR" (venda a prazo com saldo). Vem do `Receivable` vinculado. */
+  outstandingBalance: number;
   fulfillmentStatus: FulfillmentStatus;
   scheduledPickupAt: string | null;
   perItemSchedule: boolean;

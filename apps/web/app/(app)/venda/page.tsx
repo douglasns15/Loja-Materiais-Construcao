@@ -145,6 +145,28 @@ type CartItem = {
 
 /** Rótulo curto de uma unidade (sem o parêntese): "Metro (m)" → "Metro"; "Rolo" → "Rolo". */
 const unitShort = (u: UnitType) => unitTypeLabels[u].replace(/\s*\(.*\)$/, '');
+
+/** Miniatura do produto no catálogo do PDV: iniciais em bloco tingido com a cor da marca.
+ *  Realce visual (Opção A) custo-zero — não depende de foto cadastrada; puramente decorativa. */
+function ProductThumb({ name }: { name: string }) {
+  const initials =
+    name
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((w) => w[0] ?? '')
+      .join('')
+      .toUpperCase() || '?';
+  return (
+    <span
+      aria-hidden="true"
+      className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-indigo-50 text-xs font-bold text-indigo-700"
+    >
+      {initials}
+    </span>
+  );
+}
 /** Uma parcela de pagamento na tela: a forma + o valor digitado (string do MoneyInput). */
 type PayLine = { method: PaymentMethod; amount: string };
 /** Parcela já resolvida/persistida: forma + valor numérico (as parcelas somam o total). */
@@ -171,6 +193,9 @@ type View =
       /** Crédito da loja usado nesta venda (ADR-022, Fatia C) — mostrado como forma no comprovante. */
       storeCredit?: number;
       customerName?: string | null;
+      /** Venda com retirada/entrega futura (ADR-020): habilita o 2º botão "Imprimir comprovante de
+       *  retirada" na tela final (cupom + faixa "FALTA RETIRAR"). */
+      scheduled?: boolean;
     }
   | {
       kind: 'quote';
@@ -373,6 +398,9 @@ export default function VendaPage() {
     cardFeeCreditPercent: number | null;
   } | null>(null);
   const [printModel, setPrintModel] = useState<'80mm' | 'A4'>('80mm');
+  // Retirada/entrega futura (ADR-020): quando `true`, a próxima impressão sai como COMPROVANTE DE
+  // RETIRADA (cupom + faixa "FALTA RETIRAR"). O botão de retirada liga; o "Imprimir" comum desliga.
+  const [printPickup, setPrintPickup] = useState(false);
   // Salvar orçamento (ADR-024): validade default = +7 dias (editável antes de salvar) + estado de save.
   const [quoteValidity, setQuoteValidity] = useState(() => {
     const d = new Date();
@@ -583,7 +611,11 @@ export default function VendaPage() {
 
   /** Abre o diálogo de impressão. O PDF sai nomeado pelo código do documento (venda V-000128 /
    *  orçamento O-000045) em vez do genérico "NexoLoja.pdf". Ver lib/print.ts. */
-  async function imprimir() {
+  async function imprimir(pickup = false) {
+    // Liga/desliga a faixa "FALTA RETIRAR" antes de abrir o diálogo e deixa o React aplicar a mudança
+    // ao #print-area (rAF) — assim o cupom impresso reflete o modo escolhido (retirada × normal).
+    setPrintPickup(pickup);
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
     const fileName =
       view?.kind === 'quote'
         ? formatQuoteNumber(view.quoteNumber)
@@ -1237,6 +1269,8 @@ export default function VendaPage() {
       date: new Date().toLocaleString('pt-BR'),
       ...(isCredit ? { credit: creditValue, customerName } : {}),
       ...(storeCreditUsed > 0 ? { storeCredit: storeCreditUsed, customerName } : {}),
+      // Retirada/entrega futura (ADR-020): liga o botão "Imprimir comprovante de retirada" na prévia.
+      ...(isScheduled ? { scheduled: true } : {}),
     };
 
     // --- Offline: enfileira a venda (só com o recurso OFFLINE_SALES ligado) ---
@@ -1797,7 +1831,7 @@ export default function VendaPage() {
             </div>
           ) : null}
 
-          <div className="flex items-center gap-2 border-t border-gray-200 pt-3">
+          <div className="flex flex-wrap items-center gap-2 border-t border-gray-200 pt-3">
             <span className="text-sm text-gray-600">Imprimir:</span>
             <select
               value={printModel}
@@ -1808,11 +1842,21 @@ export default function VendaPage() {
               <option value="A4">A4</option>
             </select>
             <button
-              onClick={imprimir}
+              onClick={() => imprimir(false)}
               className="rounded-lg border border-gray-300 px-3 py-1 text-sm font-medium hover:bg-gray-100"
             >
               Imprimir
             </button>
+            {/* Retirada/entrega futura (ADR-020): 2º comprovante com a faixa "FALTA RETIRAR" para o
+                cliente trazer na retirada. Só aparece quando a venda foi marcada como retirada futura. */}
+            {view.kind === 'done' && view.scheduled ? (
+              <button
+                onClick={() => imprimir(true)}
+                className="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-1 text-sm font-medium text-indigo-700 hover:bg-indigo-100"
+              >
+                Comprovante de retirada
+              </button>
+            ) : null}
           </div>
 
           {/* ADR-024 (refino de UX): validade + "Salvar orçamento" na prévia. Só enquanto a cotação é
@@ -1905,6 +1949,9 @@ export default function VendaPage() {
           orderNumber={view.kind === 'done' ? view.orderNumber : undefined} // ADR-023
           quoteNumber={view.kind === 'quote' ? view.quoteNumber : undefined} // ADR-024
           validUntil={view.kind === 'quote' ? view.validUntil : undefined} // ADR-024
+          pickupNotice={printPickup} // ADR-020: faixa "FALTA RETIRAR" no comprovante de retirada
+          // "Pago" só quando não sobrou saldo a prazo (venda a prazo ⇒ só "FALTA RETIRAR").
+          pickupPaid={!(view.kind === 'done' && (view.credit ?? 0) > 0)}
         />
       </div>
     );
@@ -1912,8 +1959,10 @@ export default function VendaPage() {
 
   // --- PDV (carrinho) ---
   return (
-    <div className="mx-auto max-w-6xl">
-      <h1 className="mb-6 text-2xl font-bold">Venda</h1>
+    <div className="mx-auto max-w-7xl">
+      <h1 className="mb-6 w-fit bg-gradient-to-r from-indigo-700 to-indigo-500 bg-clip-text text-2xl font-bold text-transparent">
+        Venda
+      </h1>
 
       {/* ADR-024 (2.B): o PDV foi aberto a partir de um orçamento — "Gerar venda" (converte ao
           concluir) ou "Editar rascunho" (Salvar grava por cima do mesmo O-…). */}
@@ -1969,16 +2018,16 @@ export default function VendaPage() {
           offline sem o recurso, esconde o ruído de rede — o aviso acima já orienta a nota manual. */}
       {error && (online || offlineSales) && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
-      {/* PDV em duas colunas (desktop): carrinho + pagamento + total à ESQUERDA (protagonistas),
-          busca à DIREITA (fixa ao rolar, resultados só ao digitar). No celular/tablet volta a
-          empilhar na ordem do DOM (busca, carrinho, pagamento, total). Posicionamento explícito de
-          grid evita reordenar o DOM — cada bloco escolhe sua coluna/linha. */}
-      {/* Colunas com `minmax(0,…)` (não `1fr`, que tem mínimo `auto`) para que a coluna possa
-          ENCOLHER abaixo do conteúdo — sem isso, a tabela larga do carrinho estica a coluna e a
-          página inteira no celular (em vez de rolar dentro do próprio `overflow-x-auto`). No mobile
-          é uma coluna única `minmax(0,1fr)`; no desktop, as duas colunas do PDV. */}
-      <div className="grid items-start gap-4 [grid-template-columns:minmax(0,1fr)] lg:[grid-template-columns:minmax(0,1.4fr)_minmax(0,1fr)]">
-      <div className="min-w-0 rounded-2xl bg-white p-4 shadow-sm lg:sticky lg:top-4 lg:col-start-2 lg:row-start-1">
+      {/* PDV em duas colunas (desktop, Opção A — padrão Square/Shopify/Olist): BUSCA/catálogo à
+          ESQUERDA (protagonista, ocupa a largura livre) e o CHECKOUT (carrinho + pagamento +
+          condições + total/Concluir) num painel FIXO à DIREITA (`lg:sticky`, ~400px). No
+          celular/tablet empilha na ordem do DOM (busca, depois checkout). Posicionamento explícito
+          de grid evita reordenar o DOM — cada bloco escolhe sua coluna/linha. */}
+      {/* A coluna da busca usa `minmax(0,1fr)` (não `1fr`, que tem mínimo `auto`) para poder
+          ENCOLHER abaixo do conteúdo; a do checkout é fixa em `400px`. No mobile vira coluna única
+          `minmax(0,1fr)`. */}
+      <div className="grid items-start gap-4 [grid-template-columns:minmax(0,1fr)] lg:[grid-template-columns:minmax(0,1fr)_400px]">
+      <div className="min-w-0 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm lg:col-start-1 lg:row-start-1">
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex basis-full gap-2">
             <input
@@ -2038,12 +2087,15 @@ export default function VendaPage() {
                 return (
                   <li key={p.id} className="px-3 py-2">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="min-w-0">
-                        <span className="block truncate font-medium">{p.name}</span>
-                        <span className="block truncate text-xs text-gray-500">
-                          {p.popularName ? `${p.popularName} · ` : ''}
-                          {p.manufacturer ? `${p.manufacturer} · ` : ''}
-                          {p.sku}
+                      <span className="flex min-w-0 items-center gap-2.5">
+                        <ProductThumb name={p.name} />
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium">{p.name}</span>
+                          <span className="block truncate text-xs text-gray-500">
+                            {p.popularName ? `${p.popularName} · ` : ''}
+                            {p.manufacturer ? `${p.manufacturer} · ` : ''}
+                            {p.sku}
+                          </span>
                         </span>
                       </span>
                       <span className={`shrink-0 text-xs ${out ? 'text-red-500' : 'text-gray-500'}`}>
@@ -2090,12 +2142,15 @@ export default function VendaPage() {
                       disabled={out}
                       className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      <span className="min-w-0">
-                        <span className="block truncate font-medium">{p.name}</span>
-                        <span className="block truncate text-xs text-gray-500">
-                          {p.popularName ? `${p.popularName} · ` : ''}
-                          {p.manufacturer ? `${p.manufacturer} · ` : ''}
-                          {p.sku}
+                      <span className="flex min-w-0 items-center gap-2.5">
+                        <ProductThumb name={p.name} />
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium">{p.name}</span>
+                          <span className="block truncate text-xs text-gray-500">
+                            {p.popularName ? `${p.popularName} · ` : ''}
+                            {p.manufacturer ? `${p.manufacturer} · ` : ''}
+                            {p.sku}
+                          </span>
                         </span>
                       </span>
                       <span className="shrink-0 text-right">
@@ -2123,12 +2178,15 @@ export default function VendaPage() {
               return (
                 <li key={p.id} className="px-3 py-2">
                   <div className="flex items-center justify-between gap-3">
-                    <span className="min-w-0">
-                      <span className="block truncate font-medium">{p.name}</span>
-                      <span className="block truncate text-xs text-gray-500">
-                        {p.popularName ? `${p.popularName} · ` : ''}
-                        {p.manufacturer ? `${p.manufacturer} · ` : ''}
-                        {p.sku}
+                    <span className="flex min-w-0 items-center gap-2.5">
+                      <ProductThumb name={p.name} />
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium">{p.name}</span>
+                        <span className="block truncate text-xs text-gray-500">
+                          {p.popularName ? `${p.popularName} · ` : ''}
+                          {p.manufacturer ? `${p.manufacturer} · ` : ''}
+                          {p.sku}
+                        </span>
                       </span>
                     </span>
                     <span className={`shrink-0 text-xs ${out ? 'text-red-500' : 'text-gray-500'}`}>
@@ -2189,29 +2247,40 @@ export default function VendaPage() {
         )}
       </div>
 
-      {/* Coluna esquerda (protagonista): carrinho no topo. */}
-      <div className="min-w-0 rounded-2xl bg-white shadow-sm lg:col-start-1 lg:row-start-1">
+      {/* Coluna direita (Opção A): painel de CHECKOUT — carrinho + pagamento + condições +
+          total/Concluir num cartão único e FIXO (sticky) ao rolar. Cada seção é dividida por
+          borda (antes eram 3 cartões separados). */}
+      <div className="min-w-0 lg:col-start-2 lg:row-start-1 lg:sticky lg:top-4">
+      <div className="flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-md">
+      {/* Seção: carrinho (topo do painel). */}
+      <div className="min-w-0">
         {/* Cabeçalho do carrinho: título + botão "Limpar carrinho" (só com itens). */}
-        <div className="flex items-center justify-between gap-2 border-b border-gray-100 px-4 py-2">
-          <span className="text-sm font-medium text-gray-700">
+        <div className="flex items-center justify-between gap-2 bg-indigo-600 px-4 py-2.5 text-white">
+          <span className="flex items-center gap-2 text-sm font-semibold">
+            {/* Ícone de carrinho inline (sem dependência nova — mesmo padrão do menu). */}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4" aria-hidden="true">
+              <circle cx="9" cy="20" r="1" />
+              <circle cx="18" cy="20" r="1" />
+              <path d="M2 3h2l2.4 12.4a1 1 0 0 0 1 .8h9.7a1 1 0 0 0 1-.8L21 7H5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
             Carrinho
-            {cart.length > 0 && <span className="ml-1 text-gray-500">· {cart.length}</span>}
+            {cart.length > 0 && <span className="ml-0.5 text-indigo-100">· {cart.length}</span>}
           </span>
           {cart.length > 0 &&
             (confirmClear ? (
               <span className="flex items-center gap-2 text-xs">
-                <span className="text-gray-600">Limpar tudo?</span>
+                <span className="text-indigo-100">Limpar tudo?</span>
                 <button
                   type="button"
                   onClick={limparCarrinho}
-                  className="rounded-lg bg-red-600 px-2 py-1 font-medium text-white hover:bg-red-700"
+                  className="rounded-lg bg-white px-2 py-1 font-semibold text-red-600 hover:bg-red-50"
                 >
                   Sim, limpar
                 </button>
                 <button
                   type="button"
                   onClick={() => setConfirmClear(false)}
-                  className="rounded-lg border border-gray-300 px-2 py-1 font-medium text-gray-600 hover:bg-gray-100"
+                  className="rounded-lg border border-white/40 px-2 py-1 font-medium text-white hover:bg-white/10"
                 >
                   Cancelar
                 </button>
@@ -2220,35 +2289,27 @@ export default function VendaPage() {
               <button
                 type="button"
                 onClick={() => setConfirmClear(true)}
-                className="text-sm font-medium text-red-600 hover:text-red-700"
+                className="text-sm font-medium text-indigo-100 hover:text-white"
               >
                 Limpar carrinho
               </button>
             ))}
         </div>
-        <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-blue-200 text-left text-blue-900">
-            <tr>
-              <th className="px-4 py-2">Produto</th>
-              <th className="px-4 py-2 text-right">Qtd</th>
-              <th className="px-4 py-2 text-right">Preço</th>
-              <th className="px-4 py-2 text-right">Total</th>
-              <th className="px-4 py-2" />
-            </tr>
-          </thead>
-          <tbody>
-            {cart.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-gray-500">
-                  Carrinho vazio.
-                </td>
-              </tr>
-            ) : (
-              pricedCart.map((i) => (
-                <tr key={i.key} className="border-t border-gray-100">
-                  <td className="px-4 py-2">
-                    <span title={itemTooltip(i)} className="cursor-help border-b border-dotted border-gray-300">
+        {/* Linhas compactas do carrinho (Opção A): o painel de checkout é estreito (~400px), então
+            cada item é uma linha de 2 níveis em vez de tabela larga. Mesmos handlers/memos de antes
+            (`pricedCart`, `changeLineQty`, `removeFromCart`, `setInfoKey`, `itemTooltip`,
+            `isMeterLine`) e TODOS os selos (embalagem fechada, par ADR-015, acréscimo ADR-016).
+            Área com rolagem própria no desktop para o carrinho grande não empurrar o total pra fora. */}
+        <div className="lg:max-h-[42vh] lg:overflow-y-auto">
+          {cart.length === 0 ? (
+            <p className="px-4 py-6 text-center text-sm text-gray-500">Carrinho vazio.</p>
+          ) : (
+            pricedCart.map((i) => (
+              <div key={i.key} className="border-t border-gray-100 px-4 py-2.5 text-sm first:border-t-0">
+                {/* Nível 1: nome (tooltip) + "ⓘ" · à direita o total da linha + remover. */}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <span title={itemTooltip(i)} className="cursor-help border-b border-dotted border-gray-300 font-medium">
                       {i.name}
                     </span>
                     {/* "i" em círculo: abre as informações daquele item (ADR-021). */}
@@ -2261,80 +2322,85 @@ export default function VendaPage() {
                     >
                       i
                     </button>
-                    {i.saleMode === 'ALT' && !i.pair && (
-                      <span className="block text-xs text-gray-500">
-                        embalagem fechada · ≈ {i.quantity * i.conversionFactor} {unitShort(i.baseUnitType)}
-                      </span>
-                    )}
-                    {/* Par (ADR-015): mostra que a linha baixa os dois produtos. */}
-                    {i.pair && (
-                      <span className="block text-xs text-emerald-600">
-                        par · baixa 1 de cada produto
-                      </span>
-                    )}
-                    {/* Acréscimo por forma de pagamento (ADR-016): sempre visível na linha —
-                        o operador precisa saber por que o preço não é o de tabela. */}
-                    {(primaryMethod === 'DEBIT_CARD' ? i.surchargeDebit : primaryMethod === 'CREDIT_CARD' ? i.surchargeCredit : 0) > 0 && (
-                      <span className="block text-xs text-amber-600">
-                        +{BRL(primaryMethod === 'DEBIT_CARD' ? i.surchargeDebit : i.surchargeCredit)}/un no{' '}
-                        {primaryMethod === 'DEBIT_CARD' ? 'débito' : 'crédito'}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-2">
-                    {/* Edição inline da quantidade: − / + (passo 0,5 no metro, senão 1) e digitação
-                        direta. A trava de estoque vive em changeLineQty (mesma regra do addToCart). */}
-                    <div className="flex items-center justify-end gap-1">
-                      <button
-                        type="button"
-                        onClick={() => changeLineQty(i.key, i.quantity - (isMeterLine(i) ? 0.5 : 1))}
-                        className="h-7 w-7 shrink-0 rounded border border-gray-300 text-gray-600 hover:bg-gray-50"
-                        aria-label={`Diminuir quantidade de ${i.name}`}
-                      >
-                        −
-                      </button>
-                      <QtyInput
-                        value={i.quantity}
-                        min="0"
-                        step={isMeterLine(i) ? '0.5' : '1'}
-                        onCommit={(n) => changeLineQty(i.key, n)}
-                        className="w-14 rounded border border-gray-300 px-1 py-1 text-right"
-                        ariaLabel={`Quantidade de ${i.name}`}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => changeLineQty(i.key, i.quantity + (isMeterLine(i) ? 0.5 : 1))}
-                        className="h-7 w-7 shrink-0 rounded border border-gray-300 text-gray-600 hover:bg-gray-50"
-                        aria-label={`Aumentar quantidade de ${i.name}`}
-                      >
-                        +
-                      </button>
-                      <span className="ml-1 w-12 shrink-0 text-left text-xs text-gray-500">
-                        {i.pair
-                          ? `par${i.quantity > 1 ? 'es' : ''}`
-                          : i.saleMode === 'ALT' && !i.pair
-                            ? unitShort(i.unitType)
-                            : ''}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-2 text-right">{BRL(i.unitPrice)}</td>
-                  <td className="px-4 py-2 text-right">{BRL(i.unitPrice * i.quantity)}</td>
-                  <td className="px-4 py-2 text-right">
-                    <button onClick={() => removeFromCart(i.key)} className="text-gray-500 hover:text-red-600">
-                      remover
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span className="font-semibold tabular-nums">{BRL(i.unitPrice * i.quantity)}</span>
+                    <button
+                      onClick={() => removeFromCart(i.key)}
+                      className="rounded px-1 text-lg leading-none text-gray-400 hover:text-red-600"
+                      aria-label={`Remover ${i.name}`}
+                      title="Remover item"
+                    >
+                      ×
                     </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+                  </div>
+                </div>
+
+                {/* Selos por item. */}
+                {i.saleMode === 'ALT' && !i.pair && (
+                  <span className="mt-0.5 block text-xs text-gray-500">
+                    embalagem fechada · ≈ {i.quantity * i.conversionFactor} {unitShort(i.baseUnitType)}
+                  </span>
+                )}
+                {/* Par (ADR-015): mostra que a linha baixa os dois produtos. */}
+                {i.pair && (
+                  <span className="mt-0.5 block text-xs text-emerald-600">par · baixa 1 de cada produto</span>
+                )}
+                {/* Acréscimo por forma de pagamento (ADR-016): sempre visível na linha —
+                    o operador precisa saber por que o preço não é o de tabela. */}
+                {(primaryMethod === 'DEBIT_CARD' ? i.surchargeDebit : primaryMethod === 'CREDIT_CARD' ? i.surchargeCredit : 0) > 0 && (
+                  <span className="mt-0.5 block text-xs text-amber-600">
+                    +{BRL(primaryMethod === 'DEBIT_CARD' ? i.surchargeDebit : i.surchargeCredit)}/un no{' '}
+                    {primaryMethod === 'DEBIT_CARD' ? 'débito' : 'crédito'}
+                  </span>
+                )}
+
+                {/* Nível 2: stepper de quantidade (− / campo / +) + preço unitário. Edição inline:
+                    passo 0,5 no metro, senão 1; a trava de estoque vive em changeLineQty. */}
+                <div className="mt-1.5 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => changeLineQty(i.key, i.quantity - (isMeterLine(i) ? 0.5 : 1))}
+                      className="h-7 w-7 shrink-0 rounded border border-gray-300 text-gray-600 hover:bg-gray-50"
+                      aria-label={`Diminuir quantidade de ${i.name}`}
+                    >
+                      −
+                    </button>
+                    <QtyInput
+                      value={i.quantity}
+                      min="0"
+                      step={isMeterLine(i) ? '0.5' : '1'}
+                      onCommit={(n) => changeLineQty(i.key, n)}
+                      className="w-14 rounded border border-gray-300 px-1 py-1 text-right"
+                      ariaLabel={`Quantidade de ${i.name}`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => changeLineQty(i.key, i.quantity + (isMeterLine(i) ? 0.5 : 1))}
+                      className="h-7 w-7 shrink-0 rounded border border-gray-300 text-gray-600 hover:bg-gray-50"
+                      aria-label={`Aumentar quantidade de ${i.name}`}
+                    >
+                      +
+                    </button>
+                    <span className="ml-1 shrink-0 text-xs text-gray-500">
+                      {i.pair
+                        ? `par${i.quantity > 1 ? 'es' : ''}`
+                        : i.saleMode === 'ALT' && !i.pair
+                          ? unitShort(i.unitType)
+                          : ''}
+                    </span>
+                  </div>
+                  <span className="shrink-0 text-xs text-gray-500 tabular-nums">{BRL(i.unitPrice)}/un</span>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 
-      {/* Coluna esquerda: pagamento (linha 2). */}
-      <div className="min-w-0 space-y-3 rounded-2xl bg-white p-4 shadow-sm lg:col-start-1 lg:row-start-2">
+      {/* Seção: pagamento + condições (a prazo/crédito/retirada são opt-in, "+ …"). */}
+      <div className="min-w-0 space-y-3 border-t border-gray-100 p-4">
           <div className="flex items-center justify-between">
             <label className="block text-sm font-medium">Formas de pagamento</label>
             <button
@@ -2708,17 +2774,19 @@ export default function VendaPage() {
           )}
         </div>
 
-        {/* Coluna esquerda: total + desconto + ações (linha 3). */}
-        <div className="flex min-w-0 flex-col justify-between rounded-2xl bg-white p-4 shadow-sm lg:col-start-1 lg:row-start-3">
+        {/* Seção (rodapé do painel): total + desconto + ações. Como as condições abrem fechadas,
+            Total e "Concluir" ficam visíveis no caso comum. */}
+        <div className="min-w-0 border-t border-gray-100 bg-gray-50 p-4">
           <div>
-            <div className="space-y-1 text-sm">
+            <div className="space-y-2 text-sm">
               <div className="flex justify-between text-gray-600">
                 <span>Subtotal</span>
-                <span>{BRL(totals.subtotal)}</span>
+                <span className="tabular-nums">{BRL(totals.subtotal)}</span>
               </div>
-              <div className="flex justify-between text-lg font-bold">
-                <span>Total</span>
-                <span>{BRL(totals.total)}</span>
+              {/* Total = herói do checkout: faixa destacada na cor da marca, número grande. */}
+              <div className="flex items-center justify-between rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2.5">
+                <span className="text-sm font-bold text-indigo-700">Total</span>
+                <span className="text-2xl font-extrabold tabular-nums text-indigo-700">{BRL(totals.total)}</span>
               </div>
             </div>
             <div className="mt-3 flex items-center justify-between gap-2 border-t border-gray-100 pt-3">
@@ -2747,14 +2815,14 @@ export default function VendaPage() {
                 nonCashOverpaid ||
                 (isCredit && (!customerId || !online))
               }
-              className="rounded-lg bg-gray-900 py-2 font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+              className="rounded-lg bg-emerald-600 py-2.5 font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50 disabled:shadow-none"
             >
               Concluir venda
             </button>
             <button
               onClick={onOrcamento}
               disabled={cart.length === 0 || discountTooHigh}
-              className="rounded-lg border border-gray-300 py-2 font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+              className="rounded-lg border border-gray-300 py-2.5 font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
             >
               Orçamento
             </button>
@@ -2763,6 +2831,8 @@ export default function VendaPage() {
               "Salvar orçamento" vivem na tela de prévia (junto do "Imprimir"), onde o operador decide
               imprimir (efêmero) OU salvar (vira o documento O-000045). Sem bloco extra no carrinho. */}
         </div>
+      </div>{/* fim do cartão único do checkout */}
+      </div>{/* fim do wrapper sticky da coluna direita */}
       </div>
 
       {/* Modal de informações do item (ADR-021): cruza a linha da cesta com o produto do catálogo. */}

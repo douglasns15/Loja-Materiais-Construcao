@@ -170,13 +170,13 @@ export function StockDetail({
         role="dialog"
         aria-label={`Estoque de ${product.name}`}
         onClick={(e) => e.stopPropagation()}
-        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-2xl"
+        className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:rounded-2xl"
       >
-        {/* Cabeçalho */}
-        <div className="mb-4 flex items-start justify-between gap-3">
+        {/* Cabeçalho do painel na cor da marca (identidade do PDV / Produtos). */}
+        <div className="flex items-start justify-between gap-3 bg-indigo-600 px-5 py-4 text-white">
           <div className="min-w-0">
             <h2 className="truncate text-lg font-bold">{product.name}</h2>
-            <p className="truncate text-xs text-gray-600">
+            <p className="truncate text-xs text-indigo-100">
               {product.sku}
               {product.manufacturer ? ` · ${product.manufacturer}` : ''}
             </p>
@@ -184,13 +184,15 @@ export function StockDetail({
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded-lg px-2 py-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+            className="shrink-0 rounded-lg px-2 py-1 text-indigo-100 hover:bg-white/10 hover:text-white"
             aria-label="Fechar"
           >
             ✕
           </button>
         </div>
 
+        {/* Corpo rolável (o cabeçalho fica fixo no topo do painel). */}
+        <div className="overflow-y-auto p-5">
         {/* Características do item (leitura) */}
         <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
           <Row label="Nome popular" value={product.popularName} />
@@ -311,7 +313,7 @@ export function StockDetail({
             <>
               <div className="overflow-x-auto rounded-xl border border-gray-100">
                 <table className="w-full text-sm">
-                  <thead className="bg-blue-200 text-left text-blue-900">
+                  <thead className="bg-indigo-600 text-left text-white">
                     <tr>
                       <th className="px-3 py-2">Data</th>
                       <th className="px-3 py-2">Tipo</th>
@@ -365,6 +367,7 @@ export function StockDetail({
               )}
             </>
           )}
+        </div>
         </div>
       </div>
     </div>

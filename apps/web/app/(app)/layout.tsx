@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { STORE_ROLE_LABELS } from '@nexoloja/shared';
@@ -15,39 +15,200 @@ import { QueueChip } from './QueueChip';
 import { CartChip } from './CartChip';
 import { OfflineNav } from './OfflineNav';
 
+// Ícones do menu (SVG inline no mesmo estilo do resto do arquivo: viewBox 0 0 24 24, traço
+// currentColor, largura 2, cantos redondos). Ficam inline de propósito — evita nova dependência
+// (regra 4 do CLAUDE.md). Cada item do menu referencia um destes pelo nome; o trilho recolhido
+// mostra SÓ o ícone, então cada rótulo tem um ícone distinto e reconhecível.
+type IconName =
+  | 'venda'
+  | 'vendas'
+  | 'orcamentos'
+  | 'caixa'
+  | 'contas'
+  | 'entregas'
+  | 'produtos'
+  | 'estoque'
+  | 'cadastros'
+  | 'clientes'
+  | 'fornecedores'
+  | 'categorias'
+  | 'relatorios'
+  | 'configuracoes';
+
+const ICON_PATHS: Record<IconName, ReactNode> = {
+  // Carrinho de compras — Nova Venda.
+  venda: (
+    <>
+      <circle cx="8" cy="21" r="1" />
+      <circle cx="19" cy="21" r="1" />
+      <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" />
+    </>
+  ),
+  // Relógio com seta (histórico) — Histórico de Vendas.
+  vendas: (
+    <>
+      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path d="M3 3v5h5" />
+      <path d="M12 7v5l4 2" />
+    </>
+  ),
+  // Prancheta com lista — Orçamentos.
+  orcamentos: (
+    <>
+      <rect width="8" height="4" x="8" y="2" rx="1" ry="1" />
+      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+      <path d="M12 11h4" />
+      <path d="M12 16h4" />
+      <path d="M8 11h.01" />
+      <path d="M8 16h.01" />
+    </>
+  ),
+  // Carteira — Caixa.
+  caixa: (
+    <>
+      <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" />
+      <path d="M3 5v14a2 2 0 0 0 2 2h16v-5" />
+      <path d="M18 12a2 2 0 0 0 0 4h4v-4Z" />
+    </>
+  ),
+  // Cifrão num círculo — Contas a Receber.
+  contas: (
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8" />
+      <path d="M12 18V6" />
+    </>
+  ),
+  // Caminhão — Entregas.
+  entregas: (
+    <>
+      <path d="M5 18H3a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h11a1 1 0 0 1 1 1v11" />
+      <path d="M14 9h4l4 4v4a1 1 0 0 1-1 1h-2" />
+      <path d="M9 18h6" />
+      <circle cx="7" cy="18" r="2" />
+      <circle cx="17" cy="18" r="2" />
+    </>
+  ),
+  // Caixa/pacote — Produtos.
+  produtos: (
+    <>
+      <path d="m7.5 4.27 9 5.15" />
+      <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+      <path d="m3.3 7 8.7 5 8.7-5" />
+      <path d="M12 22V12" />
+    </>
+  ),
+  // Camadas — Estoque.
+  estoque: (
+    <>
+      <path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z" />
+      <path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65" />
+      <path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65" />
+    </>
+  ),
+  // Pasta — grupo Cadastros.
+  cadastros: (
+    <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+  ),
+  // Pessoas — Clientes.
+  clientes: (
+    <>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </>
+  ),
+  // Prédio — Fornecedores.
+  fornecedores: (
+    <>
+      <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z" />
+      <path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2" />
+      <path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2" />
+      <path d="M10 6h4" />
+      <path d="M10 10h4" />
+      <path d="M10 14h4" />
+      <path d="M10 18h4" />
+    </>
+  ),
+  // Etiqueta — Categorias.
+  categorias: (
+    <>
+      <path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z" />
+      <circle cx="7.5" cy="7.5" r=".5" fill="currentColor" />
+    </>
+  ),
+  // Barras — Relatórios.
+  relatorios: (
+    <>
+      <path d="M3 3v18h18" />
+      <path d="M18 17V9" />
+      <path d="M13 17V5" />
+      <path d="M8 17v-3" />
+    </>
+  ),
+  // Engrenagem — Configurações.
+  configuracoes: (
+    <>
+      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+      <circle cx="12" cy="12" r="3" />
+    </>
+  ),
+};
+
+function NavIcon({ name, className = 'h-5 w-5 shrink-0' }: { name: IconName; className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {ICON_PATHS[name]}
+    </svg>
+  );
+}
+
 // O menu suporta itens simples (`href`) e GRUPOS recolhíveis (`group` + `children`) — o grupo
 // "Cadastros" junta os cadastros menos frequentes (Clientes, Fornecedores) para não alongar a barra.
-type NavLink = { href: string; label: string; adminOnly?: boolean };
-type NavGroup = { group: string; children: NavLink[] };
+// Todo item tem um `icon`: no modo retraído (trilho) só o ícone aparece.
+type NavLink = { href: string; label: string; icon: IconName; adminOnly?: boolean };
+type NavGroup = { group: string; icon: IconName; children: NavLink[] };
 type NavEntry = NavLink | NavGroup;
 const isGroup = (e: NavEntry): e is NavGroup => 'group' in e;
 
 const NAV: NavEntry[] = [
-  { href: '/venda', label: 'Nova Venda' },
-  { href: '/vendas', label: 'Histórico de Vendas' },
-  { href: '/orcamentos', label: 'Orçamentos' },
-  { href: '/caixa', label: 'Caixa' },
-  { href: '/contas-a-receber', label: 'Contas a Receber' },
-  { href: '/entregas', label: 'Entregas' },
-  { href: '/products', label: 'Produtos' },
-  { href: '/estoque', label: 'Estoque' },
+  { href: '/venda', label: 'Nova Venda', icon: 'venda' },
+  { href: '/vendas', label: 'Histórico de Vendas', icon: 'vendas' },
+  { href: '/orcamentos', label: 'Orçamentos', icon: 'orcamentos' },
+  { href: '/caixa', label: 'Caixa', icon: 'caixa' },
+  { href: '/contas-a-receber', label: 'Contas a Receber', icon: 'contas' },
+  { href: '/entregas', label: 'Entregas', icon: 'entregas' },
+  { href: '/products', label: 'Produtos', icon: 'produtos' },
+  { href: '/estoque', label: 'Estoque', icon: 'estoque' },
   {
     group: 'Cadastros',
+    icon: 'cadastros',
     children: [
-      { href: '/customers', label: 'Clientes' },
-      { href: '/fornecedores', label: 'Fornecedores' },
-      { href: '/categorias', label: 'Categorias' },
+      { href: '/customers', label: 'Clientes', icon: 'clientes' },
+      { href: '/fornecedores', label: 'Fornecedores', icon: 'fornecedores' },
+      { href: '/categorias', label: 'Categorias', icon: 'categorias' },
     ],
   },
-  { href: '/relatorios', label: 'Relatórios' },
-  { href: '/configuracoes', label: 'Configurações', adminOnly: true },
+  { href: '/relatorios', label: 'Relatórios', icon: 'relatorios' },
+  { href: '/configuracoes', label: 'Configurações', icon: 'configuracoes', adminOnly: true },
 ];
 
 // Rótulo da tela atual no topo (achata os grupos para procurar pelo href).
 const NAV_LINKS: NavLink[] = NAV.flatMap((e) => (isGroup(e) ? e.children : [e]));
 
-// Lembra a preferência de recolher a barra no desktop entre sessões.
-const COLLAPSE_KEY = 'nexoloja:sidebar-collapsed';
+// Lembra a preferência de FIXAR a barra no desktop entre sessões (fixo = ocupa espaço e empurra o
+// conteúdo; não-fixo = trilho de ícones que expande no hover, sobre o conteúdo).
+const SIDEBAR_PINNED_KEY = 'nexoloja:sidebar-pinned';
 // Lembra quais grupos do menu (ex.: "Cadastros") ficam abertos.
 const GROUPS_KEY = 'nexoloja:nav-groups-open';
 
@@ -81,9 +242,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { me, setMe, isAdmin } = useMe();
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  // Gaveta no celular/tablet (overlay) e recolher no desktop (esconde a barra).
+  // Gaveta no celular/tablet (overlay). No desktop a barra é fixa ou vira trilho retrátil.
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  // Desktop: barra FIXA (empurra o conteúdo) x RETRÁTIL (trilho de ícones). Default = fixa.
+  const [pinned, setPinned] = useState(true);
+  // Desktop retrátil: `true` enquanto o mouse/foco está sobre o trilho (expande o flyout).
+  const [railHover, setRailHover] = useState(false);
   // Grupos recolhíveis do menu (ex.: "Cadastros"): mapa label→aberto, lembrado entre sessões.
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const accountRef = useRef<HTMLDivElement>(null);
@@ -100,9 +264,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return () => document.removeEventListener('mousedown', onClickOutside);
   }, [menuOpen]);
 
-  // Restaura a preferência de recolher (desktop) e a de grupos abertos, salvas no navegador.
+  // Restaura a preferência de fixar (desktop) e a de grupos abertos, salvas no navegador.
   useEffect(() => {
-    setCollapsed(localStorage.getItem(COLLAPSE_KEY) === '1');
+    // Ausência da chave = default fixo (só é retrátil quando o usuário optou por isso).
+    setPinned(localStorage.getItem(SIDEBAR_PINNED_KEY) !== '0');
     try {
       setOpenGroups(JSON.parse(localStorage.getItem(GROUPS_KEY) || '{}'));
     } catch {
@@ -153,10 +318,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     })();
   }, [router]);
 
-  function toggleCollapsed() {
-    setCollapsed((v) => {
+  function togglePinned() {
+    setPinned((v) => {
       const next = !v;
-      localStorage.setItem(COLLAPSE_KEY, next ? '1' : '0');
+      localStorage.setItem(SIDEBAR_PINNED_KEY, next ? '1' : '0');
+      // Ao voltar a fixar, zera o hover para não deixar o flyout "preso" aberto.
+      if (next) setRailHover(false);
       return next;
     });
   }
@@ -185,6 +352,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const currentLabel = NAV_LINKS.find((item) => item.href === pathname)?.label ?? 'NexoLoja';
 
+  // No desktop, a barra mostra os rótulos quando: está fixa; OU está retraída mas com o mouse/foco
+  // em cima (flyout); OU o menu de conta está aberto (evita recolher com o popup na tela). Quando
+  // NÃO mostra rótulos, o trilho fica só com ícones — os rótulos/chevrons ganham `md:hidden` (no
+  // celular continuam visíveis, pois lá é a gaveta w-64, sem prefixo `md:`).
+  const desktopExpanded = pinned || railHover || menuOpen;
+  const labelHidden = !desktopExpanded;
+
   return (
     <OutboxSyncProvider>
     {/* Cesta persistente (ADR-021): provider único no shell — o PDV e o ícone do topo compartilham
@@ -203,25 +377,46 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       )}
 
       <aside
-        className={`fixed left-0 top-0 z-40 flex h-dvh w-64 shrink-0 flex-col border-r border-gray-200 bg-white p-4 transition-transform duration-200 md:static md:z-auto md:translate-x-0 ${
+        onMouseEnter={() => !pinned && setRailHover(true)}
+        onMouseLeave={() => !pinned && setRailHover(false)}
+        // Foco entrando/saindo do trilho expande/recolhe (usuário de teclado vê os rótulos).
+        onFocusCapture={() => !pinned && setRailHover(true)}
+        onBlurCapture={(e) => {
+          if (!pinned && !e.currentTarget.contains(e.relatedTarget as Node)) setRailHover(false);
+        }}
+        className={`fixed left-0 top-0 z-40 flex h-dvh w-64 shrink-0 flex-col border-r border-gray-200 bg-white p-4 transition-all duration-200 md:translate-x-0 ${
           drawerOpen ? 'translate-x-0 shadow-xl' : '-translate-x-full'
-        } ${collapsed ? 'md:hidden' : ''}`}
+        } ${
+          pinned
+            ? 'md:static md:z-auto md:w-64'
+            : `md:fixed ${railHover || menuOpen ? 'md:w-64 md:shadow-xl' : 'md:w-16'}`
+        }`}
       >
         <div className="mb-6 flex items-center justify-between px-2">
-          <span className="text-xl font-bold">NexoLoja</span>
-          {/* Recolher a barra (desktop). No celular a gaveta fecha pelo fundo/atalho. */}
+          <span className={`text-xl font-bold ${labelHidden ? 'md:hidden' : ''}`}>NexoLoja</span>
+          {/* Fixar/retrair a barra (desktop). No celular a gaveta fecha pelo fundo/atalho. */}
           <button
-            onClick={toggleCollapsed}
+            onClick={togglePinned}
             className="hidden rounded-lg p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700 md:inline-flex"
-            title="Recolher menu"
-            aria-label="Recolher menu"
+            title={pinned ? 'Recolher menu' : 'Fixar menu'}
+            aria-label={pinned ? 'Recolher menu' : 'Fixar menu'}
           >
-            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            {/* Chevron: aponta p/ a esquerda (recolher) quando fixo; p/ a direita (fixar) no trilho. */}
+            <svg
+              className={`h-5 w-5 transition-transform ${pinned ? '' : 'rotate-180'}`}
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
               <path d="M15 18l-6-6 6-6" />
             </svg>
           </button>
         </div>
-        <nav className="flex-1 space-y-1 overflow-y-auto">
+        <nav className="flex-1 space-y-1 overflow-y-auto overflow-x-hidden">
           {NAV.map((entry) => {
             // Item simples (link direto).
             if (!isGroup(entry)) {
@@ -231,16 +426,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <Link
                   key={entry.href}
                   href={entry.href}
-                  className={`block rounded-lg px-3 py-2 text-sm font-medium transition ${
+                  title={entry.label}
+                  className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${
                     active ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-100'
-                  }`}
+                  } ${labelHidden ? 'md:justify-center md:px-2' : ''}`}
                 >
-                  {entry.label}
+                  <NavIcon name={entry.icon} />
+                  <span className={`flex-1 truncate ${labelHidden ? 'md:hidden' : ''}`}>{entry.label}</span>
                 </Link>
               );
             }
 
-            // Grupo recolhível (ex.: "Cadastros"): cabeçalho + filhos indentados.
+            // Grupo recolhível (ex.: "Cadastros"): cabeçalho + filhos indentados. No trilho recolhido
+            // só a pasta aparece; ao passar o mouse a barra expande e o grupo volta ao normal.
             const open = isGroupOpen(entry);
             const hasActiveChild = entry.children.some((c) => c.href === pathname);
             return (
@@ -248,16 +446,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <button
                   type="button"
                   onClick={() => toggleGroup(entry)}
-                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition ${
+                  title={entry.group}
+                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${
                     hasActiveChild && !open
                       ? 'bg-gray-100 text-gray-900'
                       : 'text-gray-700 hover:bg-gray-100'
-                  }`}
+                  } ${labelHidden ? 'md:justify-center md:px-2' : ''}`}
                   aria-expanded={open}
                 >
-                  <span>{entry.group}</span>
+                  <NavIcon name={entry.icon} />
+                  <span className={`flex-1 text-left ${labelHidden ? 'md:hidden' : ''}`}>{entry.group}</span>
                   <svg
-                    className={`h-4 w-4 shrink-0 text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`}
+                    className={`h-4 w-4 shrink-0 text-gray-500 transition-transform ${open ? 'rotate-180' : ''} ${labelHidden ? 'md:hidden' : ''}`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -270,18 +470,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   </svg>
                 </button>
                 {open && (
-                  <div className="mt-1 space-y-1 pl-3">
+                  <div className={`mt-1 space-y-1 pl-3 ${labelHidden ? 'md:hidden' : ''}`}>
                     {entry.children.map((child) => {
                       const active = pathname === child.href;
                       return (
                         <Link
                           key={child.href}
                           href={child.href}
-                          className={`block rounded-lg px-3 py-2 text-sm font-medium transition ${
+                          title={child.label}
+                          className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${
                             active ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-100'
                           }`}
                         >
-                          {child.label}
+                          <NavIcon name={child.icon} className="h-4 w-4 shrink-0" />
+                          <span className="flex-1 truncate">{child.label}</span>
                         </Link>
                       );
                     })}
@@ -293,7 +495,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </nav>
         <div ref={accountRef} className="relative mt-2 shrink-0 border-t border-gray-200 pt-2">
           {menuOpen && (
-            <div className="absolute bottom-full left-0 mb-2 w-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg">
+            <div className="absolute bottom-full left-0 mb-2 w-full min-w-[12rem] overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg">
               <div className="px-3 py-2">
                 <div className="truncate text-sm font-medium text-gray-900">
                   {me?.name ?? 'Usuário'}
@@ -327,7 +529,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           )}
           <button
             onClick={() => setMenuOpen((v) => !v)}
-            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-700 hover:bg-gray-100"
+            title={me?.name ?? 'Minha conta'}
+            className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-700 hover:bg-gray-100 ${
+              labelHidden ? 'md:justify-center md:px-2' : ''
+            }`}
             aria-haspopup="true"
             aria-expanded={menuOpen}
           >
@@ -345,10 +550,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
               <circle cx="12" cy="7" r="4" />
             </svg>
-            <span className="flex-1 truncate">{me?.name ?? 'Minha conta'}</span>
+            <span className={`flex-1 truncate ${labelHidden ? 'md:hidden' : ''}`}>{me?.name ?? 'Minha conta'}</span>
             {/* Chevron (gira quando aberto) */}
             <svg
-              className={`h-4 w-4 shrink-0 text-gray-500 transition-transform ${menuOpen ? 'rotate-180' : ''}`}
+              className={`h-4 w-4 shrink-0 text-gray-500 transition-transform ${menuOpen ? 'rotate-180' : ''} ${labelHidden ? 'md:hidden' : ''}`}
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -363,8 +568,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
+      {/* Espaçador em fluxo: quando a barra é retrátil (fixed/overlay), reserva a faixa do trilho
+          (w-16) para o conteúdo não ficar embaixo dele. No mobile some (a gaveta é overlay). */}
+      {!pinned && <div className="hidden w-16 shrink-0 md:block" aria-hidden="true" />}
+
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Barra superior: hambúrguer (celular) + abrir menu recolhido (desktop). */}
+        {/* Barra superior: hambúrguer (celular) abre a gaveta. No desktop o trilho fica sempre
+            visível, então não há botão de "expandir" aqui. */}
         <header className="flex items-center gap-3 border-b border-gray-200 bg-white px-4 py-3">
           {/* Celular/tablet: abre a gaveta */}
           <button
@@ -376,19 +586,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <path d="M3 12h18M3 6h18M3 18h18" />
             </svg>
           </button>
-          {/* Desktop: aparece só quando a barra está recolhida, para reabrir */}
-          {collapsed && (
-            <button
-              onClick={toggleCollapsed}
-              className="hidden rounded-lg p-1 text-gray-600 hover:bg-gray-100 md:inline-flex"
-              aria-label="Expandir menu"
-              title="Expandir menu"
-            >
-              <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M3 12h18M3 6h18M3 18h18" />
-              </svg>
-            </button>
-          )}
           <span className="truncate font-semibold text-gray-800">{currentLabel}</span>
           {/* Status da fila offline (aparece só quando há vendas na fila) — drenagem global. */}
           <QueueChip />
