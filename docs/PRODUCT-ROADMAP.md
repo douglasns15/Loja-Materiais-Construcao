@@ -98,7 +98,7 @@ Foco: **tornar o dia a dia impecável**. Origem: pedidos do Owner em `Uteis_Proj
 | **Crédito parcelado** | Parcelamento sobre o total, com campo para valor extra |
 | **Documentação de origem dos dados** | Cada número em tela com explicação de origem e cálculo — parcialmente atendido por `DOCUMENTACAO-TECNICA.md` |
 | **Autocomplete de fabricante** | Sugerir marca já existente ao digitar (com Tab) |
-| **Detalhe e exportação por forma de pagamento** | Clicar em "Por forma de pagamento" nos Relatórios e exportar Excel |
+| **Relatórios como painel de decisão** | Repaginação + inteligência: drill-down por forma de pagamento (pop-up), comparação com período anterior, **lucro/margem** ([ADR-027](adr/ADR-027-custo-congelado-na-venda.md)), top produtos/clientes com busca, projeções, insights configuráveis e export CSV/PDF. **Planejado e detalhado em [`plano-relatorios-v2.md`](plano-relatorios-v2.md)** (aprovado 2026-08-26; falta desenvolver) |
 | **Contador de caixa persistente** | Manter valores digitados até abrir/fechar o caixa + botão "zerar contador" |
 | **Filtro por coluna** | Filtrar em cada cabeçalho de tabela |
 

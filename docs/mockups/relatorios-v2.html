@@ -1,0 +1,592 @@
+<title>Relatórios Repaginados</title>
+<style>
+  :root{
+    --page:#f6f7fb; --card:#ffffff; --ink:#111827; --gray900:#111827; --gray700:#374151;
+    --gray600:#4b5563; --gray500:#6b7280; --gray400:#9ca3af; --gray300:#d1d5db; --gray200:#e5e7eb;
+    --gray100:#f3f4f6; --gray50:#f9fafb;
+    --indigo700:#4338ca; --indigo600:#4f46e5; --indigo500:#6366f1; --indigo200:#c7d2fe;
+    --indigo100:#e0e7ff; --indigo50:#eef2ff;
+    --emerald700:#047857; --emerald600:#059669; --emerald50:#ecfdf5;
+    --blue900:#1e3a8a; --blue700:#1d4ed8; --blue200:#bfdbfe; --blue100:#dbeafe; --blue50:#eff6ff;
+    --green800:#166534; --green700:#15803d; --green100:#dcfce7; --green50:#f0fdf4;
+    --amber800:#92400e; --amber700:#b45309; --amber200:#fde68a; --amber100:#fef3c7; --amber50:#fffbeb;
+    --purple600:#7c3aed; --purple50:#f5f3ff; --purple200:#ddd6fe;
+    --red700:#b91c1c; --red100:#fee2e2; --red50:#fef2f2;
+    --shadow-sm:0 1px 2px rgba(16,24,40,.06); --shadow-md:0 4px 14px rgba(16,24,40,.10);
+    --shadow-lg:0 12px 40px rgba(16,24,40,.22);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --page:#0f1117; --card:#181b22; --ink:#e8eaf0; --gray900:#e8eaf0; --gray700:#c2c7d0;
+      --gray600:#9aa1ad; --gray500:#828a97; --gray400:#6b7280; --gray300:#3a3f4b; --gray200:#2b2f3a;
+      --gray100:#232733; --gray50:#1d212b;
+      --indigo700:#a5a1f8; --indigo600:#8b86f5; --indigo500:#7c78f0; --indigo200:#3a3b63;
+      --indigo100:#2b2c4a; --indigo50:#222338;
+      --emerald700:#6ee7b7; --emerald600:#34d399; --emerald50:#12261f;
+      --blue900:#bfdbfe; --blue700:#93c5fd; --blue200:#25406b; --blue100:#1e3350; --blue50:#182338;
+      --green800:#86efac; --green700:#4ade80; --green100:#173a28; --green50:#12291d;
+      --amber800:#fcd34d; --amber700:#fbbf24; --amber200:#3f3417; --amber100:#33290f; --amber50:#241d0e;
+      --purple600:#a78bfa; --purple50:#241f38; --purple200:#3a3363;
+      --red700:#f87171; --red100:#3a2020; --red50:#2a1818;
+      --shadow-sm:0 1px 2px rgba(0,0,0,.4); --shadow-md:0 6px 20px rgba(0,0,0,.5); --shadow-lg:0 14px 44px rgba(0,0,0,.65);
+    }
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--page);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;font-size:14px;line-height:1.4;}
+  .app{max-width:1120px;margin:0 auto;padding:20px 20px 72px;}
+  .num{font-variant-numeric:tabular-nums;}
+
+  .head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px;}
+  h1.title{margin:0;font-size:24px;font-weight:800;letter-spacing:-.02em;width:fit-content;
+    background:linear-gradient(90deg,var(--indigo700),var(--indigo500));
+    -webkit-background-clip:text;background-clip:text;color:transparent;}
+  .head-actions{display:flex;gap:8px;align-items:center;}
+  .icon-toggle{display:inline-flex;background:var(--gray100);border-radius:11px;padding:3px;gap:2px;}
+  .icon-toggle button{border:0;background:transparent;cursor:pointer;font:inherit;font-weight:650;
+    font-size:12.5px;color:var(--gray600);padding:6px 11px;border-radius:8px;display:inline-flex;align-items:center;gap:6px;}
+  .icon-toggle button[aria-pressed="true"]{background:var(--card);color:var(--indigo600);box-shadow:var(--shadow-sm);}
+  .exp{border:1px solid var(--gray300);background:var(--card);color:var(--gray700);cursor:pointer;
+    font:inherit;font-weight:600;font-size:12.5px;border-radius:10px;padding:8px 12px;display:inline-flex;align-items:center;gap:6px;}
+  .exp:hover{background:var(--gray50);}
+  .exp svg{width:15px;height:15px;}
+
+  .novo{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:800;letter-spacing:.04em;
+    text-transform:uppercase;color:var(--indigo600);background:var(--indigo50);border:1px solid var(--indigo200);
+    border-radius:999px;padding:2px 7px;vertical-align:middle;}
+  .novo.base{color:var(--purple600);background:var(--purple50);border-color:var(--purple200);}
+
+  .filter{background:var(--card);border:1px solid var(--gray200);border-radius:16px;box-shadow:var(--shadow-sm);
+    padding:14px 16px;margin-bottom:16px;display:flex;flex-wrap:wrap;align-items:center;gap:14px;}
+  .navd{display:flex;align-items:center;gap:8px;}
+  .navd .arrow{width:30px;height:30px;border-radius:9px;border:1px solid var(--gray300);background:var(--card);
+    color:var(--gray500);cursor:pointer;font-size:15px;}
+  .navd .cur{background:var(--gray100);border-radius:9px;padding:7px 22px;font-weight:600;font-size:13px;}
+  .seg{display:inline-flex;gap:2px;}
+  .seg button{border:0;cursor:pointer;font:inherit;font-weight:650;font-size:13px;padding:7px 15px;border-radius:9px;
+    color:var(--gray600);background:var(--gray100);}
+  .seg button[aria-pressed="true"]{background:var(--gray900);color:var(--card);}
+  .dates{display:flex;gap:14px;margin-left:auto;}
+  .dates label{font-size:11px;color:var(--gray500);display:block;margin-bottom:3px;}
+  .datebox{border:1px solid var(--gray300);border-radius:9px;padding:6px 10px;font-size:13px;background:var(--card);color:var(--ink);}
+
+  .insights{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;margin-bottom:18px;}
+  .insight{display:flex;gap:10px;align-items:flex-start;background:var(--card);border:1px solid var(--gray200);
+    border-left:3px solid var(--indigo500);border-radius:12px;padding:11px 13px;box-shadow:var(--shadow-sm);}
+  .insight.warn{border-left-color:var(--amber700);}
+  .insight.good{border-left-color:var(--emerald600);}
+  .insight.proj{border-left-color:var(--purple600);}
+  .insight .ic{font-size:16px;line-height:1.1;}
+  .insight p{margin:0;font-size:12.5px;color:var(--gray700);}
+  .insight b{color:var(--ink);}
+
+  .sectitle{display:flex;align-items:center;gap:9px;margin:22px 2px 12px;font-size:13px;font-weight:800;
+    text-transform:uppercase;letter-spacing:.05em;color:var(--gray500);}
+  .sectitle::after{content:"";flex:1;height:1px;background:var(--gray200);}
+
+  .kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;}
+  @media(min-width:900px){.kpis{grid-template-columns:repeat(4,1fr);}}
+  .kpi{background:var(--card);border:1px solid var(--gray200);border-radius:16px;padding:15px 16px;box-shadow:var(--shadow-sm);}
+  .kpi.accent{border-color:var(--emerald600);box-shadow:0 0 0 1px var(--emerald600),var(--shadow-sm);}
+  .kpi .lbl{font-size:12px;color:var(--gray600);}
+  .kpi .val{font-size:26px;font-weight:800;margin-top:3px;letter-spacing:-.01em;}
+  .kpi .val.green{color:var(--emerald700);}
+  .delta{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:700;margin-top:7px;
+    border-radius:999px;padding:2px 8px;}
+  .delta.up{color:var(--green700);background:var(--green100);}
+  .delta.down{color:var(--red700);background:var(--red100);}
+  .delta.flat{color:var(--gray600);background:var(--gray100);}
+  .kpi .prev{font-size:10.5px;color:var(--gray400);margin-top:5px;}
+
+  .grid2{display:grid;grid-template-columns:1fr;gap:16px;}
+  @media(min-width:900px){.grid2{grid-template-columns:1fr 1fr;}}
+  .panel{background:var(--card);border:1px solid var(--gray200);border-radius:18px;box-shadow:var(--shadow-sm);overflow:hidden;}
+  .panel > h2{margin:0;padding:14px 18px;font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px;}
+  .panel .sub{padding:0 18px 12px;margin:-6px 0 0;font-size:11.5px;color:var(--gray500);}
+  .collapse-h{cursor:pointer;user-select:none;}
+  .collapse-h .chev{margin-left:auto;color:var(--gray400);transition:transform .15s;font-size:13px;}
+  .panel.closed .chev{transform:rotate(-90deg);}
+  .panel.closed .panel-body{display:none;}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  thead th{background:var(--blue200);color:var(--blue900);text-align:left;padding:9px 18px;font-weight:700;font-size:12.5px;}
+  thead th.r{text-align:right;}
+  tbody td{padding:11px 18px;border-top:1px solid var(--gray100);}
+  tbody td.r{text-align:right;}
+  .pm-row{cursor:pointer;}
+  .pm-row:hover{background:var(--gray50);}
+  .pm-row .go{color:var(--gray400);font-size:12px;}
+  .pm-name{display:flex;align-items:center;gap:8px;font-weight:600;}
+  .dot{width:9px;height:9px;border-radius:3px;flex:none;}
+  .share-bar{height:6px;border-radius:3px;background:var(--gray100);overflow:hidden;margin-top:5px;}
+  .share-bar > span{display:block;height:100%;border-radius:3px;}
+  .hide{display:none !important;}
+
+  .chartwrap{padding:16px 18px 20px;}
+  .chart{width:100%;height:190px;display:block;}
+  .chart .axis{stroke:var(--gray200);stroke-width:1;}
+  .chart .bar{fill:var(--indigo500);}
+  .chart .bar.today{fill:var(--indigo700);}
+  .chart .lbl{fill:var(--gray500);font-size:10px;}
+  .chart .val{fill:var(--gray600);font-size:10px;font-weight:700;}
+  .legend{display:flex;gap:16px;padding:0 18px 14px;font-size:11.5px;color:var(--gray500);}
+
+  .toplist{padding:8px 12px 14px;}
+  .ti{display:flex;align-items:center;gap:12px;padding:9px 8px;border-radius:10px;}
+  .ti:hover{background:var(--gray50);}
+  .ti + .ti{border-top:1px solid var(--gray100);}
+  .rank{width:22px;height:22px;flex:none;border-radius:7px;background:var(--indigo50);color:var(--indigo600);
+    font-weight:800;font-size:12px;display:grid;place-items:center;}
+  .ti .name{flex:1;min-width:0;}
+  .ti .name b{font-size:13.5px;font-weight:600;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .ti .name small{font-size:11px;color:var(--gray500);}
+  .ti .amt{text-align:right;}
+  .ti .amt b{font-weight:700;font-size:13.5px;display:block;}
+  .ti .amt small{font-size:10.5px;color:var(--emerald700);font-weight:700;}
+
+  /* projeções */
+  .projgrid{display:grid;grid-template-columns:1fr;gap:14px;}
+  @media(min-width:800px){.projgrid{grid-template-columns:repeat(3,1fr);}}
+  .proj{background:var(--card);border:1px solid var(--purple200);border-radius:16px;padding:15px 16px;box-shadow:var(--shadow-sm);
+    border-left:3px solid var(--purple600);}
+  .proj .t{font-size:12px;color:var(--gray600);display:flex;align-items:center;gap:6px;}
+  .proj .v{font-size:23px;font-weight:800;margin:4px 0 2px;}
+  .proj .d{font-size:11.5px;color:var(--gray500);}
+  .proj .track{height:7px;border-radius:4px;background:var(--gray100);overflow:hidden;margin:9px 0 4px;}
+  .proj .track > span{display:block;height:100%;background:var(--purple600);border-radius:4px;}
+
+  .divbadge{margin-left:auto;font-size:11px;font-weight:600;border-radius:999px;padding:3px 10px;}
+  .divbadge.ok{background:var(--gray100);color:var(--gray600);}
+  .divbadge.neg{background:var(--red100);color:var(--red700);}
+
+  .foundation{margin-top:12px;font-size:12px;color:var(--gray700);background:var(--purple50);
+    border:1px solid var(--purple200);border-radius:12px;padding:11px 14px;display:flex;gap:9px;align-items:flex-start;}
+  .foundation b{color:var(--ink);}
+
+  .legendbar{margin-top:20px;font-size:12px;color:var(--gray600);background:var(--card);border:1px solid var(--gray200);
+    border-radius:12px;padding:12px 16px;display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;}
+  .legendbar .k{display:inline-flex;align-items:center;gap:6px;}
+
+  .search{width:100%;border:1px solid var(--gray300);border-radius:11px;padding:9px 12px;font-size:13.5px;
+    background:var(--card);color:var(--ink);}
+  .search:focus{outline:2px solid var(--indigo200);outline-offset:1px;border-color:var(--indigo500);}
+  .ti.click{cursor:pointer;}
+  .noresult{padding:14px 18px;font-size:12.5px;color:var(--gray500);}
+
+  /* tiles de detalhe (produto/cliente) */
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:9px;}
+  .stat{border:1px solid var(--gray200);border-radius:11px;padding:10px 12px;background:var(--gray50);}
+  .stat .k{font-size:11px;color:var(--gray500);display:flex;align-items:center;gap:5px;}
+  .stat .v{font-size:18px;font-weight:800;margin-top:2px;}
+  .stat .v.green{color:var(--emerald700);}
+  .stat .v.red{color:var(--red700);}
+  .mini-h{font-size:12px;font-weight:700;color:var(--gray600);margin:16px 0 8px;}
+  .chip{display:inline-flex;align-items:center;gap:6px;background:var(--gray100);border-radius:999px;
+    padding:4px 10px;font-size:12px;margin:0 6px 6px 0;}
+  .chip b{font-weight:700;}
+
+  /* ---- MODAL (drill-down em pop-up) ---- */
+  .scrim{position:fixed;inset:0;background:rgba(15,18,30,.45);display:flex;align-items:flex-start;
+    justify-content:center;padding:6vh 16px;z-index:60;}
+  .modal{width:100%;max-width:540px;background:var(--card);border-radius:18px;box-shadow:var(--shadow-lg);
+    max-height:88vh;overflow:auto;}
+  .modal-h{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 18px;
+    background:var(--indigo600);color:#fff;position:sticky;top:0;}
+  .modal-h .mt{font-weight:700;font-size:15px;display:flex;align-items:center;gap:9px;}
+  .modal-h .mt .dot{width:11px;height:11px;border-radius:3px;}
+  .modal-h .amt{font-size:12px;opacity:.9;}
+  .xbtn{border:0;background:transparent;color:#fff;font-size:22px;cursor:pointer;line-height:1;padding:2px 6px;border-radius:8px;}
+  .xbtn:hover{background:rgba(255,255,255,.18);}
+  .modal-b{padding:16px 18px 20px;}
+  .di{display:flex;justify-content:space-between;gap:10px;padding:11px 13px;font-size:13px;
+    border:1px solid var(--gray200);border-radius:11px;background:var(--card);}
+  .di + .di{margin-top:8px;}
+  .di .who{display:flex;align-items:center;gap:9px;min-width:0;}
+  .tagv{font-size:10px;font-weight:800;border-radius:6px;padding:2px 7px;flex:none;text-transform:uppercase;letter-spacing:.03em;}
+  .tagv.sale{color:var(--emerald700);background:var(--emerald50);}
+  .tagv.debt{color:var(--indigo600);background:var(--indigo50);}
+  .di small{color:var(--gray500);display:block;font-size:11px;}
+  .modal-foot{margin-top:14px;display:flex;justify-content:space-between;align-items:center;
+    background:var(--gray50);border:1px solid var(--gray200);border-radius:11px;padding:11px 14px;font-size:13px;}
+  .modal-foot b{font-size:15px;}
+</style>
+
+<div class="app">
+  <!-- topo -->
+  <div class="head">
+    <h1 class="title">Relatórios</h1>
+    <div class="head-actions">
+      <div class="icon-toggle" role="group" aria-label="Ver como">
+        <button aria-pressed="true" onclick="setView('table',this)">▤ Tabela</button>
+        <button aria-pressed="false" onclick="setView('chart',this)">📈 Gráfico</button>
+      </div>
+      <button class="exp" onclick="alert('Mockup: exporta as tabelas do período em CSV (abre no Excel).')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>CSV
+      </button>
+      <button class="exp" onclick="window.print()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V3h12v6M6 18H4a2 2 0 01-2-2v-3a2 2 0 012-2h16a2 2 0 012 2v3a2 2 0 01-2 2h-2M6 14h12v7H6z"/></svg>PDF
+      </button>
+      <span class="novo">novo</span>
+    </div>
+  </div>
+
+  <!-- filtro (já existe) -->
+  <div class="filter">
+    <div class="navd">
+      <button class="arrow">‹</button><span class="cur">Últimos 7 dias</span><button class="arrow">›</button>
+    </div>
+    <div class="seg" role="group" aria-label="Atalho de período">
+      <button aria-pressed="false">Hoje</button><button aria-pressed="true">7 dias</button><button aria-pressed="false">30 dias</button>
+    </div>
+    <div class="dates">
+      <div><label>De</label><span class="datebox num">20/08/2026</span></div>
+      <div><label>Até</label><span class="datebox num">26/08/2026</span></div>
+    </div>
+  </div>
+
+  <!-- FAIXA DE INSIGHTS (novo) -->
+  <div class="insights" aria-label="Destaques do período">
+    <div class="insight good"><span class="ic">💰</span><p><b>Lucro bruto de R$ 888,10</b> — margem de 35,6% no período.</p></div>
+    <div class="insight"><span class="ic">🧱</span><p><b>Cimento fatura muito, mas rende pouco</b> (12% de margem). Quem lucra é a Tinta.</p></div>
+    <div class="insight proj"><span class="ic">🔮</span><p>No ritmo atual, <b>o mês fecha em ~R$ 11.050</b>.</p></div>
+    <div class="insight warn"><span class="ic">⚠️</span><p>1 caixa fechou com <b>falta de R$ 4,00</b> — vale conferir.</p></div>
+  </div>
+
+  <!-- ===== RESULTADO DO PERÍODO ===== -->
+  <div class="sectitle">Resultado do período</div>
+  <div class="kpis">
+    <div class="kpi">
+      <div class="lbl">Recebido no período</div>
+      <div class="val num">R$ 2.498,10</div>
+      <span class="delta up">▲ 12,4%</span>
+      <div class="prev num">semana anterior: R$ 2.222,40</div>
+    </div>
+    <div class="kpi accent">
+      <div class="lbl">Lucro bruto estimado <span class="novo base" title="Requer base de custo">custo</span></div>
+      <div class="val num green">R$ 888,10</div>
+      <span class="delta up">▲ 9,1%</span>
+      <div class="prev num">margem 35,6% · receita − custo</div>
+    </div>
+    <div class="kpi">
+      <div class="lbl">Vendas · Ticket médio</div>
+      <div class="val num">118 · R$ 21,17</div>
+      <span class="delta up">▲ 8 vendas · ▲ 4,0%</span>
+      <div class="prev num">semana anterior: 110 · R$ 20,35</div>
+    </div>
+    <div class="kpi">
+      <div class="lbl">Canceladas</div>
+      <div class="val num">3</div>
+      <span class="delta down">▲ 1</span>
+      <div class="prev num">semana anterior: 2</div>
+    </div>
+  </div>
+
+  <!-- ===== PROJEÇÕES (novo) ===== -->
+  <div class="sectitle">Projeções <span class="novo" style="text-transform:none;letter-spacing:0">novo</span></div>
+  <div class="projgrid">
+    <div class="proj">
+      <div class="t">🔮 Faturamento projetado do mês</div>
+      <div class="v num">R$ 11.050</div>
+      <div class="track"><span style="width:84%"></span></div>
+      <div class="d">R$ 9.280 realizados em 26 dias · projeção no ritmo atual (R$ 357/dia)</div>
+    </div>
+    <div class="proj">
+      <div class="t">📥 A receber (próx. 30 dias)</div>
+      <div class="v num">R$ 511,90</div>
+      <div class="d">4 dívidas com vencimento no período · R$ 202,90 vencem em 10/09</div>
+    </div>
+    <div class="proj">
+      <div class="t">📦 Vai faltar estoque</div>
+      <div class="v num">Cimento CP-II</div>
+      <div class="d">Acaba em <b>~4 dias</b> no giro atual (6 sacos/dia · 24 em estoque). +2 itens no limite.</div>
+    </div>
+  </div>
+  <div class="foundation">
+    <span style="font-size:15px">🧱</span>
+    <span><b>Base de custo (uma migration):</b> o lucro, a margem e as projeções de lucro dependem de <b>congelar o custo em cada venda</b>. O motor de margem já existe (o PDV usa). É só passar a gravar o custo no item — e a margem exata vale daí pra frente. As projeções de <b>faturamento, a receber e estoque não dependem disso</b> (já dá pra fazer hoje).</span>
+  </div>
+
+  <!-- ===== POR FORMA DE PAGAMENTO ===== -->
+  <div class="sectitle">Composição do recebido</div>
+  <div class="panel" id="pm-panel">
+    <h2>Por forma de pagamento <span class="novo" title="Clicar abre a composição num pop-up">clique p/ detalhar</span></h2>
+    <p class="sub">Clique numa forma para abrir <b>o que compõe</b> aquele valor — vendas à vista e recebimentos de dívida.</p>
+    <div id="pm-table">
+      <table>
+        <thead><tr><th>Forma</th><th class="r">Recebido</th><th class="r">Pagamentos</th><th class="r">Participação</th><th></th></tr></thead>
+        <tbody id="pm-body"></tbody>
+      </table>
+    </div>
+    <div id="pm-chart" class="chartwrap hide">
+      <svg viewBox="0 0 640 200" class="chart" id="dailyChart" preserveAspectRatio="none"></svg>
+      <div class="legend"><span>Faturamento por dia · últimos 7 dias</span><span style="margin-left:auto">Hoje destacado</span></div>
+    </div>
+  </div>
+
+  <!-- ===== O QUE DÁ DINHEIRO (colapsáveis) ===== -->
+  <div class="sectitle">O que dá dinheiro</div>
+  <div class="grid2">
+    <div class="panel" id="p-prod">
+      <h2 class="collapse-h" onclick="togglePanel('p-prod')">Produtos <span class="novo">novo</span>
+        <span class="chev">▾</span></h2>
+      <div class="panel-body">
+        <div style="padding:8px 18px 2px">
+          <input class="search" id="prod-search" placeholder="🔎 Buscar um produto (ex.: cimento, tinta)…" oninput="renderProd()">
+        </div>
+        <div style="padding:2px 18px 4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span class="sub" style="padding:0;margin:0">Ordenar por</span>
+          <div class="seg" style="gap:2px">
+            <button aria-pressed="true" onclick="sortProd('rev',this)">Faturamento</button>
+            <button aria-pressed="false" onclick="sortProd('profit',this)">Lucro <span class="novo base" style="text-transform:none;letter-spacing:0;margin-left:4px">custo</span></button>
+          </div>
+          <span class="sub" style="padding:0;margin-left:auto">clique p/ abrir o produto ›</span>
+        </div>
+        <div class="toplist" id="top-prod"></div>
+      </div>
+    </div>
+    <div class="panel" id="p-cli">
+      <h2 class="collapse-h" onclick="togglePanel('p-cli')">Melhores clientes <span class="novo">novo</span>
+        <span class="chev">▾</span></h2>
+      <div class="panel-body">
+        <div style="padding:8px 18px 2px">
+          <input class="search" id="cli-search" placeholder="🔎 Buscar um cliente (ex.: silva, neidinha)…" oninput="renderCli()">
+        </div>
+        <div style="padding:2px 18px 0"><span class="sub" style="padding:0;margin:0">clique p/ abrir o cliente ›</span></div>
+        <div class="toplist" id="top-cli"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== CAIXA (já existe) ===== -->
+  <div class="sectitle">Caixa</div>
+  <div class="panel">
+    <h2>Fechamentos de caixa <span class="divbadge neg num">Divergência acumulada: −R$ 4,00</span></h2>
+    <table>
+      <thead><tr><th>Fechado em</th><th class="r">Abertura</th><th class="r">Esperado</th><th class="r">Contado</th><th class="r">Divergência</th></tr></thead>
+      <tbody>
+        <tr><td class="num">26/08 · 18:40</td><td class="r num">R$ 100,00</td><td class="r num">R$ 435,10</td><td class="r num">R$ 431,10</td><td class="r num" style="color:var(--red700);font-weight:600">−R$ 4,00</td></tr>
+        <tr><td class="num">25/08 · 18:55</td><td class="r num">R$ 100,00</td><td class="r num">R$ 512,30</td><td class="r num">R$ 512,30</td><td class="r num" style="color:var(--gray500)">R$ 0,00</td></tr>
+        <tr><td class="num">24/08 · 13:10</td><td class="r num">R$ 100,00</td><td class="r num">R$ 288,00</td><td class="r num">R$ 288,00</td><td class="r num" style="color:var(--gray500)">R$ 0,00</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="legendbar">
+    <span class="k"><span class="novo">novo</span> = proposto acrescentar</span>
+    <span class="k"><span class="novo base">custo</span> = precisa da base de custo (1 migration)</span>
+    <span class="k">O resto já existe — só repaginado nesta linguagem.</span>
+  </div>
+</div>
+
+<!-- container do modal -->
+<div id="modal-root"></div>
+
+<script>
+  const BRL = n => n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+
+  const methods = [
+    {key:'PIX', label:'PIX', total:1524.30, count:64, color:'#6366f1',
+      drill:[
+        {t:'sale', ref:'V-000461', desc:'Venda à vista', v:220.00},
+        {t:'sale', ref:'V-000455', desc:'Venda à vista', v:89.00},
+        {t:'debt', ref:'D-0007', desc:'Recebimento · Construtora Silva', v:150.00},
+        {t:'sale', ref:'+ 40 vendas', desc:'demais vendas à vista no PIX', v:915.30},
+        {t:'debt', ref:'+ 4 recebimentos', desc:'demais recebimentos de dívida', v:150.00},
+      ]},
+    {key:'CASH', label:'Dinheiro', total:720.30, count:41, color:'#059669',
+      drill:[
+        {t:'sale', ref:'V-000458', desc:'Venda à vista', v:47.50},
+        {t:'sale', ref:'+ 39 vendas', desc:'demais vendas em dinheiro', v:522.80},
+        {t:'debt', ref:'D-0011', desc:'Recebimento · Neidinha', v:150.00},
+      ]},
+    {key:'DEBIT', label:'Cartão Débito', total:190.00, count:8, color:'#0ea5e9',
+      drill:[
+        {t:'sale', ref:'V-000460', desc:'Venda à vista', v:120.00},
+        {t:'sale', ref:'+ 7 vendas', desc:'demais vendas no débito', v:70.00},
+      ]},
+    {key:'CREDIT', label:'Cartão Crédito', total:63.50, count:5, color:'#f59e0b',
+      drill:[
+        {t:'sale', ref:'V-000452', desc:'Venda à vista (+ acréscimo)', v:63.50},
+      ]},
+  ];
+  const grandTotal = methods.reduce((s,m)=>s+m.total,0);
+
+  const daily = [
+    {d:'20/08', v:312.40},{d:'21/08', v:405.10},{d:'22/08', v:288.00},
+    {d:'23/08', v:520.30},{d:'24/08', v:288.00},{d:'25/08', v:349.20},{d:'26/08', v:335.10, today:true},
+  ];
+  // produto: faturamento (rev), margem % (mg) → lucro derivado; +detalhe p/ o pop-up
+  const prod = [
+    {n:'Cimento CP-II 50kg', q:'42 sacos', rev:1470.00, mg:12, ticket:35.00, buyers:['Construtora Silva','Odair']},
+    {n:'Areia Média', q:'6 m³', rev:540.00, mg:30, ticket:90.00, buyers:['Construtora Silva']},
+    {n:'Tinta Látex 18L Branco Neve', q:'8 latas', rev:1344.00, mg:38, ticket:168.00, buyers:['Neidinha (Vizinha)','Edson e Rita']},
+    {n:'Massa Corrida PVA 25kg', q:'11 un', rev:874.50, mg:33, ticket:79.50, buyers:['Edson e Rita','Neidinha (Vizinha)']},
+    {n:'Vergalhão 3/8"', q:'30 barras', rev:690.00, mg:16, ticket:23.00, buyers:['Construtora Silva']},
+    {n:'Argamassa AC-II 20kg', q:'28 sacos', rev:420.00, mg:22, ticket:15.00, buyers:['Odair']},
+    {n:'Cal Hidratada 20kg', q:'15 sacos', rev:210.00, mg:25, ticket:14.00, buyers:['Seu Raimundo']},
+    {n:'Tubo PVC 100mm', q:'12 barras', rev:360.00, mg:28, ticket:30.00, buyers:['Seu Raimundo']},
+    {n:'Telha Fibrocimento 6mm', q:'9 un', rev:585.00, mg:18, ticket:65.00, buyers:['Construtora Silva']},
+  ].map(p=>({...p, profit:+(p.rev*p.mg/100).toFixed(2)}));
+  const clients = [
+    {n:'Construtora Silva', buys:9, total:1210.00, mg:24, debt:0, items:['Cimento','Vergalhão','Areia']},
+    {n:'Edson e Rita', buys:5, total:402.90, mg:35, debt:202.90, items:['Tinta','Massa Corrida']},
+    {n:'Odair', buys:4, total:288.00, mg:17, debt:43.00, items:['Cimento','Argamassa']},
+    {n:'Neidinha (Vizinha)', buys:3, total:247.50, mg:36, debt:247.50, items:['Massa Corrida','Tinta']},
+    {n:'Seu Raimundo', buys:2, total:118.50, mg:26, debt:18.50, items:['Cal','Tubo PVC']},
+  ].map(c=>({...c, ticket:+(c.total/c.buys).toFixed(2), profit:+(c.total*c.mg/100).toFixed(2)}));
+
+  // ---- tabela forma de pagamento (linhas abrem modal) ----
+  const body = document.getElementById('pm-body');
+  methods.forEach((m,i)=>{
+    const share=(m.total/grandTotal*100);
+    const tr=document.createElement('tr'); tr.className='pm-row'; tr.onclick=()=>openModal(i);
+    tr.innerHTML=`
+      <td><div class="pm-name"><span class="dot" style="background:${m.color}"></span>${m.label}</div></td>
+      <td class="r num" style="font-weight:600">${BRL(m.total)}</td>
+      <td class="r num" style="color:var(--gray600)">${m.count}</td>
+      <td class="r num" style="color:var(--gray600)">${share.toLocaleString('pt-BR',{maximumFractionDigits:1})}%
+        <div class="share-bar"><span style="width:${share}%;background:${m.color}"></span></div></td>
+      <td class="r go">detalhar ›</td>`;
+    body.appendChild(tr);
+  });
+
+  function openModal(i){
+    const m=methods[i];
+    const root=document.getElementById('modal-root');
+    root.innerHTML=`
+      <div class="scrim" onclick="if(event.target===this)closeModal()">
+        <div class="modal" role="dialog" aria-label="Composição de ${m.label}">
+          <div class="modal-h">
+            <div class="mt"><span class="dot" style="background:${m.color}"></span>${m.label}
+              <span class="amt num">· ${BRL(m.total)} · ${m.count} pagamentos</span></div>
+            <button class="xbtn" onclick="closeModal()" aria-label="Fechar">×</button>
+          </div>
+          <div class="modal-b">
+            ${m.drill.map(d=>`
+              <div class="di">
+                <span class="who"><span class="tagv ${d.t}">${d.t==='sale'?'venda':'dívida'}</span>
+                  <span><b>${d.ref}</b><small>${d.desc}</small></span></span>
+                <span class="num" style="font-weight:600">${BRL(d.v)}</span>
+              </div>`).join('')}
+            <div class="modal-foot"><span>Soma da composição</span><b class="num">${BRL(m.total)}</b></div>
+            <p style="font-size:11px;color:var(--gray500);margin:10px 2px 0">Bate com o "Recebido" da forma no período. No app, cada linha leva à venda / à dívida.</p>
+          </div>
+        </div>
+      </div>`;
+  }
+  function closeModal(){ document.getElementById('modal-root').innerHTML=''; }
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape')closeModal(); });
+
+  // ---- gráfico diário ----
+  (function(){
+    const svg=document.getElementById('dailyChart');
+    const W=640,H=200,pad={l:8,r:8,t:16,b:24};
+    const max=Math.max(...daily.map(d=>d.v))*1.15;
+    const bw=(W-pad.l-pad.r)/daily.length;
+    let s=`<line class="axis" x1="0" y1="${H-pad.b}" x2="${W}" y2="${H-pad.b}"/>`;
+    daily.forEach((d,i)=>{
+      const h=(d.v/max)*(H-pad.t-pad.b), x=pad.l+i*bw+bw*0.2, y=H-pad.b-h, w=bw*0.6;
+      s+=`<rect class="bar ${d.today?'today':''}" x="${x}" y="${y}" width="${w}" height="${h}" rx="4"/>`;
+      s+=`<text class="val" x="${x+w/2}" y="${y-5}" text-anchor="middle">${Math.round(d.v)}</text>`;
+      s+=`<text class="lbl" x="${x+w/2}" y="${H-8}" text-anchor="middle">${d.d}</text>`;
+    });
+    svg.innerHTML=s;
+  })();
+
+  const norm=s=>s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+
+  // ---- top produtos (ordenável + busca; linha abre o pop-up do produto) ----
+  let prodSort='rev';
+  function renderProd(){
+    const term=norm(document.getElementById('prod-search').value.trim());
+    const list=[...prod].sort((a,b)=> prodSort==='profit'? b.profit-a.profit : b.rev-a.rev)
+      .filter(p=>!term || norm(p.n).includes(term));
+    const box=document.getElementById('top-prod');
+    if(list.length===0){ box.innerHTML='<p class="noresult">Nenhum produto encontrado.</p>'; return; }
+    box.innerHTML=list.map((p,i)=>`
+      <div class="ti click" onclick="openProd('${encodeURIComponent(p.n)}')">
+        <span class="rank">${term?'🔎':i+1}</span>
+        <span class="name"><b>${p.n}</b><small>${p.q}</small></span>
+        <span class="amt">
+          <b class="num">${prodSort==='profit'?BRL(p.profit):BRL(p.rev)}</b>
+          <small>${prodSort==='profit'?'fat. '+BRL(p.rev):'margem '+p.mg+'% · lucro '+BRL(p.profit)}</small>
+        </span></div>`).join('');
+  }
+  function sortProd(mode,btn){
+    btn.parentElement.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed','false'));
+    btn.setAttribute('aria-pressed','true'); prodSort=mode; renderProd();
+  }
+  renderProd();
+
+  // ---- melhores clientes (busca; linha abre o pop-up do cliente) ----
+  function renderCli(){
+    const term=norm(document.getElementById('cli-search').value.trim());
+    const list=clients.filter(c=>!term || norm(c.n).includes(term));
+    const box=document.getElementById('top-cli');
+    if(list.length===0){ box.innerHTML='<p class="noresult">Nenhum cliente encontrado.</p>'; return; }
+    box.innerHTML=list.map((c,i)=>`
+      <div class="ti click" onclick="openCli('${encodeURIComponent(c.n)}')">
+        <span class="rank">${term?'🔎':i+1}</span>
+        <span class="name"><b>${c.n}</b><small>${c.buys} compras${c.debt>0?' · deve '+BRL(c.debt):''}</small></span>
+        <span class="amt"><b class="num">${BRL(c.total)}</b></span></div>`).join('');
+  }
+  renderCli();
+
+  // ---- pop-up: detalhe do PRODUTO ----
+  function openProd(enc){
+    const p=prod.find(x=>x.n===decodeURIComponent(enc)); if(!p)return;
+    document.getElementById('modal-root').innerHTML=`
+      <div class="scrim" onclick="if(event.target===this)closeModal()">
+        <div class="modal" role="dialog" aria-label="Produto ${p.n}">
+          <div class="modal-h"><div class="mt">🧱 ${p.n}</div>
+            <button class="xbtn" onclick="closeModal()" aria-label="Fechar">×</button></div>
+          <div class="modal-b">
+            <div class="stats">
+              <div class="stat"><div class="k">Faturamento</div><div class="v num">${BRL(p.rev)}</div></div>
+              <div class="stat"><div class="k">Lucro <span class="novo base" style="text-transform:none;letter-spacing:0">custo</span></div><div class="v num green">${BRL(p.profit)}</div></div>
+              <div class="stat"><div class="k">Margem</div><div class="v num">${p.mg}%</div></div>
+              <div class="stat"><div class="k">Vendido no período</div><div class="v num">${p.q}</div></div>
+            </div>
+            <div class="mini-h">Quem mais compra</div>
+            <div>${p.buyers.map(b=>`<span class="chip">👤 ${b}</span>`).join('')}</div>
+            <p style="font-size:11px;color:var(--gray500);margin:14px 2px 0">Período: últimos 7 dias · ticket médio ${BRL(p.ticket)}/venda. No app, dá pra abrir o histórico de vendas desse produto.</p>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  // ---- pop-up: detalhe do CLIENTE ----
+  function openCli(enc){
+    const c=clients.find(x=>x.n===decodeURIComponent(enc)); if(!c)return;
+    document.getElementById('modal-root').innerHTML=`
+      <div class="scrim" onclick="if(event.target===this)closeModal()">
+        <div class="modal" role="dialog" aria-label="Cliente ${c.n}">
+          <div class="modal-h"><div class="mt">👤 ${c.n}</div>
+            <button class="xbtn" onclick="closeModal()" aria-label="Fechar">×</button></div>
+          <div class="modal-b">
+            <div class="stats">
+              <div class="stat"><div class="k">Total comprado</div><div class="v num">${BRL(c.total)}</div></div>
+              <div class="stat"><div class="k">Compras · ticket</div><div class="v num">${c.buys} · ${BRL(c.ticket)}</div></div>
+              <div class="stat"><div class="k">Lucro que te gera <span class="novo base" style="text-transform:none;letter-spacing:0">custo</span></div><div class="v num green">${BRL(c.profit)}</div></div>
+              <div class="stat"><div class="k">Dívida atual</div><div class="v num ${c.debt>0?'red':''}">${c.debt>0?BRL(c.debt):'—'}</div></div>
+            </div>
+            <div class="mini-h">O que costuma comprar</div>
+            <div>${c.items.map(it=>`<span class="chip">🧱 ${it}</span>`).join('')}</div>
+            <p style="font-size:11px;color:var(--gray500);margin:14px 2px 0">Período: últimos 7 dias. No app, leva ao perfil do cliente e à conta a receber dele.</p>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  // ---- colapsar painéis ----
+  function togglePanel(id){ document.getElementById(id).classList.toggle('closed'); }
+
+  // ---- toggle tabela/gráfico ----
+  function setView(v,btn){
+    document.querySelectorAll('.icon-toggle button').forEach(b=>b.setAttribute('aria-pressed','false'));
+    btn.setAttribute('aria-pressed','true');
+    document.getElementById('pm-table').classList.toggle('hide', v==='chart');
+    document.getElementById('pm-chart').classList.toggle('hide', v!=='chart');
+  }
+</script>
