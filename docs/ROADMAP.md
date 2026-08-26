@@ -3,8 +3,11 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-26 — **Relatorios.v2 — Fatia 2 (Base de custo: snapshot na venda)
-> — NO AR (migration `0032` aplicada). ADR-027 Aceito. E2E natural do Owner PENDENTE.** Fundação da
+> **Última atualização:** 2026-08-26 — **Relatorios.v2 — Fatias 1+2 NO AR e E2E DO OWNER VALIDADO
+> (2026-08-26). Fatia 1 (fundação visual) + Fatia 2 (snapshot de custo, migration `0032`). ADR-027
+> Aceito.** E2E de produção: venda nova (pedido #76, owner@lojademo.com) gravou `unitCost = 36` = custo
+> vigente do cadastro; vendas anteriores ao deploy ficaram `unitCost = NULL` ("custo desconhecido"),
+> confirmando o comportamento. Deploy: API `77e48fe6` + web `ca1da126` (smoke pós-deploy OK). Fundação da
 > margem/lucro: cada item vendido passa a **carimbar o custo do momento** (snapshot), para o relatório
 > de margem (Fatia 6) ser reproduzível e à prova de reajuste do custo do cadastro. **Migration `0032`
 > (aditiva, aprovada — regra 1):** `ALTER TABLE order_items ADD COLUMN "unitCost" DECIMAL(12,4)` —
