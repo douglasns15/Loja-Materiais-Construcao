@@ -172,6 +172,19 @@ function CashSessionSummary({
   );
 }
 
+/**
+ * Rótulo de seção (mesma identidade do mockup v2): texto em caixa-alta discreto + linha divisória
+ * que preenche o restante da largura. Dá ritmo às seções sem competir com o título da tela.
+ */
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mb-3 mt-8 flex items-center gap-3">
+      <span className="text-xs font-extrabold uppercase tracking-wide text-gray-500">{children}</span>
+      <span className="h-px flex-1 bg-gray-200" />
+    </div>
+  );
+}
+
 export default function RelatoriosPage() {
   const online = useOnline();
   // Abre em "Hoje" (default das telas com filtro por data). A navegação ‹ › percorre os dias.
@@ -240,8 +253,14 @@ export default function RelatoriosPage() {
   );
 
   return (
-    <div className="mx-auto max-w-5xl">
-      <h1 className="mb-6 text-2xl font-bold">Relatórios</h1>
+    <div className="mx-auto max-w-6xl">
+      {/* Identidade das telas repaginadas (PDV Opção A): título em gradiente índigo + subtítulo. */}
+      <h1 className="mb-1 w-fit bg-gradient-to-r from-indigo-700 to-indigo-500 bg-clip-text text-2xl font-bold text-transparent">
+        Relatórios
+      </h1>
+      <p className="mb-5 text-sm text-gray-500">
+        O placar do período — o que entrou, por onde entrou e como fechou cada caixa.
+      </p>
 
       {/* Tela online-only (ADR-012 (c)): offline mostra o aviso de rede, não o erro cru. */}
       <OfflineNotice />
@@ -254,9 +273,11 @@ export default function RelatoriosPage() {
 
       {error && online && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
+      <SectionLabel>Resultado do período</SectionLabel>
+
       {/* Cards de resumo de vendas */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <div className="rounded-2xl bg-white p-4 shadow-sm">
+        <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
           {/* Regime de caixa (ADR-019): dinheiro que entrou no período — inclui recebimentos de
               fiado no dia em que foram recebidos, não a parte a prazo ainda não paga. */}
           <p className="text-xs text-gray-600" title="Dinheiro recebido no período (inclui recebimentos de fiado no dia do recebimento).">
@@ -264,15 +285,15 @@ export default function RelatoriosPage() {
           </p>
           <p className="mt-1 text-2xl font-bold">{BRL(sales?.totalRevenue ?? 0)}</p>
         </div>
-        <div className="rounded-2xl bg-white p-4 shadow-sm">
+        <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
           <p className="text-xs text-gray-600">Vendas</p>
           <p className="mt-1 text-2xl font-bold">{sales?.salesCount ?? 0}</p>
         </div>
-        <div className="rounded-2xl bg-white p-4 shadow-sm">
+        <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
           <p className="text-xs text-gray-600">Ticket médio</p>
           <p className="mt-1 text-2xl font-bold">{BRL(sales?.averageTicket ?? 0)}</p>
         </div>
-        <div className="rounded-2xl bg-white p-4 shadow-sm">
+        <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
           <p className="text-xs text-gray-600">Canceladas</p>
           <p className="mt-1 text-2xl font-bold">{sales?.cancelledCount ?? 0}</p>
         </div>
@@ -289,8 +310,10 @@ export default function RelatoriosPage() {
         </p>
       )}
 
+      <SectionLabel>Composição do recebido</SectionLabel>
+
       {/* Totais por forma de pagamento */}
-      <div className="mt-6 overflow-x-auto rounded-2xl bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
         <h2 className="px-4 py-3 font-semibold">Por forma de pagamento</h2>
         <table className="w-full text-sm">
           <thead className="bg-blue-200 text-left text-blue-900">
@@ -324,8 +347,10 @@ export default function RelatoriosPage() {
         </table>
       </div>
 
+      <SectionLabel>Caixa</SectionLabel>
+
       {/* Fechamentos de caixa */}
-      <div className="mt-6 overflow-x-auto rounded-2xl bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
           <h2 className="font-semibold">Fechamentos de caixa</h2>
           {sessions.length > 0 && (

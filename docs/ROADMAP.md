@@ -3,7 +3,20 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-25 — **Infra.Resiliencia.ColdStart — cold start do free tier deixa de
+> **Última atualização:** 2026-08-26 — **Relatorios.v2 — Fatia 1 (Fundação visual) — CONCLUÍDA e
+> validada visualmente pelo Owner (2026-08-26).** Primeira fatia do [[plano-relatorios-v2]] (10 fatias):
+> reaplica a identidade das telas repaginadas (PDV Opção A / Contas a Receber) na tela **Relatórios**
+> ATUAL, **sem funcionalidade nova**. `apps/web/app/(app)/relatorios/page.tsx`: título em **gradiente
+> índigo** + subtítulo; container `max-w-5xl` → `max-w-6xl`; novo helper `SectionLabel` (rótulo caixa-alta
+> + linha divisória) nas 3 seções — **Resultado do período**, **Composição do recebido**, **Caixa**;
+> **borda `border-gray-200`** nos 4 cards de KPI e nos painéis (forma de pagamento + fechamentos). Cabeçalho
+> de tabela azul (`bg-blue-200`) e cards `rounded-2xl` já batiam com o mockup — mantidos. **Sem**
+> API/migration/core/shared; contrato de rotas intocado (§8.2). **Gate:** web `tsc --noEmit` 0; dev server
+> compila `/relatorios` sem erro; E2E de fumaça = tela carrega igual, mesmos dados (screenshot conferido
+> pelo Owner após hard reload). Mockup de referência: `docs/mockups/relatorios-v2.html`. **Próxima:**
+> Fatia 2 (snapshot de custo no `OrderItem` — MIGRATION, gate da regra 1) — ADR-027.
+>
+> **Antes:** 2026-08-25 — **Infra.Resiliencia.ColdStart — cold start do free tier deixa de
 > virar erro na cara do operador — NO AR (E2E natural PENDENTE). Duas fatias: retry de 5xx + keep-alive do
 > pool.** O Owner relatou o app "perdendo conexão do nada" com a internet OK, 3 mensagens diferentes no
 > mesmo dia. **Diagnóstico (leitura de código):** MESMA causa — o caminho de dados (Worker → Hyperdrive →
