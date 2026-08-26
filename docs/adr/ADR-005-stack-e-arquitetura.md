@@ -105,3 +105,31 @@ O eixo central é **simplicidade/custo vs. controle**. As escolhas privilegiam *
 2. [ ] Validar limites diários de Hyperdrive no free tier para o volume esperado.
 3. [ ] Definir o *auth hook* do Supabase que injeta `tenant_id`/`role` no JWT.
 4. [ ] Aprovar `docs/ARCHITECTURE.md` e seguir para o scaffold do monorepo (fase 0).
+
+---
+
+## Adendo (2026-08-25): Resiliência ao **cold start** do free tier
+
+O risco previsto na "Análise de Trade-offs" (*"risco do free tier pausar (mitigado por keep-alive…)"*) materializou-se em produção: sob uso real, com pausas entre uma ação e outra, o caminho de dados (**Worker → Hyperdrive → Supavisor → Supabase**) esfria e a **primeira consulta depois de ocioso** estoura (reset/timeout de conexão). A stack devolve um erro que, sem tratamento, aparecia ao operador como **mensagens enganosas** — nunca como "cold start":
+
+- **"Falha na autenticação."** ao confirmar venda — na verdade a consulta do usuário no middleware `requireAuth` lançou e retornou **500** (o JWT já havia sido verificado com sucesso; não é token inválido).
+- **"Caixa recuperado do cache offline — dados de HH:MM"** no PDV — o `GET /cash-sessions/current` devolveu 500 e a tela caiu no *fallback* de cache offline (ADR-012 CS-1), parecendo estar sem internet sem estar.
+- **"Failed to fetch"** (falha de rede do `fetch`) e **500 "Transaction not found"** (a transação da venda passando do *timeout* padrão de 5 s do Prisma com o pool frio).
+
+Todas são **a mesma causa** com superfícies diferentes. A resposta tem **duas camadas** — *remediar* e *atacar a causa* — nenhuma delas altera o schema, a lógica de negócio ou o contrato de rotas:
+
+### 1. Remediação (o soluço não chega ao operador)
+
+- **Mensagem amigável + retry idempotente** (`apps/web/lib/api.ts`): falha de **rede/timeout** vira uma mensagem clara e os métodos **idempotentes** (GET/PATCH/DELETE) re-tentam com *backoff*. `POST` (venda) fica **fora do retry** de propósito (não idempotente — re-tentar duplicaria a venda). *(fix "Failed to fetch", commit `42081ca`.)*
+- **Retry de 5xx transitório** (`apps/web/lib/api.ts` + `apps/api/src/lib/dbRetry.ts`): o retry passou a reagir também a **500/502/503/504** — um cold start que volta como 5xx (e não como queda de rede) antes escapava. No servidor, `withDbRetry()` re-tenta a **leitura** do usuário/admin nos middlewares de auth (`requireAuth`/`requirePlatformAuth`/`requireSupportSession`). Como o 500 do auth acontece **antes de qualquer escrita**, cobri-lo no servidor é seguro mesmo para o `POST /orders`. *(commit `3a57892`.)*
+- **Timeout de transação folgado** (`packages/db/src/index.ts`): `transactionOptions { maxWait: 10_000, timeout: 20_000 }` — cobre a venda (várias escritas em série) quando o pool está frio, sem alterar lógica (`cpuTime` real ~200 ms). *(fix "Transaction not found", commit `44b3f45`.)*
+
+### 2. Ataque à causa (o pool não esfria)
+
+- **Keep-alive do pool via cron** (`apps/api/src/index.ts` handler `scheduled` + `apps/api/wrangler.toml` `[triggers]`): de 5 em 5 minutos o Worker faz um `SELECT 1` via Hyperdrive, mantendo uma conexão de origem **quente**. Assim o keep-alive absorve o cold start no lugar da venda. É uma invocação **separada** do `fetch` (não bloqueia nem concorre por conexão); `runKeepAlive` **nunca lança** para fora. 288 execuções/dia — desprezível no free tier — e, de bônus, mantém o projeto Supabase ativo, evitando o auto-pause de longa inatividade. *(commit `66b8a07`.)*
+
+### Observabilidade
+
+`apps/api/wrangler.toml` `[observability] enabled=true` retém logs/exceções do Worker (~3 dias no free tier), permitindo investigar um incidente transitório **depois** que acontece (antes, `wrangler tail` só mostrava eventos ao vivo). Foi o que permitiu diagnosticar o "Transaction not found".
+
+> **Limite honesto:** o retry é rede de proteção e o keep-alive **reduz a frequência** do cold start, mas nenhum dos dois o **elimina** — a solução definitiva continua sendo o **Supabase Pro** (sem auto-pause, pool mais estável) no lançamento, já previsto em "Consequências → Revisar no futuro".

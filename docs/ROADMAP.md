@@ -3,7 +3,33 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-25 — **CR.DividaDoCliente — Contas a Receber unificada no modelo de
+> **Última atualização:** 2026-08-25 — **Infra.Resiliencia.ColdStart — cold start do free tier deixa de
+> virar erro na cara do operador — NO AR (E2E natural PENDENTE). Duas fatias: retry de 5xx + keep-alive do
+> pool.** O Owner relatou o app "perdendo conexão do nada" com a internet OK, 3 mensagens diferentes no
+> mesmo dia. **Diagnóstico (leitura de código):** MESMA causa — o caminho de dados (Worker → Hyperdrive →
+> Supavisor → Supabase) **esfria** entre ações e a 1ª consulta depois de ocioso estoura, a API devolve
+> **5xx transitório** que aparecia como superfícies enganosas: (1) **"Falha na autenticação."** ao
+> confirmar venda = a query do usuário no `requireAuth` lançou → 500 (o JWT já passou; **não** é token);
+> (2) **"Caixa recuperado do cache offline — dados de HH:MM"** no PDV = `GET /cash-sessions/current` 500 →
+> *fallback* de cache (parece offline sem estar). **Fatia A — Retry de 5xx** (commit `3a57892`, API
+> `8f950ce0`): `apps/web/lib/api.ts` passou a re-tentar `RETRYABLE_STATUS {500,502,503,504}` além de erro
+> de rede (antes o 5xx escapava); novo `apps/api/src/lib/dbRetry.ts` `withDbRetry()` re-tenta a leitura de
+> usuário/admin em `requireAuth`/`requirePlatformAuth`/`requireSupportSession` (o 500 do auth ocorre ANTES
+> de qualquer escrita → seguro; `POST` da venda segue sem retry no cliente). **Fatia B — Keep-alive do
+> pool** (commit `66b8a07`, API `86fa3414`): `export default` do Worker virou `{ fetch, scheduled }`; o
+> `scheduled` chama `runKeepAlive` (`apps/api/src/lib/keepAlive.ts` → `SELECT 1` via Hyperdrive, reusa
+> `withDbRetry`, sucesso silencioso, nunca lança) e `wrangler.toml [triggers] crons` de 5 em 5 min mantém
+> a conexão QUENTE, absorvendo o cold start no lugar da venda. Invocação separada do `fetch` (não bloqueia
+> nem concorre); confirmado com o Owner que **não** deixa a ferramenta off. **Verificação:** deploy imprimiu
+> `schedule: */5 * * * *` e `wrangler tail` capturou 1 disparada real (`event.cron`, `outcome: ok`,
+> `exceptions: []`, wallTime ~414 ms). **ARMADILHA:** `*/5 * * * *` dentro de comentário `/* */` FECHA o
+> bloco no `*/` — reescrever sem o literal. Sem schema/migration/core/shared; contrato de rotas intocado
+> (§8.2). Docs: **ADR-005 → Adendo "Resiliência ao cold start"** + `DOCUMENTACAO-TECNICA.md` §12. Gates:
+> api `tsc` 0 + dry-run OK; web `tsc` 0 + build. Commits locais em `main` (push do Owner). **Limite honesto:
+> retry + keep-alive REDUZEM a incidência, não ELIMINAM — solução definitiva é o Supabase Pro no lançamento.
+> E2E natural = próximo período ocioso real.** Ver [[resiliencia-rede-failed-to-fetch]] (família toda).
+>
+> **Antes:** 2026-08-25 — **CR.DividaDoCliente — Contas a Receber unificada no modelo de
 > DÍVIDA (conta-corrente `D-0001`) — NO AR e E2E DO OWNER VALIDADO (2026-08-25, "tudo validado com
 > sucesso"). ADR-026, Fatias 1+2 + vencimento na dívida. CONCLUÍDA.** Evolui a "conta implícita" da
 > ADR-022 para uma **entidade `debts`** com código sequencial por loja (`D-0001`), **1 dívida aberta por

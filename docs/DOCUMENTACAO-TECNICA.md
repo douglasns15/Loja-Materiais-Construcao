@@ -632,9 +632,32 @@ O isolamento entre lojas é garantido **no banco**, não só na aplicação — 
 
 ### Riscos operacionais conhecidos
 
-1. **Free tier do Supabase pausa após ~1 semana de inatividade** e limita a 500 MB. Mitigação: *cron*
-   de keep-alive durante o desenvolvimento e **upgrade para o plano Pro (~US$ 25/mês) no lançamento**.
+1. **Free tier do Supabase pausa após ~1 semana de inatividade** e limita a 500 MB. Mitigação **em vigor**:
+   *cron* de **keep-alive** a cada 5 min (ver "Resiliência ao cold start" abaixo) mantém o projeto ativo;
+   **upgrade para o plano Pro (~US$ 25/mês) no lançamento** resolve de vez pausa e limites.
 2. **Limites diários do Hyperdrive no free tier** — validar contra o volume esperado de queries.
+
+### Resiliência ao **cold start** (free tier)
+
+O caminho de dados (**Worker → Hyperdrive → Supavisor → Supabase**) **esfria** quando fica ocioso entre
+uma ação e outra: a **primeira consulta depois da pausa** pode estourar (reset/timeout de conexão) e a
+API devolve um **5xx transitório**. Sem tratamento, isso chegava ao operador como mensagens enganosas —
+*"Falha na autenticação."* ao confirmar venda (era a query do usuário no auth falhando, **não** o token),
+o *fallback* falso *"recuperado do cache offline"* no PDV, *"Failed to fetch"* e o 500 *"Transaction not
+found"*. **Mesma causa, superfícies diferentes.** O tratamento tem duas camadas (sem tocar schema, lógica
+de negócio ou contrato de rotas — a referência de endpoints §8.2 permanece inalterada):
+
+| Camada | Mecanismo | Onde |
+|---|---|---|
+| **Remediar** | Mensagem amigável + **retry** dos métodos idempotentes (GET/PATCH/DELETE) em falha de rede/timeout **e em 5xx transitório**. `POST` (venda) fica fora do retry (não idempotente). | `apps/web/lib/api.ts` |
+| **Remediar** | `withDbRetry()` re-tenta a **leitura** de usuário/admin nos middlewares de auth (o 500 do auth ocorre **antes** de qualquer escrita → seguro). | `apps/api/src/lib/dbRetry.ts`, `middleware/auth.ts` |
+| **Remediar** | *Timeout* de transação folgado (`maxWait 10s / timeout 20s`) p/ a venda não morrer com o pool frio. | `packages/db/src/index.ts` |
+| **Atacar a causa** | **Keep-alive**: cron de 5 min dispara o handler `scheduled`, que faz `SELECT 1` via Hyperdrive e mantém uma conexão **quente** — absorve o cold start no lugar da venda. Invocação separada do `fetch`; nunca bloqueia requisições. | `apps/api/src/index.ts` + `wrangler.toml [triggers]` |
+| **Diagnóstico** | `[observability] enabled=true` retém logs/exceções (~3 dias) p/ investigar incidentes **após** ocorrerem. | `apps/api/wrangler.toml` |
+
+Detalhamento e histórico dos commits: **ADR-005 → Adendo "Resiliência ao cold start"**. Limite honesto:
+retry e keep-alive **reduzem** a incidência, não a **eliminam** — a solução definitiva é o **Supabase Pro**
+no lançamento.
 
 ---
 
