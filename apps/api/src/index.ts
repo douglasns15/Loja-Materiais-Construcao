@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { createPrismaClient } from '@nexoloja/db';
-import { type Env, getConnectionString } from './lib/request';
+import { type Bindings, type Env, getConnectionString } from './lib/request';
+import { runKeepAlive } from './lib/keepAlive';
 import products from './routes/products';
 import catalog from './routes/catalog';
 import nfe from './routes/nfe';
@@ -108,4 +109,17 @@ app.get('/db-check', async (c) => {
   }
 });
 
-export default app;
+/**
+ * Export do Worker como MÓDULO com dois handlers:
+ * - `fetch`: a API HTTP (a app Hono acima) — atende vendas/caixa/etc.
+ * - `scheduled`: o keep-alive do pool (cron de 5 em 5 min, ver wrangler.toml `[triggers]`).
+ *   É uma invocação SEPARADA do `fetch` — roda em paralelo, não bloqueia nem concorre com as
+ *   requisições reais. `ctx.waitUntil` mantém o Worker vivo até o `SELECT 1` terminar; o próprio
+ *   `runKeepAlive` nunca lança, então uma falha do keep-alive jamais afeta o atendimento.
+ */
+export default {
+  fetch: app.fetch,
+  async scheduled(_controller: ScheduledController, env: Bindings, ctx: ExecutionContext) {
+    ctx.waitUntil(runKeepAlive(env));
+  },
+};

@@ -8,6 +8,16 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 SUPABASE_URL = "https://esxssekaflzewibbklpu.supabase.co"
 
+# --- Keep-alive do pool (ADR-005 / causa raiz do cold start) ---
+# Cron a cada 5 min → dispara o handler `scheduled` (src/index.ts → runKeepAlive), que faz um
+# `SELECT 1` via Hyperdrive para manter uma conexão de origem QUENTE. Assim a primeira venda depois
+# de um período ocioso não paga o cold start (que hoje volta como 5xx: "Falha na autenticação." /
+# fallback "offline" no PDV). 288 execuções/dia — desprezível no free tier (limite 100k req/dia).
+# Invocação separada do `fetch`: não bloqueia nem concorre com requisições reais. Bônus: mantém o
+# projeto Supabase free ativo, evitando também o auto-pause de longa inatividade.
+[triggers]
+crons = ["*/5 * * * *"]
+
 # --- Observabilidade (Workers Logs) ---
 # Retém logs/exceções do Worker (~3 dias no dashboard, incluído no free tier) para que um
 # incidente transitório (cold start do pool, 5xx pontual, "Failed to fetch" do cliente) possa
