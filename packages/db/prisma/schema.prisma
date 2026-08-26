@@ -584,6 +584,15 @@ model OrderItem {
   /// no cancelamento/devolução (ADR-001), robusto mesmo se `conversionFactor` mudar depois.
   baseQuantity      Decimal?  @db.Decimal(12, 4)
   unitPrice         Decimal   @db.Decimal(12, 4) // Preço na unidade vendida (ex.: preço do rolo)
+  /// Custo unitário CONGELADO no momento da venda (ADR-027) — snapshot do `Product.costPrice`
+  /// vigente na criação do pedido. Igual ao padrão de snapshot do item (ADR-001): não depende de
+  /// valor mutável do produto, então reajustar o custo do cadastro depois NÃO distorce a margem
+  /// histórica. NULL em vendas anteriores a esta migration ("custo desconhecido"): a venda entra no
+  /// faturamento, mas fica FORA do lucro — nunca contada como custo zero (que inflaria o lucro).
+  /// Por UNIDADE-BASE (mesma base de `costPrice`, do estoque e de `baseQuantity`) — NÃO da unidade
+  /// vendida. O custo da linha (Fatia 6) é `unitCost × (baseQuantity ?? quantity)`, casando com o
+  /// débito de estoque (ADR-013); assim funciona também no modo embalagem (ex.: 2 rolos = 200 m).
+  unitCost          Decimal?  @db.Decimal(12, 4)
   discount          Decimal   @default(0) @db.Decimal(12, 4)
   total             Decimal   @db.Decimal(12, 2)
   /// Agrupamento do par (ADR-015). Itens do MESMO pedido com o mesmo `pairGroup` foram vendidos

@@ -1,6 +1,6 @@
 # ADR-027: Custo congelado na venda (snapshot de custo no item para margem histórica)
 
-**Status:** **Proposto** (planejamento aprovado pelo Owner em 2026-08-26; a **aplicação da migration** exige aprovação de impacto — regra 1 do `CLAUDE.md` — no início da implementação). Faz parte do [plano Relatórios v2](../plano-relatorios-v2.md), Fatia 2.
+**Status:** **Aceito e implementado** (2026-08-26 — impacto aprovado pelo Owner e migration `0032` aplicada). Faz parte do [plano Relatórios v2](../plano-relatorios-v2.md), Fatia 2. A **gravação** do custo está no ar (`POST /orders`, cobre online e offline pelo mesmo caminho); o **cálculo** de margem/lucro que consome este snapshot é a Fatia 6.
 **Data:** 2026-08-26
 **Deciders:** Owner do produto
 **Relacionados:** [ADR-016](ADR-016-preco-e-margem-por-forma-de-pagamento.md) (preço e margem por forma de pagamento; motor de margem já existe em `core`), [ADR-001](ADR-001-consistencia-de-estoque.md) (snapshot congelado como padrão — `baseQuantity` no item), [ADR-019](ADR-019-venda-a-prazo-contas-a-receber.md) (regime de caixa dos relatórios)
@@ -50,6 +50,18 @@ A mutação de criação da venda (`apps/api`) grava `unitCost` por item. Confer
 **offline/outbox** (a venda nasce no cliente e sincroniza) para que **nenhuma venda nova nasça sem
 custo**. O custo é um snapshot como os demais campos do item — não participa de estorno de estoque
 nem de devolução (essas usam `baseQuantity`, ADR-001).
+
+**Implementação (2026-08-26):** um único ponto de gravação — `POST /orders`
+([`apps/api/src/routes/orders.ts`](../../apps/api/src/routes/orders.ts), no `items.create`) — cobre
+**online e offline**, porque a fila offline drena pelo mesmo endpoint idempotente
+([`apps/web/lib/syncWorker.ts`](../../apps/web/lib/syncWorker.ts)). **Zero mudança no cliente.**
+
+**Unidade do custo (decisão de implementação):** `unitCost` é gravado por **UNIDADE-BASE** — o
+`Product.costPrice` cru, mesma base do estoque e de `baseQuantity`. **Não** é convertido para a
+unidade vendida. O custo da linha (Fatia 6) é `unitCost × (baseQuantity ?? quantity)`, casando com o
+débito de estoque (ADR-013) e funcionando também no modo embalagem (ex.: 2 rolos = 200 m).
+`Product.costPrice` é obrigatório no cadastro, então **toda venda nova nasce com custo carimbado**;
+`unitCost = null` fica só nas vendas anteriores à migration.
 
 ### 4. Cálculo de margem fica em `core` (funções puras, testadas)
 

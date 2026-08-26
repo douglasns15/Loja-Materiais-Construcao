@@ -591,6 +591,12 @@ orders.post('/', requireActiveTenant, async (c) => {
               quantity: item.quantity, // na unidade vendida (ex.: 2 rolos)
               baseQuantity: baseQty, // em unidade-base p/ o estorno (ex.: 200 m) — ADR-013
               unitPrice: item.unitPrice,
+              // Custo CONGELADO na venda (ADR-027): snapshot do custo do cadastro vigente, por
+              // UNIDADE-BASE (mesma base de costPrice/estoque/baseQuantity). Cobre online E offline
+              // (o outbox drena pelo mesmo POST /orders). Reajustar o custo do produto depois não
+              // distorce a margem histórica. `costPrice` é obrigatório no cadastro, então TODA venda
+              // nova nasce com custo carimbado; `unitCost = null` fica só nas vendas pré-migration.
+              unitCost: product.costPrice,
               discount: item.discount ?? 0,
               total: calcSaleItemTotal(item),
               // Par (ADR-015): agrupa os dois itens vendidos juntos, p/ o comprovante imprimir

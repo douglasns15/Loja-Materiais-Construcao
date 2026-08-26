@@ -3,7 +3,26 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-26 — **Relatorios.v2 — Fatia 1 (Fundação visual) — CONCLUÍDA e
+> **Última atualização:** 2026-08-26 — **Relatorios.v2 — Fatia 2 (Base de custo: snapshot na venda)
+> — NO AR (migration `0032` aplicada). ADR-027 Aceito. E2E natural do Owner PENDENTE.** Fundação da
+> margem/lucro: cada item vendido passa a **carimbar o custo do momento** (snapshot), para o relatório
+> de margem (Fatia 6) ser reproduzível e à prova de reajuste do custo do cadastro. **Migration `0032`
+> (aditiva, aprovada — regra 1):** `ALTER TABLE order_items ADD COLUMN "unitCost" DECIMAL(12,4)` —
+> nullable, sem backfill (custo das vendas antigas não é recuperável ⇒ `null` = "desconhecido", fora do
+> lucro, nunca custo zero). Aplicada via `npm run db:deploy` (não `migrate dev` — shadow DB no schema
+> `auth`, ver [[supabase-prisma-migrations]]). **Gravação:** 1 linha em `apps/api/src/routes/orders.ts`
+> (`unitCost: product.costPrice` no `items.create`) — cobre **online E offline** de uma vez, porque o
+> outbox drena pelo mesmo `POST /orders` (`apps/web/lib/syncWorker.ts`). **Unidade:** custo por
+> UNIDADE-BASE (mesma base de `costPrice`/estoque/`baseQuantity`); custo da linha na Fatia 6 =
+> `unitCost × (baseQuantity ?? quantity)` — funciona no modo embalagem. **Sem** cálculo novo, **sem** UI
+> de lucro (é Fatia 6), **sem** mudança no cliente; `Product.costPrice` segue editável. Estorno/devolução
+> intactos (usam `baseQuantity`, ADR-001). **Testes (Regra 2, decisão do Owner):** esta fatia é plumbing
+> sem cálculo novo → sem teste novo (o projeto não tem infra de teste de API; margem + testes puros são da
+> Fatia 6); coberta por `tsc` + E2E natural. **Gate:** api `tsc` 0; web `tsc` 0; suíte 324/324 verde;
+> migration aplicada OK. Docs: [[ADR-027]] (Aceito) + comentários no schema/rota. **Próxima:** Fatia 3
+> (drill-down por forma de pagamento em pop-up) ou Fatia 5 (top produtos/clientes + busca) — sem migration.
+>
+> **Antes:** 2026-08-26 — **Relatorios.v2 — Fatia 1 (Fundação visual) — CONCLUÍDA e
 > validada visualmente pelo Owner (2026-08-26).** Primeira fatia do [[plano-relatorios-v2]] (10 fatias):
 > reaplica a identidade das telas repaginadas (PDV Opção A / Contas a Receber) na tela **Relatórios**
 > ATUAL, **sem funcionalidade nova**. `apps/web/app/(app)/relatorios/page.tsx`: título em **gradiente
