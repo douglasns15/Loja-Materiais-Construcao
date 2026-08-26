@@ -3,7 +3,22 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-26 — **Relatorios.v2 — Fatias 1+2 NO AR e E2E DO OWNER VALIDADO
+> **Última atualização:** 2026-08-26 — **Relatorios.v2 — Fatia 3 (Drill-down por forma de pagamento)
+> — implementada, gate de soma validado com dados reais. Deploy + E2E visual do Owner PENDENTES.**
+> Clicar numa forma na tabela "Por forma de pagamento" abre um **pop-up** com a COMPOSIÇÃO daquele
+> valor: as vendas à vista (`Payment`) + os recebimentos de dívida (`ReceivablePayment`, somando o
+> acréscimo de cartão — ADR-022) que somam o "Recebido" da forma. **Nova rota** `GET
+> /reports/payment-composition?method=&from=&to=` (`apps/api/src/routes/reports.ts`), reusando a MESMA
+> regra de caixa (ADR-019) do `/sales` — por construção `Σ linhas = total daquela forma`. **Web:** novo
+> `apps/web/components/PaymentCompositionModal.tsx` (identidade do `DebtDetailModal`) + linhas da tabela
+> viram botão (clique/Enter/Espaço, hover índigo, chevron). Tipos em `packages/shared/src/report.ts`
+> (`paymentCompositionSchema`, `PaymentComposition`, `PaymentCompositionRow`). **Sem migration, sem
+> cálculo novo em core** (a soma bate por construção). **Gate:** api `tsc` 0; web `tsc` 0; suíte
+> 324/324; **soma validada no banco** (tenant real: CASH/PIX/DEBIT/CREDIT — Σ composição = total do
+> `/sales` em todas). §8.2 atualizada. **Próxima:** Fatia 5 (top produtos/clientes + busca) ou 4
+> (comparação com período anterior).
+>
+> **Antes:** 2026-08-26 — **Relatorios.v2 — Fatias 1+2 NO AR e E2E DO OWNER VALIDADO
 > (2026-08-26). Fatia 1 (fundação visual) + Fatia 2 (snapshot de custo, migration `0032`). ADR-027
 > Aceito.** E2E de produção: venda nova (pedido #76, owner@lojademo.com) gravou `unitCost = 36` = custo
 > vigente do cadastro; vendas anteriores ao deploy ficaram `unitCost = NULL` ("custo desconhecido"),

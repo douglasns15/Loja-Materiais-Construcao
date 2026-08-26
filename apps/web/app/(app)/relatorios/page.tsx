@@ -11,6 +11,7 @@ import { apiGet } from '@/lib/api';
 import { useOnline } from '@/lib/useOnline';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { CashMovementsList } from '@/components/CashMovementsList';
+import { PaymentCompositionModal } from '@/components/PaymentCompositionModal';
 import { PeriodFilter, defaultRange } from '@/components/PeriodFilter';
 
 const BRL = (v: number) =>
@@ -198,6 +199,8 @@ export default function RelatoriosPage() {
   const [expandedSession, setExpandedSession] = useState<string | null>(null);
   const [movementsBySession, setMovementsBySession] = useState<Record<string, CashMovementRow[]>>({});
   const [loadingMovements, setLoadingMovements] = useState<string | null>(null);
+  // Drill-down por forma de pagamento (Fatia 3): a forma clicada abre a composição num pop-up.
+  const [composeMethod, setComposeMethod] = useState<string | null>(null);
 
   const toggleMovements = useCallback(
     async (sessionId: string) => {
@@ -314,7 +317,12 @@ export default function RelatoriosPage() {
 
       {/* Totais por forma de pagamento */}
       <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
-        <h2 className="px-4 py-3 font-semibold">Por forma de pagamento</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+          <h2 className="font-semibold">Por forma de pagamento</h2>
+          {sales && sales.byPaymentMethod.length > 0 && (
+            <span className="text-xs text-gray-500">Clique numa forma para ver a composição</span>
+          )}
+        </div>
         <table className="w-full text-sm">
           <thead className="bg-blue-200 text-left text-blue-900">
             <tr>
@@ -322,23 +330,42 @@ export default function RelatoriosPage() {
               <th className="px-4 py-2 text-right">Recebido</th>
               <th className="px-4 py-2 text-right">Pagamentos</th>
               <th className="px-4 py-2 text-right">Participação</th>
+              <th className="px-4 py-2" aria-hidden="true"></th>
             </tr>
           </thead>
           <tbody>
             {!sales || sales.byPaymentMethod.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-gray-500">
+                <td colSpan={5} className="px-4 py-6 text-center text-gray-500">
                   Nenhuma venda no período.
                 </td>
               </tr>
             ) : (
               sales.byPaymentMethod.map((p) => (
-                <tr key={p.method} className="border-t border-gray-100">
-                  <td className="px-4 py-2">{methodLabel(p.method)}</td>
+                // Drill-down (Fatia 3): clicar abre a composição daquela forma num pop-up. Linha
+                // acessível por teclado (Enter/Espaço) — o `<tr>` vira botão.
+                <tr
+                  key={p.method}
+                  onClick={() => setComposeMethod(p.method)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setComposeMethod(p.method);
+                    }
+                  }}
+                  tabIndex={0}
+                  role="button"
+                  aria-label={`Ver composição de ${methodLabel(p.method)}`}
+                  className="cursor-pointer border-t border-gray-100 transition hover:bg-indigo-50 focus:bg-indigo-50 focus:outline-none"
+                >
+                  <td className="px-4 py-2 font-medium text-indigo-700">{methodLabel(p.method)}</td>
                   <td className="px-4 py-2 text-right font-medium">{BRL(p.total)}</td>
                   <td className="px-4 py-2 text-right text-gray-600">{p.count}</td>
                   <td className="px-4 py-2 text-right text-gray-600">
                     {p.share.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%
+                  </td>
+                  <td className="px-2 py-2 text-right text-gray-400" aria-hidden="true">
+                    ›
                   </td>
                 </tr>
               ))
@@ -474,6 +501,16 @@ export default function RelatoriosPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Pop-up do drill-down por forma de pagamento (Fatia 3). */}
+      {composeMethod && (
+        <PaymentCompositionModal
+          method={composeMethod}
+          from={range.from ?? null}
+          to={range.to ?? null}
+          onClose={() => setComposeMethod(null)}
+        />
+      )}
     </div>
   );
 }

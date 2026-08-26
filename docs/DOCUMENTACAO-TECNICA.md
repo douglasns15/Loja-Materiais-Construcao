@@ -481,6 +481,7 @@ testável exaustivamente e compartilhada entre as duas apps.
 | Método · Rota | O que faz |
 |---|---|
 | `GET /sales` | Vendas por período (faturamento CONFIRMED, canceladas à parte, total por forma de pagamento). |
+| `GET /payment-composition` | Drill-down de UMA forma (`?method=&from=&to=`): as linhas (venda à vista + recebimento de dívida) que somam o "Recebido" da forma — Σ linhas = total daquela forma no `/sales` (Fatia 3, Relatórios v2). |
 | `GET /cash-sessions` | Relatório de caixas (aberturas/fechamentos). |
 
 **`/tenant`, `/me`, `/users` — Loja, sessão e usuários**

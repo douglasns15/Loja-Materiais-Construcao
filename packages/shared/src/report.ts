@@ -78,3 +78,40 @@ export interface CashSessionReport {
   /** Divergência recalculada = `closingAmount` − `adjustedExpected` (CS-5). */
   adjustedDivergence: number;
 }
+
+/**
+ * Drill-down por forma de pagamento (Relatórios v2, Fatia 3). Além do intervalo, exige a `method`
+ * (a forma clicada). O servidor devolve a COMPOSIÇÃO daquele valor — as vendas à vista e os
+ * recebimentos de dívida que somam o "Recebido" da forma no período (Σ linhas = total da forma).
+ */
+export const paymentCompositionSchema = reportRangeSchema.extend({
+  method: z.string().min(1).max(30),
+});
+export type PaymentCompositionQuery = z.infer<typeof paymentCompositionSchema>;
+
+/** Uma linha da composição do recebido de uma forma: uma venda à vista OU um recebimento de dívida. */
+export interface PaymentCompositionRow {
+  /** `venda` = pagamento à vista de uma venda; `divida` = recebimento de uma dívida (fiado). */
+  tipo: 'venda' | 'divida';
+  /** Identificador humano da origem: nº do pedido (`#000123`) ou código da dívida (`D-0001`). */
+  ref: string;
+  /** Cliente (ou "Consumidor" quando a venda à vista não tem cliente). */
+  descricao: string;
+  /** Valor que entrou nesta linha. À vista = `Payment.amount`; dívida = `amount + surcharge` (ADR-022). */
+  valor: number;
+  /** Data do evento (ISO): venda = data da venda; dívida = data do recebimento (`paidAt`, regime de caixa). */
+  data: string;
+}
+
+/**
+ * Composição do recebido de UMA forma no período (Fatia 3). `total` deve bater com o total daquela
+ * forma em `GET /reports/sales` (mesma regra de caixa, ADR-019): é o gate do drill-down.
+ */
+export interface PaymentComposition {
+  method: string;
+  from: string | null;
+  to: string | null;
+  /** Σ dos `valor` das linhas — bate com o total da forma em `/reports/sales`. */
+  total: number;
+  rows: PaymentCompositionRow[];
+}

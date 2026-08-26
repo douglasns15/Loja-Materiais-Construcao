@@ -6,7 +6,14 @@ import {
   calcCashDivergence,
   withPaymentShare,
 } from '@nexoloja/core';
-import { reportRangeSchema } from '@nexoloja/shared';
+import {
+  formatDebtNumber,
+  formatOrderNumber,
+  paymentCompositionSchema,
+  reportRangeSchema,
+  type PaymentComposition,
+  type PaymentCompositionRow,
+} from '@nexoloja/shared';
 import { type Env, getConnectionString, getTenantId } from '../lib/request';
 import { requireAuth } from '../middleware/auth';
 
@@ -138,6 +145,113 @@ reports.get('/sales', async (c) => {
   } catch (err) {
     console.error('GET /reports/sales falhou:', err);
     return c.json({ ok: false, error: 'Falha ao gerar o relatório de vendas.' }, 500);
+  }
+});
+
+/**
+ * Drill-down por forma de pagamento (Relatórios v2, Fatia 3): a COMPOSIÇÃO do "Recebido" de UMA
+ * forma no período. Reaproveita a MESMA regra de caixa (ADR-019) do `/sales`: linhas de venda à
+ * vista (`Payment` daquela forma, por data da venda) + recebimentos de dívida (`ReceivablePayment`
+ * daquela forma, por `paidAt`, somando o acréscimo de cartão — ADR-022). Por construção,
+ * `Σ linhas = total daquela forma` no `/sales` (o gate do drill-down).
+ */
+reports.get('/payment-composition', async (c) => {
+  const tenantId = getTenantId(c);
+  const connectionString = getConnectionString(c.env);
+  if (!tenantId || !connectionString) {
+    return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
+  }
+
+  const parsed = paymentCompositionSchema.safeParse({
+    method: c.req.query('method'),
+    from: c.req.query('from'),
+    to: c.req.query('to'),
+  });
+  if (!parsed.success) {
+    return c.json({ ok: false, error: 'Parâmetros inválidos.', issues: parsed.error.flatten() }, 400);
+  }
+  const { method, from, to } = parsed.data;
+  const createdAt = buildDateFilter(from, to); // filtro pela data da VENDA (à vista)
+  const paidAt = createdAt; // mesmo intervalo, aplicado ao RECEBIMENTO da dívida (regime de caixa)
+
+  try {
+    const prisma = createPrismaClient(connectionString);
+    // Teto de segurança (mesmo padrão do `/cash-sessions`): um período real por forma fica muito
+    // abaixo disso; existe só para nunca devolver uma resposta gigante num "todo o histórico".
+    const CAP = 5000;
+    const [cashPayments, creditReceipts] = await Promise.all([
+      // À vista: pagamentos daquela forma, de vendas não canceladas, pela data da venda.
+      prisma.payment.findMany({
+        where: {
+          tenantId,
+          method,
+          order: { status: { not: 'CANCELLED' }, ...(createdAt ? { createdAt } : {}) },
+        },
+        select: {
+          amount: true,
+          order: {
+            select: { orderNumber: true, createdAt: true, customer: { select: { name: true } } },
+          },
+        },
+        orderBy: { order: { createdAt: 'desc' } },
+        take: CAP,
+      }),
+      // Dívida: recebimentos daquela forma, pela data do recebimento (`paidAt`).
+      prisma.receivablePayment.findMany({
+        where: { tenantId, method, ...(paidAt ? { paidAt } : {}) },
+        select: {
+          amount: true,
+          surcharge: true,
+          paidAt: true,
+          receivable: {
+            select: {
+              debt: { select: { debtNumber: true } },
+              order: { select: { orderNumber: true } },
+              customer: { select: { name: true } },
+            },
+          },
+        },
+        orderBy: { paidAt: 'desc' },
+        take: CAP,
+      }),
+    ]);
+
+    const rows: PaymentCompositionRow[] = [];
+    for (const p of cashPayments) {
+      rows.push({
+        tipo: 'venda',
+        ref: formatOrderNumber(p.order.orderNumber),
+        descricao: p.order.customer?.name ?? 'Consumidor',
+        valor: Number(p.amount),
+        data: p.order.createdAt.toISOString(),
+      });
+    }
+    for (const r of creditReceipts) {
+      // Prefere o código da dívida (D-0001); vendas a prazo pré-ADR-026 sem dívida usam o nº do pedido.
+      const ref = r.receivable.debt
+        ? formatDebtNumber(r.receivable.debt.debtNumber)
+        : formatOrderNumber(r.receivable.order.orderNumber);
+      rows.push({
+        tipo: 'divida',
+        ref,
+        descricao: r.receivable.customer.name,
+        // Valor que entrou = quitação + acréscimo de cartão (ADR-022, Fatia C.3), como no `/sales`.
+        valor: Number((Number(r.amount) + Number(r.surcharge)).toFixed(2)),
+        data: r.paidAt.toISOString(),
+      });
+    }
+    // Extrato: mais recente primeiro (por data do evento).
+    rows.sort((a, b) => (a.data < b.data ? 1 : a.data > b.data ? -1 : 0));
+
+    const total = Number(rows.reduce((acc, r) => acc + r.valor, 0).toFixed(2));
+
+    return c.json({
+      ok: true,
+      data: { method, from: from ?? null, to: to ?? null, total, rows } satisfies PaymentComposition,
+    });
+  } catch (err) {
+    console.error('GET /reports/payment-composition falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao detalhar a forma de pagamento.' }, 500);
   }
 });
 
