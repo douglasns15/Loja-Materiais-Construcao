@@ -14,8 +14,13 @@
 > `null`). **Web:** `InsightsBand` (chips por severidade info/good/warn + ⚙ config com checkboxes),
 > reusa `sales`/`sessions` da página e busca o mínimo extra (top produto/cliente + projeção) nas rotas
 > JÁ existentes — **sem rota nova** (§8.2 intocada). **Camadas:** apps/web + packages/core (plano).
-> **Gate:** core 322/322 (+13); shared 48/48; web `tsc` 0; liga/desliga persiste no reload. **Restam:**
-> Fatia 10 (export CSV/PDF) — a última.
+> **Gate:** core 322/322 (+13); shared 48/48; web `tsc` 0; liga/desliga persiste no reload. Deploy: web
+> `ff3b544f` (API não mudou). **Resiliência (achado no E2E):** navegar RÁPIDO nas setas de período
+> disparava uma rajada de requests por clique (~8 chamadas/período; a Fatia 9 somou +3), saturando o
+> pool frio (ADR-005) → erro "não foi possível conectar". Corrigido com **debounce do período**
+> (`useDebouncedValue`, 300 ms): o filtro atualiza a UI na hora, mas as BUSCAS disparam uma rodada só
+> quando o usuário para. Follow-up possível: deduplicar fetches repetidos (projeção/top produto/cliente).
+> **Restam:** Fatia 10 (export CSV/PDF) — a última.
 >
 > **Antes:** 2026-08-27 — **Relatorios.v2 — Fatia 7 (Gráfico temporal, empilhado por
 > forma) — NO AR e E2E DO OWNER VALIDADO (2026-08-27). CONCLUÍDA.** Deploy final: API `a94d6538` + web

@@ -10,6 +10,7 @@ import {
 import { calcVariation } from '@nexoloja/core';
 import { apiGet } from '@/lib/api';
 import { useOnline } from '@/lib/useOnline';
+import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { CashMovementsList } from '@/components/CashMovementsList';
 import { DailyRevenueChart } from '@/components/DailyRevenueChart';
@@ -235,6 +236,10 @@ export default function RelatoriosPage() {
   const online = useOnline();
   // Abre em "Hoje" (default das telas com filtro por data). A navegação ‹ › percorre os dias.
   const [range, setRange] = useState(() => defaultRange());
+  // Período "atrasado" (Fatia 9 / resiliência): o filtro (‹ ›) atualiza `range` na hora para a UI
+  // ficar responsiva, mas as BUSCAS de dados usam `dRange` — assim navegar rápido nas setas dispara
+  // uma rodada só (quando o usuário para), sem rajada de requests no pool frio (ADR-005).
+  const dRange = useDebouncedValue(range, 300);
   const [sales, setSales] = useState<SalesReport | null>(null);
   const [sessions, setSessions] = useState<CashSessionReport[]>([]);
   const [loading, setLoading] = useState(false);
@@ -277,8 +282,8 @@ export default function RelatoriosPage() {
     setError(null);
     try {
       const qs = new URLSearchParams();
-      if (range.from) qs.set('from', range.from);
-      if (range.to) qs.set('to', range.to);
+      if (dRange.from) qs.set('from', dRange.from);
+      if (dRange.to) qs.set('to', dRange.to);
       const q = qs.toString() ? `?${qs.toString()}` : '';
       // `compare=1` traz os KPIs do período anterior equivalente para os selos ▲/▼ (Fatia 4).
       const salesQs = new URLSearchParams(qs);
@@ -294,7 +299,7 @@ export default function RelatoriosPage() {
     } finally {
       setLoading(false);
     }
-  }, [range.from, range.to]);
+  }, [dRange.from, dRange.to]);
 
   useEffect(() => {
     load();
@@ -327,7 +332,7 @@ export default function RelatoriosPage() {
       {error && online && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
       {/* Faixa de insights configuráveis (Fatia 9) — regras puras sobre os agregados do período. */}
-      <InsightsBand sales={sales} sessions={sessions} from={range.from ?? null} to={range.to ?? null} />
+      <InsightsBand sales={sales} sessions={sessions} from={dRange.from ?? null} to={dRange.to ?? null} />
 
       <SectionLabel>Resultado do período</SectionLabel>
 
@@ -459,7 +464,7 @@ export default function RelatoriosPage() {
           </div>
         </div>
         {compView === 'grafico' ? (
-          <DailyRevenueChart from={range.from ?? null} to={range.to ?? null} />
+          <DailyRevenueChart from={dRange.from ?? null} to={dRange.to ?? null} />
         ) : (
         <table className="w-full text-sm">
           <thead className="bg-blue-200 text-left text-blue-900">
@@ -518,8 +523,8 @@ export default function RelatoriosPage() {
       {/* Rankings (Fatia 5) — cards colapsáveis com busca e detalhe em pop-up. Lado a lado no
           desktop; empilhados no celular. */}
       <div className="grid gap-4 lg:grid-cols-2">
-        <TopProductsCard from={range.from ?? null} to={range.to ?? null} />
-        <TopCustomersCard from={range.from ?? null} to={range.to ?? null} />
+        <TopProductsCard from={dRange.from ?? null} to={dRange.to ?? null} />
+        <TopCustomersCard from={dRange.from ?? null} to={dRange.to ?? null} />
       </div>
 
       <SectionLabel>Caixa</SectionLabel>
@@ -654,8 +659,8 @@ export default function RelatoriosPage() {
       {composeMethod && (
         <PaymentCompositionModal
           method={composeMethod}
-          from={range.from ?? null}
-          to={range.to ?? null}
+          from={dRange.from ?? null}
+          to={dRange.to ?? null}
           onClose={() => setComposeMethod(null)}
         />
       )}
