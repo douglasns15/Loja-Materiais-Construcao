@@ -23,6 +23,8 @@ import {
   calcProfit,
   previousPeriod,
   calcVariation,
+  calcMonthRunRate,
+  calcDaysToStockout,
   netCashMovements,
   grossCashMovements,
   manualCashMovementType,
@@ -1581,5 +1583,43 @@ describe('calcVariation', () => {
   it('base negativa (lucro): sinal do % segue o delta via |anterior|', () => {
     // Melhorou de −100 para −50: delta +50; % = 50/100 = +50%; direção up.
     expect(calcVariation(-50, -100)).toEqual({ delta: 50, percent: 50, direction: 'up' });
+  });
+});
+
+describe('calcMonthRunRate', () => {
+  it('projeta o mês pela média diária do realizado', () => {
+    // R$ 9.280 em 26 dias ⇒ ~357/dia; mês de 30 dias ⇒ ~10.714.
+    const r = calcMonthRunRate(9280, 26, 30);
+    expect(r.dailyAverage).toBe(356.92);
+    expect(r.projected).toBe(10707.6);
+  });
+
+  it('primeiro dia do mês: projeta o realizado × dias do mês', () => {
+    expect(calcMonthRunRate(100, 1, 31)).toEqual({ dailyAverage: 100, projected: 3100 });
+  });
+
+  it('nenhum dia decorrido ⇒ tudo 0 (sem base, sem ÷0)', () => {
+    expect(calcMonthRunRate(0, 0, 30)).toEqual({ dailyAverage: 0, projected: 0 });
+  });
+});
+
+describe('calcDaysToStockout', () => {
+  it('dias = estoque ÷ velocidade diária', () => {
+    // 24 em estoque, 6/dia ⇒ 4 dias.
+    expect(calcDaysToStockout(24, 6)).toBe(4);
+  });
+
+  it('não vende (velocidade 0) ⇒ null (não rompe)', () => {
+    expect(calcDaysToStockout(50, 0)).toBeNull();
+  });
+
+  it('estoque já zerado/negativo ⇒ 0', () => {
+    expect(calcDaysToStockout(0, 6)).toBe(0);
+    expect(calcDaysToStockout(-5, 6)).toBe(0);
+  });
+
+  it('arredonda a 1 casa', () => {
+    // 10 / 3 = 3,333… ⇒ 3,3.
+    expect(calcDaysToStockout(10, 3)).toBe(3.3);
   });
 });

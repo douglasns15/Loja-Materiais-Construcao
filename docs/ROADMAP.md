@@ -3,7 +3,22 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-26 — **Relatorios.v2 — Fatia 4 (Comparação com o período anterior)
+> **Última atualização:** 2026-08-26 — **Relatorios.v2 — Fatia 8 (Projeções "no ritmo atual") —
+> implementada. Deploy + E2E do Owner PENDENTES.** Nova seção **"Projeções · no ritmo atual"** (sempre
+> rotulada como direcional, não promessa) com 3 cards, independentes do filtro de período: **(1)
+> Faturamento do mês** por run-rate (média diária do recebido do mês × dias do mês, com barra
+> realizado/projeção); **(2) A receber (próx. 30 dias)** = saldo em aberto das dívidas OPEN que vencem
+> na janela (ADR-026, `dueDate`); **(3) Vai faltar estoque** = itens com estoque > 0 cuja velocidade de
+> saída (StockMovement EXPENSE, 30 dias) esgota o `stockQty` em ≤ 14 dias (top 5, mais urgente
+> primeiro; já-zerados são reposição, não entram). **Core (2 funções puras + 7 testes, Regra 2):**
+> `calcMonthRunRate` e `calcDaysToStockout` (velocidade ≤ 0 ⇒ null "não rompe"; estoque ≤ 0 ⇒ 0). **API:**
+> `GET /reports/projections` (reusa `computeSalesData` p/ o realizado do mês + 2 queries SQL cru).
+> **Web:** `ProjectionsSection`. **Sem migration.** **Gate:** core 299/299 (+7); shared 48/48; api `tsc`
+> 0; web `tsc` 0; **3 projeções validadas no banco** (mês: realizado R$ 7599,99 → projeção R$ 9061,61;
+> a receber 30d R$ 202,90/1 dívida; ruptura calculada). §8.2 atualizada. **Restam:** Fatia 7 (gráfico
+> temporal), 9 (insights configuráveis), 10 (export CSV/PDF).
+>
+> **Antes:** 2026-08-26 — **Relatorios.v2 — Fatia 4 (Comparação com o período anterior)
 > — NO AR e E2E DO OWNER VALIDADO (2026-08-26). CONCLUÍDA.** Deploy: API `da57851c` + web `30a43bbf`
 > (smoke OK). Fatia 6 (lucro & margem) validada junto (mesma tela). Cada card de KPI (Recebido, Lucro, Vendas·Ticket,
 > Canceladas) ganha um selo **▲/▼** vs. a **janela anterior equivalente** (Hoje→ontem; 7d→7d antes;

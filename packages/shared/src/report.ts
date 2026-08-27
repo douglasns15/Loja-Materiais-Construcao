@@ -216,3 +216,49 @@ export interface CustomerProductRow {
   qty: number;
   revenue: number;
 }
+
+/** Projeção de faturamento do mês "no ritmo atual" (Fatia 8) — direcional, não promessa. */
+export interface MonthRevenueProjection {
+  /** Recebido do mês corrente até hoje (regime de caixa, ADR-019). */
+  realized: number;
+  /** Dias decorridos do mês (dia do mês de hoje, fuso da loja). */
+  daysElapsed: number;
+  /** Total de dias do mês corrente. */
+  daysInMonth: number;
+  /** Média diária realizada. */
+  dailyAverage: number;
+  /** Projeção do mês inteiro no ritmo atual (`dailyAverage × daysInMonth`). */
+  projected: number;
+}
+
+/** A receber nos próximos N dias (Fatia 8): dívidas em aberto com vencimento na janela. */
+export interface UpcomingReceivables {
+  /** Soma dos saldos em aberto que vencem na janela. */
+  total: number;
+  /** Nº de dívidas que vencem na janela. */
+  count: number;
+  /** Tamanho da janela em dias (30). */
+  days: number;
+}
+
+/** Item em risco de ruptura de estoque (Fatia 8): esgota em poucos dias no ritmo de saída atual. */
+export interface StockoutRisk {
+  productId: string;
+  productName: string;
+  /** Estoque atual (unidade-base). */
+  stockQty: number;
+  /** Velocidade média de saída por dia (unidade-base), na janela de referência. */
+  dailyVelocity: number;
+  /** Dias até esgotar no ritmo atual (`stockQty / dailyVelocity`, 1 casa). */
+  daysToStockout: number;
+}
+
+/** Relatório de projeções (Fatia 8): as 3 projeções da seção "Projeções — no ritmo atual". */
+export interface ProjectionsReport {
+  monthRevenue: MonthRevenueProjection;
+  upcomingReceivables: UpcomingReceivables;
+  /** Itens mais próximos de romper (ordenados por menor prazo). Vazio = nada em risco. */
+  stockoutRisks: StockoutRisk[];
+  /** Janela (dias) usada para medir a velocidade de saída do estoque. */
+  velocityWindowDays: number;
+}

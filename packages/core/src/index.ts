@@ -1314,6 +1314,41 @@ export function calcVariation(current: number, previous: number): Variation {
   return { delta, percent, direction };
 }
 
+/** Projeção de faturamento do mês "no ritmo atual" (Fatia 8) — run-rate. */
+export interface MonthRunRate {
+  /** Média diária realizada = `realized / daysElapsed` (0 se nenhum dia decorreu). */
+  dailyAverage: number;
+  /** Projeção do mês inteiro no ritmo atual = `dailyAverage × daysInMonth` (2 casas). */
+  projected: number;
+}
+
+/**
+ * Projeção de faturamento do mês por run-rate (Fatia 8): média diária do realizado × dias do mês.
+ * É DIRECIONAL ("no ritmo atual"), não promessa. `daysElapsed ≤ 0` ⇒ tudo 0 (sem base). Função pura,
+ * testada (Regra 2). O caller agrega o realizado no banco e passa os dias.
+ */
+export function calcMonthRunRate(
+  realized: number,
+  daysElapsed: number,
+  daysInMonth: number,
+): MonthRunRate {
+  if (daysElapsed <= 0) return { dailyAverage: 0, projected: 0 };
+  const dailyAverage = Number((realized / daysElapsed).toFixed(2));
+  const projected = Number((dailyAverage * daysInMonth).toFixed(2));
+  return { dailyAverage, projected };
+}
+
+/**
+ * Dias até o estoque ESGOTAR no ritmo de saída atual (Fatia 8): `stockQty / velocidadeDiária`.
+ * `velocidade ≤ 0` (não vende) ⇒ `null` (não rompe). `stockQty ≤ 0` (já zerado/negativo) ⇒ 0.
+ * Direcional ("no ritmo atual"). Função pura, testada (Regra 2). Arredonda a 1 casa.
+ */
+export function calcDaysToStockout(stockQty: number, dailyVelocity: number): number | null {
+  if (dailyVelocity <= 0) return null;
+  if (stockQty <= 0) return 0;
+  return Number((stockQty / dailyVelocity).toFixed(1));
+}
+
 // =============================================================================
 // SINCRONIZAÇÃO OFFLINE (Outbox) — ADR-011
 // =============================================================================

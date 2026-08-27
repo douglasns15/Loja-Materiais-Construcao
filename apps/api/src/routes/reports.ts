@@ -4,6 +4,8 @@ import {
   calcAdjustedCashClosing,
   calcAverageTicket,
   calcCashDivergence,
+  calcDaysToStockout,
+  calcMonthRunRate,
   calcProfit,
   previousPeriod,
   withPaymentShare,
@@ -18,7 +20,9 @@ import {
   type PaymentComposition,
   type PaymentCompositionRow,
   type ProductCustomerRow,
+  type ProjectionsReport,
   type SalesComparison,
+  type StockoutRisk,
   type TopCustomerRow,
   type TopProductRow,
 } from '@nexoloja/shared';
@@ -669,6 +673,125 @@ reports.get('/customer-products/:customerId', async (c) => {
   } catch (err) {
     console.error('GET /reports/customer-products falhou:', err);
     return c.json({ ok: false, error: 'Falha ao detalhar o cliente.' }, 500);
+  }
+});
+
+/**
+ * Projeções "no ritmo atual" (Relatórios v2, Fatia 8) — DIRECIONAIS, não promessas. Três olhares
+ * para frente, independentes do filtro de período da tela:
+ *  1. **Faturamento do mês** por run-rate (média diária do recebido do mês × dias do mês).
+ *  2. **A receber (próx. 30 dias)** — saldo em aberto das dívidas que vencem na janela (ADR-026).
+ *  3. **Vai faltar estoque** — itens cuja velocidade de saída (StockMovement EXPENSE, 30 dias)
+ *     esgota o `stockQty` em poucos dias.
+ * Cálculos direcionais vivem em `core` (funções puras testadas); aqui só agregamos no banco.
+ */
+reports.get('/projections', async (c) => {
+  const tenantId = getTenantId(c);
+  const connectionString = getConnectionString(c.env);
+  if (!tenantId || !connectionString) {
+    return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
+  }
+
+  try {
+    const prisma = createPrismaClient(connectionString);
+    const DAY = 86_400_000;
+    const now = new Date();
+    // "Hoje" no fuso da loja (Brasil, UTC-3): desloca o relógio para ler ano/mês/dia locais.
+    const br = new Date(now.getTime() - 3 * 3_600_000);
+    const y = br.getUTCFullYear();
+    const mIdx = br.getUTCMonth();
+    const dayOfMonth = br.getUTCDate();
+    const daysInMonth = new Date(Date.UTC(y, mIdx + 1, 0)).getUTCDate();
+    const monthStart = new Date(`${y}-${String(mIdx + 1).padStart(2, '0')}-01T00:00:00.000-03:00`);
+    // Janela de vencimento (próx. 30 dias) — `dueDate` é data-only (meia-noite UTC, ADR-026).
+    const dueFrom = new Date(Date.UTC(y, mIdx, dayOfMonth, 0, 0, 0, 0));
+    const dueTo = new Date(Date.UTC(y, mIdx, dayOfMonth + 30, 23, 59, 59, 999));
+    // Janela de velocidade de estoque: últimos 30 dias.
+    const velocityWindowDays = 30;
+    const velocitySince = new Date(now.getTime() - velocityWindowDays * DAY);
+
+    const [monthData, upcomingAgg, stockRows] = await Promise.all([
+      // 1. Recebido do mês até agora (mesma regra de caixa do /sales — reusa o helper).
+      computeSalesData(prisma, tenantId, { gte: monthStart, lte: now }),
+      // 2. A receber próx. 30 dias: saldo em aberto das dívidas OPEN que vencem na janela.
+      prisma.$queryRaw<Array<{ total: number; count: bigint }>>(Prisma.sql`
+        SELECT
+          COALESCE(SUM(r."originalAmount" - r."settledAmount" - r."returnedAmount"), 0)::float8 AS "total",
+          COUNT(DISTINCT d."id") AS "count"
+        FROM "debts" d
+        JOIN "receivables" r ON r."debtId" = d."id"
+        WHERE d."tenantId" = ${tenantId}::uuid
+          AND d."status" = 'OPEN'
+          AND r."status" = 'OPEN'
+          AND d."dueDate" >= ${dueFrom}
+          AND d."dueDate" <= ${dueTo}
+      `),
+      // 3. Velocidade de saída (EXPENSE) por produto nos últimos 30 dias + estoque atual.
+      prisma.$queryRaw<
+        Array<{ productId: string; productName: string; stockQty: number; consumed: number }>
+      >(Prisma.sql`
+        SELECT
+          p."id" AS "productId",
+          p."name" AS "productName",
+          p."stockQty"::float8 AS "stockQty",
+          COALESCE(SUM(sm."quantity"), 0)::float8 AS "consumed"
+        FROM "products" p
+        JOIN "stock_movements" sm
+          ON sm."productId" = p."id" AND sm."type" = 'EXPENSE' AND sm."createdAt" >= ${velocitySince}
+        WHERE p."tenantId" = ${tenantId}::uuid AND p."deletedAt" IS NULL AND p."isActive" = true
+        GROUP BY p."id", p."name", p."stockQty"
+      `),
+    ]);
+
+    const monthRunRate = calcMonthRunRate(monthData.totalRevenue, dayOfMonth, daysInMonth);
+
+    const up = upcomingAgg[0] ?? { total: 0, count: 0n };
+
+    // Ruptura: dias-para-esgotar por item (função pura). "VAI faltar" = ainda tem estoque (> 0) e
+    // rompe em ≤ 14 dias no ritmo atual — itens já zerados ("já faltou") são outra tela (reposição do
+    // Estoque), não entram aqui. Ordenado do mais urgente; teto de 5 (é um alerta, não a lista toda).
+    const RUPTURE_LIMIT_DAYS = 14;
+    const stockoutRisks: StockoutRisk[] = stockRows
+      .filter((r) => r.stockQty > 0)
+      .map((r) => {
+        const dailyVelocity = Number((r.consumed / velocityWindowDays).toFixed(4));
+        const days = calcDaysToStockout(r.stockQty, dailyVelocity);
+        return { r, dailyVelocity, days };
+      })
+      .filter((x): x is { r: (typeof stockRows)[number]; dailyVelocity: number; days: number } =>
+        x.days !== null && x.days <= RUPTURE_LIMIT_DAYS,
+      )
+      .sort((a, b) => a.days - b.days)
+      .slice(0, 5)
+      .map(({ r, dailyVelocity, days }) => ({
+        productId: r.productId,
+        productName: r.productName,
+        stockQty: r.stockQty,
+        dailyVelocity,
+        daysToStockout: days,
+      }));
+
+    const data: ProjectionsReport = {
+      monthRevenue: {
+        realized: monthData.totalRevenue,
+        daysElapsed: dayOfMonth,
+        daysInMonth,
+        dailyAverage: monthRunRate.dailyAverage,
+        projected: monthRunRate.projected,
+      },
+      upcomingReceivables: {
+        total: Number(up.total.toFixed(2)),
+        count: Number(up.count),
+        days: 30,
+      },
+      stockoutRisks,
+      velocityWindowDays,
+    };
+
+    return c.json({ ok: true, data });
+  } catch (err) {
+    console.error('GET /reports/projections falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao gerar as projeções.' }, 500);
   }
 });
 

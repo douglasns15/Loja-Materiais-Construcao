@@ -14,6 +14,7 @@ import { OfflineNotice } from '@/components/OfflineNotice';
 import { CashMovementsList } from '@/components/CashMovementsList';
 import { PaymentCompositionModal } from '@/components/PaymentCompositionModal';
 import { PeriodFilter, defaultRange } from '@/components/PeriodFilter';
+import { ProjectionsSection } from '@/components/ProjectionsSection';
 import { TopCustomersCard } from '@/components/TopCustomersCard';
 import { TopProductsCard } from '@/components/TopProductsCard';
 
@@ -412,6 +413,11 @@ export default function RelatoriosPage() {
           receber; os recebimentos entram em &ldquo;Recebido no período&rdquo;).
         </p>
       )}
+
+      <SectionLabel>Projeções · no ritmo atual</SectionLabel>
+
+      {/* Projeções (Fatia 8) — direcionais, independentes do filtro de período. */}
+      <ProjectionsSection />
 
       <SectionLabel>Composição do recebido</SectionLabel>
 

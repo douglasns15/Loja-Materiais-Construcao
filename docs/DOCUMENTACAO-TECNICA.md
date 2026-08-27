@@ -486,6 +486,7 @@ testável exaustivamente e compartilhada entre as duas apps.
 | `GET /product-customers/:productId` | "Quem mais compra" um produto (`?from=&to=`): top clientes por faturamento naquele produto — detalhe do pop-up (Fatia 5). |
 | `GET /top-customers` | Ranking de clientes no período (`?q=&orderBy=faturamento\|lucro&from=&to=&limit=`): total comprado, nº de compras, lucro/margem (custo carimbado) e **dívida atual** (saldo em aberto agora). Só clientes identificados (Fatia 5). |
 | `GET /customer-products/:customerId` | "O que costuma comprar" um cliente (`?from=&to=`): top produtos por faturamento daquele cliente — detalhe do pop-up (Fatia 5). |
+| `GET /projections` | Projeções "no ritmo atual" (Fatia 8), independentes do filtro: faturamento do mês (run-rate), a receber próx. 30 dias (vencimentos ADR-026) e itens que vão faltar (velocidade de saída, StockMovement 30d). |
 | `GET /cash-sessions` | Relatório de caixas (aberturas/fechamentos). |
 
 **`/tenant`, `/me`, `/users` — Loja, sessão e usuários**
