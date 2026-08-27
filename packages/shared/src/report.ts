@@ -157,3 +157,32 @@ export interface ProductCustomerRow {
   qty: number;
   revenue: number;
 }
+
+/**
+ * Linha do ranking de CLIENTES no período (Fatia 5). Lucro/margem só das vendas com custo carimbado
+ * (ADR-027). `currentDebt` é a dívida atual (saldo em aberto) — independe do período do relatório.
+ */
+export interface TopCustomerRow {
+  customerId: string;
+  customerName: string;
+  /** Total comprado no período (Σ dos totais das linhas), inclui vendas sem custo. */
+  revenue: number;
+  /** Nº de compras (vendas) no período — base do ticket. */
+  salesCount: number;
+  /** Lucro bruto gerado (só linhas com custo). Ver `costCoverage`. */
+  grossProfit: number;
+  /** Margem % sobre a receita coberta. */
+  marginPercent: number;
+  /** Fração do faturamento com custo (0..1). */
+  costCoverage: number;
+  /** Dívida atual do cliente (saldo em aberto AGORA, não do período). 0 se não deve. */
+  currentDebt: number;
+}
+
+/** "O que costuma comprar" um cliente (Fatia 5): top produtos por faturamento daquele cliente. */
+export interface CustomerProductRow {
+  productId: string;
+  productName: string;
+  qty: number;
+  revenue: number;
+}

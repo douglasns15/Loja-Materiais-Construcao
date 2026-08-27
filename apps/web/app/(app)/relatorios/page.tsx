@@ -13,6 +13,7 @@ import { OfflineNotice } from '@/components/OfflineNotice';
 import { CashMovementsList } from '@/components/CashMovementsList';
 import { PaymentCompositionModal } from '@/components/PaymentCompositionModal';
 import { PeriodFilter, defaultRange } from '@/components/PeriodFilter';
+import { TopCustomersCard } from '@/components/TopCustomersCard';
 import { TopProductsCard } from '@/components/TopProductsCard';
 
 const BRL = (v: number) =>
@@ -377,8 +378,12 @@ export default function RelatoriosPage() {
 
       <SectionLabel>Produtos e clientes</SectionLabel>
 
-      {/* Ranking de produtos (Fatia 5A) — card colapsável com busca e detalhe em pop-up. */}
-      <TopProductsCard from={range.from ?? null} to={range.to ?? null} />
+      {/* Rankings (Fatia 5) — cards colapsáveis com busca e detalhe em pop-up. Lado a lado no
+          desktop; empilhados no celular. */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <TopProductsCard from={range.from ?? null} to={range.to ?? null} />
+        <TopCustomersCard from={range.from ?? null} to={range.to ?? null} />
+      </div>
 
       <SectionLabel>Caixa</SectionLabel>
 

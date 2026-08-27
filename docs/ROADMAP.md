@@ -3,8 +3,28 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-26 — **Relatorios.v2 — Fatia 3 (Drill-down por forma de pagamento)
-> — implementada, gate de soma validado com dados reais. Deploy + E2E visual do Owner PENDENTES.**
+> **Última atualização:** 2026-08-26 — **Relatorios.v2 — Fatia 5 (Top produtos & clientes + busca +
+> pop-up de detalhe) — implementada em 2 sub-fatias (5A produtos, 5B clientes). Deploy + E2E do Owner
+> PENDENTES.** Dois cards colapsáveis (Produtos, Melhores clientes) sob "Produtos e clientes", cada um
+> com **busca sem acento** (no servidor, `unaccent`) e ordenação por **faturamento** ou **lucro**;
+> clicar (na lista ou no resultado) abre **pop-up enxuto**. **Lucro/margem** vêm do custo carimbado
+> (Fatia 2/ADR-027) via nova função pura **`calcProfit`** em `core` (lucro bruto, margem e
+> **cobertura de custo** — só vendas com `unitCost` entram, nunca custo zero; cobertura parcial é
+> sinalizada), **6 testes** (Regra 2). **API (4 rotas novas):** `GET /reports/top-products` e
+> `/top-customers` (agregação SQL cru com `FILTER (WHERE unitCost IS NOT NULL)` + `unaccent`; clientes
+> trazem **dívida atual** = saldo OPEN agora, em 2ª consulta enxuta), `/product-customers/:id` ("quem
+> mais compra") e `/customer-products/:id` ("o que costuma comprar"). **Web:** `TopProductsCard`,
+> `TopCustomersCard`, `ProductDetailModal`, `CustomerDetailModal` (identidade do `DebtDetailModal`);
+> cards lado a lado no desktop. Tipos em `shared` (`topReportSchema`, `TopProductRow`,
+> `TopCustomerRow`, `ProductCustomerRow`, `CustomerProductRow`). **Sem migration.** **Gate:** core
+> 282/282 (+6); shared 48/48; api `tsc` 0; web `tsc` 0; **SQL validado no banco** (faturamento/qtd/
+> vendas/lucro/cobertura e dívida atual conferem; `unaccent` OK; venda #76 → Cimento lucro R$ 2,00,
+> cobertura 2%; "Arame" prejuízo com cobertura 100%). §8.2 atualizada. **Próxima:** Fatia 6 (lucro &
+> margem no "Resultado do período") — reusa `calcProfit`; ou Fatia 4 (comparação com período anterior).
+>
+> **Antes:** 2026-08-26 — **Relatorios.v2 — Fatia 3 (Drill-down por forma de pagamento)
+> — NO AR e E2E DO OWNER VALIDADO (2026-08-26). CONCLUÍDA.** Deploy: API `4d8457bf` + web `832497f0`
+> (smoke OK; rota nova responde 401 sem token = registrada).
 > Clicar numa forma na tabela "Por forma de pagamento" abre um **pop-up** com a COMPOSIÇÃO daquele
 > valor: as vendas à vista (`Payment`) + os recebimentos de dívida (`ReceivablePayment`, somando o
 > acréscimo de cartão — ADR-022) que somam o "Recebido" da forma. **Nova rota** `GET

@@ -13,9 +13,11 @@ import {
   paymentCompositionSchema,
   reportRangeSchema,
   topReportSchema,
+  type CustomerProductRow,
   type PaymentComposition,
   type PaymentCompositionRow,
   type ProductCustomerRow,
+  type TopCustomerRow,
   type TopProductRow,
 } from '@nexoloja/shared';
 import { type Env, getConnectionString, getTenantId } from '../lib/request';
@@ -432,6 +434,183 @@ reports.get('/product-customers/:productId', async (c) => {
   } catch (err) {
     console.error('GET /reports/product-customers falhou:', err);
     return c.json({ ok: false, error: 'Falha ao detalhar o produto.' }, 500);
+  }
+});
+
+/**
+ * Ranking de CLIENTES no período (Relatórios v2, Fatia 5). Agrega compras (vendas não canceladas com
+ * cliente identificado): total comprado, nº de compras e lucro/margem (custo carimbado, ADR-027). A
+ * **dívida atual** (saldo em aberto AGORA, independente do período) vem numa 2ª consulta enxuta só
+ * para os clientes do ranking. Aceita busca `q` (sem acento) e ordena por `faturamento`/`lucro`.
+ */
+reports.get('/top-customers', async (c) => {
+  const tenantId = getTenantId(c);
+  const connectionString = getConnectionString(c.env);
+  if (!tenantId || !connectionString) {
+    return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
+  }
+
+  const parsed = topReportSchema.safeParse({
+    from: c.req.query('from'),
+    to: c.req.query('to'),
+    q: c.req.query('q'),
+    orderBy: c.req.query('orderBy'),
+    limit: c.req.query('limit'),
+  });
+  if (!parsed.success) {
+    return c.json({ ok: false, error: 'Parâmetros inválidos.', issues: parsed.error.flatten() }, 400);
+  }
+  const { from, to, q, orderBy = 'faturamento', limit = 10 } = parsed.data;
+  const range = buildDateFilter(from, to);
+
+  try {
+    const prisma = createPrismaClient(connectionString);
+    const conditions: Prisma.Sql[] = [
+      Prisma.sql`o."tenantId" = ${tenantId}::uuid`,
+      Prisma.sql`o."status" <> 'CANCELLED'`,
+      // Só clientes identificados (venda de balcão sem cadastro não entra no ranking de clientes).
+      Prisma.sql`o."customerId" IS NOT NULL`,
+    ];
+    if (range?.gte) conditions.push(Prisma.sql`o."createdAt" >= ${range.gte}`);
+    if (range?.lte) conditions.push(Prisma.sql`o."createdAt" <= ${range.lte}`);
+    for (const token of q ? q.split(/\s+/).filter(Boolean) : []) {
+      const pat = `%${likeEscape(token)}%`;
+      conditions.push(Prisma.sql`extensions.unaccent(c."name") ILIKE extensions.unaccent(${pat})`);
+    }
+    const orderExpr =
+      orderBy === 'lucro' ? Prisma.sql`"grossProfit" DESC` : Prisma.sql`"revenue" DESC`;
+
+    const rows = await prisma.$queryRaw<
+      Array<{
+        customerId: string;
+        customerName: string;
+        revenue: number;
+        salesCount: number;
+        coveredRevenue: number;
+        coveredCost: number;
+      }>
+    >(Prisma.sql`
+      SELECT
+        o."customerId" AS "customerId",
+        MAX(c."name") AS "customerName",
+        SUM(oi."total")::float8 AS "revenue",
+        COUNT(DISTINCT oi."orderId")::int AS "salesCount",
+        COALESCE(SUM(oi."total") FILTER (WHERE oi."unitCost" IS NOT NULL), 0)::float8 AS "coveredRevenue",
+        COALESCE(SUM(oi."unitCost" * COALESCE(oi."baseQuantity", oi."quantity")) FILTER (WHERE oi."unitCost" IS NOT NULL), 0)::float8 AS "coveredCost",
+        (
+          COALESCE(SUM(oi."total") FILTER (WHERE oi."unitCost" IS NOT NULL), 0)
+          - COALESCE(SUM(oi."unitCost" * COALESCE(oi."baseQuantity", oi."quantity")) FILTER (WHERE oi."unitCost" IS NOT NULL), 0)
+        )::float8 AS "grossProfit"
+      FROM "order_items" oi
+      JOIN "orders" o ON o."id" = oi."orderId"
+      JOIN "customers" c ON c."id" = o."customerId"
+      WHERE ${Prisma.join(conditions, ' AND ')}
+      GROUP BY o."customerId"
+      ORDER BY ${orderExpr}
+      LIMIT ${limit}
+    `);
+
+    // Dívida atual (saldo em aberto AGORA) só dos clientes do ranking — 2ª consulta enxuta.
+    const ids = rows.map((r) => r.customerId);
+    const debtByCustomer = new Map<string, number>();
+    if (ids.length > 0) {
+      const debts = await prisma.$queryRaw<Array<{ customerId: string; debt: number }>>(Prisma.sql`
+        SELECT rc."customerId" AS "customerId",
+          COALESCE(SUM(rc."originalAmount" - rc."settledAmount" - rc."returnedAmount"), 0)::float8 AS "debt"
+        FROM "receivables" rc
+        WHERE rc."tenantId" = ${tenantId}::uuid
+          AND rc."status" = 'OPEN'
+          AND rc."customerId" IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`))})
+        GROUP BY rc."customerId"
+      `);
+      for (const d of debts) debtByCustomer.set(d.customerId, Number(d.debt.toFixed(2)));
+    }
+
+    const data: TopCustomerRow[] = rows.map((r) => {
+      const { grossProfit, marginPercent, costCoverage } = calcProfit({
+        totalRevenue: r.revenue,
+        coveredRevenue: r.coveredRevenue,
+        coveredCost: r.coveredCost,
+      });
+      return {
+        customerId: r.customerId,
+        customerName: r.customerName ?? 'Cliente',
+        revenue: Number(r.revenue.toFixed(2)),
+        salesCount: r.salesCount,
+        grossProfit,
+        marginPercent,
+        costCoverage,
+        currentDebt: debtByCustomer.get(r.customerId) ?? 0,
+      };
+    });
+
+    return c.json({ ok: true, data });
+  } catch (err) {
+    console.error('GET /reports/top-customers falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao gerar o ranking de clientes.' }, 500);
+  }
+});
+
+/**
+ * "O que costuma comprar" um cliente (Fatia 5): top produtos por faturamento daquele cliente no
+ * período. Alimenta o pop-up de detalhe do cliente.
+ */
+reports.get('/customer-products/:customerId', async (c) => {
+  const tenantId = getTenantId(c);
+  const connectionString = getConnectionString(c.env);
+  if (!tenantId || !connectionString) {
+    return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
+  }
+  const customerId = c.req.param('customerId');
+  if (!/^[0-9a-f-]{36}$/i.test(customerId)) {
+    return c.json({ ok: false, error: 'Cliente inválido.' }, 400);
+  }
+
+  const parsed = reportRangeSchema.safeParse({ from: c.req.query('from'), to: c.req.query('to') });
+  if (!parsed.success) {
+    return c.json({ ok: false, error: 'Período inválido.', issues: parsed.error.flatten() }, 400);
+  }
+  const { from, to } = parsed.data;
+  const range = buildDateFilter(from, to);
+
+  try {
+    const prisma = createPrismaClient(connectionString);
+    const conditions: Prisma.Sql[] = [
+      Prisma.sql`o."tenantId" = ${tenantId}::uuid`,
+      Prisma.sql`o."status" <> 'CANCELLED'`,
+      Prisma.sql`o."customerId" = ${customerId}::uuid`,
+    ];
+    if (range?.gte) conditions.push(Prisma.sql`o."createdAt" >= ${range.gte}`);
+    if (range?.lte) conditions.push(Prisma.sql`o."createdAt" <= ${range.lte}`);
+
+    const rows = await prisma.$queryRaw<
+      Array<{ productId: string; productName: string | null; qty: number; revenue: number }>
+    >(Prisma.sql`
+      SELECT
+        oi."productId" AS "productId",
+        COALESCE(MAX(p."name"), MAX(oi."productName")) AS "productName",
+        SUM(oi."quantity")::float8 AS "qty",
+        SUM(oi."total")::float8 AS "revenue"
+      FROM "order_items" oi
+      JOIN "orders" o ON o."id" = oi."orderId"
+      LEFT JOIN "products" p ON p."id" = oi."productId"
+      WHERE ${Prisma.join(conditions, ' AND ')}
+      GROUP BY oi."productId"
+      ORDER BY "revenue" DESC
+      LIMIT 5
+    `);
+
+    const data: CustomerProductRow[] = rows.map((r) => ({
+      productId: r.productId,
+      productName: r.productName ?? 'Produto',
+      qty: Number(r.qty),
+      revenue: Number(r.revenue.toFixed(2)),
+    }));
+
+    return c.json({ ok: true, data });
+  } catch (err) {
+    console.error('GET /reports/customer-products falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao detalhar o cliente.' }, 500);
   }
 });
 

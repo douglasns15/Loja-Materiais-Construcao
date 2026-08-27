@@ -484,6 +484,8 @@ testável exaustivamente e compartilhada entre as duas apps.
 | `GET /payment-composition` | Drill-down de UMA forma (`?method=&from=&to=`): as linhas (venda à vista + recebimento de dívida) que somam o "Recebido" da forma — Σ linhas = total daquela forma no `/sales` (Fatia 3, Relatórios v2). |
 | `GET /top-products` | Ranking de produtos no período (`?q=&orderBy=faturamento\|lucro&from=&to=&limit=`): faturamento, qtd, nº de vendas e lucro/margem (custo carimbado, ADR-027) com cobertura. Busca sem acento (Fatia 5). |
 | `GET /product-customers/:productId` | "Quem mais compra" um produto (`?from=&to=`): top clientes por faturamento naquele produto — detalhe do pop-up (Fatia 5). |
+| `GET /top-customers` | Ranking de clientes no período (`?q=&orderBy=faturamento\|lucro&from=&to=&limit=`): total comprado, nº de compras, lucro/margem (custo carimbado) e **dívida atual** (saldo em aberto agora). Só clientes identificados (Fatia 5). |
+| `GET /customer-products/:customerId` | "O que costuma comprar" um cliente (`?from=&to=`): top produtos por faturamento daquele cliente — detalhe do pop-up (Fatia 5). |
 | `GET /cash-sessions` | Relatório de caixas (aberturas/fechamentos). |
 
 **`/tenant`, `/me`, `/users` — Loja, sessão e usuários**
