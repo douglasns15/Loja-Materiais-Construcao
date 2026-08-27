@@ -3,17 +3,20 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-26 — **Relatorios.v2 — Fatia 7 (Gráfico temporal + toggle
-> Tabela/Gráfico) — implementada. Deploy + E2E do Owner PENDENTES.** O painel "Composição do recebido"
-> ganhou um toggle **▤ Tabela × 📈 Gráfico**: o gráfico é um **barras diário do recebido** (SVG à mão,
-> sem lib — custo-zero), com a barra de **hoje** destacada em verde e tooltip nativo por dia. **API:**
-> `GET /reports/daily?from=&to=` — à vista pela data da venda + fiado por `paidAt`, somados por dia no
-> fuso da loja (−3h), preenchendo dias sem movimento com 0. Por construção `Σ barras = "Recebido do
-> período"`. **Web:** `DailyRevenueChart` (SVG responsivo por viewBox) + toggle no cabeçalho do painel.
-> **Shared:** `DailyRevenuePoint`. **Sem migration, sem lib de gráfico** (SVG puro). **Gate:** shared
-> 48/48; core 309/309; api `tsc` 0; web `tsc` 0; **Σ barras = Recebido validado no banco** (7d:
-> R$ 1892,59 = /sales, dia sem venda zerado correto). §8.2 atualizada. **Restam:** Fatia 9 (insights
-> configuráveis) e 10 (export CSV/PDF).
+> **Última atualização:** 2026-08-27 — **Relatorios.v2 — Fatia 7 (Gráfico temporal) — NO AR + REFINO
+> "empilhado por forma" no mesmo dia (E2E do Owner). Deploy do refino PENDENTE.** O painel "Composição
+> do recebido" tem toggle **▤ Tabela × 📈 Gráfico**. Após o E2E, o Owner apontou que o gráfico "cru"
+> (1 barra em "Hoje") era pouco útil; à pergunta "o que os grandes usam?", registrado que POS/adquirente
+> (Square/Stone/Cielo) mostram **série temporal EMPILHADA por forma de pagamento** — adotado: cada barra
+> do dia é dividida por PIX/Dinheiro/Cartão (cores + legenda), juntando tendência + composição e fazendo
+> sentido até com 1 dia. **API:** `GET /reports/daily` agora agrupa por **dia E forma** (`byMethod` no
+> ponto); Σ formas do dia = total do dia, Σ dias = "Recebido do período". **Web:** `DailyRevenueChart`
+> empilhado (SVG à mão, sem lib), hoje em verde, tooltip por dia com a quebra. **Sem migration.**
+> **Gate:** shared 48/48; core 309/309; api `tsc` 0; web `tsc` 0; **Σ empilhado = Recebido validado no
+> banco** (7d R$ 1892,59). §8.2. Também: confirmado que a queda da projeção do mês na virada do dia é o
+> run-rate diluindo (hoje 27/08 zerado) — mantido incluindo hoje (escolha do Owner); **backlog aberto:
+> dias de funcionamento em Configurações** (ver plano §backlog). **Restam:** Fatia 9 (insights) e 10
+> (export CSV/PDF).
 >
 > **Antes:** 2026-08-26 — **Relatorios.v2 — Fatia 8 (Projeções "no ritmo atual") —
 > NO AR e E2E DO OWNER VALIDADO (2026-08-26), incluindo os 2 refinos. CONCLUÍDA.** Deploy final: API

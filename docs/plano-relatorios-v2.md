@@ -184,3 +184,10 @@ Cada fatia é entregável e testável isoladamente. Marcar progresso no `ROADMAP
 - Export para `.xlsx` formatado / lib de PDF (decisão arquitetural — regra 4).
 - Recompor custo histórico de vendas antigas (não há snapshot retroativo; margem vale "daqui pra
   frente").
+- **Dias de funcionamento da loja (config em Configurações)** — hoje o run-rate do mês usa dias de
+  CALENDÁRIO (fechados entram no divisor e no multiplicador, então quase se cancelam: a projeção fica
+  correta; só o rótulo "R$/dia" parece baixo por incluir fins de semana). Configurar os dias abertos
+  melhoraria a clareza do "/dia" (viraria "por dia aberto") e a precisão em viradas de mês atípicas.
+  Mexe em Settings + schema (por-tenant) — refino futuro, não urgente. Levantado pelo Owner em 2026-08-27.
+- **Ponto de reposição de verdade** (lead time + estoque de segurança) para o "vai faltar" — hoje é
+  direcional pela velocidade típica; o padrão dos grandes ERPs é ROP = demanda × lead time + segurança.

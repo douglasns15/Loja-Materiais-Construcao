@@ -849,30 +849,47 @@ reports.get('/daily', async (c) => {
     if (paidAt?.lte) creditConditions.push(Prisma.sql`rp."paidAt" <= ${paidAt.lte}`);
 
     const [cashByDay, creditByDay] = await Promise.all([
-      // À vista por dia (pela data da venda, fuso da loja).
-      prisma.$queryRaw<Array<{ day: string; total: number }>>(Prisma.sql`
+      // À vista por dia E forma (pela data da venda, fuso da loja).
+      prisma.$queryRaw<Array<{ day: string; method: string; total: number }>>(Prisma.sql`
         SELECT to_char((o."createdAt" - interval '3 hours')::date, 'YYYY-MM-DD') AS "day",
+               pay."method" AS "method",
                SUM(pay."amount")::float8 AS "total"
         FROM "payments" pay
         JOIN "orders" o ON o."id" = pay."orderId"
         WHERE ${Prisma.join(cashConditions, ' AND ')}
-        GROUP BY 1
+        GROUP BY 1, 2
       `),
-      // Fiado por dia (pela data do recebimento) — valor + acréscimo de cartão (ADR-022).
-      prisma.$queryRaw<Array<{ day: string; total: number }>>(Prisma.sql`
+      // Fiado por dia E forma (pela data do recebimento) — valor + acréscimo de cartão (ADR-022).
+      prisma.$queryRaw<Array<{ day: string; method: string; total: number }>>(Prisma.sql`
         SELECT to_char((rp."paidAt" - interval '3 hours')::date, 'YYYY-MM-DD') AS "day",
+               rp."method" AS "method",
                SUM(rp."amount" + rp."surcharge")::float8 AS "total"
         FROM "receivable_payments" rp
         WHERE ${Prisma.join(creditConditions, ' AND ')}
-        GROUP BY 1
+        GROUP BY 1, 2
       `),
     ]);
 
-    // Soma as duas fontes por dia.
-    const byDay = new Map<string, number>();
+    // Soma as duas fontes por (dia, forma).
+    const byDay = new Map<string, Map<string, number>>();
     for (const r of [...cashByDay, ...creditByDay]) {
-      byDay.set(r.day, Number(((byDay.get(r.day) ?? 0) + Number(r.total)).toFixed(2)));
+      const methods = byDay.get(r.day) ?? new Map<string, number>();
+      methods.set(r.method, Number(((methods.get(r.method) ?? 0) + Number(r.total)).toFixed(2)));
+      byDay.set(r.day, methods);
     }
+
+    const toPoint = (day: string): DailyRevenuePoint => {
+      const methods = byDay.get(day);
+      const byMethod: Record<string, number> = {};
+      let total = 0;
+      if (methods) {
+        for (const [m, v] of methods) {
+          byMethod[m] = v;
+          total += v;
+        }
+      }
+      return { day, total: Number(total.toFixed(2)), byMethod };
+    };
 
     let points: DailyRevenuePoint[];
     if (from && to) {
@@ -884,14 +901,11 @@ reports.get('/daily', async (c) => {
       };
       points = [];
       for (let ms = ymd(from); ms <= ymd(to); ms += DAY) {
-        const day = new Date(ms).toISOString().slice(0, 10);
-        points.push({ day, total: byDay.get(day) ?? 0 });
+        points.push(toPoint(new Date(ms).toISOString().slice(0, 10)));
       }
     } else {
       // Sem intervalo (todo o histórico): só os dias com movimento, em ordem.
-      points = [...byDay.entries()]
-        .map(([day, total]) => ({ day, total }))
-        .sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
+      points = [...byDay.keys()].sort().map(toPoint);
     }
 
     return c.json({ ok: true, data: points });
