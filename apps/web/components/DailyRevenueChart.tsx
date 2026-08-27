@@ -123,7 +123,9 @@ export function DailyRevenueChart({ from, to }: { from: string | null; to: strin
           {points.map((p, i) => {
             const x = padL + i * slot + (slot - barW) / 2;
             const isToday = p.day === today;
-            const showLabel = i % labelStep === 0 || i === n - 1 || isToday;
+            // Rótulos ANCORADOS no último dia (espaçamento uniforme terminando em hoje) — evita a
+            // colisão do penúltimo com o último que havia no modo 30 dias.
+            const showLabel = (n - 1 - i) % labelStep === 0;
             // Empilha as formas de baixo para cima, na ordem estável da legenda.
             let yCursor = baseY;
             const segments = methods
