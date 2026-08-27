@@ -16,6 +16,7 @@ import {
   formatOrderNumber,
   paymentCompositionSchema,
   reportRangeSchema,
+  type DailyRevenuePoint,
   topReportSchema,
   type CustomerProductRow,
   type PaymentComposition,
@@ -811,6 +812,92 @@ reports.get('/projections', async (c) => {
   } catch (err) {
     console.error('GET /reports/projections falhou:', err);
     return c.json({ ok: false, error: 'Falha ao gerar as projeções.' }, 500);
+  }
+});
+
+/**
+ * Recebido por DIA no período (Relatórios v2, Fatia 7) — alimenta o gráfico de barras (SVG à mão).
+ * Mesma regra de caixa do `/sales` (ADR-019): à vista pela data da venda + fiado pela data do
+ * recebimento (`paidAt`), somados por dia no fuso da loja (−3h). Por construção, `Σ dias = Recebido
+ * do período` (o gate). Preenche os dias sem movimento com 0 (barras uniformes) quando há intervalo.
+ */
+reports.get('/daily', async (c) => {
+  const tenantId = getTenantId(c);
+  const connectionString = getConnectionString(c.env);
+  if (!tenantId || !connectionString) {
+    return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
+  }
+
+  const parsed = reportRangeSchema.safeParse({ from: c.req.query('from'), to: c.req.query('to') });
+  if (!parsed.success) {
+    return c.json({ ok: false, error: 'Período inválido.', issues: parsed.error.flatten() }, 400);
+  }
+  const { from, to } = parsed.data;
+  const createdAt = buildDateFilter(from, to);
+  const paidAt = createdAt;
+
+  try {
+    const prisma = createPrismaClient(connectionString);
+    const cashConditions: Prisma.Sql[] = [
+      Prisma.sql`o."tenantId" = ${tenantId}::uuid`,
+      Prisma.sql`o."status" <> 'CANCELLED'`,
+    ];
+    if (createdAt?.gte) cashConditions.push(Prisma.sql`o."createdAt" >= ${createdAt.gte}`);
+    if (createdAt?.lte) cashConditions.push(Prisma.sql`o."createdAt" <= ${createdAt.lte}`);
+    const creditConditions: Prisma.Sql[] = [Prisma.sql`rp."tenantId" = ${tenantId}::uuid`];
+    if (paidAt?.gte) creditConditions.push(Prisma.sql`rp."paidAt" >= ${paidAt.gte}`);
+    if (paidAt?.lte) creditConditions.push(Prisma.sql`rp."paidAt" <= ${paidAt.lte}`);
+
+    const [cashByDay, creditByDay] = await Promise.all([
+      // À vista por dia (pela data da venda, fuso da loja).
+      prisma.$queryRaw<Array<{ day: string; total: number }>>(Prisma.sql`
+        SELECT to_char((o."createdAt" - interval '3 hours')::date, 'YYYY-MM-DD') AS "day",
+               SUM(pay."amount")::float8 AS "total"
+        FROM "payments" pay
+        JOIN "orders" o ON o."id" = pay."orderId"
+        WHERE ${Prisma.join(cashConditions, ' AND ')}
+        GROUP BY 1
+      `),
+      // Fiado por dia (pela data do recebimento) — valor + acréscimo de cartão (ADR-022).
+      prisma.$queryRaw<Array<{ day: string; total: number }>>(Prisma.sql`
+        SELECT to_char((rp."paidAt" - interval '3 hours')::date, 'YYYY-MM-DD') AS "day",
+               SUM(rp."amount" + rp."surcharge")::float8 AS "total"
+        FROM "receivable_payments" rp
+        WHERE ${Prisma.join(creditConditions, ' AND ')}
+        GROUP BY 1
+      `),
+    ]);
+
+    // Soma as duas fontes por dia.
+    const byDay = new Map<string, number>();
+    for (const r of [...cashByDay, ...creditByDay]) {
+      byDay.set(r.day, Number(((byDay.get(r.day) ?? 0) + Number(r.total)).toFixed(2)));
+    }
+
+    let points: DailyRevenuePoint[];
+    if (from && to) {
+      // Preenche todos os dias do intervalo (inclusive), com 0 onde não houve recebimento.
+      const DAY = 86_400_000;
+      const ymd = (d: string) => {
+        const [yy, mm, dd] = d.split('-');
+        return Date.UTC(Number(yy), Number(mm) - 1, Number(dd));
+      };
+      points = [];
+      for (let ms = ymd(from); ms <= ymd(to); ms += DAY) {
+        const day = new Date(ms).toISOString().slice(0, 10);
+        points.push({ day, total: byDay.get(day) ?? 0 });
+      }
+    } else {
+      // Sem intervalo (todo o histórico): só os dias com movimento, em ordem.
+      points = [...byDay.entries()]
+        .map(([day, total]) => ({ day, total }))
+        .sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
+    }
+
+    return c.json({ ok: true, data: points });
+  } catch (err) {
+    console.error('GET /reports/daily falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao gerar o gráfico diário.' }, 500);
   }
 });
 

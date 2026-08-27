@@ -12,6 +12,7 @@ import { apiGet } from '@/lib/api';
 import { useOnline } from '@/lib/useOnline';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { CashMovementsList } from '@/components/CashMovementsList';
+import { DailyRevenueChart } from '@/components/DailyRevenueChart';
 import { PaymentCompositionModal } from '@/components/PaymentCompositionModal';
 import { PeriodFilter, defaultRange } from '@/components/PeriodFilter';
 import { ProjectionsSection } from '@/components/ProjectionsSection';
@@ -244,6 +245,8 @@ export default function RelatoriosPage() {
   const [loadingMovements, setLoadingMovements] = useState<string | null>(null);
   // Drill-down por forma de pagamento (Fatia 3): a forma clicada abre a composição num pop-up.
   const [composeMethod, setComposeMethod] = useState<string | null>(null);
+  // Toggle da composição (Fatia 7): tabela por forma × gráfico de barras por dia.
+  const [compView, setCompView] = useState<'tabela' | 'grafico'>('tabela');
 
   const toggleMovements = useCallback(
     async (sessionId: string) => {
@@ -421,14 +424,39 @@ export default function RelatoriosPage() {
 
       <SectionLabel>Composição do recebido</SectionLabel>
 
-      {/* Totais por forma de pagamento */}
+      {/* Totais por forma de pagamento (tabela) × recebido por dia (gráfico) — toggle da Fatia 7. */}
       <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
-          <h2 className="font-semibold">Por forma de pagamento</h2>
-          {sales && sales.byPaymentMethod.length > 0 && (
-            <span className="text-xs text-gray-500">Clique numa forma para ver a composição</span>
-          )}
+          <h2 className="font-semibold">
+            {compView === 'tabela' ? 'Por forma de pagamento' : 'Recebido por dia'}
+          </h2>
+          <div className="flex items-center gap-3">
+            {compView === 'tabela' && sales && sales.byPaymentMethod.length > 0 && (
+              <span className="hidden text-xs text-gray-500 sm:inline">
+                Clique numa forma para ver a composição
+              </span>
+            )}
+            {/* Toggle Tabela × Gráfico. */}
+            <div className="inline-flex gap-0.5 rounded-xl bg-gray-100 p-1" role="group" aria-label="Ver como">
+              {(['tabela', 'grafico'] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setCompView(v)}
+                  aria-pressed={compView === v}
+                  className={`rounded-lg px-3 py-1 text-xs font-semibold ${
+                    compView === v ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-white/60'
+                  }`}
+                >
+                  {v === 'tabela' ? '▤ Tabela' : '📈 Gráfico'}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
+        {compView === 'grafico' ? (
+          <DailyRevenueChart from={range.from ?? null} to={range.to ?? null} />
+        ) : (
         <table className="w-full text-sm">
           <thead className="bg-blue-200 text-left text-blue-900">
             <tr>
@@ -478,6 +506,7 @@ export default function RelatoriosPage() {
             )}
           </tbody>
         </table>
+        )}
       </div>
 
       <SectionLabel>Produtos e clientes</SectionLabel>

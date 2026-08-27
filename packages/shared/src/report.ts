@@ -217,6 +217,14 @@ export interface CustomerProductRow {
   revenue: number;
 }
 
+/** Um ponto do gráfico temporal (Fatia 7): o recebido de um dia. */
+export interface DailyRevenuePoint {
+  /** Dia no formato AAAA-MM-DD (fuso da loja). */
+  day: string;
+  /** Recebido no dia (regime de caixa, ADR-019) — Σ dos dias = "Recebido no período". */
+  total: number;
+}
+
 /** Projeção de faturamento do mês "no ritmo atual" (Fatia 8) — direcional, não promessa. */
 export interface MonthRevenueProjection {
   /** Recebido do mês corrente até hoje (regime de caixa, ADR-019). */

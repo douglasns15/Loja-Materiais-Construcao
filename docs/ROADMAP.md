@@ -3,9 +3,22 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-26 — **Relatorios.v2 — Fatia 8 (Projeções "no ritmo atual") —
-> NO AR, E2E validado + REFINO da ruptura (velocidade típica: mediana×frequência) + carrossel. Deploy
-> do 2º refino PENDENTE.** O 1º refino (mediana sobre janela cheia) matava o pico, mas era conservador
+> **Última atualização:** 2026-08-26 — **Relatorios.v2 — Fatia 7 (Gráfico temporal + toggle
+> Tabela/Gráfico) — implementada. Deploy + E2E do Owner PENDENTES.** O painel "Composição do recebido"
+> ganhou um toggle **▤ Tabela × 📈 Gráfico**: o gráfico é um **barras diário do recebido** (SVG à mão,
+> sem lib — custo-zero), com a barra de **hoje** destacada em verde e tooltip nativo por dia. **API:**
+> `GET /reports/daily?from=&to=` — à vista pela data da venda + fiado por `paidAt`, somados por dia no
+> fuso da loja (−3h), preenchendo dias sem movimento com 0. Por construção `Σ barras = "Recebido do
+> período"`. **Web:** `DailyRevenueChart` (SVG responsivo por viewBox) + toggle no cabeçalho do painel.
+> **Shared:** `DailyRevenuePoint`. **Sem migration, sem lib de gráfico** (SVG puro). **Gate:** shared
+> 48/48; core 309/309; api `tsc` 0; web `tsc` 0; **Σ barras = Recebido validado no banco** (7d:
+> R$ 1892,59 = /sales, dia sem venda zerado correto). §8.2 atualizada. **Restam:** Fatia 9 (insights
+> configuráveis) e 10 (export CSV/PDF).
+>
+> **Antes:** 2026-08-26 — **Relatorios.v2 — Fatia 8 (Projeções "no ritmo atual") —
+> NO AR e E2E DO OWNER VALIDADO (2026-08-26), incluindo os 2 refinos. CONCLUÍDA.** Deploy final: API
+> `a05af253` + web `36bb66b5`. Ruptura por velocidade típica (mediana×frequência) + carrossel dos 5
+> itens no card. O 1º refino (mediana sobre janela cheia) matava o pico, mas era conservador
 > demais — no tenant real só 1 item entrava, então o carrossel nunca aparecia. Owner pediu para ver o
 > carrossel; à pergunta "o que os grandes usam?", registrado que o padrão de mercado é **média + estoque
 > de segurança + lead time (ponto de reposição)** com **limpeza de outlier** antes — e a mediana é a
