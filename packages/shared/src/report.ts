@@ -48,6 +48,19 @@ export interface SalesReport {
   creditSalesGenerated: number;
   /** Total por forma de pagamento (à vista + recebimentos de fiado). Σ formas = recebido. */
   byPaymentMethod: PaymentMethodReport[];
+  /**
+   * Lucro bruto ESTIMADO do período (Fatia 6, ADR-027): base de **mercadoria vendida** — receita
+   * dos itens de vendas não canceladas do período − custo carimbado. Base DIFERENTE do "Recebido"
+   * (que é regime de caixa): aqui é o resultado das vendas feitas no período, não o dinheiro que
+   * entrou. Só as vendas COM custo entram (ver `costCoverage`), nunca como custo zero.
+   */
+  grossProfit: number;
+  /** Margem % do lucro bruto sobre a receita coberta (0 se não há vendas com custo). */
+  marginPercent: number;
+  /** Fração da receita de mercadoria do período que tem custo carimbado (0..1). `< 1` ⇒ lucro parcial. */
+  costCoverage: number;
+  /** Receita de mercadoria vendida no período (Σ itens, não canceladas) — a base do lucro/margem. */
+  goodsRevenue: number;
 }
 
 /** Uma sessão de caixa fechada, com a divergência calculada. */

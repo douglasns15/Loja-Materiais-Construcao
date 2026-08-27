@@ -3,9 +3,24 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-26 — **Relatorios.v2 — Fatia 5 (Top produtos & clientes + busca +
-> pop-up de detalhe) — implementada em 2 sub-fatias (5A produtos, 5B clientes). Deploy + E2E do Owner
-> PENDENTES.** Dois cards colapsáveis (Produtos, Melhores clientes) sob "Produtos e clientes", cada um
+> **Última atualização:** 2026-08-26 — **Relatorios.v2 — Fatia 6 (Lucro & margem no "Resultado do
+> período") — implementada. Deploy + E2E do Owner PENDENTES.** Novo card em destaque **"Lucro bruto
+> estimado"** (esmeralda) na faixa de KPIs, com **margem %** e sinal de **cobertura de custo**; os KPIs
+> passam a Recebido · **Lucro** · Vendas·Ticket (unificados) · Canceladas — como o mockup. **Base
+> contábil:** o lucro é sobre **mercadoria VENDIDA no período** (`order_items` de vendas não
+> canceladas, pela data da venda) − custo carimbado (ADR-027) — base DIFERENTE do "Recebido" (regime de
+> caixa, ADR-019); rotulado e com tooltip para não confundir. **API:** `GET /reports/sales` ganhou
+> `grossProfit`/`marginPercent`/`costCoverage`/`goodsRevenue` (6ª query no `Promise.all`, SQL cru com
+> `FILTER (WHERE unitCost IS NOT NULL)`), reusando a função pura **`calcProfit`** da Fatia 5 (sem
+> cálculo novo ⇒ sem teste novo; já coberta por 6 testes). **Ordenar Produtos por faturamento×lucro** já
+> veio na Fatia 5. **Sem migration.** **Gate:** core 282/282; shared 48/48; api `tsc` 0; web `tsc` 0;
+> **agregado validado no banco** (lucro = coberto − custo; cobertura < 100% ⇒ vendas sem custo fora do
+> lucro, nunca custo zero). §8.2 atualizada. **Depende da Fatia 2.** **Próxima:** Fatia 4 (comparação
+> com período anterior), 7 (gráfico temporal), 8 (projeções), 9 (insights) ou 10 (export CSV/PDF).
+>
+> **Antes:** 2026-08-26 — **Relatorios.v2 — Fatia 5 (Top produtos & clientes + busca +
+> pop-up de detalhe) — NO AR e E2E DO OWNER VALIDADO (2026-08-26). CONCLUÍDA (5A produtos + 5B
+> clientes).** Deploy: API `be88b0e0` + web `ac1ae148` (smoke OK; 4 rotas respondem 401 = registradas). Dois cards colapsáveis (Produtos, Melhores clientes) sob "Produtos e clientes", cada um
 > com **busca sem acento** (no servidor, `unaccent`) e ordenação por **faturamento** ou **lucro**;
 > clicar (na lista ou no resultado) abre **pop-up enxuto**. **Lucro/margem** vêm do custo carimbado
 > (Fatia 2/ADR-027) via nova função pura **`calcProfit`** em `core` (lucro bruto, margem e

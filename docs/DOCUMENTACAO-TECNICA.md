@@ -480,7 +480,7 @@ testável exaustivamente e compartilhada entre as duas apps.
 
 | Método · Rota | O que faz |
 |---|---|
-| `GET /sales` | Vendas por período (faturamento CONFIRMED, canceladas à parte, total por forma de pagamento). |
+| `GET /sales` | Vendas por período (faturamento CONFIRMED, canceladas à parte, total por forma de pagamento) + **lucro bruto/margem estimados** (base de mercadoria vendida, custo carimbado ADR-027, com cobertura) — Fatia 6. |
 | `GET /payment-composition` | Drill-down de UMA forma (`?method=&from=&to=`): as linhas (venda à vista + recebimento de dívida) que somam o "Recebido" da forma — Σ linhas = total daquela forma no `/sales` (Fatia 3, Relatórios v2). |
 | `GET /top-products` | Ranking de produtos no período (`?q=&orderBy=faturamento\|lucro&from=&to=&limit=`): faturamento, qtd, nº de vendas e lucro/margem (custo carimbado, ADR-027) com cobertura. Busca sem acento (Fatia 5). |
 | `GET /product-customers/:productId` | "Quem mais compra" um produto (`?from=&to=`): top clientes por faturamento naquele produto — detalhe do pop-up (Fatia 5). |

@@ -280,7 +280,7 @@ export default function RelatoriosPage() {
 
       <SectionLabel>Resultado do período</SectionLabel>
 
-      {/* Cards de resumo de vendas */}
+      {/* Cards de resumo de vendas (Fatia 6: inclui Lucro bruto estimado). */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
           {/* Regime de caixa (ADR-019): dinheiro que entrou no período — inclui recebimentos de
@@ -290,13 +290,38 @@ export default function RelatoriosPage() {
           </p>
           <p className="mt-1 text-2xl font-bold">{BRL(sales?.totalRevenue ?? 0)}</p>
         </div>
-        <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-          <p className="text-xs text-gray-600">Vendas</p>
-          <p className="mt-1 text-2xl font-bold">{sales?.salesCount ?? 0}</p>
+        {/* Lucro bruto ESTIMADO (Fatia 6, ADR-027): base de mercadoria vendida (não é o "Recebido").
+            Só vendas com custo carimbado entram — cobertura parcial é sinalizada abaixo. Card em
+            destaque esmeralda, como no mockup. */}
+        <div className="rounded-2xl border border-emerald-500 bg-white p-4 shadow-sm ring-1 ring-emerald-500">
+          <p
+            className="text-xs text-gray-600"
+            title="Receita das mercadorias vendidas no período − custo carimbado na venda (ADR-027). Base de venda, diferente do Recebido (caixa)."
+          >
+            Lucro bruto estimado
+          </p>
+          <p className="mt-1 text-2xl font-bold text-emerald-700">{BRL(sales?.grossProfit ?? 0)}</p>
+          <p className="mt-0.5 text-[11px] text-gray-500">
+            margem {(sales?.marginPercent ?? 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%
+            {sales != null && sales.costCoverage < 0.999 && (
+              <span
+                className="text-amber-600"
+                title="Parte do faturamento do período não tem custo registrado (vendas anteriores ao ADR-027). O lucro só conta as que têm."
+              >
+                {' '}
+                · {(sales.costCoverage * 100).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}% com
+                custo
+              </span>
+            )}
+          </p>
         </div>
+        {/* Vendas · Ticket médio, unificados num card (libera o slot do Lucro, como no mockup). */}
         <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-          <p className="text-xs text-gray-600">Ticket médio</p>
-          <p className="mt-1 text-2xl font-bold">{BRL(sales?.averageTicket ?? 0)}</p>
+          <p className="text-xs text-gray-600">Vendas · Ticket médio</p>
+          <p className="mt-1 text-2xl font-bold">
+            {sales?.salesCount ?? 0}
+            <span className="text-base font-semibold text-gray-500"> · {BRL(sales?.averageTicket ?? 0)}</span>
+          </p>
         </div>
         <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
           <p className="text-xs text-gray-600">Canceladas</p>

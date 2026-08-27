@@ -81,7 +81,17 @@ reports.get('/sales', async (c) => {
     // uma venda NÃO conta enquanto não é recebida (não vira `Payment`). Assim cada real é contado
     // uma vez só, no dia em que entra — coerente com o caixa.
     const paidAt = createdAt; // mesmo intervalo {gte,lte}, aplicado ao campo `paidAt`
-    const [salesAgg, cancelledCount, grouped, creditReceipts, creditGenerated] = await Promise.all([
+    // Base do LUCRO (Fatia 6, ADR-027): mercadoria VENDIDA no período (itens de vendas não
+    // canceladas, pela data da venda) — base diferente do "Recebido" (regime de caixa). Só as linhas
+    // com custo carimbado entram no custo; SQL cru por causa da expressão `unitCost × base`.
+    const goodsConditions: Prisma.Sql[] = [
+      Prisma.sql`o."tenantId" = ${tenantId}::uuid`,
+      Prisma.sql`o."status" <> 'CANCELLED'`,
+    ];
+    if (createdAt?.gte) goodsConditions.push(Prisma.sql`o."createdAt" >= ${createdAt.gte}`);
+    if (createdAt?.lte) goodsConditions.push(Prisma.sql`o."createdAt" <= ${createdAt.lte}`);
+    const [salesAgg, cancelledCount, grouped, creditReceipts, creditGenerated, goodsAgg] =
+      await Promise.all([
       // Nº de vendas confirmadas no período (por data da venda) — canceladas à parte.
       prisma.order.aggregate({
         _count: { _all: true },
@@ -114,6 +124,18 @@ reports.get('/sales', async (c) => {
         _sum: { originalAmount: true },
         where: { tenantId, status: { not: 'CANCELLED' }, ...(createdAt ? { createdAt } : {}) },
       }),
+      // Lucro do período (Fatia 6): receita de mercadoria + receita/custo cobertos (custo carimbado).
+      prisma.$queryRaw<
+        Array<{ goodsRevenue: number; coveredRevenue: number; coveredCost: number }>
+      >(Prisma.sql`
+        SELECT
+          COALESCE(SUM(oi."total"), 0)::float8 AS "goodsRevenue",
+          COALESCE(SUM(oi."total") FILTER (WHERE oi."unitCost" IS NOT NULL), 0)::float8 AS "coveredRevenue",
+          COALESCE(SUM(oi."unitCost" * COALESCE(oi."baseQuantity", oi."quantity")) FILTER (WHERE oi."unitCost" IS NOT NULL), 0)::float8 AS "coveredCost"
+        FROM "order_items" oi
+        JOIN "orders" o ON o."id" = oi."orderId"
+        WHERE ${Prisma.join(goodsConditions, ' AND ')}
+      `),
     ]);
 
     // Junta pagamentos à vista + recebimentos de fiado por forma de pagamento, para o "recebido"
@@ -143,6 +165,16 @@ reports.get('/sales', async (c) => {
     );
     const salesCount = salesAgg._count._all;
 
+    // Lucro bruto do período (Fatia 6) — mesma função pura do ranking (calcProfit): só vendas com
+    // custo entram, nunca custo zero; `costCoverage < 1` sinaliza cobertura parcial.
+    const goods = goodsAgg[0] ?? { goodsRevenue: 0, coveredRevenue: 0, coveredCost: 0 };
+    const goodsRevenue = Number(goods.goodsRevenue.toFixed(2));
+    const { grossProfit, marginPercent, costCoverage } = calcProfit({
+      totalRevenue: goodsRevenue,
+      coveredRevenue: goods.coveredRevenue,
+      coveredCost: goods.coveredCost,
+    });
+
     return c.json({
       ok: true,
       data: {
@@ -154,6 +186,10 @@ reports.get('/sales', async (c) => {
         cancelledCount,
         creditSalesGenerated: Number(creditGenerated._sum.originalAmount ?? 0),
         byPaymentMethod,
+        grossProfit,
+        marginPercent,
+        costCoverage,
+        goodsRevenue,
       },
     });
   } catch (err) {
