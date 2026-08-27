@@ -61,6 +61,23 @@ export interface SalesReport {
   costCoverage: number;
   /** Receita de mercadoria vendida no período (Σ itens, não canceladas) — a base do lucro/margem. */
   goodsRevenue: number;
+  /**
+   * KPIs do período ANTERIOR equivalente (Fatia 4), para os selos ▲/▼ nos cards. Só vem quando o
+   * cliente pede `?compare=1` e há intervalo; `null` caso contrário (ex.: todo o histórico).
+   */
+  previous?: SalesComparison | null;
+}
+
+/** KPIs do período anterior equivalente (Fatia 4) — subconjunto comparável do `SalesReport`. */
+export interface SalesComparison {
+  /** Intervalo anterior calculado (`previousPeriod`), para exibir "semana anterior: …" etc. */
+  from: string;
+  to: string;
+  totalRevenue: number;
+  salesCount: number;
+  averageTicket: number;
+  cancelledCount: number;
+  grossProfit: number;
 }
 
 /** Uma sessão de caixa fechada, com a divergência calculada. */

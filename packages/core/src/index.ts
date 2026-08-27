@@ -1272,6 +1272,48 @@ export function calcProfit({ totalRevenue, coveredRevenue, coveredCost }: Profit
   return { grossProfit, marginPercent, costCoverage };
 }
 
+/**
+ * Janela ANTERIOR equivalente a `[from, to]` (Relatórios v2, Fatia 4). Devolve o intervalo do mesmo
+ * tamanho imediatamente antes de `from`: "Hoje" (1 dia) → ontem; "7 dias" → os 7 dias anteriores;
+ * "30 dias" → os 30 anteriores. Datas `AAAA-MM-DD`; conta em UTC (dia cheio, sem fuso) para não
+ * escorregar um dia. Função pura, testada (Regra 2).
+ */
+export function previousPeriod(from: string, to: string): { from: string; to: string } {
+  const DAY = 86_400_000;
+  // Meia-noite UTC do dia (dia cheio, sem fuso). Entrada validada como AAAA-MM-DD pelo schema.
+  const ymdToUtc = (d: string): number => {
+    const [y, m, day] = d.split('-');
+    return Date.UTC(Number(y), Number(m) - 1, Number(day));
+  };
+  const fromMs = ymdToUtc(from);
+  const toMs = ymdToUtc(to);
+  const dayCount = Math.round((toMs - fromMs) / DAY) + 1; // inclusivo
+  const fmt = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+  return { from: fmt(fromMs - dayCount * DAY), to: fmt(fromMs - DAY) };
+}
+
+/** Variação de um KPI entre o período atual e o anterior (Fatia 4). */
+export interface Variation {
+  /** Diferença absoluta `atual − anterior` (2 casas). */
+  delta: number;
+  /** Variação percentual sobre |anterior|; `null` quando o anterior é 0 (não há base — exibir "—"). */
+  percent: number | null;
+  /** Direção da variação, para a seta ▲/▼/●. */
+  direction: 'up' | 'down' | 'flat';
+}
+
+/**
+ * Compara um KPI com o período anterior (Fatia 4). O percentual usa `|anterior|` como base para o
+ * sinal seguir o `delta` (mesmo com base negativa, ex.: lucro). Anterior 0 ⇒ `percent = null` (evita
+ * ÷0; a UI mostra "—"). Função pura, testada (Regra 2).
+ */
+export function calcVariation(current: number, previous: number): Variation {
+  const delta = Number((current - previous).toFixed(2));
+  const percent = previous !== 0 ? Number(((delta / Math.abs(previous)) * 100).toFixed(1)) : null;
+  const direction = delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat';
+  return { delta, percent, direction };
+}
+
 // =============================================================================
 // SINCRONIZAÇÃO OFFLINE (Outbox) — ADR-011
 // =============================================================================

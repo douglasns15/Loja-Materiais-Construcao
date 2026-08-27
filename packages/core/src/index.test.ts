@@ -21,6 +21,8 @@ import {
   calcAverageTicket,
   withPaymentShare,
   calcProfit,
+  previousPeriod,
+  calcVariation,
   netCashMovements,
   grossCashMovements,
   manualCashMovementType,
@@ -1533,5 +1535,51 @@ describe('calcProfit', () => {
     expect(r.grossProfit).toBe(23.33);
     expect(r.marginPercent).toBe(70);
     expect(r.costCoverage).toBe(0.3333);
+  });
+});
+
+describe('previousPeriod', () => {
+  it('"Hoje" (1 dia) → ontem', () => {
+    expect(previousPeriod('2026-08-26', '2026-08-26')).toEqual({ from: '2026-08-25', to: '2026-08-25' });
+  });
+
+  it('7 dias → os 7 dias imediatamente anteriores', () => {
+    expect(previousPeriod('2026-08-20', '2026-08-26')).toEqual({ from: '2026-08-13', to: '2026-08-19' });
+  });
+
+  it('30 dias → os 30 anteriores', () => {
+    expect(previousPeriod('2026-08-01', '2026-08-30')).toEqual({ from: '2026-07-02', to: '2026-07-31' });
+  });
+
+  it('atravessa a virada do mês/ano sem escorregar (UTC)', () => {
+    // "Hoje" = 1º de janeiro → ontem = 31/12 do ano anterior.
+    expect(previousPeriod('2026-01-01', '2026-01-01')).toEqual({ from: '2025-12-31', to: '2025-12-31' });
+  });
+});
+
+describe('calcVariation', () => {
+  it('subiu: delta e % positivos, direção up', () => {
+    expect(calcVariation(120, 100)).toEqual({ delta: 20, percent: 20, direction: 'up' });
+  });
+
+  it('caiu: delta e % negativos, direção down', () => {
+    expect(calcVariation(80, 100)).toEqual({ delta: -20, percent: -20, direction: 'down' });
+  });
+
+  it('igual: delta 0, direção flat', () => {
+    expect(calcVariation(100, 100)).toEqual({ delta: 0, percent: 0, direction: 'flat' });
+  });
+
+  it('anterior 0 (período vazio) ⇒ percent null (sem ÷0), direção up pelo delta', () => {
+    expect(calcVariation(50, 0)).toEqual({ delta: 50, percent: null, direction: 'up' });
+  });
+
+  it('ambos 0 ⇒ tudo neutro', () => {
+    expect(calcVariation(0, 0)).toEqual({ delta: 0, percent: null, direction: 'flat' });
+  });
+
+  it('base negativa (lucro): sinal do % segue o delta via |anterior|', () => {
+    // Melhorou de −100 para −50: delta +50; % = 50/100 = +50%; direção up.
+    expect(calcVariation(-50, -100)).toEqual({ delta: 50, percent: 50, direction: 'up' });
   });
 });

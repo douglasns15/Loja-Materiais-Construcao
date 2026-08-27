@@ -7,6 +7,7 @@ import {
   type CashSessionReport,
   type SalesReport,
 } from '@nexoloja/shared';
+import { calcVariation } from '@nexoloja/core';
 import { apiGet } from '@/lib/api';
 import { useOnline } from '@/lib/useOnline';
 import { OfflineNotice } from '@/components/OfflineNotice';
@@ -188,6 +189,45 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * Selo de variação vs. período anterior (Fatia 4). Verde/vermelho por direção (invertido em
+ * "Canceladas", onde subir é ruim). `percent` para dinheiro, `count` para contagens. Anterior 0 ⇒
+ * "novo" (sem ÷0). Usa a função pura `calcVariation` (core). Nada some quando não há comparação.
+ */
+function DeltaBadge({
+  current,
+  previous,
+  mode,
+  invert = false,
+  prevText,
+}: {
+  current: number;
+  previous: number | undefined;
+  mode: 'percent' | 'count';
+  invert?: boolean;
+  prevText?: string;
+}) {
+  if (previous === undefined) return null;
+  const v = calcVariation(current, previous);
+  if (v.direction === 'flat') {
+    return <span className="mt-1 block text-[11px] text-gray-400">sem variação{prevText ? ` · ${prevText}` : ''}</span>;
+  }
+  const good = invert ? v.direction === 'down' : v.direction === 'up';
+  const color = good ? 'text-emerald-600' : 'text-red-600';
+  const arrow = v.direction === 'up' ? '▲' : '▼';
+  const label =
+    v.percent === null
+      ? 'novo'
+      : mode === 'percent'
+        ? `${arrow} ${Math.abs(v.percent).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`
+        : `${arrow} ${Math.abs(v.delta).toLocaleString('pt-BR')}`;
+  return (
+    <span className={`mt-1 block text-[11px] font-medium ${color}`} title={prevText}>
+      {label}
+    </span>
+  );
+}
+
 export default function RelatoriosPage() {
   const online = useOnline();
   // Abre em "Hoje" (default das telas com filtro por data). A navegação ‹ › percorre os dias.
@@ -235,8 +275,11 @@ export default function RelatoriosPage() {
       if (range.from) qs.set('from', range.from);
       if (range.to) qs.set('to', range.to);
       const q = qs.toString() ? `?${qs.toString()}` : '';
+      // `compare=1` traz os KPIs do período anterior equivalente para os selos ▲/▼ (Fatia 4).
+      const salesQs = new URLSearchParams(qs);
+      salesQs.set('compare', '1');
       const [s, cs] = await Promise.all([
-        apiGet<SalesReport>(`/reports/sales${q}`),
+        apiGet<SalesReport>(`/reports/sales?${salesQs.toString()}`),
         apiGet<CashSessionReport[]>(`/reports/cash-sessions${q}`),
       ]);
       setSales(s);
@@ -289,6 +332,12 @@ export default function RelatoriosPage() {
             Recebido no período
           </p>
           <p className="mt-1 text-2xl font-bold">{BRL(sales?.totalRevenue ?? 0)}</p>
+          <DeltaBadge
+            current={sales?.totalRevenue ?? 0}
+            previous={sales?.previous?.totalRevenue}
+            mode="percent"
+            prevText={sales?.previous ? `período anterior: ${BRL(sales.previous.totalRevenue)}` : undefined}
+          />
         </div>
         {/* Lucro bruto ESTIMADO (Fatia 6, ADR-027): base de mercadoria vendida (não é o "Recebido").
             Só vendas com custo carimbado entram — cobertura parcial é sinalizada abaixo. Card em
@@ -314,6 +363,12 @@ export default function RelatoriosPage() {
               </span>
             )}
           </p>
+          <DeltaBadge
+            current={sales?.grossProfit ?? 0}
+            previous={sales?.previous?.grossProfit}
+            mode="percent"
+            prevText={sales?.previous ? `período anterior: ${BRL(sales.previous.grossProfit)}` : undefined}
+          />
         </div>
         {/* Vendas · Ticket médio, unificados num card (libera o slot do Lucro, como no mockup). */}
         <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
@@ -322,10 +377,28 @@ export default function RelatoriosPage() {
             {sales?.salesCount ?? 0}
             <span className="text-base font-semibold text-gray-500"> · {BRL(sales?.averageTicket ?? 0)}</span>
           </p>
+          <DeltaBadge
+            current={sales?.salesCount ?? 0}
+            previous={sales?.previous?.salesCount}
+            mode="count"
+            prevText={
+              sales?.previous
+                ? `período anterior: ${sales.previous.salesCount} vendas · ${BRL(sales.previous.averageTicket)}`
+                : undefined
+            }
+          />
         </div>
         <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
           <p className="text-xs text-gray-600">Canceladas</p>
           <p className="mt-1 text-2xl font-bold">{sales?.cancelledCount ?? 0}</p>
+          {/* Em "Canceladas" subir é RUIM (invert): mais cancelamentos = vermelho. */}
+          <DeltaBadge
+            current={sales?.cancelledCount ?? 0}
+            previous={sales?.previous?.cancelledCount}
+            mode="count"
+            invert
+            prevText={sales?.previous ? `período anterior: ${sales.previous.cancelledCount}` : undefined}
+          />
         </div>
       </div>
 

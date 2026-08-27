@@ -5,6 +5,7 @@ import {
   calcAverageTicket,
   calcCashDivergence,
   calcProfit,
+  previousPeriod,
   withPaymentShare,
 } from '@nexoloja/core';
 import {
@@ -17,6 +18,7 @@ import {
   type PaymentComposition,
   type PaymentCompositionRow,
   type ProductCustomerRow,
+  type SalesComparison,
   type TopCustomerRow,
   type TopProductRow,
 } from '@nexoloja/shared';
@@ -50,10 +52,119 @@ function buildDateFilter(
   return filter.gte || filter.lte ? filter : undefined;
 }
 
+type SalesRange = { gte?: Date; lte?: Date } | undefined;
+
 /**
- * Relatório de vendas por período. Agrega no banco (cost-zero): faturamento e
- * nº de vendas CONFIRMED, contagem de canceladas à parte e total por forma de
- * pagamento. Vendas CANCELLED ficam fora do faturamento (coerente com o caixa).
+ * Agrega os KPIs de vendas de UMA janela (cost-zero, no banco). Extraído para servir tanto a janela
+ * atual quanto a ANTERIOR (Fatia 4, `?compare=1`), garantindo a MESMA regra (ADR-019/ADR-027) nas
+ * duas — sem duplicar a lógica. Devolve o recebido (regime de caixa), nº de vendas, canceladas, a
+ * quebra por forma e o lucro/margem do período (base de mercadoria vendida).
+ */
+async function computeSalesData(
+  prisma: ReturnType<typeof createPrismaClient>,
+  tenantId: string,
+  range: SalesRange,
+) {
+  // Regime de CAIXA (ADR-019): o "recebido no período" é o dinheiro que efetivamente entrou —
+  // pagamentos à vista das vendas do período MAIS os recebimentos de fiado do período (por
+  // `paidAt`), contando o fiado no dia em que é recebido, não no dia da venda.
+  const paidAt = range; // mesmo intervalo {gte,lte}, aplicado ao campo `paidAt`
+  // Base do LUCRO (Fatia 6, ADR-027): mercadoria VENDIDA no período (itens de vendas não canceladas,
+  // pela data da venda) — base diferente do "Recebido". SQL cru por causa da expressão `unitCost × base`.
+  const goodsConditions: Prisma.Sql[] = [
+    Prisma.sql`o."tenantId" = ${tenantId}::uuid`,
+    Prisma.sql`o."status" <> 'CANCELLED'`,
+  ];
+  if (range?.gte) goodsConditions.push(Prisma.sql`o."createdAt" >= ${range.gte}`);
+  if (range?.lte) goodsConditions.push(Prisma.sql`o."createdAt" <= ${range.lte}`);
+
+  const [salesAgg, cancelledCount, grouped, creditReceipts, creditGenerated, goodsAgg] =
+    await Promise.all([
+      prisma.order.aggregate({
+        _count: { _all: true },
+        where: { tenantId, status: { not: 'CANCELLED' }, ...(range ? { createdAt: range } : {}) },
+      }),
+      prisma.order.count({
+        where: { tenantId, status: 'CANCELLED', ...(range ? { createdAt: range } : {}) },
+      }),
+      prisma.payment.groupBy({
+        by: ['method'],
+        _sum: { amount: true },
+        _count: { _all: true },
+        where: { tenantId, order: { status: { not: 'CANCELLED' }, ...(range ? { createdAt: range } : {}) } },
+      }),
+      prisma.receivablePayment.groupBy({
+        by: ['method'],
+        _sum: { amount: true, surcharge: true },
+        _count: { _all: true },
+        where: { tenantId, ...(paidAt ? { paidAt } : {}) },
+      }),
+      prisma.receivable.aggregate({
+        _sum: { originalAmount: true },
+        where: { tenantId, status: { not: 'CANCELLED' }, ...(range ? { createdAt: range } : {}) },
+      }),
+      prisma.$queryRaw<Array<{ goodsRevenue: number; coveredRevenue: number; coveredCost: number }>>(
+        Prisma.sql`
+          SELECT
+            COALESCE(SUM(oi."total"), 0)::float8 AS "goodsRevenue",
+            COALESCE(SUM(oi."total") FILTER (WHERE oi."unitCost" IS NOT NULL), 0)::float8 AS "coveredRevenue",
+            COALESCE(SUM(oi."unitCost" * COALESCE(oi."baseQuantity", oi."quantity")) FILTER (WHERE oi."unitCost" IS NOT NULL), 0)::float8 AS "coveredCost"
+          FROM "order_items" oi
+          JOIN "orders" o ON o."id" = oi."orderId"
+          WHERE ${Prisma.join(goodsConditions, ' AND ')}
+        `,
+      ),
+    ]);
+
+  // Junta à vista + fiado por forma, para o "recebido" e a quebra baterem (Σ formas = recebido).
+  const byMethod = new Map<string, { total: number; count: number }>();
+  for (const g of grouped) {
+    const cur = byMethod.get(g.method) ?? { total: 0, count: 0 };
+    cur.total = Number((cur.total + Number(g._sum.amount ?? 0)).toFixed(2));
+    cur.count += g._count._all;
+    byMethod.set(g.method, cur);
+  }
+  // Recebimentos de fiado: valor + acréscimo de cartão (ADR-022, Fatia C.3) na mesma forma.
+  for (const g of creditReceipts) {
+    const cur = byMethod.get(g.method) ?? { total: 0, count: 0 };
+    cur.total = Number((cur.total + Number(g._sum.amount ?? 0) + Number(g._sum.surcharge ?? 0)).toFixed(2));
+    cur.count += g._count._all;
+    byMethod.set(g.method, cur);
+  }
+  const byPaymentMethod = withPaymentShare(
+    [...byMethod.entries()].map(([method, v]) => ({ method, total: v.total, count: v.count })),
+  );
+  const totalRevenue = Number(byPaymentMethod.reduce((acc, m) => acc + m.total, 0).toFixed(2));
+  const salesCount = salesAgg._count._all;
+
+  // Lucro bruto (Fatia 6) — função pura calcProfit: só vendas com custo entram, nunca custo zero.
+  const goods = goodsAgg[0] ?? { goodsRevenue: 0, coveredRevenue: 0, coveredCost: 0 };
+  const goodsRevenue = Number(goods.goodsRevenue.toFixed(2));
+  const { grossProfit, marginPercent, costCoverage } = calcProfit({
+    totalRevenue: goodsRevenue,
+    coveredRevenue: goods.coveredRevenue,
+    coveredCost: goods.coveredCost,
+  });
+
+  return {
+    totalRevenue,
+    salesCount,
+    averageTicket: calcAverageTicket(totalRevenue, salesCount),
+    cancelledCount,
+    creditSalesGenerated: Number(creditGenerated._sum.originalAmount ?? 0),
+    byPaymentMethod,
+    grossProfit,
+    marginPercent,
+    costCoverage,
+    goodsRevenue,
+  };
+}
+
+/**
+ * Relatório de vendas por período. Agrega no banco (cost-zero): faturamento e nº de vendas CONFIRMED,
+ * canceladas à parte, total por forma de pagamento e lucro/margem (Fatia 6). Com `?compare=1` (e
+ * intervalo), inclui os KPIs da janela ANTERIOR equivalente para os selos ▲/▼ (Fatia 4). Vendas
+ * CANCELLED ficam fora do faturamento (coerente com o caixa).
  */
 reports.get('/sales', async (c) => {
   const tenantId = getTenantId(c);
@@ -71,126 +182,37 @@ reports.get('/sales', async (c) => {
   }
   const { from, to } = parsed.data;
   const createdAt = buildDateFilter(from, to);
+  const compare = c.req.query('compare') === '1';
 
   try {
     const prisma = createPrismaClient(connectionString);
 
-    // Regime de CAIXA (ADR-019): o "recebido no período" é o dinheiro que efetivamente entrou —
-    // pagamentos à vista das vendas do período MAIS os recebimentos de fiado do período (por
-    // `paidAt`), contando o fiado no dia em que é recebido, não no dia da venda. A parte a prazo de
-    // uma venda NÃO conta enquanto não é recebida (não vira `Payment`). Assim cada real é contado
-    // uma vez só, no dia em que entra — coerente com o caixa.
-    const paidAt = createdAt; // mesmo intervalo {gte,lte}, aplicado ao campo `paidAt`
-    // Base do LUCRO (Fatia 6, ADR-027): mercadoria VENDIDA no período (itens de vendas não
-    // canceladas, pela data da venda) — base diferente do "Recebido" (regime de caixa). Só as linhas
-    // com custo carimbado entram no custo; SQL cru por causa da expressão `unitCost × base`.
-    const goodsConditions: Prisma.Sql[] = [
-      Prisma.sql`o."tenantId" = ${tenantId}::uuid`,
-      Prisma.sql`o."status" <> 'CANCELLED'`,
-    ];
-    if (createdAt?.gte) goodsConditions.push(Prisma.sql`o."createdAt" >= ${createdAt.gte}`);
-    if (createdAt?.lte) goodsConditions.push(Prisma.sql`o."createdAt" <= ${createdAt.lte}`);
-    const [salesAgg, cancelledCount, grouped, creditReceipts, creditGenerated, goodsAgg] =
-      await Promise.all([
-      // Nº de vendas confirmadas no período (por data da venda) — canceladas à parte.
-      prisma.order.aggregate({
-        _count: { _all: true },
-        where: { tenantId, status: { not: 'CANCELLED' }, ...(createdAt ? { createdAt } : {}) },
-      }),
-      // Canceladas contadas à parte (fora do recebido).
-      prisma.order.count({
-        where: { tenantId, status: 'CANCELLED', ...(createdAt ? { createdAt } : {}) },
-      }),
-      // Pagamentos à vista por forma (só de vendas não canceladas, pela data da venda).
-      prisma.payment.groupBy({
-        by: ['method'],
-        _sum: { amount: true },
-        _count: { _all: true },
-        where: {
-          tenantId,
-          order: { status: { not: 'CANCELLED' }, ...(createdAt ? { createdAt } : {}) },
-        },
-      }),
-      // Recebimentos de fiado por forma (pela data do recebimento — regime de caixa). `surcharge` é o
-      // acréscimo de cartão cobrado ao receber (ADR-022, Fatia C.3) — soma na receita daquela forma.
-      prisma.receivablePayment.groupBy({
-        by: ['method'],
-        _sum: { amount: true, surcharge: true },
-        _count: { _all: true },
-        where: { tenantId, ...(paidAt ? { paidAt } : {}) },
-      }),
-      // Informativo: vendas a prazo GERADAS no período (crédito concedido) — não entra no recebido.
-      prisma.receivable.aggregate({
-        _sum: { originalAmount: true },
-        where: { tenantId, status: { not: 'CANCELLED' }, ...(createdAt ? { createdAt } : {}) },
-      }),
-      // Lucro do período (Fatia 6): receita de mercadoria + receita/custo cobertos (custo carimbado).
-      prisma.$queryRaw<
-        Array<{ goodsRevenue: number; coveredRevenue: number; coveredCost: number }>
-      >(Prisma.sql`
-        SELECT
-          COALESCE(SUM(oi."total"), 0)::float8 AS "goodsRevenue",
-          COALESCE(SUM(oi."total") FILTER (WHERE oi."unitCost" IS NOT NULL), 0)::float8 AS "coveredRevenue",
-          COALESCE(SUM(oi."unitCost" * COALESCE(oi."baseQuantity", oi."quantity")) FILTER (WHERE oi."unitCost" IS NOT NULL), 0)::float8 AS "coveredCost"
-        FROM "order_items" oi
-        JOIN "orders" o ON o."id" = oi."orderId"
-        WHERE ${Prisma.join(goodsConditions, ' AND ')}
-      `),
+    // Janela atual + (quando `?compare=1` e há intervalo) a ANTERIOR equivalente, em paralelo. Sem
+    // intervalo (todo o histórico) não há "período anterior" — `previous` fica null.
+    const prevRange = compare && from && to ? previousPeriod(from, to) : null;
+    const [current, prev] = await Promise.all([
+      computeSalesData(prisma, tenantId, createdAt),
+      prevRange
+        ? computeSalesData(prisma, tenantId, buildDateFilter(prevRange.from, prevRange.to))
+        : Promise.resolve(null),
     ]);
 
-    // Junta pagamentos à vista + recebimentos de fiado por forma de pagamento, para o "recebido"
-    // e a quebra por forma baterem (Σ formas = recebido).
-    const byMethod = new Map<string, { total: number; count: number }>();
-    // Pagamentos à vista das vendas (não têm acréscimo separado — já embutido no preço, ADR-016).
-    for (const g of grouped) {
-      const cur = byMethod.get(g.method) ?? { total: 0, count: 0 };
-      cur.total = Number((cur.total + Number(g._sum.amount ?? 0)).toFixed(2));
-      cur.count += g._count._all;
-      byMethod.set(g.method, cur);
-    }
-    // Recebimentos de fiado: valor + acréscimo de cartão (ADR-022, Fatia C.3) na mesma forma.
-    for (const g of creditReceipts) {
-      const cur = byMethod.get(g.method) ?? { total: 0, count: 0 };
-      cur.total = Number(
-        (cur.total + Number(g._sum.amount ?? 0) + Number(g._sum.surcharge ?? 0)).toFixed(2),
-      );
-      cur.count += g._count._all;
-      byMethod.set(g.method, cur);
-    }
-    const byPaymentMethod = withPaymentShare(
-      [...byMethod.entries()].map(([method, v]) => ({ method, total: v.total, count: v.count })),
-    );
-    const totalRevenue = Number(
-      byPaymentMethod.reduce((acc, m) => acc + m.total, 0).toFixed(2),
-    );
-    const salesCount = salesAgg._count._all;
-
-    // Lucro bruto do período (Fatia 6) — mesma função pura do ranking (calcProfit): só vendas com
-    // custo entram, nunca custo zero; `costCoverage < 1` sinaliza cobertura parcial.
-    const goods = goodsAgg[0] ?? { goodsRevenue: 0, coveredRevenue: 0, coveredCost: 0 };
-    const goodsRevenue = Number(goods.goodsRevenue.toFixed(2));
-    const { grossProfit, marginPercent, costCoverage } = calcProfit({
-      totalRevenue: goodsRevenue,
-      coveredRevenue: goods.coveredRevenue,
-      coveredCost: goods.coveredCost,
-    });
+    const previous: SalesComparison | null =
+      prevRange && prev
+        ? {
+            from: prevRange.from,
+            to: prevRange.to,
+            totalRevenue: prev.totalRevenue,
+            salesCount: prev.salesCount,
+            averageTicket: prev.averageTicket,
+            cancelledCount: prev.cancelledCount,
+            grossProfit: prev.grossProfit,
+          }
+        : null;
 
     return c.json({
       ok: true,
-      data: {
-        from: from ?? null,
-        to: to ?? null,
-        totalRevenue,
-        salesCount,
-        averageTicket: calcAverageTicket(totalRevenue, salesCount),
-        cancelledCount,
-        creditSalesGenerated: Number(creditGenerated._sum.originalAmount ?? 0),
-        byPaymentMethod,
-        grossProfit,
-        marginPercent,
-        costCoverage,
-        goodsRevenue,
-      },
+      data: { from: from ?? null, to: to ?? null, ...current, previous },
     });
   } catch (err) {
     console.error('GET /reports/sales falhou:', err);

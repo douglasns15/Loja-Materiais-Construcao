@@ -3,8 +3,23 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-26 — **Relatorios.v2 — Fatia 6 (Lucro & margem no "Resultado do
-> período") — implementada. Deploy + E2E do Owner PENDENTES.** Novo card em destaque **"Lucro bruto
+> **Última atualização:** 2026-08-26 — **Relatorios.v2 — Fatia 4 (Comparação com o período anterior)
+> — implementada. Deploy + E2E do Owner PENDENTES.** Cada card de KPI (Recebido, Lucro, Vendas·Ticket,
+> Canceladas) ganha um selo **▲/▼** vs. a **janela anterior equivalente** (Hoje→ontem; 7d→7d antes;
+> 30d→30d antes). **Core (2 funções puras + 10 testes, Regra 2):** `previousPeriod(from,to)` (janela
+> anterior, em UTC, sem escorregar dia na virada de mês/ano) e `calcVariation(atual,anterior)`
+> (delta/%/direção; anterior 0 ⇒ `percent null` = "novo", sem ÷0; base negativa usa `|anterior|`).
+> **API:** `GET /reports/sales?compare=1` devolve `previous` (KPIs da janela anterior); o cálculo dos
+> KPIs foi **extraído para `computeSalesData()`** e reusado nas duas janelas (mesma regra ADR-019/027,
+> sem duplicar). **Web:** componente `DeltaBadge` (verde/vermelho por direção; invertido em Canceladas,
+> onde subir é ruim); `apps/web` passou a **depender de `@nexoloja/core`** (uso cliente, alinhado ao
+> CLAUDE.md — não é pacote novo). **Sem migration.** **Gate:** core 292/292 (+10); shared 48/48; api
+> `tsc` 0; web `tsc` 0; **comparação validada no banco** (7d atual R$ 1892,59/108 vs anterior R$
+> 1803,40/103 → +4,9%; `previousPeriod` correto na borda). §8.2 atualizada. **Próxima:** Fatia 7
+> (gráfico temporal), 8 (projeções), 9 (insights) ou 10 (export CSV/PDF).
+>
+> **Antes:** 2026-08-26 — **Relatorios.v2 — Fatia 6 (Lucro & margem no "Resultado do
+> período") — NO AR (deploy API `6044a1a5` + web `06bec19d`). E2E do Owner PENDENTE.** Novo card em destaque **"Lucro bruto
 > estimado"** (esmeralda) na faixa de KPIs, com **margem %** e sinal de **cobertura de custo**; os KPIs
 > passam a Recebido · **Lucro** · Vendas·Ticket (unificados) · Canceladas — como o mockup. **Base
 > contábil:** o lucro é sobre **mercadoria VENDIDA no período** (`order_items` de vendas não
