@@ -1237,6 +1237,41 @@ export function withPaymentShare(rows: PaymentMethodTotal[]): PaymentMethodShare
     .sort((a, b) => b.total - a.total);
 }
 
+/** Agregados brutos de um recorte (produto, cliente, período), já somados no banco. */
+export interface ProfitInput {
+  /** Faturamento total do recorte (Σ dos totais das linhas) — inclui vendas sem custo. */
+  totalRevenue: number;
+  /** Faturamento SÓ das linhas com custo carimbado (`unitCost != null`) — base honesta da margem. */
+  coveredRevenue: number;
+  /** Custo total das linhas cobertas: Σ (`unitCost` × quantidade-base). */
+  coveredCost: number;
+}
+
+/** Lucro bruto e margem de um recorte, com a cobertura de custo (ADR-027, Fatia 2). */
+export interface ProfitResult {
+  /** Lucro bruto = `coveredRevenue − coveredCost`. Só sobre as linhas COM custo (nunca infla). */
+  grossProfit: number;
+  /** Margem % sobre a receita coberta (`grossProfit / coveredRevenue × 100`). 0 se não há receita coberta. */
+  marginPercent: number;
+  /** Fração do faturamento com custo (`coveredRevenue / totalRevenue`), 0..1. `< 1` ⇒ margem parcial. */
+  costCoverage: number;
+}
+
+/**
+ * Lucro bruto e margem de um recorte (produto, cliente, período) a partir dos agregados do banco.
+ * ADR-027: só as vendas COM custo carimbado entram no lucro/margem — vendas antigas sem custo NÃO
+ * são contadas como custo zero (que inflaria o lucro); ficam sinalizadas por `costCoverage < 1`.
+ * Função pura (Regra 2), testada com Vitest. O caller agrega no banco (cost-zero) e só deriva aqui.
+ */
+export function calcProfit({ totalRevenue, coveredRevenue, coveredCost }: ProfitInput): ProfitResult {
+  const grossProfit = Number((coveredRevenue - coveredCost).toFixed(2));
+  const marginPercent =
+    coveredRevenue > 0 ? Number(((grossProfit / coveredRevenue) * 100).toFixed(2)) : 0;
+  const costCoverage =
+    totalRevenue > 0 ? Number((coveredRevenue / totalRevenue).toFixed(4)) : 0;
+  return { grossProfit, marginPercent, costCoverage };
+}
+
 // =============================================================================
 // SINCRONIZAÇÃO OFFLINE (Outbox) — ADR-011
 // =============================================================================

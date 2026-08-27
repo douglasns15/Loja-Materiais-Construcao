@@ -1,9 +1,10 @@
 import { Hono } from 'hono';
-import { createPrismaClient } from '@nexoloja/db';
+import { createPrismaClient, Prisma } from '@nexoloja/db';
 import {
   calcAdjustedCashClosing,
   calcAverageTicket,
   calcCashDivergence,
+  calcProfit,
   withPaymentShare,
 } from '@nexoloja/core';
 import {
@@ -11,14 +12,25 @@ import {
   formatOrderNumber,
   paymentCompositionSchema,
   reportRangeSchema,
+  topReportSchema,
   type PaymentComposition,
   type PaymentCompositionRow,
+  type ProductCustomerRow,
+  type TopProductRow,
 } from '@nexoloja/shared';
 import { type Env, getConnectionString, getTenantId } from '../lib/request';
 import { requireAuth } from '../middleware/auth';
 
 const reports = new Hono<Env>();
 reports.use('*', requireAuth);
+
+/**
+ * Escapa os curingas do `ILIKE` (`%`, `_`, `\`) para o token virar substring literal (igual ao
+ * `.includes()`), sem um `%` digitado virar "qualquer coisa". `\` é o escape padrão do Postgres.
+ */
+function likeEscape(s: string): string {
+  return s.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
 
 /**
  * Converte o intervalo AAAA-MM-DD (opcional) em um filtro Prisma de data.
@@ -252,6 +264,174 @@ reports.get('/payment-composition', async (c) => {
   } catch (err) {
     console.error('GET /reports/payment-composition falhou:', err);
     return c.json({ ok: false, error: 'Falha ao detalhar a forma de pagamento.' }, 500);
+  }
+});
+
+/**
+ * Ranking de PRODUTOS no período (Relatórios v2, Fatia 5). Agrega `order_items` de vendas não
+ * canceladas (cost-zero, no banco): faturamento, quantidade, nº de vendas e — via custo carimbado
+ * (ADR-027) — lucro/margem, sinalizando a cobertura (`costCoverage < 1` quando há venda sem custo).
+ * Aceita busca `q` (sem acento) e ordena por `faturamento` (padrão) ou `lucro`.
+ */
+reports.get('/top-products', async (c) => {
+  const tenantId = getTenantId(c);
+  const connectionString = getConnectionString(c.env);
+  if (!tenantId || !connectionString) {
+    return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
+  }
+
+  const parsed = topReportSchema.safeParse({
+    from: c.req.query('from'),
+    to: c.req.query('to'),
+    q: c.req.query('q'),
+    orderBy: c.req.query('orderBy'),
+    limit: c.req.query('limit'),
+  });
+  if (!parsed.success) {
+    return c.json({ ok: false, error: 'Parâmetros inválidos.', issues: parsed.error.flatten() }, 400);
+  }
+  const { from, to, q, orderBy = 'faturamento', limit = 10 } = parsed.data;
+  const range = buildDateFilter(from, to);
+
+  try {
+    const prisma = createPrismaClient(connectionString);
+    const conditions: Prisma.Sql[] = [
+      Prisma.sql`o."tenantId" = ${tenantId}::uuid`,
+      Prisma.sql`o."status" <> 'CANCELLED'`,
+    ];
+    if (range?.gte) conditions.push(Prisma.sql`o."createdAt" >= ${range.gte}`);
+    if (range?.lte) conditions.push(Prisma.sql`o."createdAt" <= ${range.lte}`);
+    // Busca sem acento (mesmo padrão do catálogo): dobra o acento dos dois lados via `unaccent`.
+    for (const token of q ? q.split(/\s+/).filter(Boolean) : []) {
+      const pat = `%${likeEscape(token)}%`;
+      conditions.push(Prisma.sql`(
+        extensions.unaccent(coalesce(p."name", oi."productName")) ILIKE extensions.unaccent(${pat})
+        OR extensions.unaccent(coalesce(p."popularName", '')) ILIKE extensions.unaccent(${pat})
+      )`);
+    }
+    // Ordena pelo alias já projetado (Postgres aceita ORDER BY em alias de saída).
+    const orderExpr =
+      orderBy === 'lucro' ? Prisma.sql`"grossProfit" DESC` : Prisma.sql`"revenue" DESC`;
+
+    // Cost-zero: uma varredura agregada. O lucro/margem final sai da função pura `calcProfit` (core),
+    // mas o ORDER BY por lucro precisa da conta no banco — daí a expressão de `grossProfit` no SQL.
+    const rows = await prisma.$queryRaw<
+      Array<{
+        productId: string;
+        productName: string | null;
+        revenue: number;
+        qty: number;
+        salesCount: number;
+        coveredRevenue: number;
+        coveredCost: number;
+      }>
+    >(Prisma.sql`
+      SELECT
+        oi."productId" AS "productId",
+        COALESCE(MAX(p."name"), MAX(oi."productName")) AS "productName",
+        SUM(oi."total")::float8 AS "revenue",
+        SUM(oi."quantity")::float8 AS "qty",
+        COUNT(DISTINCT oi."orderId")::int AS "salesCount",
+        COALESCE(SUM(oi."total") FILTER (WHERE oi."unitCost" IS NOT NULL), 0)::float8 AS "coveredRevenue",
+        COALESCE(SUM(oi."unitCost" * COALESCE(oi."baseQuantity", oi."quantity")) FILTER (WHERE oi."unitCost" IS NOT NULL), 0)::float8 AS "coveredCost",
+        (
+          COALESCE(SUM(oi."total") FILTER (WHERE oi."unitCost" IS NOT NULL), 0)
+          - COALESCE(SUM(oi."unitCost" * COALESCE(oi."baseQuantity", oi."quantity")) FILTER (WHERE oi."unitCost" IS NOT NULL), 0)
+        )::float8 AS "grossProfit"
+      FROM "order_items" oi
+      JOIN "orders" o ON o."id" = oi."orderId"
+      LEFT JOIN "products" p ON p."id" = oi."productId"
+      WHERE ${Prisma.join(conditions, ' AND ')}
+      GROUP BY oi."productId"
+      ORDER BY ${orderExpr}
+      LIMIT ${limit}
+    `);
+
+    const data: TopProductRow[] = rows.map((r) => {
+      const { grossProfit, marginPercent, costCoverage } = calcProfit({
+        totalRevenue: r.revenue,
+        coveredRevenue: r.coveredRevenue,
+        coveredCost: r.coveredCost,
+      });
+      return {
+        productId: r.productId,
+        productName: r.productName ?? 'Produto',
+        revenue: Number(r.revenue.toFixed(2)),
+        qty: Number(r.qty),
+        salesCount: r.salesCount,
+        grossProfit,
+        marginPercent,
+        costCoverage,
+      };
+    });
+
+    return c.json({ ok: true, data });
+  } catch (err) {
+    console.error('GET /reports/top-products falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao gerar o ranking de produtos.' }, 500);
+  }
+});
+
+/**
+ * "Quem mais compra" um produto (Fatia 5): top clientes por faturamento naquele produto no período.
+ * Alimenta o pop-up de detalhe do produto. Venda sem cliente aparece como "Consumidor".
+ */
+reports.get('/product-customers/:productId', async (c) => {
+  const tenantId = getTenantId(c);
+  const connectionString = getConnectionString(c.env);
+  if (!tenantId || !connectionString) {
+    return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
+  }
+  const productId = c.req.param('productId');
+  if (!/^[0-9a-f-]{36}$/i.test(productId)) {
+    return c.json({ ok: false, error: 'Produto inválido.' }, 400);
+  }
+
+  const parsed = reportRangeSchema.safeParse({ from: c.req.query('from'), to: c.req.query('to') });
+  if (!parsed.success) {
+    return c.json({ ok: false, error: 'Período inválido.', issues: parsed.error.flatten() }, 400);
+  }
+  const { from, to } = parsed.data;
+  const range = buildDateFilter(from, to);
+
+  try {
+    const prisma = createPrismaClient(connectionString);
+    const conditions: Prisma.Sql[] = [
+      Prisma.sql`o."tenantId" = ${tenantId}::uuid`,
+      Prisma.sql`o."status" <> 'CANCELLED'`,
+      Prisma.sql`oi."productId" = ${productId}::uuid`,
+    ];
+    if (range?.gte) conditions.push(Prisma.sql`o."createdAt" >= ${range.gte}`);
+    if (range?.lte) conditions.push(Prisma.sql`o."createdAt" <= ${range.lte}`);
+
+    const rows = await prisma.$queryRaw<
+      Array<{ customerId: string | null; customerName: string; qty: number; revenue: number }>
+    >(Prisma.sql`
+      SELECT
+        o."customerId" AS "customerId",
+        COALESCE(MAX(c."name"), 'Consumidor') AS "customerName",
+        SUM(oi."quantity")::float8 AS "qty",
+        SUM(oi."total")::float8 AS "revenue"
+      FROM "order_items" oi
+      JOIN "orders" o ON o."id" = oi."orderId"
+      LEFT JOIN "customers" c ON c."id" = o."customerId"
+      WHERE ${Prisma.join(conditions, ' AND ')}
+      GROUP BY o."customerId"
+      ORDER BY "revenue" DESC
+      LIMIT 5
+    `);
+
+    const data: ProductCustomerRow[] = rows.map((r) => ({
+      customerId: r.customerId,
+      customerName: r.customerName,
+      qty: Number(r.qty),
+      revenue: Number(r.revenue.toFixed(2)),
+    }));
+
+    return c.json({ ok: true, data });
+  } catch (err) {
+    console.error('GET /reports/product-customers falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao detalhar o produto.' }, 500);
   }
 });
 

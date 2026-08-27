@@ -20,6 +20,7 @@ import {
   reconcileStock,
   calcAverageTicket,
   withPaymentShare,
+  calcProfit,
   netCashMovements,
   grossCashMovements,
   manualCashMovementType,
@@ -1478,5 +1479,59 @@ describe('ADR-020 — retirada / entrega futura', () => {
       const reserved = reconcileReserved([{ baseQuantity: 40, deliveredBaseQty: 10 }]); // 30
       expect(availableQty(100, reserved)).toBe(70);
     });
+  });
+});
+
+describe('calcProfit', () => {
+  it('lucro e margem com 100% de cobertura de custo', () => {
+    // receita 100, custo 60 ⇒ lucro 40, margem 40%, cobertura 1.
+    expect(calcProfit({ totalRevenue: 100, coveredRevenue: 100, coveredCost: 60 })).toEqual({
+      grossProfit: 40,
+      marginPercent: 40,
+      costCoverage: 1,
+    });
+  });
+
+  it('cobertura parcial: só a receita COM custo entra na margem (não infla)', () => {
+    // Faturou 100, mas só 80 tem custo (20 de venda antiga sem unitCost). Custo coberto 48.
+    // Lucro = 80 − 48 = 32; margem = 32/80 = 40%; cobertura = 80/100 = 0,8.
+    expect(calcProfit({ totalRevenue: 100, coveredRevenue: 80, coveredCost: 48 })).toEqual({
+      grossProfit: 32,
+      marginPercent: 40,
+      costCoverage: 0.8,
+    });
+  });
+
+  it('nenhuma venda com custo ⇒ lucro/margem 0 e cobertura 0 (nunca custo zero)', () => {
+    expect(calcProfit({ totalRevenue: 250, coveredRevenue: 0, coveredCost: 0 })).toEqual({
+      grossProfit: 0,
+      marginPercent: 0,
+      costCoverage: 0,
+    });
+  });
+
+  it('faturamento zero ⇒ tudo 0 (sem divisão por zero)', () => {
+    expect(calcProfit({ totalRevenue: 0, coveredRevenue: 0, coveredCost: 0 })).toEqual({
+      grossProfit: 0,
+      marginPercent: 0,
+      costCoverage: 0,
+    });
+  });
+
+  it('prejuízo: custo maior que a receita ⇒ lucro e margem negativos', () => {
+    // Vendeu abaixo do custo: receita 100, custo 120 ⇒ lucro −20, margem −20%.
+    expect(calcProfit({ totalRevenue: 100, coveredRevenue: 100, coveredCost: 120 })).toEqual({
+      grossProfit: -20,
+      marginPercent: -20,
+      costCoverage: 1,
+    });
+  });
+
+  it('arredonda a 2 casas o lucro/margem e a 4 a cobertura', () => {
+    // receita coberta 33,33, custo 10 ⇒ lucro 23,33; margem 69,997% → 70; cobertura 33,33/99,99 = 1/3 → 0,3333.
+    const r = calcProfit({ totalRevenue: 99.99, coveredRevenue: 33.33, coveredCost: 10 });
+    expect(r.grossProfit).toBe(23.33);
+    expect(r.marginPercent).toBe(70);
+    expect(r.costCoverage).toBe(0.3333);
   });
 });

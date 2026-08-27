@@ -13,6 +13,7 @@ import { OfflineNotice } from '@/components/OfflineNotice';
 import { CashMovementsList } from '@/components/CashMovementsList';
 import { PaymentCompositionModal } from '@/components/PaymentCompositionModal';
 import { PeriodFilter, defaultRange } from '@/components/PeriodFilter';
+import { TopProductsCard } from '@/components/TopProductsCard';
 
 const BRL = (v: number) =>
   v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -373,6 +374,11 @@ export default function RelatoriosPage() {
           </tbody>
         </table>
       </div>
+
+      <SectionLabel>Produtos e clientes</SectionLabel>
+
+      {/* Ranking de produtos (Fatia 5A) — card colapsável com busca e detalhe em pop-up. */}
+      <TopProductsCard from={range.from ?? null} to={range.to ?? null} />
 
       <SectionLabel>Caixa</SectionLabel>
 

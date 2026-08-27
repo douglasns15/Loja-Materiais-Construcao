@@ -115,3 +115,45 @@ export interface PaymentComposition {
   total: number;
   rows: PaymentCompositionRow[];
 }
+
+/**
+ * Consulta dos rankings de produtos/clientes (Relatórios v2, Fatia 5). Além do intervalo, aceita
+ * busca `q` (sem acento, no servidor) e o critério de ordenação. `limit` limita o tamanho da lista.
+ */
+export const topReportSchema = reportRangeSchema.extend({
+  q: z.string().trim().max(80).optional(),
+  /** `faturamento` (padrão) ou `lucro` (usa o custo carimbado — ADR-027). */
+  orderBy: z.enum(['faturamento', 'lucro']).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+});
+export type TopReportQuery = z.infer<typeof topReportSchema>;
+
+/**
+ * Linha do ranking de PRODUTOS no período (Fatia 5). Lucro/margem só das vendas com custo carimbado
+ * (ADR-027); `costCoverage < 1` sinaliza que parte do faturamento não tem custo (venda antiga).
+ */
+export interface TopProductRow {
+  productId: string;
+  productName: string;
+  /** Faturamento do produto (Σ dos totais das linhas), inclui vendas sem custo. */
+  revenue: number;
+  /** Quantidade vendida (na unidade do produto). */
+  qty: number;
+  /** Nº de vendas que incluíram o produto (base do ticket). */
+  salesCount: number;
+  /** Lucro bruto (só linhas com custo). Ver `costCoverage`. */
+  grossProfit: number;
+  /** Margem % sobre a receita coberta. */
+  marginPercent: number;
+  /** Fração do faturamento com custo (0..1). `< 1` ⇒ lucro/margem parciais. */
+  costCoverage: number;
+}
+
+/** "Quem mais compra" um produto (Fatia 5): top clientes por faturamento naquele produto. */
+export interface ProductCustomerRow {
+  /** `null` quando a venda foi sem cliente (consumidor). */
+  customerId: string | null;
+  customerName: string;
+  qty: number;
+  revenue: number;
+}
