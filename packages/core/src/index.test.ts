@@ -27,6 +27,11 @@ import {
   calcDaysToStockout,
   median,
   calcTypicalVelocity,
+  insightDominantPaymentMethod,
+  insightLowMarginTopProduct,
+  insightMonthProjection,
+  insightCashDivergence,
+  insightBestCustomer,
   netCashMovements,
   grossCashMovements,
   manualCashMovementType,
@@ -1678,5 +1683,98 @@ describe('calcTypicalVelocity', () => {
   it('frequência trava em 1 (borda pode pegar um dia a mais)', () => {
     // 31 dias com venda numa janela de 30 ⇒ frequência min(1, 31/30) = 1.
     expect(calcTypicalVelocity(Array(31).fill(4), 30)).toBe(4);
+  });
+});
+
+describe('insights (Fatia 9)', () => {
+  describe('insightDominantPaymentMethod', () => {
+    it('dispara quando uma forma concentra ≥ 55%', () => {
+      const r = insightDominantPaymentMethod([
+        { label: 'PIX', share: 64.7 },
+        { label: 'Dinheiro', share: 31.9 },
+        { label: 'Cartão Débito', share: 3.5 },
+      ]);
+      expect(r?.id).toBe('dominant-method');
+      expect(r?.severity).toBe('info');
+      expect(r?.text).toContain('PIX');
+      expect(r?.text).toContain('65%');
+    });
+
+    it('não dispara quando nenhuma passa de 55%', () => {
+      expect(
+        insightDominantPaymentMethod([
+          { label: 'PIX', share: 50 },
+          { label: 'Dinheiro', share: 50 },
+        ]),
+      ).toBeNull();
+    });
+
+    it('não dispara com uma forma só', () => {
+      expect(insightDominantPaymentMethod([{ label: 'PIX', share: 100 }])).toBeNull();
+    });
+  });
+
+  describe('insightLowMarginTopProduct', () => {
+    it('pega o de MAIOR faturamento com margem baixa e cobertura confiável', () => {
+      const r = insightLowMarginTopProduct([
+        { name: 'Cimento', revenue: 3000, marginPercent: 8, costCoverage: 1 },
+        { name: 'Areia', revenue: 500, marginPercent: 5, costCoverage: 1 },
+      ]);
+      expect(r?.id).toBe('low-margin-product');
+      expect(r?.severity).toBe('warn');
+      expect(r?.text).toContain('Cimento');
+    });
+
+    it('ignora produto sem cobertura de custo suficiente (não alarma por falta de dado)', () => {
+      expect(
+        insightLowMarginTopProduct([{ name: 'X', revenue: 9999, marginPercent: 0, costCoverage: 0.2 }]),
+      ).toBeNull();
+    });
+
+    it('não dispara quando as margens são saudáveis', () => {
+      expect(
+        insightLowMarginTopProduct([{ name: 'Y', revenue: 3000, marginPercent: 40, costCoverage: 1 }]),
+      ).toBeNull();
+    });
+  });
+
+  describe('insightMonthProjection', () => {
+    it('informa o fechamento projetado', () => {
+      const r = insightMonthProjection(9061.61);
+      expect(r?.id).toBe('month-projection');
+      expect(r?.severity).toBe('info');
+    });
+    it('projeção 0 ⇒ null', () => {
+      expect(insightMonthProjection(0)).toBeNull();
+    });
+  });
+
+  describe('insightCashDivergence', () => {
+    it('alerta quando a divergência passa do limiar (falta)', () => {
+      const r = insightCashDivergence(-25);
+      expect(r?.id).toBe('cash-divergence');
+      expect(r?.severity).toBe('warn');
+      expect(r?.text).toContain('falta');
+    });
+    it('sobra também alerta', () => {
+      expect(insightCashDivergence(30)?.text).toContain('sobra');
+    });
+    it('dentro do limiar ⇒ null', () => {
+      expect(insightCashDivergence(-4)).toBeNull();
+      expect(insightCashDivergence(0)).toBeNull();
+    });
+  });
+
+  describe('insightBestCustomer', () => {
+    it('destaca o melhor cliente', () => {
+      const r = insightBestCustomer('Bob', 452.4);
+      expect(r?.id).toBe('best-customer');
+      expect(r?.severity).toBe('good');
+      expect(r?.text).toContain('Bob');
+    });
+    it('sem compras (0) ou sem nome ⇒ null', () => {
+      expect(insightBestCustomer('Bob', 0)).toBeNull();
+      expect(insightBestCustomer('', 100)).toBeNull();
+    });
   });
 });

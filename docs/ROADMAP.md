@@ -3,8 +3,23 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-27 — **Relatorios.v2 — Fatia 7 (Gráfico temporal) — NO AR + REFINO
-> "empilhado por forma" no mesmo dia (E2E do Owner). Deploy do refino PENDENTE.** O painel "Composição
+> **Última atualização:** 2026-08-27 — **Relatorios.v2 — Fatia 9 (Insights configuráveis) —
+> implementada. Deploy + E2E do Owner PENDENTES.** Faixa de insights no topo de Relatórios, com regras
+> que o dono **liga/desliga** (preferência por dispositivo em `localStorage` `nexoloja:report-insights`,
+> custo-zero — sem migration). **5 regras PURAS em core (+13 testes, Regra 2):** `insightDominantPayment
+> Method` (uma forma ≥ 55% do recebido), `insightLowMarginTopProduct` (produto que fatura alto com
+> margem < 15% e cobertura de custo ≥ 50% — nunca alarma por falta de dado, ADR-027), `insightMonth
+> Projection` (fechamento no ritmo atual), `insightCashDivergence` (divergência acumulada ≥ R$ 20),
+> `insightBestCustomer` (quem mais comprou). Cada uma só dispara quando a condição é **real** (senão
+> `null`). **Web:** `InsightsBand` (chips por severidade info/good/warn + ⚙ config com checkboxes),
+> reusa `sales`/`sessions` da página e busca o mínimo extra (top produto/cliente + projeção) nas rotas
+> JÁ existentes — **sem rota nova** (§8.2 intocada). **Camadas:** apps/web + packages/core (plano).
+> **Gate:** core 322/322 (+13); shared 48/48; web `tsc` 0; liga/desliga persiste no reload. **Restam:**
+> Fatia 10 (export CSV/PDF) — a última.
+>
+> **Antes:** 2026-08-27 — **Relatorios.v2 — Fatia 7 (Gráfico temporal, empilhado por
+> forma) — NO AR e E2E DO OWNER VALIDADO (2026-08-27). CONCLUÍDA.** Deploy final: API `a94d6538` + web
+> `822321fb` (inclui fix dos rótulos de data que sobrepunham em 30d — ancorados no fim). O painel "Composição
 > do recebido" tem toggle **▤ Tabela × 📈 Gráfico**. Após o E2E, o Owner apontou que o gráfico "cru"
 > (1 barra em "Hoje") era pouco útil; à pergunta "o que os grandes usam?", registrado que POS/adquirente
 > (Square/Stone/Cielo) mostram **série temporal EMPILHADA por forma de pagamento** — adotado: cada barra

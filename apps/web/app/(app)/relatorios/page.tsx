@@ -13,6 +13,7 @@ import { useOnline } from '@/lib/useOnline';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { CashMovementsList } from '@/components/CashMovementsList';
 import { DailyRevenueChart } from '@/components/DailyRevenueChart';
+import { InsightsBand } from '@/components/InsightsBand';
 import { PaymentCompositionModal } from '@/components/PaymentCompositionModal';
 import { PeriodFilter, defaultRange } from '@/components/PeriodFilter';
 import { ProjectionsSection } from '@/components/ProjectionsSection';
@@ -324,6 +325,9 @@ export default function RelatoriosPage() {
       </div>
 
       {error && online && <p className="mb-4 text-sm text-red-600">{error}</p>}
+
+      {/* Faixa de insights configuráveis (Fatia 9) — regras puras sobre os agregados do período. */}
+      <InsightsBand sales={sales} sessions={sessions} from={range.from ?? null} to={range.to ?? null} />
 
       <SectionLabel>Resultado do período</SectionLabel>
 

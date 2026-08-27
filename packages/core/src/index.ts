@@ -1380,6 +1380,125 @@ export function calcTypicalVelocity(saleDayQuantities: number[], windowDays: num
 }
 
 // =============================================================================
+// INSIGHTS CONFIGURÁVEIS (Relatórios v2, Fatia 9)
+// =============================================================================
+//
+// Cada regra é uma função PURA sobre agregados já existentes — devolve um `Insight` quando a
+// condição é REAL, ou `null` quando não há o que dizer (nunca inventa). A UI (apps/web) renderiza só
+// as regras LIGADAS pelo dono (preferência em localStorage, custo-zero). Testadas com Vitest (regra 2).
+
+/** Severidade do insight (define a cor no chip): informativo, positivo ou alerta. */
+export type InsightSeverity = 'info' | 'good' | 'warn';
+
+/** Um insight pronto para exibir. `id` é estável (casa com a preferência liga/desliga). */
+export interface Insight {
+  id: string;
+  severity: InsightSeverity;
+  text: string;
+}
+
+/** Ids estáveis das regras de insight — fonte única (config liga/desliga + metadados). */
+export const INSIGHT_RULE_IDS = [
+  'dominant-method',
+  'low-margin-product',
+  'month-projection',
+  'cash-divergence',
+  'best-customer',
+] as const;
+export type InsightRuleId = (typeof INSIGHT_RULE_IDS)[number];
+
+/** Metadados das regras (rótulo + descrição) para a tela de configuração dos insights. */
+export const INSIGHT_RULE_META: { id: InsightRuleId; label: string; description: string }[] = [
+  { id: 'dominant-method', label: 'Forma dominante', description: 'Quando uma forma de pagamento concentra a maior parte do recebido.' },
+  { id: 'low-margin-product', label: 'Margem baixa', description: 'Produto que fatura alto mas tem margem baixa.' },
+  { id: 'month-projection', label: 'Projeção do mês', description: 'Faturamento projetado do mês no ritmo atual.' },
+  { id: 'cash-divergence', label: 'Divergência de caixa', description: 'Divergência acumulada de caixa acima do normal no período.' },
+  { id: 'best-customer', label: 'Melhor cliente', description: 'O cliente que mais comprou no período.' },
+];
+
+/** Formata moeda BR (uso interno das regras — mantém a mensagem pronta e pura). */
+function insightBrl(v: number): string {
+  return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+/** Limiar (%) de participação para uma forma ser "dominante". */
+export const DOMINANT_METHOD_SHARE = 55;
+/** Limiar (%) de margem para um produto de alto faturamento ser "margem baixa". */
+export const LOW_MARGIN_PERCENT = 15;
+/** Cobertura mínima de custo para confiar na margem de um produto (ADR-027). */
+const LOW_MARGIN_MIN_COVERAGE = 0.5;
+/** Divergência de caixa (R$, valor absoluto) a partir da qual vira alerta. */
+export const CASH_DIVERGENCE_THRESHOLD = 20;
+
+/**
+ * Regra "forma de pagamento dominante" (Fatia 9): dispara quando há 2+ formas e a maior concentra
+ * ≥ `DOMINANT_METHOD_SHARE`% do recebido. `label` já vem resolvido (ex.: "PIX"). Pura.
+ */
+export function insightDominantPaymentMethod(
+  methods: { label: string; share: number }[],
+): Insight | null {
+  if (methods.length < 2) return null;
+  const top = methods.reduce((a, b) => (b.share > a.share ? b : a));
+  if (top.share < DOMINANT_METHOD_SHARE) return null;
+  const share = top.share.toLocaleString('pt-BR', { maximumFractionDigits: 0 });
+  return { id: 'dominant-method', severity: 'info', text: `${top.label} concentra ${share}% do recebido no período.` };
+}
+
+/**
+ * Regra "margem baixa em produto que fatura alto" (Fatia 9): entre os produtos com cobertura de custo
+ * confiável (≥ 50%), pega o de MAIOR faturamento cuja margem seja < `LOW_MARGIN_PERCENT`%. Alerta.
+ * Só olha vendas com custo carimbado (ADR-027) — nunca alarma por falta de dado. Pura.
+ */
+export function insightLowMarginTopProduct(
+  products: { name: string; revenue: number; marginPercent: number; costCoverage: number }[],
+): Insight | null {
+  const candidate = products
+    .filter((p) => p.costCoverage >= LOW_MARGIN_MIN_COVERAGE && p.marginPercent < LOW_MARGIN_PERCENT)
+    .sort((a, b) => b.revenue - a.revenue)[0];
+  if (!candidate) return null;
+  const margin = candidate.marginPercent.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+  return {
+    id: 'low-margin-product',
+    severity: 'warn',
+    text: `${candidate.name} fatura ${insightBrl(candidate.revenue)} mas a margem é de só ${margin}%.`,
+  };
+}
+
+/** Regra "projeção do mês" (Fatia 9): informa o fechamento no ritmo atual. Pura. */
+export function insightMonthProjection(projected: number): Insight | null {
+  if (projected <= 0) return null;
+  return {
+    id: 'month-projection',
+    severity: 'info',
+    text: `No ritmo atual, o mês fecha em ${insightBrl(projected)}.`,
+  };
+}
+
+/**
+ * Regra "divergência de caixa fora do normal" (Fatia 9): dispara quando a divergência acumulada do
+ * período passa de `CASH_DIVERGENCE_THRESHOLD` (em valor absoluto). Alerta. Pura.
+ */
+export function insightCashDivergence(totalDivergence: number): Insight | null {
+  if (Math.abs(totalDivergence) < CASH_DIVERGENCE_THRESHOLD) return null;
+  const kind = totalDivergence < 0 ? 'falta' : 'sobra';
+  return {
+    id: 'cash-divergence',
+    severity: 'warn',
+    text: `Divergência de caixa acumulada de ${insightBrl(totalDivergence)} (${kind}) no período.`,
+  };
+}
+
+/** Regra "melhor cliente" (Fatia 9): destaca quem mais comprou no período. Positivo. Pura. */
+export function insightBestCustomer(name: string, revenue: number): Insight | null {
+  if (revenue <= 0 || !name) return null;
+  return {
+    id: 'best-customer',
+    severity: 'good',
+    text: `Seu melhor cliente no período: ${name} (${insightBrl(revenue)}).`,
+  };
+}
+
+// =============================================================================
 // SINCRONIZAÇÃO OFFLINE (Outbox) — ADR-011
 // =============================================================================
 //
