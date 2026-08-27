@@ -29,7 +29,8 @@
 // antiga (documentos em cache que apontam para CSS/JS de hash velho — que somem no deploy e fariam
 // a página abrir SEM ESTILO) e reaquecer com o HTML fresco. Só o SHELL é versionado; o STATIC
 // (chunks imutáveis por hash) sobrevive. v4: correção do "abre sem CSS após deploy" (2026-07-29).
-const VERSION = 'v4';
+// v5: deploy da resiliência de reabertura (orçamento de retry maior em lib/api.ts, 2026-08-27).
+const VERSION = 'v5';
 const SHELL = `nexoloja-shell-${VERSION}`; // documentos + manifest/ícones (versionado)
 const STATIC = 'nexoloja-static'; // /_next/static/* imutáveis por hash (NÃO versionado)
 

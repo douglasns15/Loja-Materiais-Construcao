@@ -47,8 +47,17 @@ async function handle<T>(res: Response): Promise<T> {
 // HTTP (401/403/404/409/500) é resposta válida do servidor e NÃO deve ser re-tentado. O POST
 // (criar venda/produto) fica FORA do retry de propósito: não é idempotente e re-tentar poderia
 // duplicar o recurso.
-const RETRIES = 2; // tentativas totais = 1 + RETRIES
-const BACKOFF_MS = [400, 1200];
+// Orçamento de retry dimensionado para ABSORVER o cold start SILENCIOSAMENTE, sem "piscar" o erro.
+// Ao REABRIR a PWA depois de ociosa, a stack (Worker→Hyperdrive→Supavisor→Supabase) está fria e a 1ª
+// leitura pode falhar por alguns segundos até esquentar. Com um orçamento curto, o loop desistia antes
+// disso e a tela mostrava "Não foi possível conectar" por um instante, recuperando na ação seguinte —
+// o "pisca" que o operador via na reabertura. O backoff CRESCENTE dá tempo do pool esquentar entre as
+// tentativas (~6,9 s somados, ~7 s de janela) — o suficiente para a reabertura recuperar DENTRO do loop
+// (a tela fica em "carregando", não em erro). Só idempotentes usam isto (o POST/venda fica de fora).
+// Genuinamente offline, o erro ainda aparece — só depois de esgotar a janela (troca justa: o caso comum
+// é ter internet e o servidor só engasgar por segundos). Ver ADR-005 (resiliência ao cold start).
+const RETRIES = 4; // tentativas totais = 1 + RETRIES
+const BACKOFF_MS = [400, 1000, 2000, 3500];
 const TIMEOUT_MS = 12000;
 
 /**
