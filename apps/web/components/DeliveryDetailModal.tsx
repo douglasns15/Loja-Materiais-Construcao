@@ -386,7 +386,10 @@ export function DeliveryDetailModal({
 
             {/* Documento imprimível (oculto na tela) — cupom da venda + faixa "FALTA RETIRAR".
                 Mostra as quantidades VENDIDAS (cupom igual ao da venda); a faixa cobre o "falta
-                retirar". "Pago" só quando não há saldo a prazo em aberto (`outstandingBalance`). */}
+                retirar". "Pago" só quando não há saldo a prazo em aberto (`outstandingBalance`).
+                `pickupLines` (progresso por item, unidade-base) faz o comprovante mostrar o bloco
+                "Situação da retirada" após retiradas parciais — o cupom deixa de mostrar só a
+                quantidade cheia e passa a discriminar o que já saiu e o que falta. */}
             <ReceiptPrint
               kind="sale"
               store={store}
@@ -402,6 +405,11 @@ export function DeliveryDetailModal({
               orderNumber={detail.orderNumber}
               pickupNotice
               pickupPaid={detail.outstandingBalance <= 0}
+              pickupLines={detail.items.map((it) => ({
+                name: it.productName,
+                delivered: Number(it.deliveredBaseQty),
+                remaining: it.remainingBaseQty,
+              }))}
             />
           </>
         )}

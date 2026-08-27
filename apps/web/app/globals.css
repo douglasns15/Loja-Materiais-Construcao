@@ -130,6 +130,35 @@
   display: flex;
   justify-content: space-between;
 }
+/* Situação da retirada (ADR-020) — na reimpressão do comprovante após retirada parcial: lista
+   "retirou X · falta Y" por item, com o que falta em negrito. Separada por linha tracejada. */
+#print-area .rc-pickup {
+  margin-top: 8px;
+  border-top: 1px dashed #000;
+  padding-top: 4px;
+  font-size: 0.9em;
+}
+#print-area .rc-pickup .rc-pickup-head {
+  text-align: center;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  margin-bottom: 3px;
+}
+#print-area .rc-pickup .rc-pickup-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+#print-area .rc-pickup .rc-pickup-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#print-area .rc-pickup .rc-pickup-qty {
+  white-space: nowrap;
+  text-align: right;
+}
 #print-area .rc-foot {
   margin-top: 12px;
   text-align: center;
