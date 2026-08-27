@@ -247,7 +247,7 @@ export interface StockoutRisk {
   productName: string;
   /** Estoque atual (unidade-base). */
   stockQty: number;
-  /** Velocidade média de saída por dia (unidade-base), na janela de referência. */
+  /** Velocidade TÍPICA de saída por dia (unidade-base): mediana dos dias com venda × frequência. */
   dailyVelocity: number;
   /** Dias até esgotar no ritmo atual (`stockQty / dailyVelocity`, 1 casa). */
   daysToStockout: number;

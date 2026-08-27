@@ -4,7 +4,18 @@
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
 > **Última atualização:** 2026-08-26 — **Relatorios.v2 — Fatia 8 (Projeções "no ritmo atual") —
-> NO AR, E2E do Owner validado + REFINO aplicado (mediana + carrossel). Deploy do refino PENDENTE.**
+> NO AR, E2E validado + REFINO da ruptura (velocidade típica: mediana×frequência) + carrossel. Deploy
+> do 2º refino PENDENTE.** O 1º refino (mediana sobre janela cheia) matava o pico, mas era conservador
+> demais — no tenant real só 1 item entrava, então o carrossel nunca aparecia. Owner pediu para ver o
+> carrossel; à pergunta "o que os grandes usam?", registrado que o padrão de mercado é **média + estoque
+> de segurança + lead time (ponto de reposição)** com **limpeza de outlier** antes — e a mediana é a
+> forma barata dessa limpeza. Escolhida a **Opção 1: velocidade típica = `calcTypicalVelocity` =
+> mediana(dias COM venda) × (dias com venda / dias da janela)** (nova função pura em core, +5 testes):
+> robusta ao pico E pega quem vende REGULARMENTE (não só quase-todo-dia). No tenant real a lista voltou
+> a **5 itens** (cimento, areia, fita, tijolinho… todos estoque baixo real) e o carrossel aparece; a
+> "Conduite" (pico único) segue fora. Backlog futuro possível: ponto de reposição com lead time +
+> estoque de segurança (fora do escopo enxuto). **Gate:** core 309/309 (+5); shared 48/48; api `tsc` 0;
+> web `tsc` 0; validado no banco (5 itens plausíveis). §8.2 atualizada.
 > Refino pedido pelo Owner após o E2E: (a) a velocidade de ruptura passou de **média** para **MEDIANA
 > do consumo diário** (nova função pura `median` em core, +5 testes) — dias sem venda contam 0, então
 > uma **venda-bombástica única** deixa de inflar a velocidade (ex.: "Conduite" saía como ~1 dia pela

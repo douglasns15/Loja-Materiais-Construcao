@@ -7,7 +7,7 @@ import {
   calcDaysToStockout,
   calcMonthRunRate,
   calcProfit,
-  median,
+  calcTypicalVelocity,
   previousPeriod,
   withPaymentShare,
 } from '@nexoloja/core';
@@ -750,9 +750,7 @@ reports.get('/projections', async (c) => {
 
     const up = upcomingAgg[0] ?? { total: 0, count: 0n };
 
-    // Agrupa as saídas diárias por produto para tirar a MEDIANA do consumo diário. Dias sem venda na
-    // janela contam como 0 (preenchidos até `velocityWindowDays`), então um item que vende esporádico
-    // tem mediana baixa/0 (não alarma), e um pico único não infla a velocidade típica.
+    // Agrupa as saídas por produto. `daily` = quantidades dos DIAS COM VENDA (uma por dia da janela).
     const byProduct = new Map<string, { name: string; stockQty: number; daily: number[] }>();
     for (const r of stockRows) {
       const cur = byProduct.get(r.productId) ?? { name: r.productName, stockQty: r.stockQty, daily: [] };
@@ -760,15 +758,15 @@ reports.get('/projections', async (c) => {
       byProduct.set(r.productId, cur);
     }
 
-    // Ruptura: dias-para-esgotar por item (função pura), usando a MEDIANA como velocidade típica.
-    // "VAI faltar" = ainda tem estoque (> 0) e rompe em ≤ 14 dias — itens já zerados ("já faltou") são
-    // outra tela (reposição do Estoque). Ordenado do mais urgente; teto de 5 (alerta, não lista toda).
+    // Ruptura: dias-para-esgotar por item (funções puras). Velocidade típica = MEDIANA dos dias com
+    // venda × frequência (robusta ao pico, mas ainda pega quem vende REGULARMENTE, não só quase-todo-
+    // dia — ver `calcTypicalVelocity`). "VAI faltar" = ainda tem estoque (> 0) e rompe em ≤ 14 dias;
+    // já zerados ("já faltou") são a tela de reposição. Ordenado do mais urgente; teto de 5.
     const RUPTURE_LIMIT_DAYS = 14;
     const stockoutRisks: StockoutRisk[] = [...byProduct.entries()]
       .filter(([, v]) => v.stockQty > 0)
       .map(([productId, v]) => {
-        const zeros = Math.max(0, velocityWindowDays - v.daily.length);
-        const dailyVelocity = Number(median([...Array(zeros).fill(0), ...v.daily]).toFixed(4));
+        const dailyVelocity = calcTypicalVelocity(v.daily, velocityWindowDays);
         const days = calcDaysToStockout(v.stockQty, dailyVelocity);
         return { productId, v, dailyVelocity, days };
       })

@@ -1364,6 +1364,21 @@ export function median(values: number[]): number {
   return (a + b) / 2;
 }
 
+/**
+ * Velocidade de saída "típica" por dia (Fatia 8, refino) — robusta a pico e sensível à frequência.
+ * `mediana(quantidades dos DIAS COM VENDA) × (dias com venda / dias da janela)`. A mediana ignora uma
+ * venda-bombástica única; a frequência traz de volta o item que vende REGULARMENTE (não todo dia) —
+ * ao contrário da mediana sobre a janela cheia, que zeraria quem não vende na maioria dos dias. É a
+ * forma barata de "média com limpeza de outlier" que os ERPs fazem antes de projetar. Frequência
+ * travada em 1 (a janela pode pegar um dia a mais na borda). Lista vazia/janela ≤ 0 ⇒ 0. Pura, testada.
+ */
+export function calcTypicalVelocity(saleDayQuantities: number[], windowDays: number): number {
+  if (windowDays <= 0 || saleDayQuantities.length === 0) return 0;
+  const typicalDay = median(saleDayQuantities);
+  const frequency = Math.min(1, saleDayQuantities.length / windowDays);
+  return Number((typicalDay * frequency).toFixed(4));
+}
+
 // =============================================================================
 // SINCRONIZAÇÃO OFFLINE (Outbox) — ADR-011
 // =============================================================================

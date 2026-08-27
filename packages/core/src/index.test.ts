@@ -26,6 +26,7 @@ import {
   calcMonthRunRate,
   calcDaysToStockout,
   median,
+  calcTypicalVelocity,
   netCashMovements,
   grossCashMovements,
   manualCashMovementType,
@@ -1650,5 +1651,32 @@ describe('median', () => {
     // Vendeu só em 3 de 30 dias ⇒ mediana 0 ⇒ "não rompe" no ritmo típico.
     const dias = [...Array(27).fill(0), 10, 10, 10];
     expect(median(dias)).toBe(0);
+  });
+});
+
+describe('calcTypicalVelocity', () => {
+  it('vende todo dia: mediana × frequência 1 = a própria mediana', () => {
+    // 30 dias vendendo 5 ⇒ 5 × (30/30) = 5.
+    expect(calcTypicalVelocity(Array(30).fill(5), 30)).toBe(5);
+  });
+
+  it('vende REGULARMENTE mas não todo dia: frequência reduz a velocidade (mas não zera)', () => {
+    // 10 de 30 dias, ~2 por vez ⇒ 2 × (10/30) = 0,6667. (Mediana sobre janela cheia zeraria.)
+    expect(calcTypicalVelocity(Array(10).fill(2), 30)).toBe(0.6667);
+  });
+
+  it('robusta ao pico: uma venda-bombástica não infla a velocidade típica', () => {
+    // 20 dias de 5 + 1 dia de 5000 (21 dias com venda) ⇒ mediana 5 × 21/30 = 3,5.
+    expect(calcTypicalVelocity([...Array(20).fill(5), 5000], 30)).toBe(3.5);
+  });
+
+  it('nenhum dia com venda ⇒ 0; janela inválida ⇒ 0', () => {
+    expect(calcTypicalVelocity([], 30)).toBe(0);
+    expect(calcTypicalVelocity([5], 0)).toBe(0);
+  });
+
+  it('frequência trava em 1 (borda pode pegar um dia a mais)', () => {
+    // 31 dias com venda numa janela de 30 ⇒ frequência min(1, 31/30) = 1.
+    expect(calcTypicalVelocity(Array(31).fill(4), 30)).toBe(4);
   });
 });
