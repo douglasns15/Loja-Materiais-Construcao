@@ -3,8 +3,9 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-27 — **Relatorios.v2 — Fatia 10 (Exportar CSV + PDF) — implementada.
-> FECHA AS 10 FATIAS do plano. Deploy + E2E do Owner PENDENTES.** Dois botões no topo (não saem na
+> **Última atualização:** 2026-08-27 — **Relatorios.v2 — Fatia 10 (Exportar CSV + PDF) — NO AR e E2E
+> DO OWNER VALIDADO (2026-08-27). 🎉 PLANO RELATÓRIOS v2 COMPLETO (10/10).** Deploy final: web
+> `cd5dacc6`. Dois botões no topo (não saem na
 > impressão): **Exportar CSV** e **Imprimir / PDF**. **CSV** montado no CLIENTE (sem dependência) a
 > partir do que já está na tela — resumo do período, por forma de pagamento, top produtos, top clientes
 > e fechamentos de caixa; alvo Excel pt-BR (separador `;`, decimal vírgula, BOM UTF-8 p/ acentos)
