@@ -106,10 +106,31 @@ products.get('/', async (c) => {
     // escopo já é o catálogo do próprio tenant (RLS), então listar tudo é o correto. Se algum
     // dia um catálogo ficar realmente grande, o caminho é busca no servidor (`?q=`) + paginação,
     // não um corte cego que oculta dados.
-    const items = await prisma.product.findMany({
-      where: { tenantId, deletedAt: null, ...(includeInactive ? {} : { isActive: true }) },
-      orderBy: { name: 'asc' },
-    });
+    //
+    // Usa `$queryRaw` (NÃO `findMany`) DE PROPÓSITO — otimização de CPU do Worker (ADR-005). O
+    // catálogo inteiro trafega a cada abertura de PDV/Estoque/Produtos; com `findMany`, o adapter do
+    // Prisma constrói um objeto `Decimal.js` por coluna numérica (são ~11) POR PRODUTO. Num catálogo
+    // grande isso estourava o teto de **10 ms de CPU** do Worker no plano grátis ("Worker exceeded CPU
+    // time limit"), matando ESTA requisição e faminta­ndo as vizinhas na mesma isolate (o PDV caía no
+    // falso "caixa recuperado do cache offline"). No SQL cru o Postgres devolve os numéricos já como
+    // STRING — exatamente o que o cliente espera (os tipos são `string`) e normaliza via `Number()`,
+    // sem construir Decimal. Mesmo padrão já comprovado em produção no `GET /products/search`. Sem
+    // `select` para não derrubar nenhum campo que Produtos/Estoque/PDV consomem — o ganho vem de
+    // evitar o Decimal, não de cortar colunas.
+    const conditions: Prisma.Sql[] = [
+      Prisma.sql`p."tenantId" = ${tenantId}::uuid`,
+      Prisma.sql`p."deletedAt" IS NULL`,
+    ];
+    if (!includeInactive) {
+      conditions.push(Prisma.sql`p."isActive" = true`);
+    }
+    const items = await prisma.$queryRaw<
+      Array<Record<string, unknown> & { costPrice: unknown; salePrice: unknown }>
+    >(Prisma.sql`
+      SELECT * FROM "products" p
+      WHERE ${Prisma.join(conditions, ' AND ')}
+      ORDER BY p."name" ASC
+    `);
     return c.json({ ok: true, data: items.map(withMargin) });
   } catch (err) {
     console.error('GET /products falhou:', err);

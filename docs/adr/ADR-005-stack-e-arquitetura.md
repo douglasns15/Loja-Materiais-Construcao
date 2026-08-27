@@ -133,3 +133,21 @@ Todas são **a mesma causa** com superfícies diferentes. A resposta tem **duas 
 `apps/api/wrangler.toml` `[observability] enabled=true` retém logs/exceções do Worker (~3 dias no free tier), permitindo investigar um incidente transitório **depois** que acontece (antes, `wrangler tail` só mostrava eventos ao vivo). Foi o que permitiu diagnosticar o "Transaction not found".
 
 > **Limite honesto:** o retry é rede de proteção e o keep-alive **reduz a frequência** do cold start, mas nenhum dos dois o **elimina** — a solução definitiva continua sendo o **Supabase Pro** (sem auto-pause, pool mais estável) no lançamento, já previsto em "Consequências → Revisar no futuro".
+
+## Adendo (2026-08-27): teto de **CPU do Worker** (free) + salvaguarda do Prisma Client no deploy
+
+Sob uso real, o operador voltou a ver "não foi possível conectar" / "caixa recuperado do cache offline" **no meio do expediente** (internet OK) e venda/estoque "caindo do nada". Desta vez **não era cold start nem o banco** (o keep-alive estava saudável, cron `*/5` `Ok`). Os logs do Worker mostraram **"Worker exceeded CPU time limit"** e **"code had hung"**.
+
+### 1. Causa: `GET /products` estourava o teto de 10 ms de CPU do plano grátis
+
+O **plano grátis** de Cloudflare Workers limita **10 ms de CPU por requisição** (o pago sobe para 30 s; ~US$5/mês). O `GET /products` (catálogo do PDV, chamado a cada abertura de PDV/Estoque/Produtos, **sem teto de linhas**) fazia `prisma.product.findMany()`, e o adapter do Prisma constrói **um objeto `Decimal.js` por coluna numérica (~11) por produto**. Num catálogo grande isso passa dos 10 ms → a Cloudflare mata a requisição. Como o Worker é **single-thread por isolate**, as requisições vizinhas leves (`/tenant`, `/quotes`, `/cash-sessions/current`) ficam **famintas** e são canceladas como "hung" → as mensagens enganosas de "offline"/"sem conexão" na tela (`/tenant` e `/quotes` eram **vítimas**, não a causa). Novo porque o catálogo cresceu e a esteira do Relatórios v2 elevou a concorrência.
+
+**Correção** (`apps/api/src/routes/products.ts`, `GET /`): troca de `findMany` por **`$queryRaw SELECT *`** — mesmo padrão já em produção no `GET /products/search`. O Postgres devolve os numéricos como **string** (formato que o cliente já espera — os tipos são `string` — e normaliza via `Number()`), **sem construir `Decimal`**. `SELECT *` de propósito: mantém **todos os campos** (PDV/Estoque/Produtos consomem conjuntos diferentes); o ganho vem de **evitar o Decimal**, não de cortar colunas. Sem schema/migração/`core`/`shared`; contrato de rota inalterado (§8.2 intocada). *(API Version `0e315f13`.)*
+
+### 2. Salvaguarda de deploy: Prisma Client **sempre fresco**
+
+O 1º deploy desta correção **quebrou a venda em produção**: `PrismaClientValidationError: Unknown argument \`unitCost\``. Causa = o **Prisma Client gerado no `node_modules` local estava stale** — os TIPOS (`index.d.ts`) tinham `OrderItem.unitCost` (ADR-027/migration 0032), mas o RUNTIME que o Worker usa para validar (a cópia embutida `.prisma/client/schema.prisma` + `wasm.js`) fora gerado ANTES da Fatia 2. Por isso `tsc`/build (tipos) passam e a falha só aparece **em runtime**, no `create` do pedido — e o `wrangler deploy` empacota o client do `node_modules` local. Recuperação: `wrangler rollback` (restaura a venda em segundos) → `prisma generate` → redeploy → venda de teste validando `POST /orders` no `wrangler tail`.
+
+**Salvaguarda permanente:** `apps/api/package.json` ganhou `"predeploy": "npx prisma generate --schema ../../packages/db/prisma/schema.prisma"`, então **todo `npm run deploy` regenera o Client fresco do schema atual antes de subir** — nunca mais fica stale. NÃO é upgrade de versão (segue **6.19.3**; a v7 continua evitada — ver adiante). Regra de deploy da API: `prisma generate` (agora automático) → conferir → build → deploy → **validar o caminho de ESCRITA (`POST /orders`)**, não só telas de leitura → rollback pronto se a escrita falhar.
+
+> **Nota sobre versão:** este incidente **não** teria sido evitado por atualizar o Prisma — o custo de CPU vinha do **uso** (`findMany`/`Decimal.js`), não da versão. A v7 segue evitada de propósito (rodava SQL sem criar migrations + problema de conexão pela edge); subir para v7 exige revalidação isolada de edge + migrations.
