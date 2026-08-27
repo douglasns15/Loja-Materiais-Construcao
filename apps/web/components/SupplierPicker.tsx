@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { normalizeSearchText } from '@nexoloja/core';
 import { formatCnpj } from '@nexoloja/shared';
+import { useAnchoredDropdown } from '@/lib/useAnchoredDropdown';
 
 /**
  * Seletor de fornecedor com **busca**, no MESMO formato do seletor de produto (`ProductPicker`) —
@@ -36,18 +38,20 @@ export function SupplierPicker<S extends PickerSupplier>({
   const [open, setOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
 
   const selected = suppliers.find((s) => s.id === value) ?? null;
 
   // Fecha a lista ao clicar fora (ou Esc): o fornecedor é OPCIONAL, então clicar fora deve
   // simplesmente deixar o campo como está (vazio, se nada foi escolhido) — não travar até escolher.
+  // A lista está no body (portal), então um clique NELA também conta como "dentro".
   useEffect(() => {
     if (!open) return;
     function onPointerDown(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-        setQuery('');
-      }
+      const t = e.target as Node;
+      if (containerRef.current?.contains(t) || listRef.current?.contains(t)) return;
+      setOpen(false);
+      setQuery('');
     }
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') {
@@ -72,6 +76,11 @@ export function SupplierPicker<S extends PickerSupplier>({
         : [],
     [suppliers, query],
   );
+
+  // Lista em PORTAL (position: fixed) p/ não ser cortada por cards com overflow-hidden; `menuStyle`
+  // a posiciona e limita a altura à viewport (último item sempre alcançável).
+  const showList = open && query.trim().length > 0;
+  const menuStyle = useAnchoredDropdown(containerRef, showList);
 
   function pick(s: S) {
     onChange(s.id);
@@ -118,45 +127,53 @@ export function SupplierPicker<S extends PickerSupplier>({
         className="w-full rounded-lg border border-gray-300 px-3 py-2 disabled:opacity-60"
         aria-label="Buscar fornecedor"
       />
-      {open && query.trim() && (
-        <ul className="absolute z-10 mt-1 max-h-72 w-full divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
-          {matches.length === 0 ? (
-            <li className="px-3 py-3 text-center text-sm text-gray-500">
-              Nenhum fornecedor encontrado.
-            </li>
-          ) : (
-            matches.map((s) => (
-              <li key={s.id}>
+      {showList &&
+        menuStyle &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <ul
+            ref={listRef}
+            style={menuStyle}
+            className="divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg"
+          >
+            {matches.length === 0 ? (
+              <li className="px-3 py-3 text-center text-sm text-gray-500">
+                Nenhum fornecedor encontrado.
+              </li>
+            ) : (
+              matches.map((s) => (
+                <li key={s.id}>
+                  <button
+                    type="button"
+                    onClick={() => pick(s)}
+                    className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-gray-50"
+                  >
+                    <span className="min-w-0 truncate font-medium">{s.name}</span>
+                    {s.cnpj && (
+                      <span className="shrink-0 text-xs text-gray-500">{formatCnpj(s.cnpj)}</span>
+                    )}
+                  </button>
+                </li>
+              ))
+            )}
+            {/* Rodapé fixo: não achou? cadastra na hora. */}
+            {onCreateNew && (
+              <li>
                 <button
                   type="button"
-                  onClick={() => pick(s)}
-                  className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-gray-50"
+                  onClick={() => {
+                    setOpen(false);
+                    onCreateNew();
+                  }}
+                  className="block w-full px-3 py-2 text-left text-sm font-medium text-blue-600 hover:bg-blue-50"
                 >
-                  <span className="min-w-0 truncate font-medium">{s.name}</span>
-                  {s.cnpj && (
-                    <span className="shrink-0 text-xs text-gray-500">{formatCnpj(s.cnpj)}</span>
-                  )}
+                  + Cadastrar novo fornecedor
                 </button>
               </li>
-            ))
-          )}
-          {/* Rodapé fixo: não achou? cadastra na hora. */}
-          {onCreateNew && (
-            <li>
-              <button
-                type="button"
-                onClick={() => {
-                  setOpen(false);
-                  onCreateNew();
-                }}
-                className="block w-full px-3 py-2 text-left text-sm font-medium text-blue-600 hover:bg-blue-50"
-              >
-                + Cadastrar novo fornecedor
-              </button>
-            </li>
-          )}
-        </ul>
-      )}
+            )}
+          </ul>,
+          document.body,
+        )}
     </div>
   );
 }

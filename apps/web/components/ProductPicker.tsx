@@ -1,7 +1,9 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { productMatchesQuery } from '@nexoloja/core';
+import { useAnchoredDropdown } from '@/lib/useAnchoredDropdown';
 
 /**
  * Seletor de produto com **busca**, no mesmo formato do PDV (Nova Venda) — substitui o
@@ -44,6 +46,8 @@ export function ProductPicker<P extends PickerProduct>({
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
 
   const selected = products.find((p) => p.id === value) ?? null;
 
@@ -51,6 +55,36 @@ export function ProductPicker<P extends PickerProduct>({
     () => (query.trim() ? products.filter((p) => productMatchesQuery(p, query)) : []),
     [products, query],
   );
+
+  // A lista aparece SÓ ao digitar; renderizada em PORTAL (position: fixed) para não ser cortada
+  // por ancestrais com overflow-hidden (cards da repaginação). `menuStyle` a posiciona e limita
+  // sua altura ao espaço da viewport — o último item fica sempre alcançável pela rolagem.
+  const showList = open && query.trim().length > 0;
+  const menuStyle = useAnchoredDropdown(containerRef, showList);
+
+  // Fecha ao clicar fora (campo + lista portada) ou Esc. Checar a lista também é essencial: como
+  // ela vive no body (portal), um clique nela seria "fora" e a fecharia ANTES do onClick do item.
+  useEffect(() => {
+    if (!showList) return;
+    function onPointerDown(e: MouseEvent) {
+      const t = e.target as Node;
+      if (containerRef.current?.contains(t) || listRef.current?.contains(t)) return;
+      setOpen(false);
+      setQuery('');
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        setOpen(false);
+        setQuery('');
+      }
+    }
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [showList]);
 
   function pick(p: P) {
     onChange(p.id);
@@ -84,7 +118,7 @@ export function ProductPicker<P extends PickerProduct>({
   }
 
   return (
-    <div className="relative">
+    <div className="relative" ref={containerRef}>
       <input
         ref={inputRef}
         type="search"
@@ -99,35 +133,43 @@ export function ProductPicker<P extends PickerProduct>({
         className="w-full rounded-lg border border-gray-300 px-3 py-2 disabled:opacity-60"
         aria-label="Buscar produto"
       />
-      {open && query.trim() && (
-        <ul className="absolute z-10 mt-1 max-h-72 w-full divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
-          {matches.length === 0 ? (
-            <li className="px-3 py-4 text-center text-sm text-gray-500">
-              Nenhum produto encontrado.
-            </li>
-          ) : (
-            matches.map((p) => (
-              <li key={p.id}>
-                <button
-                  type="button"
-                  onClick={() => pick(p)}
-                  className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-gray-50"
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate font-medium">{p.name}</span>
-                    <span className="block truncate text-xs text-gray-500">
-                      {p.popularName ? `${p.popularName} · ` : ''}
-                      {p.manufacturer ? `${p.manufacturer} · ` : ''}
-                      {p.sku}
-                    </span>
-                  </span>
-                  <span className="shrink-0 text-xs text-gray-500">{formatStock(p)}</span>
-                </button>
+      {showList &&
+        menuStyle &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <ul
+            ref={listRef}
+            style={menuStyle}
+            className="divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg"
+          >
+            {matches.length === 0 ? (
+              <li className="px-3 py-4 text-center text-sm text-gray-500">
+                Nenhum produto encontrado.
               </li>
-            ))
-          )}
-        </ul>
-      )}
+            ) : (
+              matches.map((p) => (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    onClick={() => pick(p)}
+                    className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-gray-50"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium">{p.name}</span>
+                      <span className="block truncate text-xs text-gray-500">
+                        {p.popularName ? `${p.popularName} · ` : ''}
+                        {p.manufacturer ? `${p.manufacturer} · ` : ''}
+                        {p.sku}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-xs text-gray-500">{formatStock(p)}</span>
+                  </button>
+                </li>
+              ))
+            )}
+          </ul>,
+          document.body,
+        )}
     </div>
   );
 }
