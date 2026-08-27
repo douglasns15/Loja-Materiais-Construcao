@@ -3,7 +3,49 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-27 — **Relatorios.v2 — Fatia 10 (Exportar CSV + PDF) — NO AR e E2E
+> **Última atualização:** 2026-08-27 — **UI.Buscas.DropdownCortado — o último item do dropdown de
+> busca (ProductPicker/SupplierPicker) ficava cortado/"travado" — NO AR e E2E DO OWNER VALIDADO
+> (2026-08-27, "validado com sucesso"). CONCLUÍDA.** Achado do Owner no Estoque (Ajuste de inventário
+> e Entrada) e em outras telas. **Causa:** a repaginação deu `overflow-hidden` aos cards (p/ arredondar
+> o cabeçalho índigo) e o dropdown era `position:absolute` DENTRO do card → o card cortava a lista na
+> borda inferior; a rolagem ficava além do corte. **Correção (no componente do campo → vale em todas as
+> telas):** novo hook `apps/web/lib/useAnchoredDropdown.ts` + lista em **PORTAL** (`createPortal` no
+> `document.body`, `position:fixed`, `z-70`) que escapa de qualquer `overflow-hidden`; altura limitada ao
+> espaço livre da viewport (último item sempre alcançável) e **flip p/ cima** quando o campo está baixo;
+> reposiciona ao rolar (captura)/redimensionar. Fechar ao clicar fora/`Esc` passou a tratar a lista
+> portada como "dentro" (senão o clique de seleção fecharia antes do `onClick`); ProductPicker ganhou o
+> fechar-ao-clicar-fora que não tinha. PDV verificado: dropdown em fluxo normal (não `absolute`) → não
+> era afetado, intocado. **Camadas:** só `apps/web` (2 componentes + 1 hook). **Sem API/migration/shared/
+> core.** **Gate:** web `tsc` 0 + `next build` (`/estoque` 15.9 kB). **NO AR:** web Version `d0c50e3d`;
+> smoke ✅ (HTML `no-store` + CSS 200). Commit local em `main` (push do Owner).
+>
+> **Antes:** 2026-08-27 — **UI.Entregas.CodigoVenda — código da venda `V-000XXX` visível na tela de
+> Entregas — NO AR e E2E DO OWNER VALIDADO (2026-08-27, "validado com sucesso"). CONCLUÍDA.** Pedido do
+> Owner: ao abrir uma entrega/retirada futura não dava p/ saber QUAL venda era. **Decisão (perguntada ao
+> Owner):** reusar o código da venda `V-000XXX` (ADR-023) como identificador do registro — **não** criar
+> um `E-000X` paralelo (seriam dois códigos p/ a mesma coisa; a "entrega" aqui É a venda, não entidade à
+> parte). **Modal** (`DeliveryDetailModal`): selo `V-000128` ao lado do nome do cliente (dado já vinha em
+> `GET /deliveries/:id`). **Lista** (`entregas/page.tsx`): mesmo selo na coluna "Cliente / venda" —
+> exigiu incluir `orderNumber` no payload de `GET /deliveries` (API `deliveries.ts` select+map; tipo
+> `DeliveryOrderRow` em `shared/delivery.ts`); **sem migration** (campo já existe no `Order`). Doc §8.2
+> atualizada (regra 7). **Camadas:** apps/web + apps/api + packages/shared. **Gate:** web `tsc` 0 + api
+> `tsc` 0 + `next build`. **NO AR:** API Version `22ad4f59` (predeploy `prisma generate`) + web Version
+> `2ac7cf1b`; smokes ✅. Commit local em `main` (push do Owner).
+>
+> **Antes:** 2026-08-27 — **UI.Entregas.Repaginacao — identidade visual das telas repaginadas aplicada
+> em Entregas — NO AR e E2E DO OWNER VALIDADO (2026-08-27, "validado com sucesso"). CONCLUÍDA.**
+> Continuação da onda de repaginação (PDV → Produtos → Estoque → Contas a Receber → Relatórios →
+> **Entregas**). Só apresentação; motor de entregas intocado. **Página** (`entregas/page.tsx`): título em
+> gradiente índigo + subtítulo; filtro "A retirar/Finalizadas/Todas" virou controle segmentado (pílula
+> sobre `bg-gray-100`); tabela `border-gray-200`+`shadow-md` com **cabeçalho índigo**; nome do cliente
+> índigo. **Modal** (`DeliveryDetailModal`): cabeçalho fixo índigo (`bg-indigo-600` + corpo rolável,
+> padrão do modal de Produto) e botões de baixa em **esmeralda** (ação positiva). **Camadas:** só
+> `apps/web`. **Sem API/migration/shared/core.** **Gate:** web `tsc` 0 + `next build` (`/entregas` 4.38
+> kB). **NO AR:** web Version `0a654845`; smoke ✅. Commit local em `main` (push do Owner). **Próximo
+> (outra sessão):** demais telas sem a identidade (Clientes, Fornecedores, Vendas/Histórico, Caixa) ou
+> itens do Horizonte 1 (PRODUCT-ROADMAP).
+>
+> **Antes:** 2026-08-27 — **Relatorios.v2 — Fatia 10 (Exportar CSV + PDF) — NO AR e E2E
 > DO OWNER VALIDADO (2026-08-27). 🎉 PLANO RELATÓRIOS v2 COMPLETO (10/10).** Deploy final: web
 > `cd5dacc6`. Dois botões no topo (não saem na
 > impressão): **Exportar CSV** e **Imprimir / PDF**. **CSV** montado no CLIENTE (sem dependência) a
