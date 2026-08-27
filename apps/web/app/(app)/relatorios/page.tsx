@@ -14,6 +14,7 @@ import { calcVariation } from '@nexoloja/core';
 import { apiGet } from '@/lib/api';
 import { useOnline } from '@/lib/useOnline';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
+import { csvNumber, downloadCsv, toCsv } from '@/lib/csv';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { CashMovementsList } from '@/components/CashMovementsList';
 import { DailyRevenueChart } from '@/components/DailyRevenueChart';
@@ -333,6 +334,69 @@ export default function RelatoriosPage() {
     [sessions],
   );
 
+  /** AAAA-MM-DD → DD/MM/AAAA (sem passar por Date, evita fuso). */
+  const dmy = (d: string | null) => (d ? d.split('-').reverse().join('/') : '—');
+  const periodLabel = `${dmy(dRange.from ?? null)} a ${dmy(dRange.to ?? null)}`;
+
+  /**
+   * Exporta o relatório do período em CSV (Fatia 10) — montado no cliente a partir do que já está na
+   * tela (resumo, formas, top produtos/clientes, caixa). Abre no Excel (`;` + BOM, pt-BR).
+   */
+  const handleExportCsv = useCallback(() => {
+    const rows: string[][] = [];
+    rows.push(['Relatórios — NexoLoja']);
+    rows.push([`Período: ${periodLabel}`]);
+    rows.push([]);
+    rows.push(['Resumo do período']);
+    rows.push(['Recebido', csvNumber(sales?.totalRevenue ?? 0)]);
+    rows.push(['Lucro bruto estimado', csvNumber(sales?.grossProfit ?? 0)]);
+    rows.push(['Margem %', csvNumber(sales?.marginPercent ?? 0, 1)]);
+    rows.push(['Vendas', String(sales?.salesCount ?? 0)]);
+    rows.push(['Ticket médio', csvNumber(sales?.averageTicket ?? 0)]);
+    rows.push(['Canceladas', String(sales?.cancelledCount ?? 0)]);
+    rows.push([]);
+    rows.push(['Por forma de pagamento']);
+    rows.push(['Forma', 'Recebido', 'Pagamentos', 'Participação %']);
+    for (const p of sales?.byPaymentMethod ?? []) {
+      rows.push([methodLabel(p.method), csvNumber(p.total), String(p.count), csvNumber(p.share, 1)]);
+    }
+    rows.push([]);
+    rows.push(['Top produtos (por faturamento)']);
+    rows.push(['#', 'Produto', 'Faturamento', 'Lucro', 'Margem %']);
+    topProducts.forEach((p, i) =>
+      rows.push([String(i + 1), p.productName, csvNumber(p.revenue), csvNumber(p.grossProfit), csvNumber(p.marginPercent, 1)]),
+    );
+    rows.push([]);
+    rows.push(['Top clientes (por faturamento)']);
+    rows.push(['#', 'Cliente', 'Comprado', 'Lucro gerado', 'Dívida atual']);
+    topCustomers.forEach((c, i) =>
+      rows.push([String(i + 1), c.customerName, csvNumber(c.revenue), csvNumber(c.grossProfit), csvNumber(c.currentDebt)]),
+    );
+    rows.push([]);
+    rows.push(['Fechamentos de caixa']);
+    rows.push(['Fechado em', 'Abertura', 'Esperado', 'Contado', 'Divergência']);
+    for (const s of sessions) {
+      rows.push([DATETIME(s.closedAt), csvNumber(s.openingAmount), csvNumber(s.expectedAmount), csvNumber(s.closingAmount), csvNumber(s.divergence)]);
+    }
+    downloadCsv(`relatorio_${dRange.from ?? 'periodo'}_a_${dRange.to ?? ''}`, toCsv(rows));
+  }, [periodLabel, sales, topProducts, topCustomers, sessions, dRange.from, dRange.to]);
+
+  /**
+   * Imprime / salva em PDF (Fatia 10): marca `body.print-report` (a folha de impressão esconde a
+   * navegação e o que é `.no-print`), chama `window.print()` e limpa a marca depois. Sem lib de PDF —
+   * o usuário escolhe "Salvar como PDF" na caixa de impressão do navegador.
+   */
+  const handlePrint = useCallback(() => {
+    document.body.classList.add('print-report');
+    const cleanup = () => {
+      document.body.classList.remove('print-report');
+      window.removeEventListener('afterprint', cleanup);
+    };
+    window.addEventListener('afterprint', cleanup);
+    window.print();
+    setTimeout(cleanup, 1500); // rede de segurança se afterprint não disparar
+  }, []);
+
   return (
     <div className="mx-auto max-w-6xl">
       {/* Identidade das telas repaginadas (PDV Opção A): título em gradiente índigo + subtítulo. */}
@@ -343,11 +407,32 @@ export default function RelatoriosPage() {
         O placar do período — o que entrou, por onde entrou e como fechou cada caixa.
       </p>
 
+      {/* Período no cabeçalho da impressão (só aparece no PDF/papel). */}
+      <p className="print-only mb-4 text-sm font-semibold text-gray-700">Período: {periodLabel}</p>
+
+      {/* Exportar (Fatia 10) — CSV (Excel) e Imprimir/PDF. Não sai na impressão. */}
+      <div className="no-print mb-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={handleExportCsv}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+        >
+          ⬇ Exportar CSV
+        </button>
+        <button
+          type="button"
+          onClick={handlePrint}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+        >
+          🖨 Imprimir / PDF
+        </button>
+      </div>
+
       {/* Tela online-only (ADR-012 (c)): offline mostra o aviso de rede, não o erro cru. */}
       <OfflineNotice />
 
       {/* Seletor de período (‹ Hoje › + atalhos + De/Até) — componente compartilhado. */}
-      <div className="mb-6">
+      <div className="no-print mb-6">
         <PeriodFilter value={range} onChange={setRange} />
         {loading && <span className="mt-2 block text-sm text-gray-500">Carregando…</span>}
       </div>
@@ -475,7 +560,7 @@ export default function RelatoriosPage() {
               </span>
             )}
             {/* Toggle Tabela × Gráfico. */}
-            <div className="inline-flex gap-0.5 rounded-xl bg-gray-100 p-1" role="group" aria-label="Ver como">
+            <div className="no-print inline-flex gap-0.5 rounded-xl bg-gray-100 p-1" role="group" aria-label="Ver como">
               {(['tabela', 'grafico'] as const).map((v) => (
                 <button
                   key={v}

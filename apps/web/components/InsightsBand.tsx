@@ -146,8 +146,8 @@ export function InsightsBand({
         )}
       </div>
 
-      {/* Configuração liga/desliga por regra. */}
-      <div className="relative shrink-0">
+      {/* Configuração liga/desliga por regra. Não sai na impressão (Fatia 10). */}
+      <div className="no-print relative shrink-0">
         <button
           type="button"
           onClick={() => setConfigOpen((v) => !v)}

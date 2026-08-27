@@ -14,15 +14,17 @@
   }
 }
 
+/* Modo COMPROVANTE/ORÇAMENTO: só o #print-area imprime. Escopado em `body:not(.print-report)` para
+   NÃO atrapalhar a impressão da tela de Relatórios (Fatia 10), que usa `body.print-report` abaixo. */
 @media print {
-  body * {
+  body:not(.print-report) * {
     visibility: hidden;
   }
-  #print-area,
-  #print-area * {
+  body:not(.print-report) #print-area,
+  body:not(.print-report) #print-area * {
     visibility: visible;
   }
-  #print-area {
+  body:not(.print-report) #print-area {
     display: block;
     position: absolute;
     left: 0;
@@ -132,4 +134,56 @@
   margin-top: 12px;
   text-align: center;
   font-size: 0.8em;
+}
+
+/* =========================================================================
+   Impressão da tela de RELATÓRIOS (Fatia 10) — window.print() com folha de
+   impressão. Ativada por `body.print-report` (setada antes do print e removida
+   depois). Esconde a moldura do app (navegação, cabeçalho, banners) e tudo
+   marcado com `.no-print`; o conteúdo do relatório imprime limpo, em P&B leve.
+   ========================================================================= */
+.print-only {
+  display: none;
+}
+@media print {
+  body.print-report aside,
+  body.print-report header,
+  body.print-report .no-print {
+    display: none !important;
+  }
+  /* O conteúdo ocupa a folha inteira, sem rolagem, fundo branco e sem sombras. */
+  body.print-report,
+  body.print-report main {
+    display: block !important;
+    overflow: visible !important;
+    background: #fff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  /* Solta a altura fixa (`h-dvh`) do wrapper do layout — senão a impressão corta em 1 página. */
+  body.print-report .h-dvh {
+    height: auto !important;
+    display: block !important;
+    overflow: visible !important;
+  }
+  body.print-report * {
+    box-shadow: none !important;
+  }
+  body.print-report .print-only {
+    display: block;
+  }
+  /* Evita cortar cards/tabelas no meio entre páginas. */
+  body.print-report .rounded-2xl,
+  body.print-report table,
+  body.print-report svg {
+    break-inside: avoid;
+  }
+  /* Garante que as cores de fundo (cabeçalho azul, chips) saiam na impressão. */
+  body.print-report * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  @page {
+    margin: 12mm;
+  }
 }

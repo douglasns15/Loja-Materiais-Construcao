@@ -3,8 +3,23 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-27 — **Relatorios.v2 — Fatia 9 (Insights configuráveis) —
-> implementada. Deploy + E2E do Owner PENDENTES.** Faixa de insights no topo de Relatórios, com regras
+> **Última atualização:** 2026-08-27 — **Relatorios.v2 — Fatia 10 (Exportar CSV + PDF) — implementada.
+> FECHA AS 10 FATIAS do plano. Deploy + E2E do Owner PENDENTES.** Dois botões no topo (não saem na
+> impressão): **Exportar CSV** e **Imprimir / PDF**. **CSV** montado no CLIENTE (sem dependência) a
+> partir do que já está na tela — resumo do período, por forma de pagamento, top produtos, top clientes
+> e fechamentos de caixa; alvo Excel pt-BR (separador `;`, decimal vírgula, BOM UTF-8 p/ acentos)
+> (`apps/web/lib/csv.ts`). **PDF** = `window.print()` + folha de impressão (`body.print-report` em
+> `globals.css`): esconde a navegação/cabeçalho e tudo `.no-print` (filtro, toggle, ⚙ insights, botões),
+> imprime só o relatório; cabeçalho só-impressão com o período; solta o `h-dvh` do layout p/ paginar; o
+> modo comprovante (`#print-area`) foi escopado em `body:not(.print-report)` p/ não conflitar. **Camadas:**
+> só `apps/web`. **Sem API/migration.** **Gate:** web `tsc` 0; core 322/322; shared 48/48; CSV validado
+> (separador/decimais/escape pt-BR). **🎉 Plano Relatórios v2 COMPLETO (10/10).** Backlog remanescente
+> (plano §backlog): dias de funcionamento em Configurações; ponto de reposição (lead time+segurança);
+> deduplicação já feita na resiliência da Fatia 9.
+>
+> **Antes:** 2026-08-27 — **Relatorios.v2 — Fatia 9 (Insights configuráveis) — NO AR e
+> E2E DO OWNER VALIDADO (2026-08-27), incluindo as 2 levas de resiliência (debounce + busca
+> compartilhada/warm-up). CONCLUÍDA.** Deploy final: web `e10458cc`. Faixa de insights no topo, com regras
 > que o dono **liga/desliga** (preferência por dispositivo em `localStorage` `nexoloja:report-insights`,
 > custo-zero — sem migration). **5 regras PURAS em core (+13 testes, Regra 2):** `insightDominantPayment
 > Method` (uma forma ≥ 55% do recebido), `insightLowMarginTopProduct` (produto que fatura alto com
