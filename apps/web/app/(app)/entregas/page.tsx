@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  formatOrderNumber,
   FULFILLMENT_STATUS_LABELS,
   type DeliveriesPage,
   type DeliveryOrderRow,
@@ -85,23 +86,26 @@ export default function EntregasPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <h1 className="mb-6 text-2xl font-bold">Entregas / Retiradas</h1>
+      <h1 className="mb-1 w-fit bg-gradient-to-r from-indigo-700 to-indigo-500 bg-clip-text text-2xl font-bold text-transparent">
+        Entregas / Retiradas
+      </h1>
+      <p className="mb-5 text-sm text-gray-500">
+        Vendas com retirada ou entrega posterior — acompanhe o que já saiu, o que falta e dê baixa.
+      </p>
 
       <OfflineNotice />
 
       {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
-      {/* Filtro de situação. */}
-      <div className="mb-4 flex gap-1">
+      {/* Filtro de situação (controle segmentado — identidade das telas repaginadas). */}
+      <div className="mb-4 inline-flex gap-0.5 rounded-xl bg-gray-100 p-1">
         {(['pending', 'completed', 'all'] as StatusFilter[]).map((s) => (
           <button
             key={s}
             type="button"
             onClick={() => setStatus(s)}
-            className={`rounded-lg px-3 py-2 text-sm font-medium ${
-              status === s
-                ? 'bg-gray-900 text-white'
-                : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
+            className={`rounded-lg px-4 py-1.5 text-sm font-semibold ${
+              status === s ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-white/60'
             }`}
           >
             {s === 'pending' ? 'A retirar' : s === 'completed' ? 'Finalizadas' : 'Todas'}
@@ -119,10 +123,10 @@ export default function EntregasPage() {
         </p>
       ) : (
         <>
-          <div className="overflow-x-auto rounded-2xl bg-white shadow-sm">
+          <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-md">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-100 text-left text-gray-600">
+                <tr className="bg-indigo-600 text-left text-white">
                   <th className="px-4 py-3">Cliente / venda</th>
                   <th className="px-4 py-3">Previsão</th>
                   <th className="px-4 py-3 text-center">Itens a retirar</th>
@@ -140,9 +144,15 @@ export default function EntregasPage() {
                       className="cursor-pointer border-b border-gray-50 hover:bg-gray-50"
                     >
                       <td className="px-4 py-3">
-                        <span className="font-medium text-blue-700">
-                          {r.customerName ?? 'Cliente não informado'}
-                        </span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold text-indigo-700">
+                            {r.customerName ?? 'Cliente não informado'}
+                          </span>
+                          {/* Código da venda (ADR-023) — identifica o registro. */}
+                          <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-bold tabular-nums text-indigo-600">
+                            {formatOrderNumber(r.orderNumber)}
+                          </span>
+                        </div>
                         <span className="block text-xs text-gray-500">
                           {new Date(r.createdAt).toLocaleDateString('pt-BR')}
                         </span>

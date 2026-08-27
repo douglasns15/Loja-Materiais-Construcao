@@ -89,6 +89,7 @@ deliveries.get('/', async (c) => {
       take: limit + 1,
       select: {
         id: true,
+        orderNumber: true,
         total: true,
         fulfillmentStatus: true,
         scheduledPickupAt: true,
@@ -110,6 +111,7 @@ deliveries.get('/', async (c) => {
       ).length;
       return {
         id: o.id,
+        orderNumber: o.orderNumber,
         total: o.total,
         fulfillmentStatus: o.fulfillmentStatus,
         scheduledPickupAt: o.scheduledPickupAt,

@@ -14,6 +14,8 @@ export type FulfillmentStatus = 'PENDING' | 'PARTIAL' | 'COMPLETED';
  */
 export type DeliveryOrderRow = {
   id: string;
+  /** Código sequencial da venda (ADR-023) — exibido como "V-000128"; identifica o registro. */
+  orderNumber: number;
   total: string;
   fulfillmentStatus: FulfillmentStatus;
   scheduledPickupAt: string | null;

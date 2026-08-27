@@ -159,12 +159,12 @@ export function DeliveryDetailModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-5 shadow-lg"
+        className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-lg"
       >
         {!loaded ? (
-          <p className="text-gray-600">Carregando…</p>
+          <p className="p-5 text-gray-600">Carregando…</p>
         ) : !detail ? (
-          <div>
+          <div className="p-5">
             <p className="text-sm text-red-600">{error ?? 'Pedido não encontrado.'}</p>
             <button
               type="button"
@@ -176,28 +176,35 @@ export function DeliveryDetailModal({
           </div>
         ) : (
           <>
-            <div className="mb-4 flex items-start justify-between gap-2">
+            {/* Cabeçalho do painel na cor da marca (identidade do PDV / telas repaginadas). */}
+            <div className="flex items-start justify-between gap-2 bg-indigo-600 px-5 py-4 text-white">
               <div>
-                <h2 className="text-lg font-bold">
-                  {detail.customer?.name ?? 'Cliente não informado'}
-                </h2>
-                <p className="text-sm text-gray-600">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-lg font-bold">
+                    {detail.customer?.name ?? 'Cliente não informado'}
+                  </h2>
+                  {/* Código da venda (ADR-023): identifica qual venda gerou esta retirada. */}
+                  <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-bold tabular-nums">
+                    {formatOrderNumber(detail.orderNumber)}
+                  </span>
+                </div>
+                <p className="text-sm text-indigo-100">
                   Venda em {dateTime(detail.createdAt)} · {BRL(detail.total)}
                 </p>
-                <p className="mt-0.5 text-sm">
+                <p className="mt-1 text-sm">
                   <span
                     className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
                       detail.fulfillmentStatus === 'COMPLETED'
                         ? 'bg-green-100 text-green-800'
                         : detail.fulfillmentStatus === 'PARTIAL'
                           ? 'bg-amber-100 text-amber-800'
-                          : 'bg-indigo-100 text-indigo-800'
+                          : 'bg-white/20 text-white'
                     }`}
                   >
                     {FULFILLMENT_STATUS_LABELS[detail.fulfillmentStatus]}
                   </span>
                   {!detail.perItemSchedule && detail.scheduledPickupAt && (
-                    <span className="ml-2 text-xs text-gray-600">
+                    <span className="ml-2 text-xs text-indigo-100">
                       Previsão: {dateOnly(detail.scheduledPickupAt)}
                     </span>
                   )}
@@ -206,13 +213,15 @@ export function DeliveryDetailModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="shrink-0 rounded-lg px-2 py-1 text-xl leading-none text-gray-400 hover:text-gray-700"
+                className="shrink-0 rounded-lg px-2 py-1 text-xl leading-none text-indigo-100 hover:bg-white/10 hover:text-white"
                 aria-label="Fechar"
               >
                 ×
               </button>
             </div>
 
+            {/* Corpo rolável (o cabeçalho índigo fica fixo no topo do painel). */}
+            <div className="overflow-y-auto p-5">
             {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
 
             {/* Comprovante de retirada (ADR-020): reimpressão do cupom com a faixa "FALTA RETIRAR"
@@ -319,7 +328,7 @@ export function DeliveryDetailModal({
                                 type="button"
                                 disabled={busy}
                                 onClick={() => deliverOne(it.id)}
-                                className="rounded-lg bg-gray-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-60"
+                                className="rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60"
                               >
                                 Retirar
                               </button>
@@ -345,7 +354,7 @@ export function DeliveryDetailModal({
                   type="button"
                   disabled={busy}
                   onClick={deliverAll}
-                  className="w-full rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+                  className="w-full rounded-lg bg-emerald-600 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60"
                 >
                   {busy ? 'Registrando…' : 'Retirar tudo o que falta'}
                 </button>
@@ -411,6 +420,7 @@ export function DeliveryDetailModal({
                 remaining: it.remainingBaseQty,
               }))}
             />
+            </div>
           </>
         )}
       </div>
