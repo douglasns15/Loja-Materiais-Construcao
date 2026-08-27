@@ -1349,6 +1349,21 @@ export function calcDaysToStockout(stockQty: number, dailyVelocity: number): num
   return Number((stockQty / dailyVelocity).toFixed(1));
 }
 
+/**
+ * Mediana de uma lista de números (Fatia 8). Robusta a outliers — ao contrário da média, uma única
+ * venda-bombástica não a distorce. Lista vazia ⇒ 0; par ⇒ média dos dois centrais. Função pura,
+ * testada (Regra 2). Usada na velocidade de saída do estoque (mediana do consumo diário).
+ */
+export function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  const a = sorted[mid] ?? 0;
+  if (sorted.length % 2 !== 0) return a;
+  const b = sorted[mid - 1] ?? 0;
+  return (a + b) / 2;
+}
+
 // =============================================================================
 // SINCRONIZAÇÃO OFFLINE (Outbox) — ADR-011
 // =============================================================================

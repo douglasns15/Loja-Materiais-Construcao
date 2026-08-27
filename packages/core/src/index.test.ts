@@ -25,6 +25,7 @@ import {
   calcVariation,
   calcMonthRunRate,
   calcDaysToStockout,
+  median,
   netCashMovements,
   grossCashMovements,
   manualCashMovementType,
@@ -1621,5 +1622,33 @@ describe('calcDaysToStockout', () => {
   it('arredonda a 1 casa', () => {
     // 10 / 3 = 3,333… ⇒ 3,3.
     expect(calcDaysToStockout(10, 3)).toBe(3.3);
+  });
+});
+
+describe('median', () => {
+  it('ímpar: o valor central', () => {
+    expect(median([3, 1, 2])).toBe(2);
+  });
+
+  it('par: média dos dois centrais', () => {
+    expect(median([1, 2, 3, 4])).toBe(2.5);
+  });
+
+  it('lista vazia ⇒ 0', () => {
+    expect(median([])).toBe(0);
+  });
+
+  it('robusta a outlier: uma venda-bombástica NÃO distorce (ao contrário da média)', () => {
+    // 5 vendida em 29 dias + 5000 num dia: média ~171, mas mediana = 5.
+    const dias = [...Array(29).fill(5), 5000];
+    expect(median(dias)).toBe(5);
+    const media = dias.reduce((a, b) => a + b, 0) / dias.length;
+    expect(media).toBeGreaterThan(170); // confirma que a média SIM seria distorcida
+  });
+
+  it('muitos dias sem venda (zeros) puxam a mediana p/ 0 (item esporádico não alarma)', () => {
+    // Vendeu só em 3 de 30 dias ⇒ mediana 0 ⇒ "não rompe" no ritmo típico.
+    const dias = [...Array(27).fill(0), 10, 10, 10];
+    expect(median(dias)).toBe(0);
   });
 });

@@ -4,7 +4,16 @@
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
 > **Última atualização:** 2026-08-26 — **Relatorios.v2 — Fatia 8 (Projeções "no ritmo atual") —
-> implementada. Deploy + E2E do Owner PENDENTES.** Nova seção **"Projeções · no ritmo atual"** (sempre
+> NO AR, E2E do Owner validado + REFINO aplicado (mediana + carrossel). Deploy do refino PENDENTE.**
+> Refino pedido pelo Owner após o E2E: (a) a velocidade de ruptura passou de **média** para **MEDIANA
+> do consumo diário** (nova função pura `median` em core, +5 testes) — dias sem venda contam 0, então
+> uma **venda-bombástica única** deixa de inflar a velocidade (ex.: "Conduite" saía como ~1 dia pela
+> média por causa de um pico e sumiu da lista; sobra "Saco de Areia" 8/estoque → ~8 dias por mediana
+> vs 4,4 pela média); (b) o card "Vai faltar estoque" ganhou **carrossel ‹ ›** para passar pelos 5
+> itens dentro do próprio card (contador N/5). Backlog aberto por engano na explicação: refinar
+> "vendas atípicas" já resolvido pela mediana. **Gate:** core 304/304 (+5); shared 48/48; api `tsc` 0;
+> web `tsc` 0; mediana validada no banco. §8.2 atualizada. Base implementada antes (deploy API
+> `d4ae4857` + web `e13c927c`). Nova seção **"Projeções · no ritmo atual"** (sempre
 > rotulada como direcional, não promessa) com 3 cards, independentes do filtro de período: **(1)
 > Faturamento do mês** por run-rate (média diária do recebido do mês × dias do mês, com barra
 > realizado/projeção); **(2) A receber (próx. 30 dias)** = saldo em aberto das dívidas OPEN que vencem

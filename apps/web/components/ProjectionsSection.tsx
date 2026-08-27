@@ -18,6 +18,8 @@ const NUM = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 1 
 export function ProjectionsSection() {
   const [data, setData] = useState<ProjectionsReport | null>(null);
   const [failed, setFailed] = useState(false);
+  // Carrossel dos itens em risco DENTRO do próprio card (Fatia 8, refino): ‹ › passa pelos 5.
+  const [riskIdx, setRiskIdx] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -39,8 +41,10 @@ export function ProjectionsSection() {
   const m = data?.monthRevenue;
   const monthPct =
     m && m.projected > 0 ? Math.min(100, Math.round((m.realized / m.projected) * 100)) : 0;
-  const top = data?.stockoutRisks[0];
-  const moreRisks = data ? Math.max(0, data.stockoutRisks.length - 1) : 0;
+  const risks = data?.stockoutRisks ?? [];
+  // Clampa o índice ao tamanho da lista (protege se a lista encolher entre buscas).
+  const idx = risks.length > 0 ? Math.min(riskIdx, risks.length - 1) : 0;
+  const risk = risks[idx];
 
   return (
     <div className="grid gap-4 sm:grid-cols-3">
@@ -75,20 +79,44 @@ export function ProjectionsSection() {
         )}
       </div>
 
-      {/* 3. Vai faltar estoque (velocidade de saída). */}
+      {/* 3. Vai faltar estoque — carrossel dos itens em risco dentro do card (‹ ›). */}
       <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-        <p className="text-xs font-medium text-gray-600">📦 Vai faltar estoque</p>
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-medium text-gray-600">📦 Vai faltar estoque</p>
+          {risks.length > 1 && (
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setRiskIdx((idx - 1 + risks.length) % risks.length)}
+                className="flex h-6 w-6 items-center justify-center rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50"
+                aria-label="Item anterior"
+              >
+                ‹
+              </button>
+              <span className="text-[11px] tabular-nums text-gray-400">
+                {idx + 1}/{risks.length}
+              </span>
+              <button
+                type="button"
+                onClick={() => setRiskIdx((idx + 1) % risks.length)}
+                className="flex h-6 w-6 items-center justify-center rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50"
+                aria-label="Próximo item"
+              >
+                ›
+              </button>
+            </div>
+          )}
+        </div>
         {!data ? (
           <p className="mt-1 text-2xl font-bold">—</p>
-        ) : top ? (
+        ) : risk ? (
           <>
-            <p className="mt-1 truncate text-lg font-bold" title={top.productName}>
-              {top.productName}
+            <p className="mt-1 truncate text-lg font-bold" title={risk.productName}>
+              {risk.productName}
             </p>
             <p className="mt-1.5 text-[11px] text-gray-500">
-              acaba em <strong>~{NUM(top.daysToStockout)} dias</strong> no ritmo atual (
-              {NUM(top.dailyVelocity)}/dia · {NUM(top.stockQty)} em estoque)
-              {moreRisks > 0 && <> · +{moreRisks} no limite</>}
+              acaba em <strong>~{NUM(risk.daysToStockout)} dias</strong> no ritmo atual (
+              {NUM(risk.dailyVelocity)}/dia · {NUM(risk.stockQty)} em estoque)
             </p>
           </>
         ) : (

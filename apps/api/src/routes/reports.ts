@@ -7,6 +7,7 @@ import {
   calcDaysToStockout,
   calcMonthRunRate,
   calcProfit,
+  median,
   previousPeriod,
   withPaymentShare,
 } from '@nexoloja/core';
@@ -726,20 +727,22 @@ reports.get('/projections', async (c) => {
           AND d."dueDate" >= ${dueFrom}
           AND d."dueDate" <= ${dueTo}
       `),
-      // 3. Velocidade de saída (EXPENSE) por produto nos últimos 30 dias + estoque atual.
+      // 3. Saída (EXPENSE) por produto E POR DIA nos últimos 30 dias + estoque atual. Agrupar por dia
+      //    (fuso da loja, −3h) permite tirar a MEDIANA do consumo diário — robusta a uma venda-
+      //    bombástica única, que distorceria a média. Uma linha por (produto, dia com saída).
       prisma.$queryRaw<
-        Array<{ productId: string; productName: string; stockQty: number; consumed: number }>
+        Array<{ productId: string; productName: string; stockQty: number; dayQty: number }>
       >(Prisma.sql`
         SELECT
           p."id" AS "productId",
           p."name" AS "productName",
           p."stockQty"::float8 AS "stockQty",
-          COALESCE(SUM(sm."quantity"), 0)::float8 AS "consumed"
+          SUM(sm."quantity")::float8 AS "dayQty"
         FROM "products" p
         JOIN "stock_movements" sm
           ON sm."productId" = p."id" AND sm."type" = 'EXPENSE' AND sm."createdAt" >= ${velocitySince}
         WHERE p."tenantId" = ${tenantId}::uuid AND p."deletedAt" IS NULL AND p."isActive" = true
-        GROUP BY p."id", p."name", p."stockQty"
+        GROUP BY p."id", p."name", p."stockQty", (sm."createdAt" - interval '3 hours')::date
       `),
     ]);
 
@@ -747,26 +750,44 @@ reports.get('/projections', async (c) => {
 
     const up = upcomingAgg[0] ?? { total: 0, count: 0n };
 
-    // Ruptura: dias-para-esgotar por item (função pura). "VAI faltar" = ainda tem estoque (> 0) e
-    // rompe em ≤ 14 dias no ritmo atual — itens já zerados ("já faltou") são outra tela (reposição do
-    // Estoque), não entram aqui. Ordenado do mais urgente; teto de 5 (é um alerta, não a lista toda).
+    // Agrupa as saídas diárias por produto para tirar a MEDIANA do consumo diário. Dias sem venda na
+    // janela contam como 0 (preenchidos até `velocityWindowDays`), então um item que vende esporádico
+    // tem mediana baixa/0 (não alarma), e um pico único não infla a velocidade típica.
+    const byProduct = new Map<string, { name: string; stockQty: number; daily: number[] }>();
+    for (const r of stockRows) {
+      const cur = byProduct.get(r.productId) ?? { name: r.productName, stockQty: r.stockQty, daily: [] };
+      cur.daily.push(r.dayQty);
+      byProduct.set(r.productId, cur);
+    }
+
+    // Ruptura: dias-para-esgotar por item (função pura), usando a MEDIANA como velocidade típica.
+    // "VAI faltar" = ainda tem estoque (> 0) e rompe em ≤ 14 dias — itens já zerados ("já faltou") são
+    // outra tela (reposição do Estoque). Ordenado do mais urgente; teto de 5 (alerta, não lista toda).
     const RUPTURE_LIMIT_DAYS = 14;
-    const stockoutRisks: StockoutRisk[] = stockRows
-      .filter((r) => r.stockQty > 0)
-      .map((r) => {
-        const dailyVelocity = Number((r.consumed / velocityWindowDays).toFixed(4));
-        const days = calcDaysToStockout(r.stockQty, dailyVelocity);
-        return { r, dailyVelocity, days };
+    const stockoutRisks: StockoutRisk[] = [...byProduct.entries()]
+      .filter(([, v]) => v.stockQty > 0)
+      .map(([productId, v]) => {
+        const zeros = Math.max(0, velocityWindowDays - v.daily.length);
+        const dailyVelocity = Number(median([...Array(zeros).fill(0), ...v.daily]).toFixed(4));
+        const days = calcDaysToStockout(v.stockQty, dailyVelocity);
+        return { productId, v, dailyVelocity, days };
       })
-      .filter((x): x is { r: (typeof stockRows)[number]; dailyVelocity: number; days: number } =>
-        x.days !== null && x.days <= RUPTURE_LIMIT_DAYS,
+      .filter(
+        (
+          x,
+        ): x is {
+          productId: string;
+          v: { name: string; stockQty: number; daily: number[] };
+          dailyVelocity: number;
+          days: number;
+        } => x.days !== null && x.days <= RUPTURE_LIMIT_DAYS,
       )
       .sort((a, b) => a.days - b.days)
       .slice(0, 5)
-      .map(({ r, dailyVelocity, days }) => ({
-        productId: r.productId,
-        productName: r.productName,
-        stockQty: r.stockQty,
+      .map(({ productId, v, dailyVelocity, days }) => ({
+        productId,
+        productName: v.name,
+        stockQty: v.stockQty,
         dailyVelocity,
         daysToStockout: days,
       }));
