@@ -19,8 +19,13 @@
 > disparava uma rajada de requests por clique (~8 chamadas/período; a Fatia 9 somou +3), saturando o
 > pool frio (ADR-005) → erro "não foi possível conectar". Corrigido com **debounce do período**
 > (`useDebouncedValue`, 300 ms): o filtro atualiza a UI na hora, mas as BUSCAS disparam uma rodada só
-> quando o usuário para. Follow-up possível: deduplicar fetches repetidos (projeção/top produto/cliente).
-> **Restam:** Fatia 10 (export CSV/PDF) — a última.
+> quando o usuário para. **2ª leva (após novos erros 500 "Falha na autenticação"/"Falha ao gerar o
+> relatório" = cold start + pool esgotado por concorrência):** a página passou a buscar os dados
+> compartilhados UMA vez e repassar aos filhos (InsightsBand, ProjectionsSection e os cards viraram
+> "burros", recebem via props; cards só re-buscam ao buscar/trocar ordenação) e a fazer **warm-up**
+> (aguarda o `/sales` — que tem retry — antes de abrir o leque paralelo). Requests por período caíram
+> de ~8 para ~5 (1 warm-up + 4 paralelos quentes), sem duplicatas. **Restam:** Fatia 10 (export
+> CSV/PDF) — a última.
 >
 > **Antes:** 2026-08-27 — **Relatorios.v2 — Fatia 7 (Gráfico temporal, empilhado por
 > forma) — NO AR e E2E DO OWNER VALIDADO (2026-08-27). CONCLUÍDA.** Deploy final: API `a94d6538` + web

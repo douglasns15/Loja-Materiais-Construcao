@@ -1,8 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { ProjectionsReport } from '@nexoloja/shared';
-import { apiGet } from '@/lib/api';
 
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -13,31 +12,14 @@ const NUM = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 1 
  * Seção "Projeções" (Relatórios v2, Fatia 8) — três olhares para frente, sempre rotulados **"no
  * ritmo atual"** (direcional, não promessa). Independente do filtro de período da tela: mês corrente
  * (run-rate), a receber nos próx. 30 dias (vencimentos ADR-026) e itens que vão faltar (velocidade de
- * saída). Busca uma vez ao montar (`GET /reports/projections`).
+ * saída). Recebe as projeções PRONTAS da página (buscadas uma vez lá, sem duplicar request).
  */
-export function ProjectionsSection() {
-  const [data, setData] = useState<ProjectionsReport | null>(null);
-  const [failed, setFailed] = useState(false);
+export function ProjectionsSection({ data }: { data: ProjectionsReport | null }) {
   // Carrossel dos itens em risco DENTRO do próprio card (Fatia 8, refino): ‹ › passa pelos 5.
   const [riskIdx, setRiskIdx] = useState(0);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const d = await apiGet<ProjectionsReport>('/reports/projections');
-        if (!cancelled) setData(d);
-      } catch {
-        if (!cancelled) setFailed(true);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (failed) return null; // silencioso: projeções são um extra, não travam a tela
-
+  // As projeções vêm PRONTAS da página (buscadas uma vez, sem duplicar request). Enquanto não chegam,
+  // mostra o esqueleto ("—"); nunca some (é um extra silencioso).
   const m = data?.monthRevenue;
   const monthPct =
     m && m.projected > 0 ? Math.min(100, Math.round((m.realized / m.projected) * 100)) : 0;

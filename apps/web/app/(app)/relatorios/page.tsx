@@ -5,7 +5,10 @@ import {
   paymentMethodLabel,
   type CashMovementRow,
   type CashSessionReport,
+  type ProjectionsReport,
   type SalesReport,
+  type TopCustomerRow,
+  type TopProductRow,
 } from '@nexoloja/shared';
 import { calcVariation } from '@nexoloja/core';
 import { apiGet } from '@/lib/api';
@@ -242,6 +245,11 @@ export default function RelatoriosPage() {
   const dRange = useDebouncedValue(range, 300);
   const [sales, setSales] = useState<SalesReport | null>(null);
   const [sessions, setSessions] = useState<CashSessionReport[]>([]);
+  // Dados compartilhados buscados UMA vez na página (evita cada componente refazer o request e reduz
+  // a concorrência no pool frio do free tier — ADR-005): projeções + rankings padrão (faturamento).
+  const [projections, setProjections] = useState<ProjectionsReport | null>(null);
+  const [topProducts, setTopProducts] = useState<TopProductRow[]>([]);
+  const [topCustomers, setTopCustomers] = useState<TopCustomerRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Drill-down do extrato por fechamento: lazy (busca só ao expandir) e cacheado por sessão,
@@ -288,12 +296,27 @@ export default function RelatoriosPage() {
       // `compare=1` traz os KPIs do período anterior equivalente para os selos ▲/▼ (Fatia 4).
       const salesQs = new URLSearchParams(qs);
       salesQs.set('compare', '1');
-      const [s, cs] = await Promise.all([
-        apiGet<SalesReport>(`/reports/sales?${salesQs.toString()}`),
-        apiGet<CashSessionReport[]>(`/reports/cash-sessions${q}`),
-      ]);
+      // Rankings PADRÃO (faturamento) — servem aos cards E às regras de insight (sem duplicar).
+      const topQs = new URLSearchParams(qs);
+      topQs.set('orderBy', 'faturamento');
+      topQs.set('limit', '10');
+
+      // 1) "Esquenta" o pool com o request principal (tem retry embutido) ANTES de abrir o leque —
+      //    reduz o risco de vários requests baterem no banco frio ao mesmo tempo (ADR-005).
+      const s = await apiGet<SalesReport>(`/reports/sales?${salesQs.toString()}`);
       setSales(s);
+      // 2) Demais dados compartilhados em paralelo, já com o pool quente. Buscados aqui UMA vez e
+      //    repassados aos filhos (insights, projeções, cards) — antes cada um refazia o request.
+      const [cs, proj, prods, custs] = await Promise.all([
+        apiGet<CashSessionReport[]>(`/reports/cash-sessions${q}`),
+        apiGet<ProjectionsReport>('/reports/projections'),
+        apiGet<TopProductRow[]>(`/reports/top-products?${topQs.toString()}`),
+        apiGet<TopCustomerRow[]>(`/reports/top-customers?${topQs.toString()}`),
+      ]);
       setSessions(cs);
+      setProjections(proj);
+      setTopProducts(prods);
+      setTopCustomers(custs);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -332,7 +355,13 @@ export default function RelatoriosPage() {
       {error && online && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
       {/* Faixa de insights configuráveis (Fatia 9) — regras puras sobre os agregados do período. */}
-      <InsightsBand sales={sales} sessions={sessions} from={dRange.from ?? null} to={dRange.to ?? null} />
+      <InsightsBand
+        sales={sales}
+        sessions={sessions}
+        products={topProducts}
+        customers={topCustomers}
+        projections={projections}
+      />
 
       <SectionLabel>Resultado do período</SectionLabel>
 
@@ -428,8 +457,8 @@ export default function RelatoriosPage() {
 
       <SectionLabel>Projeções · no ritmo atual</SectionLabel>
 
-      {/* Projeções (Fatia 8) — direcionais, independentes do filtro de período. */}
-      <ProjectionsSection />
+      {/* Projeções (Fatia 8) — direcionais; dados vêm prontos da página (sem duplicar request). */}
+      <ProjectionsSection data={projections} />
 
       <SectionLabel>Composição do recebido</SectionLabel>
 
@@ -523,8 +552,18 @@ export default function RelatoriosPage() {
       {/* Rankings (Fatia 5) — cards colapsáveis com busca e detalhe em pop-up. Lado a lado no
           desktop; empilhados no celular. */}
       <div className="grid gap-4 lg:grid-cols-2">
-        <TopProductsCard from={dRange.from ?? null} to={dRange.to ?? null} />
-        <TopCustomersCard from={dRange.from ?? null} to={dRange.to ?? null} />
+        <TopProductsCard
+          from={dRange.from ?? null}
+          to={dRange.to ?? null}
+          initial={topProducts}
+          initialLoading={loading}
+        />
+        <TopCustomersCard
+          from={dRange.from ?? null}
+          to={dRange.to ?? null}
+          initial={topCustomers}
+          initialLoading={loading}
+        />
       </div>
 
       <SectionLabel>Caixa</SectionLabel>

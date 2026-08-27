@@ -20,7 +20,6 @@ import {
   type TopCustomerRow,
   type TopProductRow,
 } from '@nexoloja/shared';
-import { apiGet } from '@/lib/api';
 
 const STORAGE_KEY = 'nexoloja:report-insights';
 
@@ -54,21 +53,23 @@ const CHIP_ICON: Record<Insight['severity'], string> = { info: '💡', good: '�
 export function InsightsBand({
   sales,
   sessions,
-  from,
-  to,
+  products,
+  customers,
+  projections,
 }: {
   sales: SalesReport | null;
   sessions: CashSessionReport[];
-  from: string | null;
-  to: string | null;
+  /** Ranking de produtos (faturamento) já buscado pela página — as regras derivam daqui (0 requests). */
+  products: TopProductRow[];
+  /** Ranking de clientes (faturamento) já buscado pela página. */
+  customers: TopCustomerRow[];
+  /** Projeções já buscadas pela página. */
+  projections: ProjectionsReport | null;
 }) {
   const [enabled, setEnabled] = useState<Record<InsightRuleId, boolean>>(() =>
     Object.fromEntries(INSIGHT_RULE_IDS.map((id) => [id, true])) as Record<InsightRuleId, boolean>,
   );
   const [configOpen, setConfigOpen] = useState(false);
-  const [topProduct, setTopProduct] = useState<TopProductRow[] | null>(null);
-  const [topCustomer, setTopCustomer] = useState<TopCustomerRow | null>(null);
-  const [projections, setProjections] = useState<ProjectionsReport | null>(null);
 
   // Carrega as preferências no cliente (evita divergência de hidratação).
   useEffect(() => {
@@ -87,32 +88,7 @@ export function InsightsBand({
     });
   };
 
-  // Dados extras que as regras precisam (top produto p/ margem, top cliente, projeção do mês).
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const qs = new URLSearchParams();
-        if (from) qs.set('from', from);
-        if (to) qs.set('to', to);
-        const q = qs.toString() ? `&${qs.toString()}` : '';
-        const [prods, custs, proj] = await Promise.all([
-          apiGet<TopProductRow[]>(`/reports/top-products?limit=5${q}`),
-          apiGet<TopCustomerRow[]>(`/reports/top-customers?limit=1${q}`),
-          apiGet<ProjectionsReport>('/reports/projections'),
-        ]);
-        if (cancelled) return;
-        setTopProduct(prods);
-        setTopCustomer(custs[0] ?? null);
-        setProjections(proj);
-      } catch {
-        /* insights são um extra — falha silenciosa não trava a tela */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [from, to]);
+  const topCustomer = customers[0] ?? null;
 
   const totalDivergence = useMemo(
     () => sessions.reduce((acc, s) => acc + s.divergence, 0),
@@ -133,11 +109,11 @@ export function InsightsBand({
         ),
       );
     }
-    if (topProduct) {
+    if (products.length > 0) {
       push(
         'low-margin-product',
         insightLowMarginTopProduct(
-          topProduct.map((p) => ({
+          products.map((p) => ({
             name: p.productName,
             revenue: p.revenue,
             marginPercent: p.marginPercent,
@@ -150,7 +126,7 @@ export function InsightsBand({
     push('cash-divergence', insightCashDivergence(totalDivergence));
     if (topCustomer) push('best-customer', insightBestCustomer(topCustomer.customerName, topCustomer.revenue));
     return out;
-  }, [enabled, sales, topProduct, projections, topCustomer, totalDivergence]);
+  }, [enabled, sales, products, projections, topCustomer, totalDivergence]);
 
   return (
     <div className="mb-4 flex items-start gap-2">

@@ -16,7 +16,19 @@ type OrderBy = 'faturamento' | 'lucro';
  * dívida atual + "o que costuma comprar"). Só clientes identificados entram (venda de balcão sem
  * cadastro não conta). Gerencia o próprio estado.
  */
-export function TopCustomersCard({ from, to }: { from: string | null; to: string | null }) {
+export function TopCustomersCard({
+  from,
+  to,
+  initial,
+  initialLoading = false,
+}: {
+  from: string | null;
+  to: string | null;
+  /** Ranking padrão (faturamento, sem busca) já buscado pela página — evita um request duplicado. */
+  initial: TopCustomerRow[];
+  /** `true` enquanto a página ainda busca o `initial` (evita o flash de "nenhuma compra"). */
+  initialLoading?: boolean;
+}) {
   const [open, setOpen] = useState(true);
   const [q, setQ] = useState('');
   const [debouncedQ, setDebouncedQ] = useState('');
@@ -30,8 +42,17 @@ export function TopCustomersCard({ from, to }: { from: string | null; to: string
     return () => clearTimeout(t);
   }, [q]);
 
+  // Visão PADRÃO (sem busca, ordem faturamento) usa o `initial` da página (0 requests). Só busca no
+  // servidor quando o usuário digita ou muda a ordenação — reduz a concorrência no carregamento.
+  const isDefault = debouncedQ === '' && orderBy === 'faturamento';
+  const displayRows = isDefault ? initial : rows;
+  const isLoading = isDefault ? initialLoading : loading;
+
   useEffect(() => {
-    if (!open) return;
+    if (!open || isDefault) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     (async () => {
@@ -51,7 +72,7 @@ export function TopCustomersCard({ from, to }: { from: string | null; to: string
     return () => {
       cancelled = true;
     };
-  }, [open, from, to, debouncedQ, orderBy]);
+  }, [open, from, to, debouncedQ, orderBy, isDefault]);
 
   return (
     <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
@@ -90,15 +111,15 @@ export function TopCustomersCard({ from, to }: { from: string | null; to: string
             </div>
           </div>
 
-          {loading ? (
+          {isLoading ? (
             <p className="py-4 text-center text-sm text-gray-500">Carregando…</p>
-          ) : rows.length === 0 ? (
+          ) : displayRows.length === 0 ? (
             <p className="rounded-lg bg-gray-50 px-3 py-6 text-center text-sm text-gray-500">
               {debouncedQ ? 'Nenhum cliente encontrado.' : 'Nenhuma compra de cliente no período.'}
             </p>
           ) : (
             <ul className="space-y-1.5">
-              {rows.map((r, idx) => (
+              {displayRows.map((r, idx) => (
                 <li key={r.customerId}>
                   <button
                     type="button"
