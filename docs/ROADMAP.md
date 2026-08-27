@@ -4,7 +4,8 @@
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
 > **Última atualização:** 2026-08-26 — **Relatorios.v2 — Fatia 4 (Comparação com o período anterior)
-> — implementada. Deploy + E2E do Owner PENDENTES.** Cada card de KPI (Recebido, Lucro, Vendas·Ticket,
+> — NO AR e E2E DO OWNER VALIDADO (2026-08-26). CONCLUÍDA.** Deploy: API `da57851c` + web `30a43bbf`
+> (smoke OK). Fatia 6 (lucro & margem) validada junto (mesma tela). Cada card de KPI (Recebido, Lucro, Vendas·Ticket,
 > Canceladas) ganha um selo **▲/▼** vs. a **janela anterior equivalente** (Hoje→ontem; 7d→7d antes;
 > 30d→30d antes). **Core (2 funções puras + 10 testes, Regra 2):** `previousPeriod(from,to)` (janela
 > anterior, em UTC, sem escorregar dia na virada de mês/ano) e `calcVariation(atual,anterior)`
@@ -19,7 +20,8 @@
 > (gráfico temporal), 8 (projeções), 9 (insights) ou 10 (export CSV/PDF).
 >
 > **Antes:** 2026-08-26 — **Relatorios.v2 — Fatia 6 (Lucro & margem no "Resultado do
-> período") — NO AR (deploy API `6044a1a5` + web `06bec19d`). E2E do Owner PENDENTE.** Novo card em destaque **"Lucro bruto
+> período") — NO AR e E2E DO OWNER VALIDADO (2026-08-26, junto com a Fatia 4). CONCLUÍDA.** Deploy: API
+> `6044a1a5` + web `06bec19d`. Novo card em destaque **"Lucro bruto
 > estimado"** (esmeralda) na faixa de KPIs, com **margem %** e sinal de **cobertura de custo**; os KPIs
 > passam a Recebido · **Lucro** · Vendas·Ticket (unificados) · Canceladas — como o mockup. **Base
 > contábil:** o lucro é sobre **mercadoria VENDIDA no período** (`order_items` de vendas não
