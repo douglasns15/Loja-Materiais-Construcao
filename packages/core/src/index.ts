@@ -1741,3 +1741,157 @@ export function nfeConvertedUnitCost(vUnCom: number, factor: number): number {
   const f = factor > 0 ? factor : 1;
   return Number((vUnCom / f).toFixed(4));
 }
+
+// -----------------------------------------------------------------------------
+// VENDER DE NOVO (reorder) — combina itens de UMA ou VÁRIAS vendas passadas num
+// carrinho novo. Função pura: recebe os itens de origem (já resolvidos para
+// productId + modo de venda + fator-para-base pelo chamador, que tem o catálogo)
+// e a disponibilidade ATUAL do catálogo, e decide o que entra. Regras (decisão
+// do Owner, 2026-08-28):
+//  - MESCLAGEM: mesmo produto no mesmo modo → soma as quantidades (1 linha só).
+//  - REPREÇO: quem repreça é o PDV, sempre pelo preço ATUAL — aqui só se decide
+//    QUANTO de cada produto entra; nunca se ressuscita o preço antigo.
+//  - ESTOQUE: a soma pedida é limitada ao estoque disponível (em unidade-base);
+//    passou do estoque, a linha entra "aparada" (clamped); zero disponível, cai.
+//  - AUSENTE: produto que sumiu do catálogo (arquivado/apagado) fica de fora.
+// O resultado alimenta a tela de revisão ("12 itens de 3 vendas · 2 mesclados ·
+// 1 aparado · 1 ignorado") ANTES de jogar no PDV — nada entra cru.
+// -----------------------------------------------------------------------------
+
+/** Item de origem de um reorder, já resolvido contra o catálogo pelo chamador. */
+export interface ReorderSourceItem {
+  productId: string;
+  /** Nome no momento da venda (fallback para as mensagens quando o produto sumiu). */
+  productName: string;
+  /** Modo de venda derivado da unidade vendida: base (unidade principal) ou embalagem/alternativa. */
+  saleMode: 'BASE' | 'ALT';
+  /** Quantidade na unidade VENDIDA (ex.: 2 rolos). */
+  quantity: number;
+  /** Unidades-base por 1 unidade vendida neste modo (BASE = 1; ALT = fator/tamanho). */
+  factorToBase: number;
+}
+
+/** Disponibilidade ATUAL de um produto do catálogo (nome vivo + estoque livre em unidade-base). */
+export interface ReorderProductInfo {
+  name: string;
+  /** Estoque LIVRE em unidade-base (já descontado o que outras linhas do carrinho consomem). */
+  baseStock: number;
+}
+
+/** Uma linha resolvida do plano de reorder (um produto num modo, com a quantidade que cabe). */
+export interface ReorderPlanLine {
+  productId: string;
+  saleMode: 'BASE' | 'ALT';
+  name: string;
+  factorToBase: number;
+  /** Quantidade pedida (soma das origens), na unidade vendida. */
+  requestedQuantity: number;
+  /** Quantidade que CABE no estoque (≤ pedida), na unidade vendida. */
+  quantity: number;
+  /** Quantas linhas de origem foram somadas aqui (>1 ⇒ mesclada). */
+  sources: number;
+  /** ok = entrou inteira; clamped = entrou aparada pelo estoque. */
+  status: 'ok' | 'clamped';
+}
+
+/** Plano completo do reorder: o que entra + o que ficou de fora, com contadores para a revisão. */
+export interface ReorderPlan {
+  /** Linhas a adicionar ao PDV (todas com quantidade > 0). */
+  lines: ReorderPlanLine[];
+  /** Produtos que sumiram do catálogo (arquivados/apagados) — dedup por produto. */
+  missing: { productId: string; name: string }[];
+  /** Produtos sem nenhum estoque livre — pedidos mas 0 coube. */
+  outOfStock: { productId: string; name: string }[];
+  /** Nº de linhas mescladas (origens > 1). */
+  mergedCount: number;
+  /** Nº de linhas aparadas pelo estoque. */
+  clampedCount: number;
+  /** Nº total de linhas que entram. */
+  lineCount: number;
+}
+
+/**
+ * Monta o plano de "Vender de novo" a partir dos itens de origem e do catálogo atual.
+ * PURA e determinística: mesma entrada ⇒ mesmo plano. O rateio de estoque respeita a
+ * ORDEM das origens (as primeiras selecionadas têm prioridade quando o estoque não cobre tudo).
+ */
+export function planReorder(
+  sources: ReorderSourceItem[],
+  catalog: Map<string, ReorderProductInfo>,
+): ReorderPlan {
+  // 1) Agrega por produto+modo, somando quantidades e contando origens. Preserva a ordem de
+  //    primeira aparição (Map mantém a ordem de inserção) para um rateio de estoque previsível.
+  const agg = new Map<
+    string,
+    { productId: string; saleMode: 'BASE' | 'ALT'; name: string; factorToBase: number; quantity: number; sources: number }
+  >();
+  const missing = new Map<string, { productId: string; name: string }>();
+
+  for (const s of sources) {
+    const info = catalog.get(s.productId);
+    if (!info) {
+      // Produto sumiu do catálogo — de fora, listado uma vez só.
+      if (!missing.has(s.productId)) missing.set(s.productId, { productId: s.productId, name: s.productName });
+      continue;
+    }
+    const key = `${s.productId}:${s.saleMode}`;
+    const cur = agg.get(key);
+    if (cur) {
+      cur.quantity = Number((cur.quantity + s.quantity).toFixed(4));
+      cur.sources += 1;
+    } else {
+      agg.set(key, {
+        productId: s.productId,
+        saleMode: s.saleMode,
+        name: info.name,
+        factorToBase: s.factorToBase,
+        quantity: Number(s.quantity.toFixed(4)),
+        sources: 1,
+      });
+    }
+  }
+
+  // 2) Rateia o estoque livre POR PRODUTO entre suas linhas (base e embalagem dividem o mesmo
+  //    estoque). A quantidade pedida é limitada ao que cabe, na ordem de aparição.
+  const remainingBase = new Map<string, number>();
+  const lines: ReorderPlanLine[] = [];
+  const outOfStock: { productId: string; name: string }[] = [];
+
+  for (const a of agg.values()) {
+    const info = catalog.get(a.productId)!;
+    const left = remainingBase.has(a.productId) ? remainingBase.get(a.productId)! : info.baseStock;
+    const factor = a.factorToBase > 0 ? a.factorToBase : 1;
+    const requestedBase = Number((a.quantity * factor).toFixed(4));
+    const fittedBase = Math.max(0, Math.min(requestedBase, left));
+    // Quantidade que cabe, de volta à unidade vendida (a UI/PDV valida passo do metro depois).
+    const fittedQty = Number((fittedBase / factor).toFixed(4));
+    remainingBase.set(a.productId, Number((left - fittedBase).toFixed(4)));
+
+    if (fittedQty <= 0) {
+      // Pedido mas nada coube — listado uma vez por produto.
+      if (!outOfStock.some((o) => o.productId === a.productId)) {
+        outOfStock.push({ productId: a.productId, name: a.name });
+      }
+      continue;
+    }
+    lines.push({
+      productId: a.productId,
+      saleMode: a.saleMode,
+      name: a.name,
+      factorToBase: a.factorToBase,
+      requestedQuantity: a.quantity,
+      quantity: fittedQty,
+      sources: a.sources,
+      status: fittedQty < a.quantity ? 'clamped' : 'ok',
+    });
+  }
+
+  return {
+    lines,
+    missing: [...missing.values()],
+    outOfStock,
+    mergedCount: lines.filter((l) => l.sources > 1).length,
+    clampedCount: lines.filter((l) => l.status === 'clamped').length,
+    lineCount: lines.length,
+  };
+}
