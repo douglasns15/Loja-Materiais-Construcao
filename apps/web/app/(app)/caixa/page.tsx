@@ -18,6 +18,10 @@ import { MoneyInput } from '@/components/MoneyInput';
 import { CashCounter } from '@/components/CashCounter';
 import { CashMovementModal } from '@/components/CashMovementModal';
 import { CashMovementsList } from '@/components/CashMovementsList';
+import { printArea } from '@/lib/print';
+import { type Store } from '@/components/ReceiptPrint';
+import { CashClosePrint, type CashCloseReceiptData } from '@/components/CashClosePrint';
+import { CashMovementPrint, type CashMovementReceiptData } from '@/components/CashMovementPrint';
 
 type CashSession = {
   id: string;
@@ -68,6 +72,12 @@ export default function CaixaPage() {
   // fechamento até o operador "revelar". `revealed` guarda que ele já revelou nesta sessão.
   const [blindClose, setBlindClose] = useState(false);
   const [revealed, setRevealed] = useState(false);
+  // Identidade da loja (cabeçalho dos comprovantes) + comprovantes imprimíveis do Caixa.
+  const [store, setStore] = useState<Store | null>(null);
+  const [closeReceipt, setCloseReceipt] = useState<CashCloseReceiptData | null>(null);
+  const [movementReceipt, setMovementReceipt] = useState<CashMovementReceiptData | null>(null);
+  // Qual comprovante está montado no #print-area (só um por vez — o id é único). null = nenhum.
+  const [printKind, setPrintKind] = useState<'close' | 'movement' | null>(null);
 
   async function load() {
     try {
@@ -120,13 +130,42 @@ export default function CaixaPage() {
     setDraftHint({ open: hasCounterDraft('open'), close: hasCounterDraft('close') });
   }
 
-  // Ajuste da loja: fechamento cego ligado? Uma falha (offline/erro) degrada para o fechamento
+  // Identidade da loja + ajuste de fechamento cego (um GET só). A loja alimenta o cabeçalho dos
+  // comprovantes; `blindCashClose` liga o modo cego. Falha (offline/erro) degrada para o fechamento
   // normal (não-cego), que é o comportamento historicamente padrão. Só de leitura.
   useEffect(() => {
-    apiGet<{ blindCashClose?: boolean }>('/tenant')
-      .then((t) => setBlindClose(!!t?.blindCashClose))
+    apiGet<Store & { blindCashClose?: boolean }>('/tenant')
+      .then((t) => {
+        setStore(t);
+        setBlindClose(!!t?.blindCashClose);
+      })
       .catch(() => {});
   }, []);
+
+  // Monta um comprovante no #print-area e abre o diálogo de impressão. Dois `requestAnimationFrame`
+  // garantem que o React já pintou o #print-area escolhido antes de `window.print()` capturar a página.
+  function doPrint(kind: 'close' | 'movement', fileName: string) {
+    setPrintKind(kind);
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        void printArea({ model: '80mm', logoUrl: store?.logoUrl, fileName });
+      }),
+    );
+  }
+
+  // Reimprime uma movimentação do extrato (suprimento/sangria/etc.).
+  function printMovement(row: CashMovementRow) {
+    setMovementReceipt({
+      kind: row.kind,
+      type: row.type,
+      amount: Number(row.amount),
+      reason: row.reason,
+      at: row.createdAt,
+      byName: row.registeredByName,
+      sessionOpenedAt: session?.openedAt ?? null,
+    });
+    doPrint('movement', `Movimentacao-${new Date(row.createdAt).toLocaleDateString('pt-BR')}`);
+  }
 
   async function onOpen(e: React.FormEvent) {
     e.preventDefault();
@@ -144,6 +183,8 @@ export default function CaixaPage() {
       // Turno virou: descarta o rascunho de abertura (valor + contagem) e some com o selo.
       clearCashDraft('open');
       refreshDraftHints();
+      // Novo turno: o comprovante do fechamento anterior deixa de fazer sentido na tela.
+      setCloseReceipt(null);
       await load();
     } catch (e) {
       setError((e as Error).message);
@@ -170,6 +211,31 @@ export default function CaixaPage() {
         '/cash-sessions/close',
         parsed.data,
       );
+      // Monta o comprovante de fechamento ANTES de limpar os campos/sessão (habilita "Imprimir
+      // comprovante" na tela de confirmação). `session` ainda tem a mini-DRE do turno que fechou.
+      if (session) {
+        setCloseReceipt({
+          openedAt: session.openedAt,
+          closedAt: new Date().toISOString(),
+          openedByName: session.openedByName,
+          closedByName: me?.name ?? null,
+          openingAmount: Number(session.openingAmount),
+          cashInflow: session.cashInflow,
+          movementsIn: session.cashMovementsIn,
+          movementsOut: session.cashMovementsOut,
+          expectedAmount: res.expectedAmount,
+          countedAmount: Number(closing),
+          divergence: res.divergence,
+          notes: notes || null,
+          movements: movements.map((m) => ({
+            kind: m.kind,
+            type: m.type,
+            amount: Number(m.amount),
+            reason: m.reason,
+            at: m.createdAt,
+          })),
+        });
+      }
       setClosing('');
       setNotes('');
       // Turno encerrado: descarta o rascunho de fechamento (valor contado + observações + contagem).
@@ -249,6 +315,17 @@ export default function CaixaPage() {
           explica. Só mostra o erro técnico quando online (falha real de ação). */}
       {error && online && <p className="mb-4 text-sm text-red-600">{error}</p>}
       {info && <p className="mb-4 rounded-lg bg-gray-100 px-3 py-2 text-sm">{info}</p>}
+
+      {/* Comprovante do fechamento recém-feito (some ao abrir um novo caixa). */}
+      {closeReceipt && (
+        <button
+          type="button"
+          onClick={() => doPrint('close', 'Fechamento-de-caixa')}
+          className="mb-4 inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100"
+        >
+          🖨 Imprimir comprovante do fechamento
+        </button>
+      )}
 
       {!loaded ? (
         <p className="text-gray-600">Carregando…</p>
@@ -343,6 +420,7 @@ export default function CaixaPage() {
                     emptyLabel="Nenhuma movimentação neste caixa ainda."
                     onReverse={onReverseMovement}
                     reversingId={reversingId}
+                    onPrint={printMovement}
                   />
                 </div>
               )}
@@ -530,6 +608,12 @@ export default function CaixaPage() {
       )}
 
       {moving && <CashMovementModal onSubmit={onMovement} onClose={() => setMoving(false)} />}
+
+      {/* Comprovantes imprimíveis (ocultos na tela; só um #print-area montado por vez). */}
+      {printKind === 'close' && closeReceipt && <CashClosePrint store={store} data={closeReceipt} />}
+      {printKind === 'movement' && movementReceipt && (
+        <CashMovementPrint store={store} data={movementReceipt} />
+      )}
     </div>
   );
 }

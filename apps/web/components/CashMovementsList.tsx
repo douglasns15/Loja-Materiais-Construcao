@@ -37,6 +37,7 @@ export function CashMovementsList({
   emptyLabel = 'Nenhuma movimentação neste caixa.',
   onReverse,
   reversingId,
+  onPrint,
 }: {
   movements: CashMovementRow[];
   emptyLabel?: string;
@@ -44,6 +45,8 @@ export function CashMovementsList({
   onReverse?: (row: CashMovementRow) => void;
   /** Id do lançamento em processo de estorno (desabilita o botão e mostra "Estornando…"). */
   reversingId?: string | null;
+  /** Reimprimir o comprovante da movimentação (só na tela do Caixa). Ausente → sem botão. */
+  onPrint?: (row: CashMovementRow) => void;
 }) {
   // Qual linha está com a confirmação inline "Estornar? Sim / Cancelar" aberta.
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
@@ -69,39 +72,50 @@ export function CashMovementsList({
                 {new Date(m.createdAt).toLocaleString('pt-BR')}
                 {m.registeredByName ? ` · ${m.registeredByName}` : ''}
               </p>
-              {canReverse &&
-                (confirmingId === m.id ? (
-                  <p className="mt-1 flex items-center gap-2 text-xs">
-                    <span className="text-gray-600">Estornar este lançamento?</span>
+              <div className="mt-1 flex flex-wrap items-center gap-3 text-xs">
+                {canReverse &&
+                  (confirmingId === m.id ? (
+                    <span className="flex items-center gap-2">
+                      <span className="text-gray-600">Estornar este lançamento?</span>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => {
+                          setConfirmingId(null);
+                          onReverse!(m);
+                        }}
+                        className="font-medium text-red-600 hover:underline disabled:opacity-60"
+                      >
+                        {busy ? 'Estornando…' : 'Sim, estornar'}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => setConfirmingId(null)}
+                        className="text-gray-600 hover:underline disabled:opacity-60"
+                      >
+                        Cancelar
+                      </button>
+                    </span>
+                  ) : (
                     <button
                       type="button"
-                      disabled={busy}
-                      onClick={() => {
-                        setConfirmingId(null);
-                        onReverse!(m);
-                      }}
-                      className="font-medium text-red-600 hover:underline disabled:opacity-60"
+                      onClick={() => setConfirmingId(m.id)}
+                      className="font-medium text-gray-600 hover:text-red-600 hover:underline"
                     >
-                      {busy ? 'Estornando…' : 'Sim, estornar'}
+                      Estornar
                     </button>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => setConfirmingId(null)}
-                      className="text-gray-600 hover:underline disabled:opacity-60"
-                    >
-                      Cancelar
-                    </button>
-                  </p>
-                ) : (
+                  ))}
+                {onPrint && (
                   <button
                     type="button"
-                    onClick={() => setConfirmingId(m.id)}
-                    className="mt-1 text-xs font-medium text-gray-600 hover:text-red-600 hover:underline"
+                    onClick={() => onPrint(m)}
+                    className="font-medium text-gray-600 hover:text-indigo-700 hover:underline"
                   >
-                    Estornar
+                    🖨 Comprovante
                   </button>
-                ))}
+                )}
+              </div>
             </div>
             <span
               className={`shrink-0 text-sm font-medium tabular-nums ${income ? 'text-green-700' : 'text-red-600'}`}

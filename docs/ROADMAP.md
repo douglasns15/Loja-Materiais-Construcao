@@ -3,7 +3,22 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-27 — **Caixa.FechamentoCego + Divergência ao vivo — NO AR e E2E DO
+> **Última atualização:** 2026-08-27 — **Comprovantes.Caixa+Fiado — 3 comprovantes imprimíveis novos
+> — NO AR (aguardando E2E do Owner).** Pedido do Owner ("comprovante de pagamento" → os 3). Reusam a
+> infra de impressão existente (`#print-area` oculto na tela, classes `rc-*`, `lib/print.ts`, 80mm/A4;
+> um só `#print-area` montado por vez em cada tela). **(1) Fechamento de caixa** (`CashClosePrint`):
+> montado no fechamento; botão "Imprimir comprovante do fechamento" na confirmação (some ao abrir novo
+> caixa). Loja + operador (abriu/fechou) + horários + mini-DRE + Esperado/Contado/Divergência +
+> itemização das movimentações do turno. **(2) Movimentação** (`CashMovementPrint`): botão "🖨
+> Comprovante" por linha do extrato (`CashMovementsList` ganhou `onPrint` opcional — Relatórios
+> intocado). Natureza/valor com sinal/motivo/responsável/hora + linha de assinatura. **(3) Recibo de
+> recebimento de fiado por parcela** (`ReceivablePaymentPrint`): botão "🖨" por recebimento no
+> `ReceivableDetailModal` (o resumo `ReceivablePrint` segue funcionando). Cliente + código da venda +
+> forma/valor + acréscimo + saldo restante atual. **Camadas:** só `apps/web` (3 componentes novos + 3
+> arquivos tocados). **Sem API/migration/shared/core.** **Gate:** web `tsc` 0; `/caixa` e
+> `/contas-a-receber` compilam no dev. **NO AR:** web Version `1d34cafe`; smoke ✅. Commit local em `main`.
+>
+> **Antes:** 2026-08-27 — **Caixa.FechamentoCego + Divergência ao vivo — NO AR e E2E DO
 > OWNER VALIDADO (2026-08-27, "validado com sucesso"). CONCLUÍDA.** Modernização da tela do Caixa
 > (inovação pedida pelo Owner). **(1) Fechamento CEGO (blind close), por loja:** ajuste em
 > **Configurações → Fechamento de caixa** (toggle "Conferência às cegas"). Ligado, a tela do Caixa

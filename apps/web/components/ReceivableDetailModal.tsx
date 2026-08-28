@@ -9,11 +9,13 @@ import {
   RETURN_TARGET_LABELS,
   type PaymentMethod,
   type ReceivableDetail,
+  type ReceivablePaymentRow,
   type ReceivableRow,
 } from '@nexoloja/shared';
 import { apiGet, apiPatch } from '@/lib/api';
 import { printArea } from '@/lib/print';
 import { ReceivablePrint } from '@/components/ReceivablePrint';
+import { ReceivablePaymentPrint } from '@/components/ReceivablePaymentPrint';
 import type { Store } from '@/components/ReceiptPrint';
 
 const BRL = (v: string | number) =>
@@ -44,6 +46,9 @@ export function ReceivableDetailModal({
   // O `store` é buscado aqui para o modal ser autossuficiente nas duas telas que o usam.
   const [store, setStore] = useState<Store | null>(null);
   const [printModel, setPrintModel] = useState<'80mm' | 'A4'>('80mm');
+  // Qual documento está montado no #print-area: `null` = resumo da dívida (ReceivablePrint); um
+  // recebimento = recibo daquela parcela (ReceivablePaymentPrint). Só um por vez (id único).
+  const [printPayment, setPrintPayment] = useState<ReceivablePaymentRow | null>(null);
 
   // Observação da dívida (edição inline).
   const [notes, setNotes] = useState('');
@@ -78,14 +83,29 @@ export function ReceivableDetailModal({
     apiGet<Store>('/tenant').then(setStore).catch(() => {});
   }, []);
 
-  /** Abre o diálogo de impressão do resumo. O PDF sai nomeado pelo código da dívida (V-000128). */
-  async function imprimir() {
+  /** Abre o diálogo de impressão do RESUMO da dívida. O PDF sai nomeado pelo código (V-000128). */
+  function imprimir() {
     if (!detail) return;
-    await printArea({
-      model: printModel,
-      logoUrl: store?.logoUrl,
-      fileName: formatOrderNumber(detail.orderNumber) || 'Divida',
-    });
+    // Garante o #print-area do RESUMO montado (não um recibo de parcela) antes de imprimir.
+    setPrintPayment(null);
+    const fileName = formatOrderNumber(detail.orderNumber) || 'Divida';
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        void printArea({ model: printModel, logoUrl: store?.logoUrl, fileName });
+      }),
+    );
+  }
+
+  /** Imprime o RECIBO de um recebimento específico (a parcela que o cliente leva ao pagar). */
+  function imprimirPagamento(p: ReceivablePaymentRow) {
+    if (!detail) return;
+    setPrintPayment(p);
+    const code = formatOrderNumber(detail.orderNumber) || 'Recibo';
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        void printArea({ model: printModel, logoUrl: store?.logoUrl, fileName: `Recibo-${code}` });
+      }),
+    );
   }
 
   async function saveNotes() {
@@ -229,8 +249,18 @@ export function ReceivableDetailModal({
                             : ''}
                         </span>
                       </span>
-                      <span className="shrink-0 font-medium tabular-nums text-green-700">
-                        {BRL(p.amount)}
+                      <span className="flex shrink-0 items-center gap-3">
+                        <span className="font-medium tabular-nums text-green-700">
+                          {BRL(p.amount)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => imprimirPagamento(p)}
+                          className="text-xs font-medium text-gray-500 hover:text-indigo-700 hover:underline"
+                          title="Imprimir recibo deste recebimento"
+                        >
+                          🖨
+                        </button>
                       </span>
                     </li>
                   ))}
@@ -361,8 +391,13 @@ export function ReceivableDetailModal({
               </button>
             )}
 
-            {/* Documento imprimível (oculto na tela; só aparece na impressão). */}
-            <ReceivablePrint store={store} detail={detail} />
+            {/* Documento imprimível (oculto na tela; só aparece na impressão). Um #print-area por vez:
+                o resumo da dívida, ou o recibo de um recebimento específico. */}
+            {printPayment ? (
+              <ReceivablePaymentPrint store={store} detail={detail} payment={printPayment} />
+            ) : (
+              <ReceivablePrint store={store} detail={detail} />
+            )}
           </>
         )}
       </div>
