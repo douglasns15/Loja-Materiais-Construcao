@@ -3,8 +3,9 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-27 — **Comprovantes.Caixa+Fiado — 3 comprovantes imprimíveis novos
-> — NO AR (aguardando E2E do Owner).** Pedido do Owner ("comprovante de pagamento" → os 3). Reusam a
+> **Última atualização:** 2026-08-28 — **Comprovantes.Caixa+Fiado — 3 comprovantes imprimíveis novos
+> — NO AR e E2E DO OWNER VALIDADO (2026-08-28, "validado com sucesso"). CONCLUÍDA.** Pedido do Owner
+> ("comprovante de pagamento" → os 3). Reusam a
 > infra de impressão existente (`#print-area` oculto na tela, classes `rc-*`, `lib/print.ts`, 80mm/A4;
 > um só `#print-area` montado por vez em cada tela). **(1) Fechamento de caixa** (`CashClosePrint`):
 > montado no fechamento; botão "Imprimir comprovante do fechamento" na confirmação (some ao abrir novo
