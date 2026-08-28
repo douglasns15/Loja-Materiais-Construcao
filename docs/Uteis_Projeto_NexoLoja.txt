@@ -32,10 +32,6 @@ http://localhost:3000/
 
 <> Peso tmbm em MLs no cadastro do Produto, eu coloquei em Gramas, mas depois de salvar ele converte pra kilos
 
-<> Em Relatórios, na sessão "Por forma de pagamento" ter como clicar em detalhes e também como exportar excel, mostrando o detalhe de todas as vendas, mostrando as vendas por cada forma de pagamento.
-
-<> Nova ideia de tela de Venda com campo buscar no topo da tela, de ponta a ponta, com tudo abaixo.. E campos de pesquisa, ao aparecerem resultados, permitir acionar o seta pra baixo, pra cima.
-
 <> Contador do Caixa, ele só apagar os valores digitados quando eu abrir o caixa, até lá, fica em memória, e no fechamento a mesma coisa, só apaga depois de eu fechar o caixa e tmbm ter um botão dentro do contador, chamado zerar contador.
 
 <> Devolução de itens mas o cliente faz uma nova compra esse valor referente ao(s) item(ns) devolvido(s) é colocado como desconto em uma nova compra, com isso eu deveria usar como crédito, preciso testar esse fluxo.. pq o botão de crédito não habilitou pra mim.
