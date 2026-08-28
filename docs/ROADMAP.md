@@ -3,8 +3,9 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-28 — **Caixa.CaixasDeHoje + reimpressão do fechamento — NO AR
-> (aguardando E2E do Owner).** Achado do Owner: a tela do Caixa só mostrava o caixa aberto AGORA —
+> **Última atualização:** 2026-08-28 — **Caixa.CaixasDeHoje + reimpressão do fechamento — NO AR e
+> E2E DO OWNER VALIDADO (2026-08-28, "tudo validado com sucesso"). CONCLUÍDA.** Achado do Owner: a
+> tela do Caixa só mostrava o caixa aberto AGORA —
 > para ver os caixas do dia era preciso ir ao Relatórios. Nova seção **"Caixas de hoje"** na própria
 > tela: lista os turnos FECHADOS hoje (o aberto segue no card acima) com abertura→fechamento,
 > operador, Abertura/Esperado/Contado e o selo de divergência (Conferiu/Sobra/Falta). Cada um tem
