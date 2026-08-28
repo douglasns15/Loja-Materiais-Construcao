@@ -23,6 +23,8 @@ type Store = {
   // Taxas da maquininha (ADR-016) — só informam a margem real; nunca alteram preço de venda.
   cardFeeDebitPercent: number | string | null;
   cardFeeCreditPercent: number | string | null;
+  // Fechamento cego do caixa (blind close): esconde o Esperado no fechamento até revelar.
+  blindCashClose: boolean;
 };
 
 export default function ConfiguracoesPage() {
@@ -44,6 +46,7 @@ export default function ConfiguracoesPage() {
     phone: '',
     cardFeeDebitPercent: '',
     cardFeeCreditPercent: '',
+    blindCashClose: false,
   });
   const [savingData, setSavingData] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
@@ -58,6 +61,7 @@ export default function ConfiguracoesPage() {
       cardFeeDebitPercent: s.cardFeeDebitPercent == null ? '' : String(Number(s.cardFeeDebitPercent)),
       cardFeeCreditPercent:
         s.cardFeeCreditPercent == null ? '' : String(Number(s.cardFeeCreditPercent)),
+      blindCashClose: s.blindCashClose ?? false,
     });
   }
 
@@ -155,6 +159,7 @@ export default function ConfiguracoesPage() {
         phone: onlyDigits(form.phone) || null,
         cardFeeDebitPercent: feeOrNull(form.cardFeeDebitPercent),
         cardFeeCreditPercent: feeOrNull(form.cardFeeCreditPercent),
+        blindCashClose: form.blindCashClose,
       });
       setStore(updated);
       fillForm(updated);
@@ -176,7 +181,8 @@ export default function ConfiguracoesPage() {
       feeOrNull(form.cardFeeDebitPercent) !==
         (store.cardFeeDebitPercent == null ? null : Number(store.cardFeeDebitPercent)) ||
       feeOrNull(form.cardFeeCreditPercent) !==
-        (store.cardFeeCreditPercent == null ? null : Number(store.cardFeeCreditPercent)));
+        (store.cardFeeCreditPercent == null ? null : Number(store.cardFeeCreditPercent)) ||
+      form.blindCashClose !== (store.blindCashClose ?? false));
 
   // RBAC (ADR-008): Configurações é área administrativa. A API já bloqueia as escritas;
   // aqui evitamos exibir a tela para quem não é Admin (acesso direto pela URL).
@@ -369,6 +375,39 @@ export default function ConfiguracoesPage() {
                 />
               </div>
             </div>
+          </div>
+
+          {/*
+            Fechamento cego do caixa (blind close). Quando ligado, a tela do Caixa esconde o
+            Esperado e a quebra de valores no fechamento; o operador conta a gaveta às cegas e só
+            então revela a divergência — evita "ajustar" a contagem para bater com o esperado.
+          */}
+          <div className="border-t border-gray-100 pt-4">
+            <h3 className="text-sm font-medium text-gray-900">Fechamento de caixa</h3>
+            <label className="mt-3 flex cursor-pointer items-start justify-between gap-4">
+              <span>
+                <span className="block text-sm font-medium text-gray-800">
+                  Conferência às cegas
+                </span>
+                <span className="mt-0.5 block text-xs text-gray-600">
+                  Ao fechar, o operador conta a gaveta <strong>sem ver o valor esperado</strong> e
+                  revela a diferença só no fim. Reduz o viés de ajustar a contagem para bater.
+                </span>
+              </span>
+              {/* Toggle acessível: um checkbox nativo escondido controla o switch visual (peer). */}
+              <span className="relative mt-0.5 inline-flex shrink-0">
+                <input
+                  type="checkbox"
+                  className="peer sr-only"
+                  checked={form.blindCashClose}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, blindCashClose: e.target.checked }))
+                  }
+                />
+                <span className="h-6 w-11 rounded-full bg-gray-300 transition-colors peer-checked:bg-indigo-600 peer-focus-visible:ring-2 peer-focus-visible:ring-indigo-400 peer-focus-visible:ring-offset-2" />
+                <span className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
+              </span>
+            </label>
           </div>
 
           <div className="flex items-center gap-3">

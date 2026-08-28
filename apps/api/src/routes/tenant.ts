@@ -33,6 +33,7 @@ tenant.get('/', async (c) => {
         phone: true,
         cardFeeDebitPercent: true,
         cardFeeCreditPercent: true,
+        blindCashClose: true,
       },
     });
     if (!data) {
@@ -75,6 +76,7 @@ tenant.patch('/', requireAdmin, async (c) => {
         phone: true,
         cardFeeDebitPercent: true,
         cardFeeCreditPercent: true,
+        blindCashClose: true,
       },
     });
     return c.json({ ok: true, data });

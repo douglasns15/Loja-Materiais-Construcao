@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { BRL_BILL_VALUES, BRL_COIN_VALUES, sumCashCount } from '@nexoloja/core';
+import { readCashDraft, saveCashDraft, type CashMode } from '@/lib/cashDrafts';
 
 /**
  * **Contador de cédulas e moedas** (contador de gaveta) — pedido do Owner.
@@ -68,15 +69,26 @@ export function CashCounter({
   title,
   onConfirm,
   onClose,
+  persistMode,
 }: {
   /** Título do modal (ex.: "Contar abertura" / "Contar a gaveta"). */
   title: string;
   /** Recebe o total contado (número em reais) para preencher o campo que abriu o contador. */
   onConfirm: (total: number) => void;
   onClose: () => void;
+  /**
+   * Quando informado, a contagem é **persistida em rascunho** (`localStorage`) por modo
+   * (abertura/fechamento): se o operador sair e voltar, a contagem reaparece. Só é apagada
+   * ao "Limpar" aqui ou ao abrir/fechar o caixa. Sem esta prop, o contador é 100% efêmero.
+   */
+  persistMode?: CashMode;
 }) {
-  // Quantidade por denominação, como texto (permite campo vazio); '' conta como 0.
-  const [counts, setCounts] = useState<Record<number, string>>({});
+  // Quantidade por denominação, como texto (permite campo vazio); '' conta como 0. Inicia do
+  // rascunho salvo quando há `persistMode` (o modal só monta após um clique no cliente, então
+  // ler `localStorage` no inicializador é seguro — nunca roda no SSR).
+  const [counts, setCounts] = useState<Record<number, string>>(
+    () => (persistMode ? readCashDraft(persistMode).counts ?? {} : {}),
+  );
 
   // Esc fecha (atalho de teclado no desktop — CLAUDE.md → menos cliques).
   useEffect(() => {
@@ -96,11 +108,19 @@ export function CashCounter({
   const total = sumCashCount(numericCounts);
 
   function setQty(value: number, raw: string) {
-    setCounts((prev) => ({ ...prev, [value]: toQty(raw) }));
+    setCounts((prev) => {
+      const next = { ...prev, [value]: toQty(raw) };
+      // Salva o rascunho a cada tecla (barato; só localStorage) para sobreviver à navegação.
+      if (persistMode) saveCashDraft(persistMode, { counts: next });
+      return next;
+    });
   }
 
   function clearAll() {
     setCounts({});
+    // "Limpar" é o reset explícito pedido pelo Owner: zera também a contagem no rascunho (mantém
+    // um valor eventualmente digitado à mão no campo; o rascunho inteiro só some ao abrir/fechar).
+    if (persistMode) saveCashDraft(persistMode, { counts: {} });
   }
 
   return (

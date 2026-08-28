@@ -3,7 +3,34 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-27 — **UI.Buscas.DropdownCortado — o último item do dropdown de
+> **Última atualização:** 2026-08-27 — **Caixa.FechamentoCego + Divergência ao vivo — NO AR e E2E DO
+> OWNER VALIDADO (2026-08-27, "validado com sucesso"). CONCLUÍDA.** Modernização da tela do Caixa
+> (inovação pedida pelo Owner). **(1) Fechamento CEGO (blind close), por loja:** ajuste em
+> **Configurações → Fechamento de caixa** (toggle "Conferência às cegas"). Ligado, a tela do Caixa
+> mascara o Esperado e toda a quebra de valores da mini-DRE (`•••••`) e esconde o extrato de
+> movimentações; o operador conta a gaveta às cegas e só então clica **"👁️ Revelar conferência"** —
+> evita o viés de ajustar a contagem p/ bater com o esperado. **(2) Divergência AO VIVO:** com o modo
+> normal (ou após revelar), faixa no card de fechar mostra **✅ Confere / Sobra +R$X / Falta −R$X**
+> atualizando a cada tecla/contagem; **decisão do Owner:** após revelar, segue ao vivo (recontar/ajustar
+> vê o efeito). **Migration 0033** (`Tenant.blindCashClose Boolean @default(false)` — aditiva, default
+> preserva o comportamento atual; aplicada com `db:deploy`). **Camadas:** db + shared (`updateTenantSchema`)
+> + api (`/tenant` GET/PATCH select) + web (Caixa + Configurações). Doc §8.2 atualizada (regra 7).
+> **Gate:** shared/api/web `tsc` 0; `/caixa` e `/configuracoes` compilam 200 no dev. **NO AR:** API Version
+> `8c80b324` + web Version `53c8919e`; smoke web ✅ (HTML `no-store` + CSS 200). Commit local em `main`.
+>
+> **Antes:** 2026-08-27 — **UI.Caixa.Repaginacao + Contador persistente — NO AR e E2E DO OWNER VALIDADO
+> (2026-08-27, "validado com sucesso"). CONCLUÍDA.** Continuação da onda de repaginação (…→ Entregas →
+> **Caixa**). **(a) Identidade visual:** título em gradiente índigo + subtítulo; cards com
+> `border-gray-200`. **(b) Contador/valores que não se perdem (pedido do Owner):** novo helper
+> `apps/web/lib/cashDrafts.ts` — rascunho em `localStorage` por modo (`open`/`close`) da contagem de
+> cédulas/moedas (`CashCounter`) e dos valores digitados (abertura/valor contado/observações); reaparece
+> ao voltar de outra tela. Some ao **"Limpar"** no contador (zera só a contagem) ou ao **abrir/fechar** o
+> caixa (turno vira). Selo **"rascunho"** no botão "Usar contador" quando há contagem salva. Hidratação
+> via effect (evita mismatch de SSR). **Camadas:** só `apps/web` (page + CashCounter + 1 helper). **Sem
+> API/migration.** **Gate:** web `tsc` 0. **NO AR:** junto com o deploy do Fechamento Cego (web
+> `53c8919e`). Commit local em `main`.
+>
+> **Antes:** 2026-08-27 — **UI.Buscas.DropdownCortado — o último item do dropdown de
 > busca (ProductPicker/SupplierPicker) ficava cortado/"travado" — NO AR e E2E DO OWNER VALIDADO
 > (2026-08-27, "validado com sucesso"). CONCLUÍDA.** Achado do Owner no Estoque (Ajuste de inventário
 > e Entrada) e em outras telas. **Causa:** a repaginação deu `overflow-hidden` aos cards (p/ arredondar

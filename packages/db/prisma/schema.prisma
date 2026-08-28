@@ -152,6 +152,11 @@ model Tenant {
   /// exibida como sempre foi (sem desconto de taxa).
   cardFeeDebitPercent  Decimal? @db.Decimal(5, 2)
   cardFeeCreditPercent Decimal? @db.Decimal(5, 2)
+  /// Fechamento CEGO (blind close): quando `true`, a tela do Caixa esconde o Esperado e a quebra
+  /// de valores ao fechar; o operador conta a gaveta às cegas e só então "revela" a divergência.
+  /// Prática anti-viés (evita ajustar a contagem para bater com o esperado). `false` = fechamento
+  /// normal, com a conferência à vista. Ajuste por loja, definido pelo dono nas Configurações.
+  blindCashClose       Boolean  @default(false)
   // Contador de vendas da loja (ADR-023): o ÚLTIMO número emitido. A venda aloca o próximo com um
   // incremento atômico (UPDATE ... RETURNING) dentro da transação — à prova de corrida, sem furo em
   // rollback. Backfill na migration 0021 acertou cada loja para o maior nº já emitido (0 se sem vendas).

@@ -72,6 +72,12 @@ export const updateTenantSchema = z.object({
    */
   cardFeeDebitPercent: z.number().min(0).max(100).nullish(),
   cardFeeCreditPercent: z.number().min(0).max(100).nullish(),
+  /**
+   * Fechamento CEGO do caixa (blind close). Quando `true`, a tela do Caixa esconde o Esperado e a
+   * quebra de valores no fechamento; o operador conta às cegas e só então revela a divergência.
+   * Ajuste por loja (definido pelo dono). Ausente no payload ⇒ não altera o valor atual.
+   */
+  blindCashClose: z.boolean().optional(),
 });
 export type UpdateTenantInput = z.infer<typeof updateTenantSchema>;
 

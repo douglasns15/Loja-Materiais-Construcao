@@ -494,7 +494,7 @@ testável exaustivamente e compartilhada entre as duas apps.
 
 | Método · Rota | O que faz |
 |---|---|
-| `GET /tenant` · `PATCH /tenant` 🔒 | Dados da loja / edição. |
+| `GET /tenant` · `PATCH /tenant` 🔒 | Dados da loja / edição. Inclui taxas da maquininha (ADR-016) e `blindCashClose` (fechamento cego do caixa, por loja). |
 | `POST /tenant/logo` 🔒 · `DELETE /tenant/logo` 🔒 | Upload (URL assinada R2) / remoção do logo. |
 | `GET /me` · `PATCH /me` | Perfil da sessão (+ memberships) / edição do próprio perfil. |
 | `GET /users` | Lista usuários da loja. |
