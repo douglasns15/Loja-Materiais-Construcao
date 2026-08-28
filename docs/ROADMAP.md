@@ -3,7 +3,30 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-28 — **Caixa.CaixasDeHoje + reimpressão do fechamento — NO AR e
+> **Última atualização:** 2026-08-28 — **Vendas.Historico — repaginação + "Vender de novo" +
+> Comprovante WhatsApp/PDF + Faixa de inteligência — NO AR e E2E DO OWNER VALIDADO (2026-08-28,
+> "validado com sucesso… os 3 pontos"). CONCLUÍDA.** Quatro frentes na tela Histórico de Vendas.
+> **(a) Repaginação** (identidade índigo): título em gradiente, busca com controle segmentado
+> (Código·Cliente·Valor), cartões `border+shadow-md`, pill índigo do código. **(b) Vender de novo
+> (reorder):** botão liga a SELEÇÃO MÚLTIPLA (checkbox por cartão, combina com os filtros); marca 1
+> ou VÁRIAS vendas e junta os itens num carrinho novo no PDV. Motor PURO `planReorder`
+> (`packages/core`, +9 testes Vitest — regra 2): mescla por produto+modo (soma qtd), REPREÇA pelo
+> preço ATUAL (nunca o antigo), limita ao estoque livre (clamped) e separa sumido/sem-estoque. Handoff
+> por `sessionStorage` (`lib/reorder.ts`); o PDV hidrata (padrão do `?quoteId=`) e mostra uma REVISÃO
+> antes de cair no carrinho (nada entra cru; soma ao que já havia). **(c) Comprovante no WhatsApp/PDF:**
+> botões por venda (Histórico) E no modal do Orçamento. Imagem (`html-to-image`, INLINE no chat) ou PDF
+> (`jspdf`, anexo). `navigator.share` → o operador escolhe o app e envia (nada sozinho); fallback abre
+> em aba. Cupom fotografado FORA da tela (`ReceiptPrint captureMode` + `.rc-capture-host` no
+> globals.css); espera o LOGO carregar antes de medir (`waitImages`) p/ não CORTAR o rodapé. Libs por
+> DYNAMIC IMPORT (fora do bundle inicial; /vendas 202 kB). **(d) Faixa de inteligência:** reusa
+> `GET /reports/sales?compare=1` — Faturamento (▲/▼ vs. período anterior), Vendas, Ticket médio e Forma
+> predominante; some na busca. **Camadas:** `packages/core` + `apps/web` (Histórico, PDV, Orçamentos).
+> **Sem API/migration** (reusa endpoints; doc §8.2 intocada). **2 deps novas** (`html-to-image`,
+> `jspdf@4.2.1` — regra 4, aprovadas pelo Owner). **Gate:** core 331 testes; web `tsc` 0 + build.
+> Captura (imagem + PDF) validada em teste isolado antes de cada deploy. **NO AR:** web Version
+> `7a7a7acf` (última de uma série de deploys da sessão); smoke ✅. Commit local em `main`.
+>
+> **Antes:** 2026-08-28 — **Caixa.CaixasDeHoje + reimpressão do fechamento — NO AR e
 > E2E DO OWNER VALIDADO (2026-08-28, "tudo validado com sucesso"). CONCLUÍDA.** Achado do Owner: a
 > tela do Caixa só mostrava o caixa aberto AGORA —
 > para ver os caixas do dia era preciso ir ao Relatórios. Nova seção **"Caixas de hoje"** na própria
