@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { groupPairedItems } from '@nexoloja/core';
@@ -15,6 +15,7 @@ import {
 } from '@nexoloja/shared';
 import { apiDelete, apiGet, apiPatch } from '@/lib/api';
 import { printArea } from '@/lib/print';
+import { shareReceiptImage, shareReceiptPdf } from '@/lib/receiptShare';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { ReceiptPrint, type Store } from '@/components/ReceiptPrint';
 
@@ -292,6 +293,11 @@ function QuoteDetailModal({
   // (aí o nome do cadastro é a identidade). `detail.customerName` já resolve o de exibição.
   const [custName, setCustName] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // Compartilhamento do orçamento (WhatsApp imagem / PDF). `shareBusy` = tipo em "Gerando…" (monta
+  // o cupom de captura fora da tela); `shareErr` = falha amigável.
+  const [shareBusy, setShareBusy] = useState<'image' | 'pdf' | null>(null);
+  const [shareErr, setShareErr] = useState<string | null>(null);
+  const captureRef = useRef<HTMLDivElement>(null);
 
   async function reload() {
     try {
@@ -345,6 +351,43 @@ function QuoteDetailModal({
     const fileName = detail ? formatQuoteNumber(detail.quoteNumber) : null;
     await printArea({ model: printModel, logoUrl: store?.logoUrl, fileName });
   }
+
+  /** Dispara o compartilhamento do orçamento (imagem inline ou PDF anexo). O efeito abaixo monta o
+   *  cupom de captura fora da tela e fotografa — o operador escolhe o app (WhatsApp) e envia. */
+  function compartilhar(kind: 'image' | 'pdf') {
+    setShareErr(null);
+    setShareBusy(kind);
+  }
+
+  useEffect(() => {
+    if (!shareBusy || !detail) return;
+    let cancelled = false;
+    (async () => {
+      // Respiro para o React pintar o cupom de captura antes da foto.
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(null))));
+      const node = captureRef.current?.querySelector<HTMLElement>('#print-area') ?? null;
+      if (!node || cancelled) return;
+      const code = formatQuoteNumber(detail.quoteNumber);
+      const share = shareBusy === 'pdf' ? shareReceiptPdf : shareReceiptImage;
+      try {
+        await share(node, {
+          fileName: code || 'orcamento',
+          title: `Orçamento ${code}`.trim(),
+          text: `Orçamento ${code} — ${store?.name ?? 'nossa loja'} · ${BRL(detail.total)}`,
+        });
+      } catch (e) {
+        if (!cancelled && (e as Error)?.name !== 'AbortError') {
+          setShareErr(`Não consegui gerar o ${shareBusy === 'pdf' ? 'PDF' : 'comprovante'}. Tente novamente.`);
+        }
+      } finally {
+        if (!cancelled) setShareBusy(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shareBusy]);
 
   return (
     <div
@@ -516,6 +559,28 @@ function QuoteDetailModal({
               >
                 Imprimir
               </button>
+              {/* Enviar o orçamento: WhatsApp (imagem inline) ou PDF (anexo — o mais comum p/ orçamento). */}
+              <button
+                onClick={() => compartilhar('image')}
+                disabled={shareBusy !== null}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 px-3 py-1 text-sm font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-60"
+              >
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2Zm0 1.67c2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.42 5.82c0 4.54-3.7 8.24-8.25 8.24a8.2 8.2 0 0 1-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.17 8.17 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.25-8.24Zm4.71 10.29c-.26-.13-1.53-.75-1.76-.84-.24-.09-.41-.13-.59.13-.17.26-.67.84-.82 1.02-.15.17-.3.19-.56.06-.26-.13-1.09-.4-2.08-1.28-.77-.69-1.29-1.53-1.44-1.79-.15-.26-.02-.4.11-.53.12-.12.26-.3.39-.46.13-.15.17-.26.26-.43.09-.17.04-.32-.02-.45-.06-.13-.59-1.42-.81-1.94-.21-.51-.43-.44-.59-.45l-.5-.01c-.17 0-.45.06-.68.32-.24.26-.9.88-.9 2.15 0 1.27.92 2.49 1.05 2.66.13.17 1.8 2.75 4.36 3.86.61.26 1.08.42 1.45.54.61.19 1.17.17 1.61.1.49-.07 1.53-.62 1.74-1.23.21-.6.21-1.12.15-1.23-.06-.11-.24-.17-.5-.3Z" />
+                </svg>
+                {shareBusy === 'image' ? 'Gerando…' : 'WhatsApp'}
+              </button>
+              <button
+                onClick={() => compartilhar('pdf')}
+                disabled={shareBusy !== null}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-60"
+              >
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <path d="M14 2v6h6" />
+                </svg>
+                {shareBusy === 'pdf' ? 'Gerando…' : 'PDF'}
+              </button>
               <div className="ml-auto flex items-center gap-2">
                 {!converted &&
                   (confirmDelete ? (
@@ -551,6 +616,30 @@ function QuoteDetailModal({
                 </button>
               </div>
             </div>
+            {shareErr && (
+              <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 ring-1 ring-red-200">{shareErr}</p>
+            )}
+
+            {/* Cupom de CAPTURA (WhatsApp/PDF): renderizado fora do viewport enquanto compartilha. */}
+            {shareBusy && (
+              <div ref={captureRef} className="rc-capture-host">
+                <ReceiptPrint
+                  captureMode
+                  kind="quote"
+                  store={store}
+                  items={groupPairedItems(detail.items).map((line) => ({
+                    name: line.isPair ? `${line.label} (par)` : line.label,
+                    quantity: line.quantity,
+                    unitPrice: line.quantity > 0 ? Number((line.total / line.quantity).toFixed(2)) : line.total,
+                  }))}
+                  total={Number(detail.total)}
+                  discount={Number(detail.discountAmount)}
+                  date={new Date(detail.createdAt).toLocaleString('pt-BR')}
+                  quoteNumber={detail.quoteNumber}
+                  validUntil={detail.validUntil ? dt(detail.validUntil) : null}
+                />
+              </div>
+            )}
 
             {/* Documento de impressão (oculto na tela; aparece só na impressão). */}
             <ReceiptPrint

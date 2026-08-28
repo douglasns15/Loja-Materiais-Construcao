@@ -38,7 +38,12 @@ import {
   surchargePerBaseUnit,
   cardFeePercentFor,
   netMarginPercent,
+  planReorder,
+  type ReorderSourceItem,
+  type ReorderProductInfo,
+  type ReorderPlan,
 } from '@nexoloja/core';
+import { takeReorderPayload } from '@/lib/reorder';
 import { apiGet, apiPatch, apiPost } from '@/lib/api';
 import { cacheCashSession, readCachedCashSession } from '@/lib/cashSessionCache';
 import { cacheProducts, readCachedProducts } from '@/lib/catalog';
@@ -424,6 +429,12 @@ export default function VendaPage() {
   const [quoteReview, setQuoteReview] = useState<string[]>([]);
   // Roda a reconstrução do `?quoteId=` uma única vez (depois que o catálogo carrega).
   const quoteAppliedRef = useRef(false);
+  // "Vender de novo" (reorder): plano calculado a partir do repasse do Histórico, mostrado numa
+  // revisão ANTES de cair no carrinho. `null` = sem reorder pendente. `reorderSales` = de quantas
+  // vendas veio, só para o texto da revisão. Roda uma vez, guardado no ref (depois do catálogo).
+  const [reorderPlan, setReorderPlan] = useState<ReorderPlan | null>(null);
+  const [reorderSales, setReorderSales] = useState(0);
+  const reorderAppliedRef = useRef(false);
   // Venda a prazo (ADR-019): valor deixado a prazo, cliente devedor e vencimento opcional.
   // `creditInput` vazio/0 = venda à vista comum (nenhuma regressão). Online-only nesta fatia.
   // `showCredit` mantém a opção ESCONDIDA por padrão (PDV limpo) — só aparece quando o operador
@@ -608,6 +619,63 @@ export default function VendaPage() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [products]);
+
+  // "Vender de novo" (reorder): repasse do Histórico via sessionStorage (lib/reorder). Espera o
+  // catálogo carregar (preço/estoque/fator saem dele) e roda UMA vez. Resolve cada item contra o
+  // catálogo ATUAL — deriva o modo pela unidade vendida e o fator-para-base por `buildCartLine` —
+  // e monta o plano no core. Nada entra no carrinho aqui: abre a REVISÃO para o operador confirmar.
+  useEffect(() => {
+    if (reorderAppliedRef.current || products.length === 0) return;
+    const payload = takeReorderPayload();
+    reorderAppliedRef.current = true;
+    if (!payload) return;
+    const sources: ReorderSourceItem[] = [];
+    const catalog = new Map<string, ReorderProductInfo>();
+    for (const it of payload.items) {
+      const qty = Number(it.quantity) || 0;
+      const p = products.find((x) => x.id === it.productId);
+      if (!p) {
+        // Produto sumiu do catálogo: entra como origem sem verbete → o core marca "missing".
+        sources.push({ productId: it.productId, productName: it.productName, saleMode: 'BASE', quantity: qty, factorToBase: 1 });
+        continue;
+      }
+      // A unidade principal do produto é a base; qualquer outra (embalagem/metro) é a alternativa.
+      const mode: SaleUnitMode = it.unit === p.unit ? 'BASE' : 'ALT';
+      const { factorToBase } = buildCartLine(p, mode, 1);
+      sources.push({ productId: p.id, productName: p.name, saleMode: mode, quantity: qty, factorToBase });
+      if (!catalog.has(p.id)) {
+        // Estoque LIVRE = estoque atual − o que o carrinho já consome deste produto (não vende duas vezes).
+        const free = Math.max(0, Number(p.stockQty) - baseUsedByProduct(p.id));
+        catalog.set(p.id, { name: p.name, baseStock: free });
+      }
+    }
+    setReorderSales(payload.sales);
+    setReorderPlan(planReorder(sources, catalog));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [products]);
+
+  /** Confirma a revisão do reorder: monta as linhas pelo preço ATUAL e SOMA ao carrinho (não
+   *  substitui — respeita o que já estava lá). O core já limitou tudo ao estoque livre. */
+  function applyReorder(plan: ReorderPlan) {
+    setError(null);
+    setCart((prev) => {
+      const next = [...prev];
+      for (const l of plan.lines) {
+        const p = products.find((x) => x.id === l.productId);
+        if (!p) continue;
+        const { line } = buildCartLine(p, l.saleMode, l.quantity);
+        const idx = next.findIndex((c) => c.key === line.key);
+        const existing = idx >= 0 ? next[idx] : undefined;
+        if (existing) {
+          next[idx] = { ...existing, quantity: Number((existing.quantity + l.quantity).toFixed(4)) };
+        } else {
+          next.push(line);
+        }
+      }
+      return next;
+    });
+    setReorderPlan(null);
+  }
 
   /** Abre o diálogo de impressão. O PDF sai nomeado pelo código do documento (venda V-000128 /
    *  orçamento O-000045) em vez do genérico "NexoLoja.pdf". Ver lib/print.ts. */
@@ -2863,6 +2931,109 @@ export default function VendaPage() {
             setCustomerOptions([]);
           }}
         />
+      )}
+
+      {/* Revisão do "Vender de novo" (reorder): mostra o que entra e o que ficou de fora ANTES de
+          somar ao carrinho — nada entra cru (decisão do Owner). O core já decidiu quantidades e
+          estoque; aqui é só transparência + confirmação. */}
+      {reorderPlan && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
+            <h2 className="bg-gradient-to-r from-indigo-700 to-indigo-500 bg-clip-text text-lg font-bold text-transparent">
+              Vender de novo
+            </h2>
+            <p className="mt-1 text-sm text-gray-500">
+              {reorderPlan.lineCount > 0 ? (
+                <>
+                  <strong className="text-gray-700">{reorderPlan.lineCount}</strong>{' '}
+                  {reorderPlan.lineCount === 1 ? 'produto vai' : 'produtos vão'} para o carrinho
+                  {reorderSales > 1 ? <> de <strong className="text-gray-700">{reorderSales}</strong> vendas</> : null}
+                  , repreçados pelo preço atual.
+                </>
+              ) : (
+                'Nenhum item pôde ser adicionado desta seleção.'
+              )}
+            </p>
+
+            {/* Selos-resumo: mesclados / ajustados ao estoque. */}
+            {(reorderPlan.mergedCount > 0 || reorderPlan.clampedCount > 0) && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {reorderPlan.mergedCount > 0 && (
+                  <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-semibold text-indigo-700">
+                    {reorderPlan.mergedCount} mesclado{reorderPlan.mergedCount > 1 ? 's' : ''}
+                  </span>
+                )}
+                {reorderPlan.clampedCount > 0 && (
+                  <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700">
+                    {reorderPlan.clampedCount} ajustado{reorderPlan.clampedCount > 1 ? 's' : ''} ao estoque
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Linhas que entram. */}
+            {reorderPlan.lines.length > 0 && (
+              <ul className="mt-3 divide-y divide-gray-100 rounded-xl border border-gray-100 text-sm">
+                {reorderPlan.lines.map((l) => (
+                  <li key={`${l.productId}:${l.saleMode}`} className="flex items-center justify-between gap-2 px-3 py-2">
+                    <span className="min-w-0 truncate text-gray-700">{l.name}</span>
+                    <span className="flex shrink-0 items-center gap-2">
+                      {l.sources > 1 && (
+                        <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-[11px] font-semibold text-indigo-600">
+                          {l.sources}×
+                        </span>
+                      )}
+                      {l.status === 'clamped' && (
+                        <span
+                          className="rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-700"
+                          title={`Pedido: ${l.requestedQuantity} — ajustado ao estoque`}
+                        >
+                          ajustado
+                        </span>
+                      )}
+                      <span className="tabular-nums font-medium text-gray-900">{l.quantity}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {/* Itens que ficaram de fora (sumiram do catálogo ou sem estoque). */}
+            {(reorderPlan.missing.length > 0 || reorderPlan.outOfStock.length > 0) && (
+              <div className="mt-3 rounded-xl bg-gray-50 p-3 text-xs text-gray-500">
+                {reorderPlan.missing.length > 0 && (
+                  <p>
+                    <strong className="text-gray-600">Fora (não existem mais):</strong>{' '}
+                    {reorderPlan.missing.map((m) => m.name).join(', ')}.
+                  </p>
+                )}
+                {reorderPlan.outOfStock.length > 0 && (
+                  <p className={reorderPlan.missing.length > 0 ? 'mt-1' : ''}>
+                    <strong className="text-gray-600">Sem estoque:</strong>{' '}
+                    {reorderPlan.outOfStock.map((m) => m.name).join(', ')}.
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                onClick={() => setReorderPlan(null)}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+              >
+                {reorderPlan.lineCount > 0 ? 'Cancelar' : 'Entendi'}
+              </button>
+              {reorderPlan.lineCount > 0 && (
+                <button
+                  onClick={() => applyReorder(reorderPlan)}
+                  className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800"
+                >
+                  Adicionar ao carrinho ({reorderPlan.lineCount})
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

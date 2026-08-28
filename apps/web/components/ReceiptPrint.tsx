@@ -64,6 +64,10 @@ type Props = {
    *  partir dele o comprovante mostra o bloco "Situação da retirada" (retirou X · falta Y) e adapta
    *  a faixa (RETIRADA PARCIAL / RETIRADA CONCLUÍDA). Ausente no cupom do PDV ⇒ comportamento antigo. */
   pickupLines?: ReceiptPickupLine[];
+  /** Renderiza o comprovante VISÍVEL na tela (fora do viewport) para virar imagem — usado pelo
+   *  "Enviar no WhatsApp" (html-to-image). Adiciona a classe `rc-capture`, que sobrepõe o
+   *  `display:none` de tela e dá largura/fonte/cor, sem afetar a impressão normal. */
+  captureMode?: boolean;
 };
 
 const BRL = (v: number) =>
@@ -80,7 +84,7 @@ const QTY = (v: number) => {
  * e só aparece na impressão (ver regras @media print em globals.css). O modelo
  * (80mm / A4) é controlado pelo atributo data-model, definido antes de imprimir.
  */
-export function ReceiptPrint({ kind, store, items, total, date, discount, payments, method, change, creditAmount, storeCreditAmount, customerName, orderNumber, quoteNumber, validUntil, pickupNotice, pickupPaid, pickupLines }: Props) {
+export function ReceiptPrint({ kind, store, items, total, date, discount, payments, method, change, creditAmount, storeCreditAmount, customerName, orderNumber, quoteNumber, validUntil, pickupNotice, pickupPaid, pickupLines, captureMode }: Props) {
   const isQuote = kind === 'quote';
   const subtotal = items.reduce((acc, i) => acc + i.unitPrice * i.quantity, 0);
   const hasDiscount = (discount ?? 0) > 0;
@@ -104,7 +108,7 @@ export function ReceiptPrint({ kind, store, items, total, date, discount, paymen
   const pickupStarted = pickupDelivered > 0;
   const pickupDone = !!pickupLines && pickupLines.length > 0 && pickupRemaining <= 0;
   return (
-    <div id="print-area" data-model="80mm">
+    <div id="print-area" data-model="80mm" className={captureMode ? 'rc-capture' : undefined}>
       <header className="rc-head">
         {store?.logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element

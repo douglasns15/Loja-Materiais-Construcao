@@ -12,6 +12,28 @@
   #print-area {
     display: none;
   }
+  /* Captura para imagem (comprovante no WhatsApp): renderiza o cupom com a largura/fonte/cor do
+     modelo 80mm para o html-to-image fotografar. Vence o display:none acima por especificidade
+     (id + classe). NÃO posiciona o próprio #print-area (nada de position/left aqui): quem o joga
+     para fora da tela é o invólucro (.rc-capture-host) — se o offset ficasse no nó capturado, o
+     html-to-image copiaria o `left` negativo para o clone e o conteúdo sairia da área do SVG (imagem
+     em branco). Não afeta a impressão (que usa @media print). */
+  #print-area.rc-capture {
+    display: block;
+    width: 302px; /* ~80mm */
+    padding: 12px;
+    font-size: 12px;
+    color: #000;
+    background: #fff;
+    font-family: ui-sans-serif, system-ui, sans-serif;
+  }
+  /* Invólucro do cupom de captura: tira-o do viewport (o nó fotografado, dentro, fica em 0,0). */
+  .rc-capture-host {
+    position: fixed;
+    left: -10000px;
+    top: 0;
+    z-index: -1;
+  }
 }
 
 /* Modo COMPROVANTE/ORÇAMENTO: só o #print-area imprime. Escopado em `body:not(.print-report)` para
