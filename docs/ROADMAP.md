@@ -3,7 +3,22 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-28 — **Comprovantes.Caixa+Fiado — 3 comprovantes imprimíveis novos
+> **Última atualização:** 2026-08-28 — **Caixa.CaixasDeHoje + reimpressão do fechamento — NO AR
+> (aguardando E2E do Owner).** Achado do Owner: a tela do Caixa só mostrava o caixa aberto AGORA —
+> para ver os caixas do dia era preciso ir ao Relatórios. Nova seção **"Caixas de hoje"** na própria
+> tela: lista os turnos FECHADOS hoje (o aberto segue no card acima) com abertura→fechamento,
+> operador, Abertura/Esperado/Contado e o selo de divergência (Conferiu/Sobra/Falta). Cada um tem
+> **🖨 Comprovante** que reimprime o **fechamento completo** (reusa `CashClosePrint`). Reusa o
+> endpoint `GET /reports/cash-sessions` (só `requireAuth`, serve ao operador) com um flag novo
+> **`?breakdown=1`** que devolve a quebra da mini-DRE (`cashInflow`/`cashMovementsIn`/
+> `cashMovementsOut`) por 2 leituras agregadas — SÓ quando pedido, para não onerar o Relatórios (que
+> lista até 2000 sessões). Campos opcionais em `CashSessionReport`; doc §8.2 atualizada (regra 7).
+> Refatorado o print de fechamento (separando "recém-fechado" de "reimpressão"). **Camadas:**
+> apps/api + apps/web + packages/shared. **Sem migration.** **Gate:** shared/api/web `tsc` 0; `/caixa`
+> compila 200 no dev. **NO AR:** API Version `dedbe85f` + web Version `0abf3b26`; smoke web ✅. Commit
+> local em `main`.
+>
+> **Antes:** 2026-08-28 — **Comprovantes.Caixa+Fiado — 3 comprovantes imprimíveis novos
 > — NO AR e E2E DO OWNER VALIDADO (2026-08-28, "validado com sucesso"). CONCLUÍDA.** Pedido do Owner
 > ("comprovante de pagamento" → os 3). Reusam a
 > infra de impressão existente (`#print-area` oculto na tela, classes `rc-*`, `lib/print.ts`, 80mm/A4;

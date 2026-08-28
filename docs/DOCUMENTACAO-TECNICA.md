@@ -488,7 +488,7 @@ testável exaustivamente e compartilhada entre as duas apps.
 | `GET /customer-products/:customerId` | "O que costuma comprar" um cliente (`?from=&to=`): top produtos por faturamento daquele cliente — detalhe do pop-up (Fatia 5). |
 | `GET /daily` | Recebido por DIA no período (`?from=&to=`) para o gráfico de barras (Fatia 7): à vista pela data da venda + fiado por `paidAt`, por dia (fuso −3h). Σ dias = "Recebido do período". |
 | `GET /projections` | Projeções "no ritmo atual" (Fatia 8), independentes do filtro: faturamento do mês (run-rate), a receber próx. 30 dias (vencimentos ADR-026) e itens que vão faltar (velocidade típica = mediana dos dias com venda × frequência — robusta a pico único, mas pega quem vende regularmente; StockMovement EXPENSE 30d). |
-| `GET /cash-sessions` | Relatório de caixas (aberturas/fechamentos). |
+| `GET /cash-sessions` | Relatório de caixas fechados (`?from=&to=`). Com `?breakdown=1` cada sessão inclui a quebra da mini-DRE (`cashInflow`, `cashMovementsIn`, `cashMovementsOut`) — usado pela tela do Caixa ("Caixas de hoje") para reimprimir o comprovante de fechamento completo; ausente no fluxo padrão (Relatórios) para não onerar. |
 
 **`/tenant`, `/me`, `/users` — Loja, sessão e usuários**
 

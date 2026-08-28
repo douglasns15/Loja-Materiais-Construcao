@@ -6,6 +6,7 @@ import {
   closeCashSessionSchema,
   type CashMovementInput,
   type CashMovementRow,
+  type CashSessionReport,
 } from '@nexoloja/shared';
 import { apiGet, apiPost } from '@/lib/api';
 import { cacheCashSession, readCachedCashSession, type CachedCashSession } from '@/lib/cashSessionCache';
@@ -74,10 +75,16 @@ export default function CaixaPage() {
   const [revealed, setRevealed] = useState(false);
   // Identidade da loja (cabeçalho dos comprovantes) + comprovantes imprimíveis do Caixa.
   const [store, setStore] = useState<Store | null>(null);
+  // `closeReceipt`: fechamento recém-feito (habilita o botão de imprimir na confirmação).
+  // `closePrintData`: o que está montado no #print-area de fechamento (recém-feito OU reimpressão).
   const [closeReceipt, setCloseReceipt] = useState<CashCloseReceiptData | null>(null);
+  const [closePrintData, setClosePrintData] = useState<CashCloseReceiptData | null>(null);
   const [movementReceipt, setMovementReceipt] = useState<CashMovementReceiptData | null>(null);
   // Qual comprovante está montado no #print-area (só um por vez — o id é único). null = nenhum.
   const [printKind, setPrintKind] = useState<'close' | 'movement' | null>(null);
+  // Caixas fechados HOJE (histórico do dia na própria tela do Caixa) — reusa GET /reports/cash-sessions
+  // com ?breakdown=1 para poder reimprimir o comprovante de fechamento completo.
+  const [todaySessions, setTodaySessions] = useState<CashSessionReport[]>([]);
 
   async function load() {
     try {
@@ -112,6 +119,7 @@ export default function CaixaPage() {
 
   useEffect(() => {
     load();
+    loadTodaySessions();
   }, []);
 
   // Hidrata os campos com o rascunho salvo (feito em effect, não no render, para não quebrar a
@@ -142,6 +150,19 @@ export default function CaixaPage() {
       .catch(() => {});
   }, []);
 
+  // Carrega os caixas fechados HOJE (fuso -03h, como o servidor). Falha (offline/erro) → lista vazia.
+  async function loadTodaySessions() {
+    try {
+      const day = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+      const rows = await apiGet<CashSessionReport[]>(
+        `/reports/cash-sessions?breakdown=1&from=${day}&to=${day}`,
+      );
+      setTodaySessions(rows);
+    } catch {
+      setTodaySessions([]);
+    }
+  }
+
   // Monta um comprovante no #print-area e abre o diálogo de impressão. Dois `requestAnimationFrame`
   // garantem que o React já pintou o #print-area escolhido antes de `window.print()` capturar a página.
   function doPrint(kind: 'close' | 'movement', fileName: string) {
@@ -151,6 +172,31 @@ export default function CaixaPage() {
         void printArea({ model: '80mm', logoUrl: store?.logoUrl, fileName });
       }),
     );
+  }
+
+  // Imprime um comprovante de fechamento (recém-feito ou reimpressão de um caixa de hoje).
+  function printClose(data: CashCloseReceiptData, fileName: string) {
+    setClosePrintData(data);
+    doPrint('close', fileName);
+  }
+
+  // Constrói os dados do comprovante a partir de um caixa fechado do relatório (?breakdown=1 traz a
+  // quebra da mini-DRE). Sem a lista de movimentações item a item (o relatório não a traz).
+  function receiptFromReport(s: CashSessionReport): CashCloseReceiptData {
+    return {
+      openedAt: s.openedAt,
+      closedAt: s.closedAt,
+      openedByName: s.openedByName,
+      closedByName: s.closedByName,
+      openingAmount: s.openingAmount,
+      cashInflow: s.cashInflow ?? 0,
+      movementsIn: s.cashMovementsIn ?? 0,
+      movementsOut: s.cashMovementsOut ?? 0,
+      expectedAmount: s.expectedAmount,
+      countedAmount: s.closingAmount,
+      divergence: s.divergence,
+      notes: s.notes,
+    };
   }
 
   // Reimprime uma movimentação do extrato (suprimento/sangria/etc.).
@@ -243,6 +289,8 @@ export default function CaixaPage() {
       refreshDraftHints();
       // Próximo turno recomeça às cegas (se a loja usa fechamento cego).
       setRevealed(false);
+      // O caixa que acabou de fechar entra no histórico "Caixas de hoje".
+      loadTodaySessions();
       const d = res.divergence;
       setInfo(
         d === 0
@@ -320,7 +368,7 @@ export default function CaixaPage() {
       {closeReceipt && (
         <button
           type="button"
-          onClick={() => doPrint('close', 'Fechamento-de-caixa')}
+          onClick={() => printClose(closeReceipt, 'Fechamento-de-caixa')}
           className="mb-4 inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100"
         >
           🖨 Imprimir comprovante do fechamento
@@ -585,6 +633,65 @@ export default function CaixaPage() {
         </>
       )}
 
+      {/* Histórico do dia na própria tela do Caixa: os turnos JÁ FECHADOS hoje (o aberto agora está
+          no card acima). Cada um pode reimprimir o comprovante de fechamento completo. */}
+      {todaySessions.length > 0 && (
+        <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="font-medium">Caixas de hoje</h2>
+            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs tabular-nums text-gray-600">
+              {todaySessions.length}
+            </span>
+          </div>
+          <ul className="divide-y divide-gray-100">
+            {todaySessions.map((s) => {
+              const d = s.divergence;
+              const hhmm = (iso: string) =>
+                new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+              return (
+                <li key={s.id} className="flex items-start justify-between gap-3 py-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-800">
+                      {hhmm(s.openedAt)} → {hhmm(s.closedAt)}
+                      {s.closedByName ? (
+                        <span className="font-normal text-gray-500"> · {s.closedByName}</span>
+                      ) : null}
+                    </p>
+                    <p className="mt-0.5 text-xs text-gray-500">
+                      Abertura {BRL(s.openingAmount)} · Esperado {BRL(s.expectedAmount)} · Contado{' '}
+                      {BRL(s.closingAmount)}
+                    </p>
+                    <span
+                      className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                        d === 0
+                          ? 'bg-green-50 text-green-700'
+                          : d > 0
+                            ? 'bg-amber-50 text-amber-700'
+                            : 'bg-red-50 text-red-600'
+                      }`}
+                    >
+                      {d === 0
+                        ? '✅ Conferiu'
+                        : `${d > 0 ? 'Sobra' : 'Falta'} ${BRL(Math.abs(d))}`}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      printClose(receiptFromReport(s), `Fechamento-${hhmm(s.closedAt).replace(':', 'h')}`)
+                    }
+                    className="shrink-0 rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                    title="Reimprimir o comprovante de fechamento"
+                  >
+                    🖨 Comprovante
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
       {counter && (
         <CashCounter
           title={counter === 'open' ? 'Contar abertura' : 'Contar a gaveta'}
@@ -610,7 +717,7 @@ export default function CaixaPage() {
       {moving && <CashMovementModal onSubmit={onMovement} onClose={() => setMoving(false)} />}
 
       {/* Comprovantes imprimíveis (ocultos na tela; só um #print-area montado por vez). */}
-      {printKind === 'close' && closeReceipt && <CashClosePrint store={store} data={closeReceipt} />}
+      {printKind === 'close' && closePrintData && <CashClosePrint store={store} data={closePrintData} />}
       {printKind === 'movement' && movementReceipt && (
         <CashMovementPrint store={store} data={movementReceipt} />
       )}

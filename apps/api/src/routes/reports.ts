@@ -8,6 +8,7 @@ import {
   calcMonthRunRate,
   calcProfit,
   calcTypicalVelocity,
+  grossCashMovements,
   previousPeriod,
   withPaymentShare,
 } from '@nexoloja/core';
@@ -951,6 +952,43 @@ reports.get('/cash-sessions', async (c) => {
     // reconciliação (AuditEvent SALE_ON_CLOSED_CASH). Agrega por sessão para o fechamento sinalizar
     // "N vendas lançadas após o fechamento" — a divergência que a decisão (b) manda surgir aqui.
     const sessionIds = new Set(sessions.map((s) => s.id));
+
+    // Quebra da mini-DRE por sessão (vendas em dinheiro / suprimentos / saídas) — SÓ quando pedida
+    // (`?breakdown=1`), para não onerar o Relatórios (que lista até 2000 sessões). A tela do Caixa a
+    // pede só para "hoje" (poucas sessões) e a usa para REIMPRIMIR o comprovante de fechamento
+    // completo. Duas leituras agregadas (não por-sessão) mantêm o custo baixo mesmo com o flag.
+    const wantBreakdown = ['1', 'true'].includes((c.req.query('breakdown') ?? '').toLowerCase());
+    const inflowBySession = new Map<string, number>();
+    const movBySession = new Map<string, { income: number; expense: number }>();
+    if (wantBreakdown && sessionIds.size > 0) {
+      const ids = [...sessionIds];
+      // Vendas em dinheiro (pagamentos CASH de pedidos não cancelados) agrupadas por sessão.
+      const cashPays = await prisma.payment.findMany({
+        where: {
+          tenantId,
+          method: 'CASH',
+          order: { cashSessionId: { in: ids }, status: { not: 'CANCELLED' } },
+        },
+        select: { amount: true, order: { select: { cashSessionId: true } } },
+      });
+      for (const p of cashPays) {
+        const sid = p.order?.cashSessionId;
+        if (!sid) continue;
+        inflowBySession.set(sid, (inflowBySession.get(sid) ?? 0) + Number(p.amount));
+      }
+      // Movimentações de caixa (suprimento/sangria/devolução/despesa) agrupadas por sessão.
+      const movs = await prisma.cashMovement.findMany({
+        where: { tenantId, cashSessionId: { in: ids } },
+        select: { cashSessionId: true, type: true, amount: true },
+      });
+      const rowsBySession = new Map<string, { type: 'INCOME' | 'EXPENSE'; amount: number }[]>();
+      for (const m of movs) {
+        const arr = rowsBySession.get(m.cashSessionId) ?? [];
+        arr.push({ type: m.type as 'INCOME' | 'EXPENSE', amount: Number(m.amount) });
+        rowsBySession.set(m.cashSessionId, arr);
+      }
+      for (const [sid, rows] of rowsBySession) movBySession.set(sid, grossCashMovements(rows));
+    }
     // CS-5: além do total, acumula a parcela em DINHEIRO (`cashTotal`) das vendas tardias —
     // é o que recalcula o "esperado ajustado" (cartão/PIX não tocam a gaveta).
     const reconBySession = new Map<string, { count: number; total: number; cashTotal: number }>();
@@ -1012,6 +1050,15 @@ reports.get('/cash-sessions', async (c) => {
         lateCashSalesTotal: recon.cashTotal,
         adjustedExpected,
         adjustedDivergence,
+        // Quebra da mini-DRE (só com `?breakdown=1`): alimenta a REIMPRESSÃO do comprovante de
+        // fechamento completo. Ausente (undefined) no fluxo normal do Relatórios.
+        ...(wantBreakdown
+          ? {
+              cashInflow: inflowBySession.get(s.id) ?? 0,
+              cashMovementsIn: movBySession.get(s.id)?.income ?? 0,
+              cashMovementsOut: movBySession.get(s.id)?.expense ?? 0,
+            }
+          : {}),
       };
     });
 

@@ -107,6 +107,11 @@ export interface CashSessionReport {
   adjustedExpected: number;
   /** Divergência recalculada = `closingAmount` − `adjustedExpected` (CS-5). */
   adjustedDivergence: number;
+  /** Quebra da mini-DRE — presente SÓ quando a chamada pede `?breakdown=1` (a tela do Caixa, para
+   * reimprimir o comprovante de fechamento completo). Ausente no fluxo normal do Relatórios. */
+  cashInflow?: number;
+  cashMovementsIn?: number;
+  cashMovementsOut?: number;
 }
 
 /**
