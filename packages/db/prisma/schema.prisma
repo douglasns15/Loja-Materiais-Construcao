@@ -71,6 +71,13 @@ enum DebtStatus {
   PAID // Quitada (saldo zerado) — arquivada na aba "Quitadas"
 }
 
+/// Situação de uma conta de retiradas (ADR-028). Espelha o ciclo da dívida: abre com a 1ª venda
+/// SCHEDULED de um cliente e fecha quando TODAS as vendas da conta foram retiradas (COMPLETED).
+enum DeliveryAccountStatus {
+  OPEN // Ainda há mercadoria a retirar em alguma venda da conta
+  COMPLETED // Tudo retirado — conta finalizada (aba "Finalizadas")
+}
+
 /// Destino do EXCEDENTE de uma devolução (ADR-022) — o que sobra depois de abater a dívida da
 /// venda: vira crédito na loja (abatido numa próxima compra) OU devolução em dinheiro pelo caixa.
 /// Escolha do operador no momento da devolução.
@@ -169,6 +176,10 @@ model Tenant {
   // atômica do `lastOrderNumber`; sequência SEPARADA (prefixo D-). Alocado ao ABRIR uma dívida (1ª
   // venda a prazo de um cliente sem dívida aberta). Backfill na migration 0030 acerta cada loja.
   lastDebtNumber       Int      @default(0)
+  // Contador de CONTAS DE RETIRADA da loja (ADR-028): último nº emitido, exibido como "E-0001".
+  // Mesma mecânica atômica do `lastDebtNumber`; sequência SEPARADA (prefixo E-). Alocado ao ABRIR
+  // uma conta (1ª venda SCHEDULED de um cliente sem conta aberta). Backfill na migration 0034.
+  lastDeliveryNumber   Int      @default(0)
   isActive             Boolean  @default(true)
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
@@ -190,6 +201,7 @@ model Tenant {
   receivables         Receivable[]
   receivablePayments  ReceivablePayment[]
   debts               Debt[]
+  deliveryAccounts    DeliveryAccount[]
   orderItemDeliveries OrderItemDelivery[]
   carts               Cart[]
   orderReturns        OrderReturn[]
@@ -455,6 +467,7 @@ model Customer {
   deliveries  Delivery[]
   receivables Receivable[]
   debts       Debt[]
+  deliveryAccounts DeliveryAccount[]
   returns     OrderReturn[]
   credits     CustomerCredit[]
   quotes      Quote[]
@@ -545,6 +558,10 @@ model Order {
   fulfillmentStatus FulfillmentStatus? // Só p/ SCHEDULED; null em IMMEDIATE. Cache derivado dos itens.
   scheduledPickupAt DateTime? // Previsão ÚNICA de retirada (modo padrão)
   perItemSchedule   Boolean            @default(false) // Flag "Data por item": true ⇒ a previsão vem de cada OrderItem
+  // Conta de retiradas do cliente (ADR-028): a venda SCHEDULED de um cliente entra na conta ABERTA
+  // dele (agrupa as retiradas na tela, como a dívida agrupa o fiado). NULL em vendas IMMEDIATE e em
+  // SCHEDULED sem cliente (balcão "pego depois") — que seguem como card avulso.
+  deliveryAccountId String?            @db.Uuid
   // Campos de sincronização offline
   syncStatus        SyncStatus         @default(PENDING) // Vendas nascem como PENDING no caixa offline
   createdAt         DateTime           @default(now())
@@ -556,6 +573,7 @@ model Order {
   cashSession    CashSession?        @relation(fields: [cashSessionId], references: [id])
   user           User                @relation(fields: [userId], references: [id])
   customer       Customer?           @relation(fields: [customerId], references: [id])
+  deliveryAccount DeliveryAccount?   @relation(fields: [deliveryAccountId], references: [id])
   items          OrderItem[]
   payments       Payment[]
   delivery       Delivery?
@@ -571,6 +589,7 @@ model Order {
   @@index([tenantId, createdAt])
   @@index([tenantId, status])
   @@index([tenantId, fulfillmentStatus])
+  @@index([deliveryAccountId]) // Buscar as vendas de uma conta de retiradas (ADR-028)
   @@map("orders")
 }
 
@@ -716,6 +735,38 @@ model Debt {
   @@index([tenantId, customerId, status]) // Achar a dívida aberta do cliente
   @@index([tenantId, status])
   @@map("debts")
+}
+
+/// Conta de retiradas de um cliente (ADR-028). Espelha a `Debt` (ADR-026), mas no eixo da ENTREGA:
+/// agrega as vendas SCHEDULED de um cliente numa única "conta-corrente de retiradas" (código
+/// `E-0001`, `formatDeliveryNumber`), a unidade exibida na tela de Entregas. Invariante "1 conta
+/// ABERTA por cliente" garantida SEM constraint pelo lock da linha do tenant já tomado ao numerar a
+/// venda (mesma prova da dívida). Fecha (`COMPLETED` + `closedAt`) quando TODAS as suas vendas foram
+/// retiradas. Só vendas COM cliente entram; SCHEDULED sem cliente ficam avulsas (deliveryAccountId
+/// nulo). Diferente do fiado, a mercadoria NÃO é fungível: cada venda mantém seus itens e comprovante
+/// (`V-000XXX`); a conta é a camada de agrupamento/visão, não a unidade de baixa.
+model DeliveryAccount {
+  id            String                @id @default(uuid()) @db.Uuid
+  tenantId      String                @db.Uuid // Denormalizado para RLS (ADR-003)
+  customerId    String                @db.Uuid // O cliente que vai retirar
+  // Código sequencial POR LOJA (ADR-028), exibido "E-0001" (`formatDeliveryNumber`). Único por loja;
+  // alocado atômico (`Tenant.lastDeliveryNumber` UPDATE ... RETURNING) ao ABRIR a conta.
+  accountNumber Int
+  status        DeliveryAccountStatus @default(OPEN)
+  openedAt      DateTime              @default(now())
+  closedAt      DateTime? // Quando a última venda foi retirada (conta finalizada)
+  // Autoria (ADR-010): quem abriu (1ª venda SCHEDULED). Referência solta; snapshot do nome.
+  createdById   String?               @db.Uuid
+  createdByName String?               @db.VarChar(100)
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id])
+  orders   Order[]
+
+  @@unique([tenantId, accountNumber]) // Código sequencial por loja (ADR-028)
+  @@index([tenantId, customerId, status]) // Achar a conta aberta do cliente
+  @@index([tenantId, status])
+  @@map("delivery_accounts")
 }
 
 /// Recebimento contra uma conta a receber (ADR-019): cada baixa (total ou parcial) da dívida.

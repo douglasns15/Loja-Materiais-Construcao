@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   formatOrderNumber,
+  formatDateBr,
   FULFILLMENT_STATUS_LABELS,
   unitTypeLabels,
   type DeliveryDetail,
@@ -11,12 +12,15 @@ import {
 import { apiGet, apiPatch, apiPost } from '@/lib/api';
 import { printArea } from '@/lib/print';
 import { ReceiptPrint, type Store } from '@/components/ReceiptPrint';
+import { OrderSummaryModal } from '@/components/OrderSummaryModal';
 
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const dateTime = (iso: string) => new Date(iso).toLocaleString('pt-BR');
-const dateOnly = (iso: string) => new Date(iso).toLocaleDateString('pt-BR');
+// Previsão de retirada é data-only (meia-noite UTC, ADR-020): formata em UTC (`formatDateBr`) para
+// não voltar um dia no fuso do navegador — mesma correção do vencimento (dueDate).
+const dateOnly = (iso: string) => formatDateBr(iso);
 
 const unitLabel = (u: string) => unitTypeLabels[u as UnitType] ?? u;
 
@@ -56,6 +60,8 @@ export function DeliveryDetailModal({
   // + modelo de papel. Espelha o `ReceivableDetailModal`.
   const [store, setStore] = useState<Store | null>(null);
   const [printModel, setPrintModel] = useState<'80mm' | 'A4'>('80mm');
+  // Resumo da venda: aberto ao clicar no código da venda no cabeçalho (mesmas infos do Histórico).
+  const [showSaleSummary, setShowSaleSummary] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -153,6 +159,7 @@ export function DeliveryDetailModal({
   const anyPending = detail?.items.some((it) => it.remainingBaseQty > 0) ?? false;
 
   return (
+    <>
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
       onClick={onClose}
@@ -183,10 +190,16 @@ export function DeliveryDetailModal({
                   <h2 className="text-lg font-bold">
                     {detail.customer?.name ?? 'Cliente não informado'}
                   </h2>
-                  {/* Código da venda (ADR-023): identifica qual venda gerou esta retirada. */}
-                  <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-bold tabular-nums">
+                  {/* Código da venda (ADR-023): identifica qual venda gerou esta retirada. Clicável —
+                      abre o resumo da venda (mesmas infos do Histórico), por cima deste painel. */}
+                  <button
+                    type="button"
+                    onClick={() => setShowSaleSummary(true)}
+                    className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-bold tabular-nums underline decoration-white/50 underline-offset-2 hover:bg-white/30"
+                    title="Ver resumo da venda"
+                  >
                     {formatOrderNumber(detail.orderNumber)}
-                  </span>
+                  </button>
                 </div>
                 <p className="text-sm text-indigo-100">
                   Venda em {dateTime(detail.createdAt)} · {BRL(detail.total)}
@@ -425,5 +438,14 @@ export function DeliveryDetailModal({
         )}
       </div>
     </div>
+
+    {/* Resumo da venda por cima do painel de entrega — abre ao clicar no código da venda. */}
+    {showSaleSummary && detail && (
+      <OrderSummaryModal
+        code={formatOrderNumber(detail.orderNumber)}
+        onClose={() => setShowSaleSummary(false)}
+      />
+    )}
+    </>
   );
 }

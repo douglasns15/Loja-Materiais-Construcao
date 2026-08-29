@@ -3,7 +3,45 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-28 — **Vendas.Historico — repaginação + "Vender de novo" +
+> **Última atualização:** 2026-08-29 — **Entregas.ContaDeRetiradas (E-0001, ADR-028) + código da
+> venda clicável (Relatórios/Entregas) + fix off-by-one da previsão — NO AR e E2E DO OWNER VALIDADO
+> (2026-08-29, "validei com sucesso, tudo aprovado"). CONCLUÍDA.** + 2 refinos pós-validação (pedidos do
+> Owner): **(a) comprovante ÚNICO da conta** (junta os itens de todas as retiradas do card num só cupom
+> `E-000X`; só web, reusa `ReceiptPrint` com novo prop `codeLabel`, busca `GET /deliveries/:id` de cada
+> venda e concatena itens + progresso; aparece no card com 2+ vendas). **(b) Busca na tela de Entregas**
+> (segmentado Código/Cliente): `code` casa a conta `E-000X` OU a venda `V-000XXX` dentro dela (e as
+> avulsas), `customer` casa o nome do cliente; varre todas as situações (ignora a aba). API `GET
+> /deliveries` ganhou `?code=`/`?customer=` (§8.2). **Gate:** api/web `tsc` 0; 382 testes. **NO AR e
+> E2E DO OWNER VALIDADO (2026-08-29, "tudo validado com sucesso"):** API `1fa958bc` + web `f004cadd`
+> (smokes ✅) — incluindo os 2 refinos. Três frentes desta sessão. Commits locais em `main` (push do Owner). **Migration
+> `0034` aplicada em produção** (backfill validado no banco: 6 vendas SCHEDULED c/ cliente → 4 contas
+> [2 OPEN, 2 COMPLETED]; "Bob Pagador da Silva" agrupou 3 vendas num `E-0001` — a duplicação relatada;
+> 1 venda sem cliente ficou avulsa). Smokes: API health 200 + `/deliveries` 401; web HTML no-store + CSS 200. **(1) Código
+> da venda clicável → resumo:** na "Composição do recebido" (Relatórios) e no detalhe de Entregas, o
+> código `V-000XXX` virou link que abre um `OrderSummaryModal` com o resumo da venda (mesmas infos do
+> Histórico: status, data, cliente, itens agrupados por par, formas de pagamento, troco), buscando por
+> código via `GET /orders?scope=all&number=` (sem rota nova). **(2) Bug da previsão de retirada
+> (off-by-one):** ao escolher a data de HOJE no PDV, a tela de Entregas mostrava ONTEM e marcava
+> "atrasada". Causa = mesmo off-by-one de fuso do vencimento: a previsão é data-only em meia-noite UTC
+> e a tela formatava/comparava no fuso do navegador. Corrigido aplicando `formatDateBr`/`isDatePast`
+> (shared, UTC) na lista e no `DeliveryDetailModal` — só apresentação, storage intacto. **(3)
+> Entregas.ContaDeRetiradas (ADR-028):** as vendas SCHEDULED de um mesmo cliente passam a ser
+> AGRUPADAS numa **conta** com código `E-0001` (espelha a dívida `D-0001` da ADR-026): 1 conta ABERTA
+> por cliente, fecha quando TODAS as vendas são retiradas, e uma nova venda pra retirar reabre outra;
+> vendas SCHEDULED **sem cliente** ficam avulsas. A conta é camada de VISÃO — a baixa/comprovante
+> seguem por venda (`V-000XXX`), pois mercadoria não é fungível como dinheiro. **Migration `0034`**
+> (aditiva: enum `DeliveryAccountStatus`, tabela `delivery_accounts` + RLS, `Tenant.lastDeliveryNumber`,
+> `Order.deliveryAccountId`, + backfill por cliente) **escrita mas NÃO aplicada** (regra 1 — aguarda
+> OK do Owner; aplicar com `db:deploy` + dry-run/rollback). **API:** alocação da conta no `POST
+> /orders` (SCHEDULED c/ cliente), fechamento no `deliver` (`closeDeliveryAccountIfFulfilled`) e `GET
+> /deliveries` reescrito para devolver **cards** (conta com extrato + avulsas), mesclando dois fluxos
+> keyset. **Web:** tela de Entregas reescrita em cards por conta (extrato expansível; cada venda abre o
+> detalhe/baixa). **shared:** `formatDeliveryNumber`/`parseDeliveryNumberQuery` (`E-`, 4 díg.) + tipos.
+> **Camadas:** db + shared + api + web. Docs: ADR-028 + índice + §8.2. **Gate:** core 382 testes (+6 do
+> `E-`); shared/api/web `tsc` 0; migration aplicada + backfill validado no banco. **NO AR:** API
+> `dd930a23` + web `f75b3a0d`. **Falta:** E2E do Owner. Commit local em `main` (push do Owner).
+>
+> **Antes:** 2026-08-28 — **Vendas.Historico — repaginação + "Vender de novo" +
 > Comprovante WhatsApp/PDF + Faixa de inteligência — NO AR e E2E DO OWNER VALIDADO (2026-08-28,
 > "validado com sucesso… os 3 pontos"). CONCLUÍDA.** Quatro frentes na tela Histórico de Vendas.
 > **(a) Repaginação** (identidade índigo): título em gradiente, busca com controle segmentado

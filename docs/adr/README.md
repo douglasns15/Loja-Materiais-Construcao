@@ -46,6 +46,7 @@ Um *Architecture Decision Record* é um documento curto e versionado que captura
 | [ADR-025](./ADR-025-catalogo-global-ean.md) | Catálogo global de EAN (enriquecimento por código de barras e NF-e; cache cross-tenant custo-zero) | Aceito — Fatias 1 e 2.A implementadas/validadas; Fatia 2.B desenhada (§5.B), não implementada |
 | [ADR-026](./ADR-026-divida-do-cliente-como-entidade.md) | Dívida do cliente como entidade (conta-corrente com código `D-0001`; 1 dívida aberta por cliente; vencimento na dívida; supera a decisão 1 da ADR-022) | Aceito — Fatias 1+2 implementadas/validadas (migrations 0030/0031) |
 | [ADR-027](./ADR-027-custo-congelado-na-venda.md) | Custo congelado na venda (snapshot `unitCost` no item p/ margem histórica reproduzível; cadastro segue editável) | Proposto — Fatia 2 do [plano Relatórios v2](../plano-relatorios-v2.md) (migration aditiva pendente de aprovação) |
+| [ADR-028](./ADR-028-conta-de-retiradas-do-cliente.md) | Conta de retiradas do cliente (agrupa as vendas SCHEDULED de um cliente numa entidade `E-0001`; 1 aberta por cliente; fecha quando tudo é retirado; espelha a dívida ADR-026; + comprovante único da conta) | Aceito — NO AR e E2E do Owner VALIDADO (2026-08-29); migration `0034` aplicada |
 
 > O detalhamento da arquitetura (diagrama, estrutura do monorepo, segurança/RLS, offline, deploy e roadmap) está em [`../ARCHITECTURE.md`](../ARCHITECTURE.md).
 

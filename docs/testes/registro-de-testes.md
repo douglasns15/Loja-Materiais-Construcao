@@ -5431,3 +5431,75 @@ página e os dois modais. **Fatia CONCLUÍDA.**
 
 **Próximo (outra sessão):** seguir a repaginação nas demais telas (ex.: Clientes, Fornecedores, Vendas/
 Histórico, Contas a Receber, Caixa, Relatórios, Entregas) OU retomar itens funcionais do Horizonte 1.
+
+---
+
+## Entregas.ContaDeRetiradas (E-0001, ADR-028) + código da venda clicável + fix da previsão (2026-08-29)
+
+Sessão com três frentes. Migration `0034` **escrita mas ainda NÃO aplicada** (regra 1 — aguarda OK do Owner);
+por isso os testes abaixo são de código/tipos/unidade, não de banco/E2E ainda.
+
+### 1) Código da venda clicável → resumo (Relatórios e Entregas)
+
+| O que foi testado | Método | Resultado |
+|---|---|---|
+| `OrderSummaryModal` (novo) busca a venda por código e monta o resumo | `apps/web` `tsc --noEmit` | ✅ 0 erros |
+| Link do código na `PaymentCompositionModal` (só linhas `venda`) | leitura + `tsc` | ✅ |
+| Link do código no `DeliveryDetailModal` (cabeçalho) | leitura + `tsc` | ✅ |
+
+### 2) Fix off-by-one da previsão de retirada (fuso)
+
+| O que foi testado | Método | Resultado |
+|---|---|---|
+| Previsão de HOJE deixa de aparecer como ontem/atrasada | `formatDateBr`/`isDatePast` (UTC) na lista e no modal | ✅ (helpers já cobertos por teste no shared) |
+| Storage intacto (só apresentação) | leitura de `orders.ts` (grava `new Date('AAAA-MM-DD')` = meia-noite UTC) | ✅ inalterado |
+
+### 3) Entregas.ContaDeRetiradas (ADR-028) — entidade `E-0001`
+
+| O que foi testado | Método | Resultado |
+|---|---|---|
+| Schema Prisma válido (enum + `delivery_accounts` + `Order.deliveryAccountId` + `Tenant.lastDeliveryNumber`) | `prisma validate` | ✅ "schema is valid" |
+| Geração do client | `prisma generate` | ✅ |
+| `formatDeliveryNumber`/`parseDeliveryNumberQuery` (`E-0001`, 4 díg., ida-e-volta, bordas) | Vitest (`format.test.ts`, +6) | ✅ |
+| Alocação da conta no `POST /orders` (SCHEDULED c/ cliente) + fechamento no `deliver` | `apps/api` `tsc --noEmit` | ✅ 0 erros |
+| `GET /deliveries` reescrito (cards conta+avulsa, merge de 2 fluxos keyset) | `apps/api` `tsc --noEmit` | ✅ |
+| Tela de Entregas reescrita (cards por conta + extrato) | `apps/web` `tsc --noEmit` | ✅ |
+| Suíte completa | `vitest run` | ✅ **382 testes** (core 331 + shared/core outros) |
+
+**Pendente:** aprovação + aplicação da migration `0034` (`db:deploy` com dry-run/rollback), deploy API+web e
+**E2E do Owner** (criar 2 vendas de retirada do mesmo cliente → 1 card `E-000X`; retirar tudo → finaliza;
+nova venda → novo card; previsão de hoje sem "atrasada"; código da venda abre o resumo).
+
+---
+
+## Entregas.ComprovanteDaConta — cupom único consolidado (ADR-028, refino) (2026-08-29)
+
+Pós-validação do E2E da ADR-028 ("validei com sucesso, tudo aprovado"), pedido do Owner: imprimir TODAS as
+retiradas de um card num só comprovante (hoje só dava separadamente, por venda). Só `apps/web`.
+
+| O que foi testado | Método | Resultado |
+|---|---|---|
+| `ReceiptPrint` ganhou `codeLabel` (imprime `E-000X` no lugar do `V-000XXX`) | leitura + `tsc` | ✅ |
+| Card com 2+ vendas mostra "Comprovante da conta (todas as retiradas)" | leitura do JSX | ✅ |
+| Handler junta itens de todas as vendas (`GET /deliveries/:id` × N), soma total, desconto agregado, progresso por item | `apps/web` `tsc --noEmit` | ✅ 0 erros |
+| Cupom oculto (#print-area) + `printArea` (80mm/A4) via seletor no topo | leitura | ✅ |
+| Suíte | `vitest run` | ✅ 382 testes (sem mudança em core/shared) |
+
+**NO AR** (web `f004cadd`) **e E2E do Owner ✅ VALIDADO (2026-08-29, "tudo validado com sucesso")** — conta do
+"Bob Pagador da Silva" impressa com as 3 vendas num só cupom, faixa "FALTA RETIRAR" e progresso por item.
+
+---
+
+## Entregas.Busca — por código e por cliente (ADR-028, refino) (2026-08-29)
+
+Pedido do Owner antes do deploy: campo de busca na tela de Entregas (código / nome do cliente).
+
+| O que foi testado | Método | Resultado |
+|---|---|---|
+| `GET /deliveries` aceita `?code=` (conta E-000X OU venda V-000XXX) e `?customer=` (nome), ignorando a aba | `apps/api` `tsc --noEmit` | ✅ 0 erros |
+| Busca por cliente não retorna avulsas (sem cliente) | leitura (`skipOrphans`) | ✅ |
+| `parseSeqNumberQuery` casa `E-0001`/`V-000128`/`128` → inteiro | reuso (coberto no shared) | ✅ |
+| UI: segmentado Código/Cliente + campo + Buscar/Limpar (espelha Histórico) | `apps/web` `tsc --noEmit` | ✅ |
+| Suíte | `vitest run` | ✅ 382 testes |
+
+**NO AR** (API `1fa958bc` + web `f004cadd`) **e E2E do Owner ✅ VALIDADO (2026-08-29, "tudo validado com sucesso")** — busca por cliente e por código (conta E-000X / venda V-000XXX) conferida.

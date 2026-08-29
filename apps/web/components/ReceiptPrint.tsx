@@ -49,6 +49,10 @@ type Props = {
   /** Código sequencial da venda (ADR-023): impresso como "Venda V-000128" abaixo do título. Só em
    *  vendas. Ausente/0 (venda offline ainda não sincronizada) imprime "código pendente". */
   orderNumber?: number | null;
+  /** Sobrescreve o código impresso abaixo do título (ex.: "E-0001" no comprovante CONSOLIDADO de uma
+   *  conta de retiradas — ADR-028, várias vendas num só cupom). Quando presente, tem prioridade sobre
+   *  `orderNumber`/`quoteNumber`. */
+  codeLabel?: string | null;
   /** Código do orçamento salvo (ADR-024): impresso como "O-000045" abaixo do título. Só em orçamentos
    *  SALVOS; a cotação efêmera (não salva) não tem número. */
   quoteNumber?: number | null;
@@ -84,7 +88,7 @@ const QTY = (v: number) => {
  * e só aparece na impressão (ver regras @media print em globals.css). O modelo
  * (80mm / A4) é controlado pelo atributo data-model, definido antes de imprimir.
  */
-export function ReceiptPrint({ kind, store, items, total, date, discount, payments, method, change, creditAmount, storeCreditAmount, customerName, orderNumber, quoteNumber, validUntil, pickupNotice, pickupPaid, pickupLines, captureMode }: Props) {
+export function ReceiptPrint({ kind, store, items, total, date, discount, payments, method, change, creditAmount, storeCreditAmount, customerName, orderNumber, codeLabel, quoteNumber, validUntil, pickupNotice, pickupPaid, pickupLines, captureMode }: Props) {
   const isQuote = kind === 'quote';
   const subtotal = items.reduce((acc, i) => acc + i.unitPrice * i.quantity, 0);
   const hasDiscount = (discount ?? 0) > 0;
@@ -122,9 +126,12 @@ export function ReceiptPrint({ kind, store, items, total, date, discount, paymen
       <div className={`rc-title ${isQuote ? 'quote' : ''}`}>
         {isQuote ? 'ORÇAMENTO' : 'COMPROVANTE DE VENDA'}
       </div>
-      {/* Código do documento. Venda (ADR-023): sempre — offline sem número ⇒ "código pendente".
-          Orçamento (ADR-024): só quando SALVO (tem número); a cotação efêmera não tem código. */}
-      {isQuote ? (
+      {/* Código do documento. `codeLabel` (ADR-028: conta de retiradas E-0001, cupom consolidado) tem
+          prioridade. Senão: Venda (ADR-023) sempre — offline sem número ⇒ "código pendente";
+          Orçamento (ADR-024) só quando SALVO (tem número); a cotação efêmera não tem código. */}
+      {codeLabel ? (
+        <div className="rc-code">{codeLabel}</div>
+      ) : isQuote ? (
         quoteNumber ? <div className="rc-code">{formatQuoteNumber(quoteNumber)}</div> : null
       ) : (
         <div className="rc-code">

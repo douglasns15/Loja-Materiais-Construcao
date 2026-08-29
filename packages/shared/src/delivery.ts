@@ -28,8 +28,45 @@ export type DeliveryOrderRow = {
   itemsPending: number;
 };
 
-/** Página de entregas (cursor keyset) — mesmo contrato das demais telas paginadas. */
-export type DeliveriesPage = { rows: DeliveryOrderRow[]; nextCursor: string | null };
+/** Situação de uma conta de retiradas (ADR-028). Espelha o enum `DeliveryAccountStatus` do Prisma. */
+export type DeliveryAccountStatus = 'OPEN' | 'COMPLETED';
+
+/**
+ * Conta de retiradas de um cliente (ADR-028) — o CARD agrupado da tela de Entregas, exibido como
+ * "E-0001" (`formatDeliveryNumber`). Reúne as vendas SCHEDULED do cliente (o extrato em `orders`) e
+ * traz os agregados para o resumo do card. Espelha a dívida (`D-0001`) no eixo da entrega.
+ */
+export type DeliveryAccountSummary = {
+  id: string;
+  /** Código sequencial por loja (ADR-028) — "E-0001". */
+  accountNumber: number;
+  status: DeliveryAccountStatus;
+  customerId: string;
+  customerName: string;
+  openedAt: string;
+  closedAt: string | null;
+  /** Quantas vendas a conta agrega. */
+  ordersCount: number;
+  /** Σ do total das vendas da conta (Decimal serializado em string). */
+  total: string;
+  /** Σ das linhas ainda com mercadoria a sair, somando as vendas. */
+  itemsPending: number;
+  /** Previsão mais PRÓXIMA entre as vendas com item pendente (base do "atrasada"); null se nenhuma tem data. */
+  nextPickupAt: string | null;
+  /** O extrato: as vendas da conta, mais recente primeiro. */
+  orders: DeliveryOrderRow[];
+};
+
+/**
+ * Um card da tela de Entregas: uma CONTA (agrupa as vendas SCHEDULED de um cliente) ou uma venda
+ * AVULSA (SCHEDULED sem cliente — balcão "pego depois", que não entra em conta). ADR-028.
+ */
+export type DeliveryCard =
+  | { kind: 'account'; account: DeliveryAccountSummary }
+  | { kind: 'order'; order: DeliveryOrderRow };
+
+/** Página de entregas (cursor keyset) — cards agrupados por conta + vendas avulsas (ADR-028). */
+export type DeliveriesPage = { cards: DeliveryCard[]; nextCursor: string | null };
 
 /**
  * Um item do pedido no detalhe de entrega. `baseQuantity` é a quantidade em unidade-base

@@ -58,6 +58,7 @@ export function formatPhoneBr(value: string | null | undefined): string {
 export const ORDER_CODE_PREFIX = 'V-';
 export const QUOTE_CODE_PREFIX = 'O-';
 export const DEBT_CODE_PREFIX = 'D-';
+export const DELIVERY_CODE_PREFIX = 'E-';
 
 /** Formata um número sequencial como `<prefixo>000128`: prefixo + inteiro com zeros à esquerda até
  *  `pad` dígitos (acima disso só cresce, nunca trunca). Nula/≤0 volta string vazia. Base de
@@ -115,6 +116,20 @@ export function formatDebtNumber(n: number | null | undefined): string {
 
 /** Busca por código de dívida (ADR-026): `D-0001`/`0001`/`1` → 1. Alias de `parseSeqNumberQuery`. */
 export function parseDebtNumberQuery(query: string | null | undefined): number | null {
+  return parseSeqNumberQuery(query);
+}
+
+/**
+ * Formata o número sequencial da conta de retiradas (ADR-028) como `E-0001` (4 dígitos, mesma largura
+ * do `D-0001`). É APRESENTAÇÃO — o banco guarda o inteiro (`delivery_accounts.accountNumber`). Entrada
+ * nula/≤0 volta string vazia.
+ */
+export function formatDeliveryNumber(n: number | null | undefined): string {
+  return formatSeqCode(DELIVERY_CODE_PREFIX, n, 4);
+}
+
+/** Busca por código de conta de retiradas (ADR-028): `E-0001`/`0001`/`1` → 1. Alias de `parseSeqNumberQuery`. */
+export function parseDeliveryNumberQuery(query: string | null | undefined): number | null {
   return parseSeqNumberQuery(query);
 }
 

@@ -548,6 +548,38 @@ orders.post('/', requireActiveTenant, async (c) => {
       const orderNumber = lastOrderNumber;
       const orderCode = formatOrderNumber(orderNumber); // "V-000128" p/ as descrições do ledger
 
+      // Conta de retiradas do cliente (ADR-028): uma venda SCHEDULED de um cliente entra na conta
+      // ABERTA dele; se ele não tiver nenhuma, abre uma nova alocando o próximo código `E-000X`
+      // (incremento atômico do `lastDeliveryNumber`, mesma mecânica do `lastDebtNumber`). A invariante
+      // "1 aberta por cliente" fica garantida SEM constraint pelo lock da linha do tenant já tomado
+      // acima (para numerar a venda), que serializa as vendas da loja — mesma prova da dívida (ADR-026).
+      // Vendas SCHEDULED SEM cliente (balcão "pego depois") ficam sem conta (card avulso na tela).
+      let deliveryAccountId: string | null = null;
+      if (isScheduled && sale.customerId) {
+        let account = await tx.deliveryAccount.findFirst({
+          where: { tenantId, customerId: sale.customerId, status: 'OPEN' },
+          select: { id: true },
+        });
+        if (!account) {
+          const { lastDeliveryNumber } = await tx.tenant.update({
+            where: { id: tenantId },
+            data: { lastDeliveryNumber: { increment: 1 } },
+            select: { lastDeliveryNumber: true },
+          });
+          account = await tx.deliveryAccount.create({
+            data: {
+              tenantId,
+              customerId: sale.customerId,
+              accountNumber: lastDeliveryNumber,
+              createdById: userId, // autoria (ADR-010)
+              createdByName: c.get('userName'),
+            },
+            select: { id: true },
+          });
+        }
+        deliveryAccountId = account.id;
+      }
+
       const created = await tx.order.create({
         data: {
           // Offline: usa a PK gerada no cliente (idempotência). Online: deixa o @default(uuid).
@@ -581,6 +613,8 @@ orders.post('/', requireActiveTenant, async (c) => {
                   !sale.perItemSchedule && sale.scheduledPickupAt
                     ? new Date(sale.scheduledPickupAt)
                     : null,
+                // Conta de retiradas (ADR-028): liga a venda à conta do cliente (nula se sem cliente).
+                ...(deliveryAccountId ? { deliveryAccountId } : {}),
               }
             : {}),
           items: {

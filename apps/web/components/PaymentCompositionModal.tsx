@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { paymentMethodLabel, type PaymentComposition } from '@nexoloja/shared';
 import { apiGet } from '@/lib/api';
+import { OrderSummaryModal } from './OrderSummaryModal';
 
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -30,6 +31,8 @@ export function PaymentCompositionModal({
 }) {
   const [data, setData] = useState<PaymentComposition | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Resumo da venda: código clicado numa linha `venda` (abre o OrderSummaryModal por cima).
+  const [saleCode, setSaleCode] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,6 +62,7 @@ export function PaymentCompositionModal({
   }, [onClose]);
 
   return (
+    <>
     <div
       className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/30 p-4"
       onClick={onClose}
@@ -120,7 +124,20 @@ export function PaymentCompositionModal({
                       <div className="min-w-0">
                         <p className="text-sm font-medium">
                           {r.tipo === 'venda' ? 'Venda à vista' : 'Recebimento de dívida'}
-                          <span className="ml-1 font-normal text-gray-500">· {r.ref}</span>
+                          {/* O código da VENDA vira link: abre o resumo da venda (mesmas infos do
+                              Histórico). Recebimento de dívida referencia a dívida (D-000X), não uma
+                              venda única ⇒ segue como texto. */}
+                          {r.tipo === 'venda' ? (
+                            <button
+                              type="button"
+                              onClick={() => setSaleCode(r.ref)}
+                              className="ml-1 font-medium text-indigo-600 underline decoration-indigo-300 underline-offset-2 hover:text-indigo-800"
+                            >
+                              {r.ref}
+                            </button>
+                          ) : (
+                            <span className="ml-1 font-normal text-gray-500">· {r.ref}</span>
+                          )}
                         </p>
                         <p className="truncate text-xs text-gray-500">{r.descricao}</p>
                         <p className="text-xs text-gray-400">{DATETIME(r.data)}</p>
@@ -146,5 +163,9 @@ export function PaymentCompositionModal({
         )}
       </div>
     </div>
+
+    {/* Resumo da venda por cima da composição — abre ao clicar no código de uma venda. */}
+    {saleCode && <OrderSummaryModal code={saleCode} onClose={() => setSaleCode(null)} />}
+    </>
   );
 }

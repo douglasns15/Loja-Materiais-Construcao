@@ -5,11 +5,13 @@ import {
   formatCpfCnpj,
   formatDateBr,
   formatDebtNumber,
+  formatDeliveryNumber,
   formatOrderNumber,
   formatPhoneBr,
   formatQuoteNumber,
   isDatePast,
   parseDebtNumberQuery,
+  parseDeliveryNumberQuery,
   parseMoneyQuery,
   parseOrderNumberQuery,
   parseQuoteNumberQuery,
@@ -134,6 +136,29 @@ describe('formatDebtNumber / parseDebtNumberQuery', () => {
     expect(parseDebtNumberQuery(formatDebtNumber(14))).toBe(14);
     expect(parseDebtNumberQuery('D-')).toBeNull();
     expect(parseDebtNumberQuery('D-0000')).toBeNull();
+  });
+});
+
+describe('formatDeliveryNumber / parseDeliveryNumberQuery', () => {
+  it('formata com prefixo E- e 4 dígitos (mesma largura do D-)', () => {
+    expect(formatDeliveryNumber(1)).toBe('E-0001');
+    expect(formatDeliveryNumber(83)).toBe('E-0083');
+    expect(formatDeliveryNumber(9999)).toBe('E-9999');
+    expect(formatDeliveryNumber(0)).toBe('');
+    expect(formatDeliveryNumber(null)).toBe('');
+  });
+
+  it('acima de 9999 só cresce (nunca trunca)', () => {
+    expect(formatDeliveryNumber(10000)).toBe('E-10000');
+  });
+
+  it('interpreta a busca em qualquer forma e faz ida-e-volta', () => {
+    expect(parseDeliveryNumberQuery('E-0001')).toBe(1);
+    expect(parseDeliveryNumberQuery('0083')).toBe(83);
+    expect(parseDeliveryNumberQuery('83')).toBe(83);
+    expect(parseDeliveryNumberQuery(formatDeliveryNumber(83))).toBe(83);
+    expect(parseDeliveryNumberQuery('E-')).toBeNull();
+    expect(parseDeliveryNumberQuery('E-0000')).toBeNull();
   });
 });
 

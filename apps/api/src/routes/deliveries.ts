@@ -1,11 +1,11 @@
 import { Hono } from 'hono';
-import { createPrismaClient } from '@nexoloja/db';
+import { createPrismaClient, type Prisma } from '@nexoloja/db';
 import {
   isValidDelivery,
   orderFulfillmentStatus,
   remainingToDeliver,
 } from '@nexoloja/core';
-import { deliverOrderSchema, updateOrderNotesSchema } from '@nexoloja/shared';
+import { deliverOrderSchema, updateOrderNotesSchema, parseSeqNumberQuery } from '@nexoloja/shared';
 import { type Env, getConnectionString, getTenantId } from '../lib/request';
 import { requireActiveTenant, requireAuth } from '../middleware/auth';
 
@@ -22,6 +22,38 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 const PAGE_DEFAULT = 20;
 const PAGE_MAX = 50;
+
+/**
+ * Fecha a CONTA DE RETIRADAS (ADR-028) quando não resta nenhuma venda a retirar — todas as suas
+ * vendas CONFIRMED estão COMPLETED. A conta vira `COMPLETED` + `closedAt` (arquiva na aba
+ * "Finalizadas"). Idempotente e à prova de corrida: o `updateMany` condicional (`status: 'OPEN'`) só
+ * age uma vez. Chamado DENTRO da transação que finalizou a última retirada. `accountId` nulo (venda
+ * SCHEDULED sem cliente, ou pré-ADR-028 sem backfill) é no-op. Espelha `closeDebtIfSettled` do fiado.
+ */
+async function closeDeliveryAccountIfFulfilled(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  accountId: string | null | undefined,
+): Promise<void> {
+  if (!accountId) return;
+  // Vendas da conta ainda com mercadoria a sair (CONFIRMED e não COMPLETED). Canceladas/devolvidas
+  // (status != CONFIRMED) não contam — não travam o fechamento da conta.
+  const pendingLeft = await tx.order.count({
+    where: {
+      tenantId,
+      deliveryAccountId: accountId,
+      status: 'CONFIRMED',
+      // Null-safe: um pedido SCHEDULED sem status ainda conta como "a retirar" (não fecha à toa).
+      OR: [{ fulfillmentStatus: null }, { fulfillmentStatus: { in: ['PENDING', 'PARTIAL'] } }],
+    },
+  });
+  if (pendingLeft === 0) {
+    await tx.deliveryAccount.updateMany({
+      where: { id: accountId, tenantId, status: 'OPEN' },
+      data: { status: 'COMPLETED', closedAt: new Date() },
+    });
+  }
+}
 
 type Cursor = { createdAt: string; id: string };
 
@@ -40,11 +72,65 @@ function decodeCursor(raw: string): Cursor | null {
 }
 
 /**
- * Lista os pedidos com retirada futura (ADR-020), paginada por cursor keyset em `createdAt desc,
- * id desc`. Filtros de `status`: `pending` (default — a retirar + parcial, o foco operacional),
- * `completed` (finalizadas) ou `all`. Só pedidos SCHEDULED confirmados (cancelados/devolvidos saem
- * da lista — aparecem no Histórico). Cada linha traz o cliente e um resumo do que falta retirar.
+ * Lista as retiradas futuras (ADR-020) AGRUPADAS por cliente (ADR-028): cada card é uma CONTA de
+ * retiradas (`E-0001`, com o extrato das vendas do cliente) ou uma venda AVULSA (SCHEDULED sem
+ * cliente, que não entra em conta). Paginada por cursor keyset num tempo comum (`openedAt` da conta /
+ * `createdAt` da venda avulsa), mesclando os dois fluxos. Filtros de `status`: `pending` (default —
+ * contas abertas + avulsas a retirar), `completed` (finalizadas) ou `all`. Só vendas SCHEDULED
+ * confirmadas (canceladas/devolvidas saem — aparecem no Histórico).
  */
+// Colunas selecionadas de uma venda para montar a linha do extrato (`DeliveryOrderRow`).
+const ORDER_ROW_SELECT = {
+  id: true,
+  orderNumber: true,
+  total: true,
+  fulfillmentStatus: true,
+  scheduledPickupAt: true,
+  perItemSchedule: true,
+  createdAt: true,
+  registeredByName: true,
+  customer: { select: { id: true, name: true } },
+  items: { select: { quantity: true, baseQuantity: true, deliveredBaseQty: true } },
+} as const;
+
+type OrderRowRaw = {
+  id: string;
+  orderNumber: number;
+  total: Prisma.Decimal;
+  fulfillmentStatus: 'PENDING' | 'PARTIAL' | 'COMPLETED' | null;
+  scheduledPickupAt: Date | null;
+  perItemSchedule: boolean;
+  createdAt: Date;
+  registeredByName: string | null;
+  customer: { id: string; name: string } | null;
+  items: { quantity: Prisma.Decimal; baseQuantity: Prisma.Decimal | null; deliveredBaseQty: Prisma.Decimal }[];
+};
+
+/** Quantas linhas de uma venda ainda têm mercadoria a sair (progresso). */
+function itemsPendingOf(o: OrderRowRaw): number {
+  return o.items.filter(
+    (it) => remainingToDeliver(Number(it.baseQuantity ?? it.quantity), Number(it.deliveredBaseQty)) > 0,
+  ).length;
+}
+
+/** Mapeia uma venda para a linha do extrato (`DeliveryOrderRow`) — mesma forma de antes. */
+function toOrderRow(o: OrderRowRaw) {
+  return {
+    id: o.id,
+    orderNumber: o.orderNumber,
+    total: o.total,
+    fulfillmentStatus: o.fulfillmentStatus,
+    scheduledPickupAt: o.scheduledPickupAt,
+    perItemSchedule: o.perItemSchedule,
+    createdAt: o.createdAt,
+    registeredByName: o.registeredByName,
+    customerId: o.customer?.id ?? null,
+    customerName: o.customer?.name ?? null,
+    itemsCount: o.items.length,
+    itemsPending: itemsPendingOf(o),
+  };
+}
+
 deliveries.get('/', async (c) => {
   const tenantId = getTenantId(c);
   const connectionString = getConnectionString(c.env);
@@ -54,79 +140,149 @@ deliveries.get('/', async (c) => {
 
   const statusParam = c.req.query('status');
   const PENDING_PARTIAL: ('PENDING' | 'PARTIAL')[] = ['PENDING', 'PARTIAL'];
-  const statusWhere =
+  // Filtro por aba, aplicado às CONTAS (por status da conta) e às vendas AVULSAS (por fulfillment).
+  const accountStatusWhere =
+    statusParam === 'completed'
+      ? { status: 'COMPLETED' as const }
+      : statusParam === 'all'
+        ? {}
+        : { status: 'OPEN' as const };
+  const orphanStatusWhere =
     statusParam === 'completed'
       ? { fulfillmentStatus: 'COMPLETED' as const }
       : statusParam === 'all'
         ? {}
         : { fulfillmentStatus: { in: PENDING_PARTIAL } };
 
+  // Busca (opcional): por CÓDIGO (conta `E-000X` ou venda `V-000XXX`) ou por CLIENTE (nome). Qualquer
+  // busca ativa VARRE TODAS as situações (ignora a aba), como no Histórico. `code` casa a conta pelo
+  // `accountNumber` OU uma venda dela pelo `orderNumber`; para as avulsas, casa o `orderNumber`. `q`
+  // (cliente) filtra a conta pelo nome do cliente; avulsas não têm cliente ⇒ ficam de fora da busca por nome.
+  const codeQuery = parseSeqNumberQuery(c.req.query('code'));
+  const customerQuery = (c.req.query('customer') ?? '').trim();
+  const hasSearch = codeQuery != null || customerQuery.length > 0;
+  const accountSearchWhere = codeQuery != null
+    ? { OR: [{ accountNumber: codeQuery }, { orders: { some: { orderNumber: codeQuery } } }] }
+    : customerQuery
+      ? { customer: { name: { contains: customerQuery, mode: 'insensitive' as const } } }
+      : {};
+  // Avulsas (sem cliente): entram na busca por código; numa busca por cliente, nunca casam.
+  const orphanSearchWhere = codeQuery != null ? { orderNumber: codeQuery } : {};
+  const skipOrphans = customerQuery.length > 0; // busca por cliente não retorna avulsas
+  // Com busca ativa, ignora o filtro de aba (varre todas as situações).
+  const effAccountStatusWhere = hasSearch ? {} : accountStatusWhere;
+  const effOrphanStatusWhere = hasSearch ? {} : orphanStatusWhere;
+
   const limitRaw = Number(c.req.query('limit'));
   const limit =
     Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(Math.floor(limitRaw), PAGE_MAX) : PAGE_DEFAULT;
   const cursorParam = c.req.query('cursor');
   const cursor = cursorParam ? decodeCursor(cursorParam) : null;
-  const keyset = cursor
-    ? {
-        OR: [
-          { createdAt: { lt: new Date(cursor.createdAt) } },
-          { createdAt: new Date(cursor.createdAt), id: { lt: cursor.id } },
-        ],
-      }
-    : {};
+  // Keyset num tempo comum: `(tempo, id) < (cursor)`. Aplicado a `openedAt` (conta) e `createdAt` (venda).
+  const keysetOn = (field: 'openedAt' | 'createdAt') =>
+    cursor
+      ? {
+          OR: [
+            { [field]: { lt: new Date(cursor.createdAt) } },
+            { [field]: new Date(cursor.createdAt), id: { lt: cursor.id } },
+          ],
+        }
+      : {};
 
   try {
     const prisma = createPrismaClient(connectionString);
-    const list = await prisma.order.findMany({
-      where: {
-        tenantId,
-        deliveryMode: 'SCHEDULED',
-        status: 'CONFIRMED',
-        ...statusWhere,
-        ...keyset,
-      },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      take: limit + 1,
-      select: {
-        id: true,
-        orderNumber: true,
-        total: true,
-        fulfillmentStatus: true,
-        scheduledPickupAt: true,
-        perItemSchedule: true,
-        createdAt: true,
-        registeredByName: true,
-        customer: { select: { id: true, name: true } },
-        items: {
-          select: { quantity: true, baseQuantity: true, deliveredBaseQty: true },
+    // Dois fluxos, cada um paginado (take limit+1): contas do cliente e vendas avulsas (sem conta).
+    const [accounts, orphans] = await Promise.all([
+      prisma.deliveryAccount.findMany({
+        where: {
+          tenantId,
+          ...effAccountStatusWhere,
+          ...accountSearchWhere,
+          // Só contas com ao menos uma venda ativa (evita card vazio de conta toda cancelada).
+          orders: { some: { status: 'CONFIRMED' } },
+          ...keysetOn('openedAt'),
         },
-      },
-    });
-    const hasMore = list.length > limit;
-    const page = hasMore ? list.slice(0, limit) : list;
-    const rows = page.map((o) => {
-      // Resumo de progresso do pedido: quantas linhas ainda têm mercadoria a sair.
-      const itemsPending = o.items.filter(
-        (it) => remainingToDeliver(Number(it.baseQuantity ?? it.quantity), Number(it.deliveredBaseQty)) > 0,
-      ).length;
-      return {
-        id: o.id,
-        orderNumber: o.orderNumber,
-        total: o.total,
-        fulfillmentStatus: o.fulfillmentStatus,
-        scheduledPickupAt: o.scheduledPickupAt,
-        perItemSchedule: o.perItemSchedule,
-        createdAt: o.createdAt,
-        registeredByName: o.registeredByName,
-        customerId: o.customer?.id ?? null,
-        customerName: o.customer?.name ?? null,
-        itemsCount: o.items.length,
-        itemsPending,
-      };
-    });
-    const last = page[page.length - 1];
-    const nextCursor = hasMore && last ? encodeCursor(last) : null;
-    return c.json({ ok: true, data: { rows, nextCursor } });
+        orderBy: [{ openedAt: 'desc' }, { id: 'desc' }],
+        take: limit + 1,
+        select: {
+          id: true,
+          accountNumber: true,
+          status: true,
+          openedAt: true,
+          closedAt: true,
+          customer: { select: { id: true, name: true } },
+          // Extrato: as vendas ativas da conta, mais recente primeiro.
+          orders: {
+            where: { status: 'CONFIRMED' },
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+            select: ORDER_ROW_SELECT,
+          },
+        },
+      }),
+      skipOrphans
+        ? Promise.resolve([])
+        : prisma.order.findMany({
+            where: {
+              tenantId,
+              deliveryMode: 'SCHEDULED',
+              status: 'CONFIRMED',
+              deliveryAccountId: null, // avulsas (SCHEDULED sem cliente)
+              ...effOrphanStatusWhere,
+              ...orphanSearchWhere,
+              ...keysetOn('createdAt'),
+            },
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+            take: limit + 1,
+            select: ORDER_ROW_SELECT,
+          }),
+    ]);
+
+    // Cada fluxo vira um card com uma chave de ordenação comum (tempo desc, id desc).
+    type CardEnvelope = { time: Date; id: string; card: unknown };
+    const cards: CardEnvelope[] = [];
+    for (const a of accounts) {
+      const orders = a.orders.map(toOrderRow);
+      const total = orders.reduce((acc, o) => acc + Number(o.total), 0);
+      const itemsPending = orders.reduce((acc, o) => acc + o.itemsPending, 0);
+      // Previsão mais próxima entre as vendas ainda com item a retirar (base do "atrasada").
+      const nextPickupAt =
+        orders
+          .filter((o) => o.itemsPending > 0 && o.scheduledPickupAt)
+          .map((o) => o.scheduledPickupAt as Date)
+          .sort((x, y) => x.getTime() - y.getTime())[0] ?? null;
+      cards.push({
+        time: a.openedAt,
+        id: a.id,
+        card: {
+          kind: 'account',
+          account: {
+            id: a.id,
+            accountNumber: a.accountNumber,
+            status: a.status,
+            customerId: a.customer.id,
+            customerName: a.customer.name,
+            openedAt: a.openedAt,
+            closedAt: a.closedAt,
+            ordersCount: orders.length,
+            total: total.toFixed(2),
+            itemsPending,
+            nextPickupAt,
+            orders,
+          },
+        },
+      });
+    }
+    for (const o of orphans) {
+      cards.push({ time: o.createdAt, id: o.id, card: { kind: 'order', order: toOrderRow(o) } });
+    }
+
+    // Mescla os dois fluxos (tempo desc, id desc), corta em `limit` e deriva o cursor da última.
+    cards.sort((a, b) => (b.time.getTime() - a.time.getTime()) || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
+    const hasMore = cards.length > limit;
+    const pageCards = hasMore ? cards.slice(0, limit) : cards;
+    const last = pageCards[pageCards.length - 1];
+    const nextCursor = hasMore && last ? encodeCursor({ createdAt: last.time, id: last.id }) : null;
+    return c.json({ ok: true, data: { cards: pageCards.map((e) => e.card), nextCursor } });
   } catch (err) {
     console.error('GET /deliveries falhou:', err);
     return c.json({ ok: false, error: 'Falha ao listar as entregas.' }, 500);
@@ -367,6 +523,10 @@ deliveries.post('/:id/deliver', requireActiveTenant, async (c) => {
         data: { fulfillmentStatus: nextStatus },
         include: { items: true, itemDeliveries: { orderBy: { deliveredAt: 'desc' } } },
       });
+      // Conta de retiradas (ADR-028): se esta foi a última venda a retirar do cliente, fecha a conta.
+      if (nextStatus === 'COMPLETED') {
+        await closeDeliveryAccountIfFulfilled(tx, tenantId, order.deliveryAccountId);
+      }
       return updated;
     });
 

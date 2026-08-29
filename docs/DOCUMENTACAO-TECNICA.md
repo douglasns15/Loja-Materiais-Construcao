@@ -453,13 +453,14 @@ testável exaustivamente e compartilhada entre as duas apps.
 | `PATCH /:id` 🔒 | Edita a dívida (ex.: notas, vencimento). |
 | `POST /:id/receive` 🔒 | Recebe pagamento de **uma** dívida específica. Ao quitar o último recebível, fecha a **dívida** (ADR-026). |
 
-**`/deliveries` — Entrega / retirada futura (ADR-020)**
+**`/deliveries` — Entrega / retirada futura (ADR-020) · conta de retiradas (ADR-028)**
 
 | Método · Rota | O que faz |
 |---|---|
-| `GET /` · `GET /:id` | Lista e detalhe de entregas/retiradas agendadas. Cada linha da lista traz `orderNumber` (código da venda `V-000128`, ADR-023 — identifica o registro na tela). O detalhe (`GET /:id`) inclui `orderNumber`, `discountAmount`, os itens com `unitPrice`/`total` e `outstandingBalance` (saldo a prazo em aberto, `0` quando 100% pago) — usados para reimprimir o **comprovante de retirada** ("PAGO — FALTA RETIRAR" quando saldo `0`; só "FALTA RETIRAR" quando há saldo a prazo). |
+| `GET /` | Lista **AGRUPADA por cliente** (ADR-028): devolve `{ cards, nextCursor }`, onde cada card é `{ kind: 'account', account }` — uma conta de retiradas (`E-0001`) com os agregados (`ordersCount`, `total`, `itemsPending`, `nextPickupAt`) e o extrato `orders` (as vendas `V-000XXX`) — ou `{ kind: 'order', order }` para uma venda SCHEDULED **sem cliente** (avulsa, não entra em conta). Paginação keyset num tempo comum (`openedAt` da conta / `createdAt` da avulsa), mesclando os dois fluxos. `?status=pending` (default) / `completed` / `all` filtra por status da conta e por `fulfillmentStatus` das avulsas. **Busca** (varre todas as situações, ignora `status`): `?code=` casa a conta pelo `accountNumber` (`E-000X`) OU uma venda dela pelo `orderNumber` (`V-000XXX`), e as avulsas pelo `orderNumber`; `?customer=` filtra a conta pelo nome do cliente (avulsas não têm cliente ⇒ ficam de fora). |
+| `GET /:id` | Detalhe de UMA venda de retirada: inclui `orderNumber`, `discountAmount`, os itens com `unitPrice`/`total` e `outstandingBalance` (saldo a prazo em aberto, `0` quando 100% pago) — usados para reimprimir o **comprovante de retirada** ("PAGO — FALTA RETIRAR" quando saldo `0`; só "FALTA RETIRAR" quando há saldo a prazo). |
 | `PATCH /:id` 🔒 | Atualiza status/dados da entrega. |
-| `POST /:id/deliver` 🔒 | Confirma entrega/retirada → efetiva a saída de estoque adiada. |
+| `POST /:id/deliver` 🔒 | Confirma entrega/retirada → efetiva a saída de estoque adiada. Ao finalizar a última venda da conta (todas COMPLETED), **fecha a conta** (`DeliveryAccount.status = COMPLETED` + `closedAt`, ADR-028). |
 
 **`/quotes` — Orçamentos salvos (ADR-024)**
 
