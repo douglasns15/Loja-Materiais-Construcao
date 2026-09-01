@@ -476,26 +476,29 @@ export default function EstoquePage() {
         <h1 className="w-fit bg-gradient-to-r from-indigo-700 to-indigo-500 bg-clip-text text-2xl font-bold text-transparent">
           Estoque
         </h1>
-        {/* Importar NF-e (ADR-025, Fatia 2): dá entrada de vários itens de uma nota de compra. */}
-        <button
-          type="button"
-          onClick={() => setNfeOpen(true)}
-          disabled={!online}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-          title="Ler o XML da NF-e de compra e dar entrada no estoque item a item."
-        >
-          📄 Importar NF-e
-        </button>
-        {/* Histórico das importações já feitas (por XML): datas, itens e nome do arquivo. */}
-        <button
-          type="button"
-          onClick={() => setNfeHistoryOpen(true)}
-          disabled={!online}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-          title="Ver as importações de NF-e já realizadas e os itens de cada uma."
-        >
-          🕑 Histórico de importação
-        </button>
+        {/* Ações de NF-e agrupadas à direita (Importar + Histórico lado a lado). */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Importar NF-e (ADR-025, Fatia 2): dá entrada de vários itens de uma nota de compra. */}
+          <button
+            type="button"
+            onClick={() => setNfeOpen(true)}
+            disabled={!online}
+            className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            title="Ler o XML da NF-e de compra e dar entrada no estoque item a item."
+          >
+            📄 Importar NF-e
+          </button>
+          {/* Histórico das importações já feitas (por XML): datas, itens e nome do arquivo. */}
+          <button
+            type="button"
+            onClick={() => setNfeHistoryOpen(true)}
+            disabled={!online}
+            className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            title="Ver as importações de NF-e já realizadas e os itens de cada uma."
+          >
+            🕑 Histórico de importação
+          </button>
+        </div>
       </div>
 
       {/* Tela online-only (ADR-012 (c)): offline mostra o aviso de rede, não o erro cru. */}
