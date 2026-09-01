@@ -326,6 +326,12 @@ model Product {
   /// um aviso discreto "custo ajustado, confira o preço" até o operador reconhecer (limpa no PATCH
   /// com `dismissPriceReview`). NULL ⇒ nada pendente. Só sinaliza; nunca altera preço automaticamente.
   priceReviewPendingAt DateTime?
+  /// Fator de embalagem LEMBRADO da importação de NF-e (ADR-025): quantas unidades de venda vêm numa
+  /// unidade comercial do fornecedor (ex.: 1 PC = 50 UN). Gravado na importação quando o operador
+  /// informa o fator; nas próximas notas daquele produto o De-Para já pré-preenche esse valor (custo
+  /// do pacote ÷ fator). NULL ⇒ sem embalagem lembrada (fator 1). Simplificação: 1 fator por produto
+  /// (assume embalagem consistente entre notas). Só afeta a SUGESTÃO na importação; não muda venda.
+  nfePackFactor    Int?
   /// Venda em unidade alternativa (ADR-013 — EF-3). Quando `altUnit` + `altSalePrice` +
   /// `conversionFactor` estão preenchidos, o produto pode ser vendido também na embalagem
   /// fechada (ex.: ROLO de 100 m) com PREÇO PRÓPRIO — o fechado costuma sair mais barato por
@@ -1117,6 +1123,11 @@ model NfeImportItem {
   movementId  String?  @db.Uuid // StockMovement gerado — referência solta (sem FK), como a autoria
   quantity    Decimal  @db.Decimal(12, 4)
   notaNumber  String?  @db.VarChar(20)
+  // Histórico de importação (tela Estoque): nome do arquivo XML importado e snapshot do fornecedor —
+  // preenchidos na confirmação. Nullable: linhas anteriores a esta mudança (e notas antigas) ficam
+  // sem nome de arquivo e são marcadas como tal na listagem. Snapshot do fornecedor evita join extra.
+  fileName     String? @db.VarChar(200)
+  supplierName String? @db.VarChar(120)
   createdById String?  @db.Uuid
   createdAt   DateTime @default(now())
 
@@ -1125,5 +1136,7 @@ model NfeImportItem {
 
   @@unique([tenantId, accessKey, nItem])
   @@index([tenantId, accessKey])
+  // Listagem do histórico de importações (mais recentes primeiro), com paginação/filtro.
+  @@index([tenantId, createdAt])
   @@map("nfe_import_items")
 }

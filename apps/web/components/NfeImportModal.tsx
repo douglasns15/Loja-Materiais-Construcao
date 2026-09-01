@@ -43,6 +43,10 @@ export type NfeProduct = {
   ean: string | null;
   unit: string;
   stockQty: string;
+  /** Fator de embalagem lembrado (ex.: 50) — pré-preenche o fator ao casar; null/1 = sem embalagem. */
+  nfePackFactor: number | null;
+  /** Preço de venda atual (por unidade de venda) — referência ao reajustar o preço no casamento. */
+  salePrice: string;
 };
 
 type RowMode = 'existing' | 'new';
@@ -55,6 +59,10 @@ type Row = {
   selected: boolean;
   mode: RowMode;
   productId: string; // quando mode = 'existing'
+  /** Novo preço de venda ao CASAR (mode = 'existing'). Vazio = mantém o preço atual do cadastro. */
+  existingSalePrice: string;
+  /** Nova unidade ao CASAR (mode = 'existing'). Vazio = mantém a unidade atual do produto. */
+  existingUnit: string;
   // Cadastro novo (mode = 'new')
   npSku: string;
   npEan: string;
@@ -115,6 +123,8 @@ function toRow(item: NFeItem, products: NfeProduct[], imported: Map<number, stri
     selected: importedAt == null, // já lançado ⇒ desmarcado por padrão
     mode: productId ? 'existing' : 'new',
     productId,
+    existingSalePrice: '',
+    existingUnit: '',
     npSku: item.supplierCode ?? item.rawEan ?? '',
     npEan: item.ean ?? '',
     npName: item.name,
@@ -123,9 +133,18 @@ function toRow(item: NFeItem, products: NfeProduct[], imported: Map<number, stri
     npSalePrice: '',
     quantity: String(item.quantity),
     cost: item.unitCost > 0 ? String(item.unitCost) : '',
-    // Sugere o fator pela própria nota (qTrib ÷ qCom): 2 CX → 24 UN ⇒ 12. Sem pista, fica 1.
-    factor: String(suggestNfeFactor(item.quantity, item.quantityTrib)),
+    // Fator: 1º a própria nota (qTrib ÷ qCom); sem pista, o fator LEMBRADO do produto casado
+    // (ex.: 50 gravado numa importação anterior); senão 1.
+    factor: String(suggestedFactor(item, productId ? products.find((p) => p.id === productId) : undefined)),
   };
+}
+
+/** Fator inicial da linha: sugestão da nota (qTrib÷qCom) ou, sem pista, o lembrado no produto casado. */
+function suggestedFactor(item: NFeItem, matched: NfeProduct | undefined): number {
+  const fromNota = suggestNfeFactor(item.quantity, item.quantityTrib);
+  if (fromNota > 1) return fromNota;
+  const remembered = matched?.nfePackFactor ?? 0;
+  return remembered > 1 ? remembered : 1;
 }
 
 /** Fator efetivo (≥ 1) e valores CONVERTIDOS para a unidade de venda (o que vai ao servidor). */
@@ -158,7 +177,11 @@ export function NfeImportModal({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [summary, setSummary] = useState<string | null>(null);
+  // Nome do arquivo XML lido — enviado na confirmação e guardado no histórico de importações.
+  const [fileName, setFileName] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  // Corpo rolável do painel — usado para voltar ao topo ao concluir, expondo o aviso de resultado.
+  const bodyRef = useRef<HTMLDivElement>(null);
 
   const inputCls = 'w-full rounded-lg border border-gray-300 px-2 py-1 text-sm';
 
@@ -168,6 +191,7 @@ export function NfeImportModal({
     setError(null);
     setSummary(null);
     setLoading(true);
+    setFileName(file.name);
     try {
       const xml = await file.text();
       const parsed = parseNfeXml(xml);
@@ -234,6 +258,7 @@ export function NfeImportModal({
       // O contrato do `POST /nfe/entry` NÃO muda: enviamos os valores JÁ convertidos para a unidade
       // de venda (quantity = qCom × fator; custo = vUnCom ÷ fator). ADR-025 §5.B, Eixo 1.
       const cost = convertedCost(r);
+      const factor = effectiveFactor(r);
       const base = {
         nItem: r.item.nItem,
         quantity: convertedQty(r),
@@ -241,8 +266,25 @@ export function NfeImportModal({
         ...(r.item.ean ? { ean: r.item.ean } : {}),
         ...(r.item.name ? { officialName: r.item.name } : {}),
         ...(r.item.ncm ? { ncm: r.item.ncm } : {}),
+        // Lembra o fator de embalagem no produto (só inteiro > 1) p/ pré-sugerir nas próximas notas.
+        ...(factor > 1 && Number.isInteger(factor) ? { packFactor: factor } : {}),
       };
-      if (r.mode === 'existing') return { ...base, productId: r.productId };
+      if (r.mode === 'existing') {
+        const newSale = Number(r.existingSalePrice);
+        const chosenProduct = products.find((p) => p.id === r.productId);
+        // Troca de unidade: só envia quando o operador escolheu uma diferente da atual do produto.
+        const newUnit =
+          r.existingUnit && chosenProduct && r.existingUnit !== chosenProduct.unit
+            ? r.existingUnit
+            : null;
+        return {
+          ...base,
+          productId: r.productId,
+          // Reajuste opcional do preço de venda do cadastro (vazio/0 = não altera).
+          ...(newSale > 0 ? { newSalePrice: newSale } : {}),
+          ...(newUnit ? { newUnit } : {}),
+        };
+      }
       return {
         ...base,
         newProduct: {
@@ -259,6 +301,7 @@ export function NfeImportModal({
     const payload = {
       ...(doc.header.accessKey ? { accessKey: doc.header.accessKey } : {}),
       ...(doc.header.number ? { notaNumber: doc.header.number } : {}),
+      ...(fileName ? { fileName } : {}),
       ...(doc.header.supplierName
         ? {
             createSupplier: {
@@ -295,9 +338,14 @@ export function NfeImportModal({
           (failed > 0 ? ` · ${failed} com erro (veja abaixo)` : '') +
           '.',
       );
+      // Volta ao topo do painel para o aviso de resultado ficar visível (o operador costuma concluir
+      // com o scroll lá embaixo, perto do botão). `requestAnimationFrame` espera o banner renderizar.
+      requestAnimationFrame(() => bodyRef.current?.scrollTo({ top: 0, behavior: 'smooth' }));
       await onImported();
     } catch (err) {
       setError((err as Error).message);
+      // Mesma lógica do sucesso: sobe para o topo para o aviso de erro ficar visível.
+      requestAnimationFrame(() => bodyRef.current?.scrollTo({ top: 0, behavior: 'smooth' }));
     } finally {
       setSaving(false);
     }
@@ -338,7 +386,7 @@ export function NfeImportModal({
         </div>
 
         {/* Corpo rolável (o cabeçalho fica fixo no topo do painel). */}
-        <div className="overflow-y-auto p-5">
+        <div ref={bodyRef} className="overflow-y-auto p-5">
         {error && <p className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
         {summary && (
           <p className="mb-3 rounded-lg bg-green-50 p-3 text-sm text-green-800">{summary}</p>
@@ -380,6 +428,11 @@ export function NfeImportModal({
                 <span>
                   <span className="text-gray-500">Nota:</span>{' '}
                   <span className="font-medium">{doc.header.number ?? '—'}</span>
+                </span>
+                {/* Total de itens reconhecidos no XML — dá a dimensão da nota já no topo. */}
+                <span>
+                  <span className="text-gray-500">Itens lidos:</span>{' '}
+                  <span className="font-medium">{rows.length}</span>
                 </span>
               </div>
               {doc.header.supplierName && (
@@ -428,6 +481,13 @@ export function NfeImportModal({
                     <div className="min-w-0 flex-1">
                       {/* Item da nota. */}
                       <div className="flex flex-wrap items-baseline gap-x-2">
+                        {/* Contador da linha: posição do item na nota (nº atual de total lido). */}
+                        <span
+                          className="inline-flex shrink-0 items-center rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold tabular-nums text-indigo-700"
+                          aria-label={`Item ${idx + 1} de ${rows.length}`}
+                        >
+                          {idx + 1}/{rows.length}
+                        </span>
                         <span className="text-sm font-medium text-gray-900">{r.item.name}</span>
                         {r.alreadyImported && !r.result && (
                           <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
@@ -463,14 +523,74 @@ export function NfeImportModal({
                       </div>
 
                       {r.mode === 'existing' ? (
-                        <div className="mt-2">
+                        <div className="mt-2 space-y-2">
                           <ProductPicker
                             products={products}
                             value={r.productId}
-                            onChange={(id) => patch(idx, { productId: id })}
+                            // Ao trocar o produto, re-sugere o fator (usa o LEMBRADO do novo produto se
+                            // a nota não deu pista) e zera a troca de unidade (cada produto tem a sua).
+                            onChange={(id) =>
+                              patch(idx, {
+                                productId: id,
+                                existingUnit: '',
+                                factor: String(
+                                  suggestedFactor(
+                                    r.item,
+                                    products.find((p) => p.id === id),
+                                  ),
+                                ),
+                              })
+                            }
                             formatStock={(p) => `${Number(p.stockQty)} em estoque`}
                             placeholder="Buscar produto ou SKU…"
                           />
+                          {(() => {
+                            const chosen = products.find((p) => p.id === r.productId);
+                            // Unidade escolhida = a override do operador, senão a atual do produto.
+                            const unitValue = (r.existingUnit || chosen?.unit || 'UNIT') as UnitType;
+                            const unitChanged = Boolean(chosen && unitValue !== chosen.unit);
+                            return (
+                              <div className="grid grid-cols-2 gap-2 sm:max-w-md">
+                                {/* Reajuste OPCIONAL do preço de venda (em função do novo custo). */}
+                                <label className="block text-xs text-gray-600">
+                                  Preço de venda — vazio: não muda
+                                  <MoneyInput
+                                    value={r.existingSalePrice}
+                                    onChange={(v) => patch(idx, { existingSalePrice: v })}
+                                    className={inputCls}
+                                    aria-label="Novo preço de venda"
+                                  />
+                                  {chosen && (
+                                    <span className="mt-0.5 block text-[11px] text-gray-400">
+                                      Atual: {BRL(Number(chosen.salePrice))}
+                                    </span>
+                                  )}
+                                </label>
+                                {/* Trocar a UNIDADE de venda do produto casado (ex.: PC → UN). */}
+                                <label className="block text-xs text-gray-600">
+                                  Unidade de venda
+                                  <select
+                                    value={unitValue}
+                                    onChange={(e) => patch(idx, { existingUnit: e.target.value })}
+                                    className={`${inputCls} bg-white`}
+                                    disabled={!chosen}
+                                    aria-label="Unidade de venda do produto casado"
+                                  >
+                                    {(Object.keys(unitTypeLabels) as UnitType[]).map((u) => (
+                                      <option key={u} value={u}>
+                                        {unitTypeLabels[u]}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  {unitChanged && (
+                                    <span className="mt-0.5 block text-[11px] text-amber-600">
+                                      Muda a unidade do cadastro
+                                    </span>
+                                  )}
+                                </label>
+                              </div>
+                            );
+                          })()}
                         </div>
                       ) : (
                         <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -510,6 +630,16 @@ export function NfeImportModal({
                             placeholder="Preço de venda"
                             className={inputCls}
                             aria-label="Preço de venda do novo produto"
+                          />
+                          {/* EAN editável: vem preenchido do XML quando houver; quando a nota não traz
+                              (ex.: "SEM GTIN"), o operador digita o código da embalagem aqui. */}
+                          <input
+                            value={r.npEan}
+                            onChange={(e) => patch(idx, { npEan: e.target.value })}
+                            placeholder="Código de barras (EAN)"
+                            inputMode="numeric"
+                            className={`${inputCls} col-span-2`}
+                            aria-label="Código de barras (EAN) do novo produto"
                           />
                         </div>
                       )}

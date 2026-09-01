@@ -28,12 +28,18 @@ import { PeriodFilter, defaultRange } from '@/components/PeriodFilter';
 import { SupplierFormModal } from '@/components/SupplierFormModal';
 import { SupplierPicker } from '@/components/SupplierPicker';
 import { NfeImportModal } from '@/components/NfeImportModal';
+import { NfeHistoryModal } from '@/components/NfeHistoryModal';
 
 // `GET /products` devolve a linha completa do produto; o detalhe de estoque (StockDetail)
 // usa esses campos extras (custo/venda, peso, descrição…), então o tipo espelha o StockProduct.
 // `updatedAt` (também no payload) ordena o "Estoque atual" pelos mais recentemente atualizados.
 // `ean` (ADR-025) vem no payload mas não está no StockProduct — o De-Para (NF-e) casa por ele.
-type Product = StockProduct & { updatedAt: string; ean: string | null };
+// `nfePackFactor` (ADR-025) pré-preenche o fator de embalagem ao casar na importação de NF-e.
+type Product = StockProduct & {
+  updatedAt: string;
+  ean: string | null;
+  nfePackFactor: number | null;
+};
 
 /** Chaves de ordenação da tabela "Estoque atual". `recent` (padrão) = mais recentemente
  *  atualizados primeiro; não é coluna clicável, é só a ordem inicial. As demais são colunas. */
@@ -175,6 +181,7 @@ export default function EstoquePage() {
   const [detailProduct, setDetailProduct] = useState<Product | null>(null);
   // Importação de NF-e (ADR-025, Fatia 2) — modal De-Para (leitura do XML + entrada por item).
   const [nfeOpen, setNfeOpen] = useState(false);
+  const [nfeHistoryOpen, setNfeHistoryOpen] = useState(false);
 
   // Formulário de entrada de estoque (compra/recebimento).
   const [entry, setEntry] = useState({
@@ -478,6 +485,16 @@ export default function EstoquePage() {
           title="Ler o XML da NF-e de compra e dar entrada no estoque item a item."
         >
           📄 Importar NF-e
+        </button>
+        {/* Histórico das importações já feitas (por XML): datas, itens e nome do arquivo. */}
+        <button
+          type="button"
+          onClick={() => setNfeHistoryOpen(true)}
+          disabled={!online}
+          className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          title="Ver as importações de NF-e já realizadas e os itens de cada uma."
+        >
+          🕑 Histórico de importação
         </button>
       </div>
 
@@ -1038,6 +1055,9 @@ export default function EstoquePage() {
           }}
         />
       )}
+
+      {/* Histórico de importações de NF-e (por chave de acesso): datas, itens e nome do arquivo. */}
+      {nfeHistoryOpen && <NfeHistoryModal onClose={() => setNfeHistoryOpen(false)} />}
     </div>
   );
 }

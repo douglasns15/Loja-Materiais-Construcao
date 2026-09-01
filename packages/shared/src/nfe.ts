@@ -198,6 +198,24 @@ export const nfeEntryItemSchema = z
     quantity: z.number().positive(),
     /** Novo custo do cadastro por unidade de venda ("último custo", ADR-025/estoque). */
     newCostPrice: z.number().positive().optional(),
+    /**
+     * Novo PREÇO DE VENDA do cadastro (por unidade de venda). Só faz sentido casando um produto
+     * existente — permite reajustar o preço em função do custo que chegou na nota. Ausente = mantém
+     * o preço atual. Quando informado, o servidor considera a margem "revisada" e limpa o aviso de
+     * revisão de preço (`priceReviewPendingAt`) em vez de acendê-lo pela mudança de custo.
+     */
+    newSalePrice: z.number().nonnegative().optional(),
+    /**
+     * Nova UNIDADE de venda do produto casado (ex.: trocar PC → UN na importação). Só ao casar um
+     * existente; ausente = mantém a unidade atual do cadastro. Muda `Product.unit`.
+     */
+    newUnit: unitTypeSchema.optional(),
+    /**
+     * Fator de embalagem a LEMBRAR no produto (`Product.nfePackFactor`): quantas unidades de venda
+     * vêm numa unidade comercial (ex.: 50). Enviado quando > 1; nas próximas notas o De-Para
+     * pré-sugere. Vale para produto novo e casado. Ausente/1 ⇒ não altera o fator lembrado.
+     */
+    packFactor: z.number().int().positive().optional(),
     // Ficha p/ o catálogo global (upsert por EAN). Só grava com EAN GTIN válido no servidor.
     ean: z.string().max(14).optional(),
     officialName: z.string().max(200).optional(),
@@ -221,6 +239,8 @@ export const nfeEntrySchema = z
       .nullable()
       .optional(),
     notaNumber: z.string().max(20).optional(),
+    /** Nome do arquivo XML importado — guardado no histórico de importações (tela Estoque). */
+    fileName: z.string().max(200).optional(),
     supplierId: z.string().uuid().optional(),
     createSupplier: z
       .object({ name: z.string().min(1).max(120), cnpj: z.string().max(18).optional() })

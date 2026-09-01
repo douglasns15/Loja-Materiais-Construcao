@@ -426,8 +426,10 @@ testável exaustivamente e compartilhada entre as duas apps.
 
 | Método · Rota | O que faz |
 |---|---|
-| `POST /entry` 🔒 | Confirma o De-Para item-a-item → gera Entrada de estoque; cada linha em sua própria transação. |
+| `POST /entry` 🔒 | Confirma o De-Para item-a-item → gera Entrada de estoque; cada linha em sua própria transação. Ao **casar** com um produto de `ean` vazio, faz backfill do GTIN da nota no cadastro (nunca sobrescreve EAN preenchido) para a próxima importação casar sozinha. Aceita `newSalePrice` (opcional) para reajustar o preço de venda do produto casado — quando informado, considera a margem revisada e limpa o aviso `priceReviewPendingAt`. Aceita `fileName` (opcional), guardado no histórico. Aceita `newUnit` (troca a unidade do produto casado) e `packFactor` (lembra o fator de embalagem em `Product.nfePackFactor` para pré-sugerir nas próximas notas). |
 | `GET /imported` | Lista itens já importados de uma nota (por `chNFe`) — idempotência. |
+| `GET /imports` | Histórico de importações agrupado por chave de acesso (data, nota, fornecedor, arquivo, nº de itens); filtro `q` (nota/fornecedor/arquivo) e paginação por cursor `before`. |
+| `GET /imports/:accessKey` | Detalhe de uma importação: itens lançados (nome do produto, quantidade, unidade) + cabeçalho (nota/fornecedor/arquivo/data). |
 
 **`/customers` e `/suppliers` — Pessoas**
 
