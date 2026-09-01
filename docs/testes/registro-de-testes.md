@@ -5503,3 +5503,24 @@ Pedido do Owner antes do deploy: campo de busca na tela de Entregas (código / n
 | Suíte | `vitest run` | ✅ 382 testes |
 
 **NO AR** (API `1fa958bc` + web `f004cadd`) **e E2E do Owner ✅ VALIDADO (2026-08-29, "tudo validado com sucesso")** — busca por cliente e por código (conta E-000X / venda V-000XXX) conferida.
+
+---
+
+## Estoque.ImportacaoNFe — 7 melhorias + layout (ADR-025) (2026-09-01)
+
+Levantados pelo Owner durante a importação real na loja **Maria ConstruLar (PRD)**. Migrations `0035_nfe_import_history` e `0036_product_pack_factor` aplicadas em produção.
+
+| O que foi testado | Método | Resultado |
+|---|---|---|
+| Diagnóstico: chave de vínculo do De-Para é EAN/GTIN → nome exato; "mesmo EAN não linca" = código estava no campo SKU | leitura (`matchProduct`) | ✅ causa confirmada |
+| Backfill de EAN ao casar produto de `ean` vazio (não sobrescreve preenchido; `ean` não-único → sem P2002) | `apps/api` `tsc` | ✅ 0 erros |
+| Preço de venda ao casar (`newSalePrice`): grava e limpa `priceReviewPendingAt`; custo mudou sem preço → acende | `tsc` shared+API | ✅ 0 erros |
+| Trocar unidade ao casar (`newUnit` → `Product.unit`); seletor no modo casar | `tsc` web | ✅ 0 erros |
+| EAN editável no "Cadastrar novo" (pré-preenche do XML; digitável em "SEM GTIN") | `tsc` web + build | ✅ |
+| Fator de embalagem lembrado por produto (`Product.nfePackFactor`, migration 0036); pré-preenche nas próximas notas | `migrate diff` (bate) + `tsc` | ✅ |
+| Histórico de importação: `GET /nfe/imports` (agrupa por chave, busca+cursor) e `GET /nfe/imports/:accessKey` (itens); `fileName`+`supplierName` em `nfe_import_items` | `tsc` shared+API + build | ✅ |
+| UX: "Itens lidos" no topo, contador n/total por linha, scroll ao topo ao concluir; botões NF-e agrupados à direita | build web | ✅ 23 rotas |
+
+**Resposta ao Owner** (pacote entra como 1): o campo "Fator (embalagem)" já divide o custo e multiplica a quantidade; o XML só auto-sugere quando o fornecedor manda `qTrib ≠ qCom`. **Consultar o EAN NÃO traz a quantidade por pacote de forma confiável** (fontes grátis não fornecem; DUN-14 da caixa ≠ EAN da unidade) — cadastro manual, mas agora **"manual 1×"** via `nfePackFactor`.
+
+**NO AR** (migrations 0035+0036; API `e974c672`; web 2ª+3ª levas, smoke OK) **e E2E do Owner ✅ VALIDADO (2026-09-01)**. Commits `e32bc30` (7 melhorias) + `e770691` (layout dos botões) em `main` — push do Owner.
