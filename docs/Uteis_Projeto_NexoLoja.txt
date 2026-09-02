@@ -42,6 +42,10 @@ http://localhost:3000/
 
 <> Atalho de cadastrar produto pelo pesquisar do PDV
 
+<> Destacar tela para conseguir navegar pelo sistema 
+
+<> Tela de permissões
+
 <> 
 
 ## Subir servidor
