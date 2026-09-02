@@ -3,7 +3,25 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-09-02 — **UI.Repaginação índigo — CONCLUÍDA em TODAS as telas + E2E
+> **Última atualização:** 2026-09-02 — **Central de Pendências (sino de alertas — ADR-029) — CONCLUÍDA
+> (plano de 5 fatias + refino pós-E2E) e E2E DO OWNER VALIDADO (2026-09-02, "tudo validado com
+> sucesso"). NO AR.** Sino no topo (ao lado da cesta) que reúne pendências **calculadas sob demanda** —
+> **sem tabela, sem push, sem migração** (custo-zero). Nasce **visível a todos os papéis** (o `roles` de
+> cada alerta já está no catálogo, informativo; o filtro por papel vem com a futura **tela de
+> permissões** — próximo épico). **Catálogo (10 alertas):** bloco A cadastro (sem custo, custo≥preço,
+> sem preço, sem EAN, sem categoria), bloco B estoque (negativo, abaixo do mínimo), bloco C operacional
+> (caixa aberto >18h, divergência de fechamento 30d, dívida vencida >30d OU sem recebimento >30d —
+> decisões do Owner). Cada alerta tem **pop-up "Ver"** + **CSV** (produtos, montado no cliente) ou
+> **"Abrir"** a tela (bloco C); **silenciar 7 dias** (localStorage); badge = **nº de alertas**
+> warn+danger (não a soma dos itens). **core:** `isCashOpenTooLong`/`isDebtStale` (puros, +10 testes,
+> 341/341). **api:** `GET /alerts` (COUNT FILTER agregado + consultas leves), `/alerts/products`
+> (keyset, `$queryRaw` float8), `/alerts/detail` (bloco C) — §8.2. **web:** `AlertsChip` (sino/painel) +
+> `AlertDetailModal`. **Gate:** tsc shared/core/api/web + web build. **NO AR:** API `58c7c4d9`→`b0240d76`
+> + web (smokes OK: `/alerts` e `/alerts/detail` 401 sem token; HTML no-store + CSS 200); commits
+> `9ee5c91` (5 fatias) + `0ff3c73` (refino) em `main` — push do Owner. Docs: ADR-029 +
+> `docs/plano-central-de-alertas.md`.
+>
+> **Antes:** 2026-09-02 — **UI.Repaginação índigo — CONCLUÍDA em TODAS as telas + E2E
 > DO OWNER VALIDADO (2026-09-02, todas as telas conferidas com sucesso). ONDA COMPLETA.** Fecha a onda
 > de identidade **índigo/esmeralda** na interface inteira. Só apresentação — **sem API/migration/core/
 > shared**. Padrão reusável: título em gradiente índigo (`from-indigo-700 to-indigo-500 bg-clip-text`) +

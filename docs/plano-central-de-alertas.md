@@ -1,10 +1,11 @@
 # Plano de Execução — Central de Pendências (sino de alertas)
 
-> **Status:** proposto em **2026-09-02**, aguardando aprovação do Owner para iniciar. Decisão de
-> arquitetura em [ADR-029](adr/ADR-029-central-de-pendencias-computada.md). Fonte de verdade do
-> progresso continua sendo [`ROADMAP.md`](ROADMAP.md) +
-> [`testes/registro-de-testes.md`](testes/registro-de-testes.md); este documento detalha o **como**
-> (as fatias).
+> **Status:** **CONCLUÍDO e NO AR** — as 5 fatias + o refino pós-E2E foram implementados, deployados e
+> **E2E do Owner VALIDADO em 2026-09-02** ("tudo validado com sucesso"). Decisão de arquitetura em
+> [ADR-029](adr/ADR-029-central-de-pendencias-computada.md). Fonte de verdade do progresso continua
+> sendo [`ROADMAP.md`](ROADMAP.md) + [`testes/registro-de-testes.md`](testes/registro-de-testes.md);
+> este documento detalha o **como** (as fatias). NO AR: API `b0240d76` + web (smokes OK); commits
+> `9ee5c91` (5 fatias) + `0ff3c73` (refino) em `main` — push do Owner.
 
 ## Contexto
 
@@ -137,6 +138,20 @@ Detalhe/download por alerta de produto: `GET /alerts/products?kind=<AlertKind>&c
   tudo está oculto. Chave `nexoloja:alerts-snooze`, tolerante a storage indisponível; expira sozinho e o
   alerta reaparece se persistir. Sem tabela/servidor.
 - **Gate:** ✅ web tsc + build. **E2E do Owner pendente** (silenciar some do sino; reexibir traz de volta).
+
+### Refino pós-E2E — **IMPLEMENTADO e NO AR (2026-09-02)**
+Feedback do 1º teste do Owner (commit `0ff3c73`):
+- **Badge por nº de alertas** (não a soma dos itens): um alerta com 250 produtos é **1** notificação —
+  corrige o "99+". O badge conta os `warn`+`danger` visíveis; a contagem grande fica no card do alerta.
+- **Pop-up "Ver"** em todo alerta, além do CSV/Abrir ([`AlertDetailModal.tsx`](../apps/web/components/AlertDetailModal.tsx)):
+  cadastro/estoque → tabela de produtos (mesma fonte do CSV, paginada por keyset com "Carregar mais");
+  caixa/dívida → lista de datas/valores.
+- **`GET /alerts/detail?kind=`** (bloco C): detalhe já formatado pt-BR — fechamentos com diferença
+  (data + falta/sobra), caixa aberto (desde quando), dívidas paradas (`D-000X` — cliente +
+  vencimento/inatividade). Timestamps formatados no Worker via offset −3h; vencimento (date-only) via
+  `formatDateBr` (UTC). Doc §8.2 atualizada.
+- **Não feito (melhoria futura):** "Abrir a tela já filtrada" (ex.: Relatórios nas datas divergentes) —
+  mexeria nas telas de destino; por ora o `actionHref` leva à tela e o "Ver" mostra as datas.
 
 ## Fora de escopo (próximos épicos)
 - **Tela de permissões por usuário** (Admin limita telas/funcionalidades por papel) — quando existir,

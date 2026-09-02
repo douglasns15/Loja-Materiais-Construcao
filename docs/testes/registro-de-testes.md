@@ -5544,3 +5544,27 @@ Fecha a onda de identidade **índigo/esmeralda** em TODA a interface. Só aprese
 | Build de produção | `next build` | ✅ todas as rotas compilam |
 
 **NO AR** — 2 commits em `main`: `7f654fb` (Clientes/Fornecedores/Categorias, web Version `637975a9`) + `54300fe` (Orçamentos/Configurações + acabamento de Caixa/Contas/Relatórios, web Version `ae1940ee`); smokes pós-deploy OK (HTML no-store + CSS 200). **E2E do Owner ✅ VALIDADO (2026-09-02) — TODAS as telas conferidas com sucesso.** Push do Owner feito. Com isto, **toda a interface do app está na identidade índigo/esmeralda**.
+
+---
+
+## Central de Pendências — sino de alertas (ADR-029) — 5 fatias + refino pós-E2E (2026-09-02)
+
+Sino no topo (ao lado da cesta) que reúne pendências **calculadas sob demanda** — **sem tabela, sem push, sem migração** (custo-zero). Catálogo de 10 alertas: bloco A cadastro (sem custo, custo≥preço, sem preço, sem EAN, sem categoria), bloco B estoque (negativo, abaixo do mínimo), bloco C operacional (caixa aberto >18h, divergência de fechamento 30d, dívida vencida >30d OU sem recebimento >30d). Nasce visível a todos os papéis (`roles` no catálogo é informativo; enforcement vem com a tela de permissões).
+
+| O que foi testado | Método | Resultado |
+|---|---|---|
+| `isCashOpenTooLong`/`isDebtStale` + limiares (18h / 30d) — funções puras do core | Vitest (`packages/core/src/alerts.test.ts`, +10 testes) | ✅ core 341/341 |
+| `GET /alerts` (COUNT FILTER agregado de `products` p/ A+B; consultas leves de caixa/dívida p/ C) | `tsc` shared/core/api | ✅ 0 erros |
+| `GET /alerts/products` (keyset por `id`, `$queryRaw` float8 — guarda de CPU do Worker) | `tsc` + smoke 401 sem token | ✅ montado/protegido |
+| `GET /alerts/detail` (bloco C: datas/valores já formatados pt-BR) | `tsc` + smoke 401 | ✅ montado/protegido |
+| Sino + painel índigo: badge = nº de alertas warn+danger (não soma de itens — corrige "99+") | `tsc` web + build | ✅ |
+| Pop-up "Ver" (tabela de produtos paginada / lista de datas do bloco C) além do CSV/Abrir | `tsc` web + build | ✅ |
+| Download CSV montado no cliente (pagina o keyset até o fim) | `tsc` + build | ✅ |
+| Silenciar 7 dias (localStorage), rodapé "Reexibir", estado vazio, recarga ao focar | `tsc` + build | ✅ |
+| Build de produção | `next build` | ✅ todas as rotas |
+
+**Decisões do Owner (2026-09-02):** caixa aberto = **18h**; dívida parada = **vencida há >30d OU sem recebimento há >30d** (os dois critérios); catálogo **inteiro**; nasce visível a todos, tela de permissões é o próximo épico.
+
+**Refino pós-E2E** (feedback do 1º teste): (1) badge por nº de alertas; (2) pop-up "Ver"; (3) `/alerts/detail` com as datas do bloco C.
+
+**NO AR** — sem migration. API Versions `58c7c4d9`→`b0240d76`; web em 2 deploys (smokes pós-deploy OK: `/alerts` e `/alerts/detail` 401 sem token; health 200; HTML no-store + CSS 200). Commits `9ee5c91` (5 fatias) + `0ff3c73` (refino) em `main` — push do Owner. **E2E do Owner ✅ VALIDADO (2026-09-02) — "tudo validado com sucesso".** Docs: [ADR-029](../adr/ADR-029-central-de-pendencias-computada.md) + [plano-central-de-alertas.md](../plano-central-de-alertas.md) + doc técnica §8.2.

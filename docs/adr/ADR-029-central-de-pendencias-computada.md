@@ -1,6 +1,6 @@
 # ADR-029: Central de pendências computada (sino de alertas sem push nem tabela)
 
-**Status:** **Proposto** (2026-09-02 — aguardando aprovação do Owner para iniciar). Detalhamento em [plano da Central de Alertas](../plano-central-de-alertas.md).
+**Status:** **Aceito e implementado** (2026-09-02 — 5 fatias + refino pós-E2E NO AR; **E2E do Owner VALIDADO**). Detalhamento em [plano da Central de Alertas](../plano-central-de-alertas.md).
 **Data:** 2026-09-02
 **Deciders:** Owner do produto
 **Relacionados:** [ADR-001](ADR-001-consistencia-de-estoque.md) (`stockQty` é cache; fonte = `StockMovement`), [ADR-026](ADR-026-divida-do-cliente-como-entidade.md) (dívida do cliente `D-0001`), [ADR-027](ADR-027-custo-congelado-na-venda.md) (custo carimbado — por que "sem custo" prejudica o lucro), ARCHITECTURE §7 (persistência custo-zero)
