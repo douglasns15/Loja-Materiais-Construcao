@@ -191,3 +191,21 @@ export interface AlertProductsPage {
   rows: AlertProductRow[];
   nextCursor: string | null;
 }
+
+/** Query do detalhe (`GET /alerts/detail`) dos alertas do bloco C (caixa/dívida), para o pop-up "Ver". */
+export const alertDetailQuerySchema = z.object({
+  kind: z.enum(['cash-open-too-long', 'cash-divergence', 'debt-stale']),
+});
+export type AlertDetailQuery = z.infer<typeof alertDetailQuerySchema>;
+
+/**
+ * Uma linha do detalhe de um alerta do bloco C (lista enxuta no pop-up). Já vem FORMATADA em pt-BR
+ * pelo servidor (datas/valores dependem de dados do banco: nº da dívida, nome do cliente, vencimento).
+ */
+export interface AlertDetailRow {
+  id: string;
+  /** Linha principal (ex.: "Fechado em 01/08/2026", "D-0001 — Neidinha"). */
+  title: string;
+  /** Complemento (ex.: "Falta R$ 84,60", "Vencida em 10/08/2026", "Sem recebimento há 40 dias"). */
+  subtitle?: string;
+}

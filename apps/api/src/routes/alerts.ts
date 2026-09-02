@@ -2,14 +2,23 @@ import { Hono } from 'hono';
 import { createPrismaClient, Prisma } from '@nexoloja/db';
 import {
   ALERT_META,
+  alertDetailQuerySchema,
   alertProductsQuerySchema,
+  formatDateBr,
+  formatDebtNumber,
+  type AlertDetailRow,
   type AlertKind,
   type AlertProductRow,
   type AlertProductsPage,
   type AlertSeverity,
   type AlertSummary,
 } from '@nexoloja/shared';
-import { CASH_DIVERGENCE_WINDOW_DAYS, isCashOpenTooLong, isDebtStale } from '@nexoloja/core';
+import {
+  CASH_DIVERGENCE_WINDOW_DAYS,
+  DEBT_STALE_ALERT_DAYS,
+  isCashOpenTooLong,
+  isDebtStale,
+} from '@nexoloja/core';
 import { type Env, getConnectionString, getTenantId } from '../lib/request';
 import { requireAuth } from '../middleware/auth';
 
@@ -239,6 +248,140 @@ alerts.get('/products', async (c) => {
   } catch (err) {
     console.error('GET /alerts/products falhou:', err);
     return c.json({ ok: false, error: 'Falha ao carregar a lista do alerta.' }, 500);
+  }
+});
+
+// Formatação pt-BR no servidor (o detalhe do bloco C já sai pronto para exibir). O Worker roda em UTC;
+// aplicamos o fuso do Brasil (UTC-3, sem horário de verão desde 2019) subtraindo 3h antes de formatar
+// timestamps — datas-só (vencimento) usam `formatDateBr`, que é UTC-safe.
+const BR_OFFSET_MS = 3 * 60 * 60 * 1000;
+function brDate(d: Date): string {
+  const t = new Date(d.getTime() - BR_OFFSET_MS);
+  const dd = String(t.getUTCDate()).padStart(2, '0');
+  const mm = String(t.getUTCMonth() + 1).padStart(2, '0');
+  return `${dd}/${mm}/${t.getUTCFullYear()}`;
+}
+function brDateTime(d: Date): string {
+  const t = new Date(d.getTime() - BR_OFFSET_MS);
+  const dd = String(t.getUTCDate()).padStart(2, '0');
+  const mm = String(t.getUTCMonth() + 1).padStart(2, '0');
+  const hh = String(t.getUTCHours()).padStart(2, '0');
+  const mi = String(t.getUTCMinutes()).padStart(2, '0');
+  return `${dd}/${mm} ${hh}:${mi}`;
+}
+const brl = (n: number): string =>
+  n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+/**
+ * Detalhe (lista enxuta, já formatada) de UM alerta do bloco C, para o pop-up "Ver" — quando não dá
+ * para levar à tela com o filtro pronto, o operador ao menos vê as datas/valores (ex.: as datas das
+ * divergências de caixa). Volumes pequenos (1 caixa aberto por loja; dívidas abertas), sem paginação.
+ */
+alerts.get('/detail', async (c) => {
+  const tenantId = getTenantId(c);
+  const connectionString = getConnectionString(c.env);
+  if (!tenantId || !connectionString) {
+    return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
+  }
+
+  const parsed = alertDetailQuerySchema.safeParse({ kind: c.req.query('kind') });
+  if (!parsed.success) {
+    return c.json({ ok: false, error: 'Parâmetros inválidos.', issues: parsed.error.flatten() }, 400);
+  }
+  const { kind } = parsed.data;
+
+  try {
+    const prisma = createPrismaClient(connectionString);
+    const now = new Date();
+    let rows: AlertDetailRow[] = [];
+
+    if (kind === 'cash-open-too-long') {
+      const sessions = await prisma.$queryRaw<Array<{ id: string; openedAt: Date }>>(
+        Prisma.sql`
+          SELECT "id"::text AS "id", "openedAt" FROM "cash_sessions"
+          WHERE "tenantId" = ${tenantId}::uuid AND "closedAt" IS NULL
+          ORDER BY "openedAt" ASC
+        `,
+      );
+      rows = sessions
+        .filter((s) => isCashOpenTooLong(s.openedAt, now))
+        .map((s) => {
+          const hours = Math.floor((now.getTime() - s.openedAt.getTime()) / (60 * 60 * 1000));
+          return {
+            id: s.id,
+            title: `Aberto desde ${brDateTime(s.openedAt)}`,
+            subtitle: `${hours}h em aberto`,
+          };
+        });
+    } else if (kind === 'cash-divergence') {
+      const cutoff = new Date(now.getTime() - CASH_DIVERGENCE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+      const sessions = await prisma.$queryRaw<Array<{ id: string; closedAt: Date; diff: number }>>(
+        Prisma.sql`
+          SELECT "id"::text AS "id", "closedAt",
+            ("closingAmount" - "expectedAmount")::float8 AS "diff"
+          FROM "cash_sessions"
+          WHERE "tenantId" = ${tenantId}::uuid
+            AND "closedAt" IS NOT NULL AND "closedAt" >= ${cutoff}
+            AND "closingAmount" IS NOT NULL AND "expectedAmount" IS NOT NULL
+            AND "closingAmount" <> "expectedAmount"
+          ORDER BY "closedAt" DESC
+        `,
+      );
+      rows = sessions.map((s) => ({
+        id: s.id,
+        title: `Fechado em ${brDate(s.closedAt)}`,
+        subtitle: `${s.diff < 0 ? 'Falta' : 'Sobra'} ${brl(Math.abs(s.diff))}`,
+      }));
+    } else {
+      // debt-stale: dívidas abertas (ADR-026) filtradas pela regra pura do core, com nome/nº/atividade.
+      const debts = await prisma.$queryRaw<
+        Array<{
+          id: string;
+          debtNumber: number;
+          customerName: string | null;
+          dueDate: Date | null;
+          openedAt: Date;
+          lastPaymentAt: Date | null;
+        }>
+      >(
+        Prisma.sql`
+          SELECT d."id"::text AS "id", d."debtNumber" AS "debtNumber", c."name" AS "customerName",
+            d."dueDate" AS "dueDate", d."openedAt" AS "openedAt",
+            (SELECT MAX(rp."paidAt")
+               FROM "receivable_payments" rp
+               JOIN "receivables" r ON r."id" = rp."receivableId"
+              WHERE r."debtId" = d."id") AS "lastPaymentAt"
+          FROM "debts" d
+          JOIN "customers" c ON c."id" = d."customerId"
+          WHERE d."tenantId" = ${tenantId}::uuid AND d."status" = 'OPEN'
+        `,
+      );
+      const cutoffMs = now.getTime() - DEBT_STALE_ALERT_DAYS * 24 * 60 * 60 * 1000;
+      rows = debts
+        .filter((d) =>
+          isDebtStale({ dueDate: d.dueDate, openedAt: d.openedAt, lastPaymentAt: d.lastPaymentAt }, now),
+        )
+        .map((d) => {
+          const overdue = d.dueDate != null && d.dueDate.getTime() < cutoffMs;
+          const lastActivity = (d.lastPaymentAt ?? d.openedAt).getTime();
+          const days = Math.floor((now.getTime() - lastActivity) / (24 * 60 * 60 * 1000));
+          // `dueDate` é data-só (meia-noite UTC); `formatDateBr` espera string e formata em UTC.
+          const subtitle =
+            overdue && d.dueDate
+              ? `Vencida em ${formatDateBr(d.dueDate.toISOString())}`
+              : `Sem recebimento há ${days} dias`;
+          return {
+            id: d.id,
+            title: `${formatDebtNumber(d.debtNumber)} — ${d.customerName ?? 'Cliente'}`,
+            subtitle,
+          };
+        });
+    }
+
+    return c.json({ ok: true, data: rows });
+  } catch (err) {
+    console.error('GET /alerts/detail falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao carregar o detalhe do alerta.' }, 500);
   }
 });
 

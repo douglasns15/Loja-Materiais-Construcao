@@ -10,6 +10,7 @@ import {
 } from '@nexoloja/shared';
 import { apiGet } from '@/lib/api';
 import { downloadCsv, csvNumber, toCsv } from '@/lib/csv';
+import { AlertDetailModal } from '@/components/AlertDetailModal';
 
 /**
  * Sino da **Central de pendências** (ADR-029), ao lado da cesta no topo. Alertas CALCULADOS sob
@@ -56,6 +57,7 @@ export function AlertsChip() {
   const [open, setOpen] = useState(false);
   const [downloading, setDownloading] = useState<string | null>(null);
   const [snoozed, setSnoozed] = useState<Record<string, number>>({});
+  const [viewing, setViewing] = useState<AlertSummary | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
@@ -119,8 +121,9 @@ export function AlertsChip() {
   const visibleItems = items.filter((a) => !isSnoozed(a.kind));
   const snoozedCount = items.length - visibleItems.length;
 
-  // O badge (e a "cara" acesa do sino) ignora os silenciados — silenciar tira o número também.
-  const badge = visibleItems.filter(alarms).reduce((acc, a) => acc + a.count, 0);
+  // O badge conta o número de ALERTAS que alarmam (warn+danger), não a soma dos itens de cada um —
+  // um alerta com 250 produtos é UMA notificação, não 250. Silenciados ficam de fora (some do sino).
+  const badge = visibleItems.filter(alarms).length;
   const has = badge > 0;
 
   /** Baixa a lista completa de uma pendência (pagina o keyset até o fim) e gera o CSV no navegador. */
@@ -227,6 +230,21 @@ export function AlertsChip() {
                           </div>
                           <p className="mt-0.5 text-xs text-gray-500">{meta.description}</p>
                           <div className="mt-2 flex items-center gap-3">
+                            {/* Ver os dados num pop-up (produtos, ou datas do bloco C) sem sair da tela. */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setViewing(a);
+                                setOpen(false);
+                              }}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs font-semibold text-gray-700 transition hover:bg-gray-50"
+                            >
+                              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                <circle cx="12" cy="12" r="3" />
+                              </svg>
+                              Ver
+                            </button>
                             {a.downloadable ? (
                               <button
                                 type="button"
@@ -291,6 +309,16 @@ export function AlertsChip() {
             </div>
           )}
         </div>
+      )}
+
+      {/* Pop-up "Ver": dados por trás do número (produtos, ou datas do bloco C). */}
+      {viewing && (
+        <AlertDetailModal
+          alert={viewing}
+          onClose={() => setViewing(null)}
+          onDownload={handleDownload}
+          downloading={downloading === viewing.kind}
+        />
       )}
     </div>
   );

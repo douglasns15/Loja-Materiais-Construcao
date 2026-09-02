@@ -500,7 +500,8 @@ Alertas CALCULADOS sob demanda (custo-zero: nada é gravado; a pendência some q
 | Método · Rota | O que faz |
 |---|---|
 | `GET /alerts` | Contagens das pendências ativas (só `count > 0`), ordenadas por gravidade. **Bloco A/B** = uma varredura agregada de `products` (`COUNT FILTER`, sem `findMany`; ativos/não excluídos): sem custo (`costPrice=0`), custo≥preço (ambos >0), sem preço (`salePrice=0`), sem EAN (nulo/vazio), sem categoria; estoque negativo (`stockQty<0`), abaixo do mínimo (`minStockQty>0 AND 0<=stockQty<=minStockQty`). **Bloco C** = consultas leves decididas por funções puras do `core` (ADR-029 §6): caixa aberto há >18h (`isCashOpenTooLong`), fechamento com diferença nos últimos 30d, dívida (ADR-026) vencida há >30d OU sem recebimento há >30d (`isDebtStale`). Alertas do bloco C trazem `actionHref` (leva à tela) em vez de download. |
-| `GET /alerts/products` | Lista paginada (keyset por `id`, `?kind=&cursor=`) dos produtos de UMA pendência (qualquer `kind` dos blocos A/B), para o download em CSV (montado no cliente). `$queryRaw` com casts `float8` (guarda de CPU do Worker). |
+| `GET /alerts/products` | Lista paginada (keyset por `id`, `?kind=&cursor=`) dos produtos de UMA pendência (qualquer `kind` dos blocos A/B), para o pop-up "Ver" e o download em CSV (montado no cliente). `$queryRaw` com casts `float8` (guarda de CPU do Worker). |
+| `GET /alerts/detail` | Detalhe já formatado (pt-BR) de UM alerta do **bloco C** (`?kind=cash-open-too-long\|cash-divergence\|debt-stale`), para o pop-up "Ver": linhas `{ title, subtitle }` — caixa aberto (desde quando/horas), fechamentos com diferença (data + falta/sobra), dívidas paradas (D-000X — cliente + vencimento/inatividade). Volume pequeno, sem paginação. |
 
 **`/tenant`, `/me`, `/users` — Loja, sessão e usuários**
 
