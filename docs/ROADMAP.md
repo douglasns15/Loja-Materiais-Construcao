@@ -3,7 +3,28 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-08-29 — **Entregas.ContaDeRetiradas (E-0001, ADR-028) + código da
+> **Última atualização:** 2026-09-02 — **UI.Repaginação índigo — CONCLUÍDA em TODAS as telas + E2E
+> DO OWNER VALIDADO (2026-09-02, todas as telas conferidas com sucesso). ONDA COMPLETA.** Fecha a onda
+> de identidade **índigo/esmeralda** na interface inteira. Só apresentação — **sem API/migration/core/
+> shared**. Padrão reusável: título em gradiente índigo (`from-indigo-700 to-indigo-500 bg-clip-text`) +
+> subtítulo; cartões `border border-gray-200 shadow-md`; inputs com foco `focus:ring-2 focus:ring-indigo-100`;
+> CTA primário gradiente índigo; thead `bg-indigo-50 text-indigo-900`; nome/código clicável `text-indigo-700`;
+> `hover:bg-gray-50` nas linhas; controles de exclusão/status e abas segmentadas mantêm suas cores.
+> **(a) Telas que estavam no visual ANTIGO → repaginadas por completo:** **Clientes** (`customers/page.tsx`
+> + `CustomerProfile.tsx`), **Fornecedores** (`fornecedores/page.tsx` + `SupplierFormModal.tsx`, reusado no
+> atalho "+ Novo fornecedor" da Entrada de Estoque), **Categorias** (`categorias/page.tsx` +
+> `CategoryFormModal.tsx`), **Orçamentos** (`orcamentos/page.tsx`; código `O-000045`/link índigo, "Gerar
+> venda" green→emerald, modal gradiente) e **Configurações** (`configuracoes/page.tsx` + `UsersSection.tsx`;
+> thead de Usuários índigo, file-input `file:bg-indigo-600`). **(b) Telas JÁ repaginadas antes (só
+> acabamento):** **Relatórios** tinha 2 theads no azul antigo (`bg-blue-200`, resíduo do polimento
+> `d96be73`) → `bg-indigo-50`; **Caixa** botões "Abrir/Fechar caixa" `bg-gray-900` → gradiente índigo +
+> foco índigo nos campos; **Contas a Receber** foco índigo na busca e no modal (o `bg-gray-900` restante
+> é o controle SEGMENTADO de abas, mantido). **Gate:** web `tsc` 0 + build (todas as rotas). **NO AR** —
+> 2 commits em `main`: `7f654fb` (Clientes/Fornecedores/Categorias, web `637975a9`) + `54300fe`
+> (Orçamentos/Configurações + acabamento, web `ae1940ee`); smokes pós-deploy OK. **E2E DO OWNER VALIDADO
+> (2026-09-02).** Push do Owner feito. **Com isto, toda a interface está na identidade índigo/esmeralda.**
+>
+> **Antes:** 2026-08-29 — **Entregas.ContaDeRetiradas (E-0001, ADR-028) + código da
 > venda clicável (Relatórios/Entregas) + fix off-by-one da previsão — NO AR e E2E DO OWNER VALIDADO
 > (2026-08-29, "validei com sucesso, tudo aprovado"). CONCLUÍDA.** + 2 refinos pós-validação (pedidos do
 > Owner): **(a) comprovante ÚNICO da conta** (junta os itens de todas as retiradas do card num só cupom

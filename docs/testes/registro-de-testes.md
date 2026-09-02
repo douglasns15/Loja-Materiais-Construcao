@@ -5524,3 +5524,23 @@ Levantados pelo Owner durante a importação real na loja **Maria ConstruLar (PR
 **Resposta ao Owner** (pacote entra como 1): o campo "Fator (embalagem)" já divide o custo e multiplica a quantidade; o XML só auto-sugere quando o fornecedor manda `qTrib ≠ qCom`. **Consultar o EAN NÃO traz a quantidade por pacote de forma confiável** (fontes grátis não fornecem; DUN-14 da caixa ≠ EAN da unidade) — cadastro manual, mas agora **"manual 1×"** via `nfePackFactor`.
 
 **NO AR** (migrations 0035+0036; API `e974c672`; web 2ª+3ª levas, smoke OK) **e E2E do Owner ✅ VALIDADO (2026-09-01)**. Commits `e32bc30` (7 melhorias) + `e770691` (layout dos botões) em `main` — push do Owner.
+
+---
+
+## UI.Repaginação índigo — telas restantes (Clientes, Fornecedores, Categorias, Orçamentos, Configurações) + acabamento (Caixa, Contas a Receber, Relatórios) (2026-09-02)
+
+Fecha a onda de identidade **índigo/esmeralda** em TODA a interface. Só apresentação — sem API/migration/core/shared. Padrão: título em gradiente índigo + subtítulo; cartões `border border-gray-200 shadow-md`; inputs com foco `focus:ring-2 focus:ring-indigo-100`; CTA primário gradiente índigo; thead `bg-indigo-50 text-indigo-900`; nome/código clicável `text-indigo-700`; controles de exclusão/status seguem cores semânticas.
+
+| O que foi testado | Método | Resultado |
+|---|---|---|
+| Clientes (`customers/page.tsx` + `CustomerProfile.tsx`): título gradiente, thead índigo, botões/links índigo, foco índigo | `apps/web` `tsc --noEmit` + build | ✅ 0 erros |
+| Fornecedores (`fornecedores/page.tsx` + `SupplierFormModal.tsx`, reusado na Entrada de Estoque) | `tsc` + build | ✅ |
+| Categorias (`categorias/page.tsx` + `CategoryFormModal.tsx`) | `tsc` + build | ✅ |
+| Orçamentos (`orcamentos/page.tsx`): estava no visual antigo → repaginado; código `O-000045`/link índigo; "Gerar venda" green→emerald; modal gradiente | `tsc` + build | ✅ |
+| Configurações (`configuracoes/page.tsx` + `UsersSection.tsx`): estava no visual antigo → repaginado; thead de Usuários índigo; file-input índigo | `tsc` + build | ✅ |
+| Relatórios: 2 theads remanescentes `bg-blue-200` (resíduo do polimento antigo `d96be73`) → `bg-indigo-50` | `tsc` + build | ✅ |
+| Caixa: botões "Abrir/Fechar caixa" `bg-gray-900` → gradiente índigo + foco índigo nos campos | `tsc` + build | ✅ |
+| Contas a Receber: foco índigo na busca e no modal de recebimento (abas segmentadas mantêm `bg-gray-900`) | `tsc` + build | ✅ |
+| Build de produção | `next build` | ✅ todas as rotas compilam |
+
+**NO AR** — 2 commits em `main`: `7f654fb` (Clientes/Fornecedores/Categorias, web Version `637975a9`) + `54300fe` (Orçamentos/Configurações + acabamento de Caixa/Contas/Relatórios, web Version `ae1940ee`); smokes pós-deploy OK (HTML no-store + CSS 200). **E2E do Owner ✅ VALIDADO (2026-09-02) — TODAS as telas conferidas com sucesso.** Push do Owner feito. Com isto, **toda a interface do app está na identidade índigo/esmeralda**.
