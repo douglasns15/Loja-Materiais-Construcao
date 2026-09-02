@@ -23,6 +23,7 @@ export * from './return';
 export * from './delivery';
 export * from './stock';
 export * from './report';
+export * from './alerts';
 export * from './tenant';
 export * from './modules';
 export * from './outbox';

@@ -493,6 +493,15 @@ testável exaustivamente e compartilhada entre as duas apps.
 | `GET /projections` | Projeções "no ritmo atual" (Fatia 8), independentes do filtro: faturamento do mês (run-rate), a receber próx. 30 dias (vencimentos ADR-026) e itens que vão faltar (velocidade típica = mediana dos dias com venda × frequência — robusta a pico único, mas pega quem vende regularmente; StockMovement EXPENSE 30d). |
 | `GET /cash-sessions` | Relatório de caixas fechados (`?from=&to=`). Com `?breakdown=1` cada sessão inclui a quebra da mini-DRE (`cashInflow`, `cashMovementsIn`, `cashMovementsOut`) — usado pela tela do Caixa ("Caixas de hoje") para reimprimir o comprovante de fechamento completo; ausente no fluxo padrão (Relatórios) para não onerar. |
 
+**`/alerts` — Central de pendências (sino, ADR-029)**
+
+Alertas CALCULADOS sob demanda (custo-zero: nada é gravado; a pendência some quando o dado é corrigido). Guarda de auth: `requireAuth` (nasce visível a todos os papéis — o `roles` do catálogo é informativo, ADR-029 §4). Blocos A (cadastro) e B (estoque) sobre `products`; C (operacional/financeiro) sobre caixa/dívida.
+
+| Método · Rota | O que faz |
+|---|---|
+| `GET /alerts` | Contagens das pendências ativas (só `count > 0`), ordenadas por gravidade. **Bloco A/B** = uma varredura agregada de `products` (`COUNT FILTER`, sem `findMany`; ativos/não excluídos): sem custo (`costPrice=0`), custo≥preço (ambos >0), sem preço (`salePrice=0`), sem EAN (nulo/vazio), sem categoria; estoque negativo (`stockQty<0`), abaixo do mínimo (`minStockQty>0 AND 0<=stockQty<=minStockQty`). **Bloco C** = consultas leves decididas por funções puras do `core` (ADR-029 §6): caixa aberto há >18h (`isCashOpenTooLong`), fechamento com diferença nos últimos 30d, dívida (ADR-026) vencida há >30d OU sem recebimento há >30d (`isDebtStale`). Alertas do bloco C trazem `actionHref` (leva à tela) em vez de download. |
+| `GET /alerts/products` | Lista paginada (keyset por `id`, `?kind=&cursor=`) dos produtos de UMA pendência (qualquer `kind` dos blocos A/B), para o download em CSV (montado no cliente). `$queryRaw` com casts `float8` (guarda de CPU do Worker). |
+
 **`/tenant`, `/me`, `/users` — Loja, sessão e usuários**
 
 | Método · Rota | O que faz |

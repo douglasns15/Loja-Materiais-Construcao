@@ -1272,6 +1272,50 @@ export function calcProfit({ totalRevenue, coveredRevenue, coveredCost }: Profit
   return { grossProfit, marginPercent, costCoverage };
 }
 
+// ---- Central de pendências — bloco C (operacional/financeiro, ADR-029 §6) --------------------------
+// Limiares de negócio + a regra de "é alerta?" como funções PURAS (testadas), para o servidor não
+// espalhar a decisão em SQL. As contagens de produto/estoque (bloco A/B) são `COUNT` no banco; aqui,
+// como o volume é pequeno (1 caixa aberto por loja; 1 dívida aberta por cliente), o servidor busca os
+// candidatos e aplica estas regras — mantendo a regra num lugar só e testável.
+
+/** Horas em aberto a partir das quais um caixa vira alerta (fechamento provavelmente esquecido). */
+export const CASH_OPEN_ALERT_HOURS = 18;
+/** Dias que definem uma dívida "parada" (vencida OU sem recebimento) — decisão do Owner 2026-09-02. */
+export const DEBT_STALE_ALERT_DAYS = 30;
+/** Janela (dias) em que um fechamento de caixa com diferença ainda gera o alerta de divergência. */
+export const CASH_DIVERGENCE_WINDOW_DAYS = 30;
+
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+
+/** Um caixa AINDA aberto (`closedAt` nulo) está aberto há tempo demais? Puro (recebe o `now`). */
+export function isCashOpenTooLong(openedAt: Date, now: Date, hours = CASH_OPEN_ALERT_HOURS): boolean {
+  return now.getTime() - openedAt.getTime() >= hours * HOUR_MS;
+}
+
+/** Fatos de uma dívida aberta (ADR-026) para decidir se está "parada". */
+export interface DebtStaleInput {
+  /** Vencimento da dívida (`null` quando nunca foi informado numa venda a prazo). */
+  dueDate: Date | null;
+  /** Abertura da dívida (1ª venda a prazo) — atividade inicial quando não houve recebimento. */
+  openedAt: Date;
+  /** Data do ÚLTIMO recebimento contra a dívida (`null` se ainda não recebeu nada). */
+  lastPaymentAt: Date | null;
+}
+
+/**
+ * Uma dívida aberta está "parada" (decisão do Owner: OS DOIS critérios, com OU): **vencida** há mais
+ * de `days` dias, OU **sem nenhum recebimento** há mais de `days` dias (a atividade conta a partir do
+ * último pagamento ou, na ausência dele, da abertura). Puro (recebe o `now`).
+ */
+export function isDebtStale(d: DebtStaleInput, now: Date, days = DEBT_STALE_ALERT_DAYS): boolean {
+  const cutoff = now.getTime() - days * DAY_MS;
+  const overdue = d.dueDate != null && d.dueDate.getTime() < cutoff;
+  const lastActivity = (d.lastPaymentAt ?? d.openedAt).getTime();
+  const inactive = lastActivity < cutoff;
+  return overdue || inactive;
+}
+
 /**
  * Janela ANTERIOR equivalente a `[from, to]` (Relatórios v2, Fatia 4). Devolve o intervalo do mesmo
  * tamanho imediatamente antes de `from`: "Hoje" (1 dia) → ontem; "7 dias" → os 7 dias anteriores;

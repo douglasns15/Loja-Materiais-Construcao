@@ -12,6 +12,7 @@ import { OutboxSyncProvider } from '@/lib/outboxSync';
 import { CartProvider } from '@/lib/cartStore';
 import { ProfileModal } from './ProfileModal';
 import { QueueChip } from './QueueChip';
+import { AlertsChip } from './AlertsChip';
 import { CartChip } from './CartChip';
 import { OfflineNav } from './OfflineNav';
 
@@ -589,8 +590,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <span className="truncate font-semibold text-gray-800">{currentLabel}</span>
           {/* Status da fila offline (aparece só quando há vendas na fila) — drenagem global. */}
           <QueueChip />
-          {/* Ícone da cesta (ADR-021): mostra a contagem do carrinho de qualquer tela; leva ao PDV. */}
-          <CartChip />
+          {/* Grupo à direita: sino de pendências (ADR-029) + cesta (ADR-021), sempre visíveis. */}
+          <div className="ml-auto flex items-center gap-1">
+            {/* Central de pendências: alertas de cadastro calculados sob demanda. */}
+            <AlertsChip />
+            {/* Ícone da cesta: mostra a contagem do carrinho de qualquer tela; leva ao PDV. */}
+            <CartChip />
+          </div>
         </header>
 
         {/* Aviso de loja desativada pelo Super Usuário (ADR-009): visível no topo de toda tela.
