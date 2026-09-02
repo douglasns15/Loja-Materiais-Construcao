@@ -69,27 +69,33 @@ export default function CategoriesPage() {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <h1 className="mb-6 text-2xl font-bold">Categorias</h1>
+      <h1 className="w-fit bg-gradient-to-r from-indigo-700 to-indigo-500 bg-clip-text text-2xl font-bold text-transparent">
+        Categorias
+      </h1>
+      <p className="mb-5 text-sm text-gray-500">
+        Organize seus produtos em categorias e subcategorias. Toque numa <strong>categoria</strong>{' '}
+        para renomear, mudar o pai ou remover.
+      </p>
 
       {/* Tela online-only (ADR-012 (c)): offline mostra o aviso de rede, não o erro cru. */}
       <OfflineNotice />
 
       <form
         onSubmit={onCreate}
-        className="mb-6 grid grid-cols-1 gap-3 rounded-2xl bg-white p-4 shadow-sm sm:grid-cols-4"
+        className="mb-6 grid grid-cols-1 gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-md sm:grid-cols-4"
       >
         <input
           placeholder="Nome da categoria"
           value={name}
           onChange={(e) => setName(e.target.value)}
           maxLength={80}
-          className="rounded-lg border border-gray-300 px-3 py-2 sm:col-span-2"
+          className="rounded-lg border border-gray-300 px-3 py-2 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 sm:col-span-2"
         />
         <select
           value={parentId}
           onChange={(e) => setParentId(e.target.value)}
           aria-label="Categoria-pai (opcional)"
-          className="rounded-lg border border-gray-300 bg-white px-3 py-2"
+          className="rounded-lg border border-gray-300 bg-white px-3 py-2 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
         >
           <option value="">— principal (sem pai) —</option>
           {options.map((o) => (
@@ -101,7 +107,7 @@ export default function CategoriesPage() {
         <button
           type="submit"
           disabled={saving}
-          className="rounded-lg bg-gray-900 py-2 font-medium text-white hover:bg-gray-800 disabled:opacity-60"
+          className="rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-500 py-2 font-medium text-white shadow-sm hover:from-indigo-700 hover:to-indigo-600 disabled:opacity-60"
         >
           {saving ? 'Salvando…' : 'Adicionar categoria'}
         </button>
@@ -114,16 +120,16 @@ export default function CategoriesPage() {
           placeholder="Buscar categoria…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2"
+          className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
           aria-label="Buscar categoria"
         />
       </div>
 
       {error && online && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
-      <div className="overflow-x-auto rounded-2xl bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-md">
         <table className="w-full text-sm">
-          <thead className="bg-blue-200 text-left text-blue-900">
+          <thead className="bg-indigo-50 text-left text-indigo-900">
             <tr>
               <th className="px-4 py-2">Categoria</th>
             </tr>
@@ -144,12 +150,12 @@ export default function CategoriesPage() {
                 const cat = categories.find((c) => c.id === o.id);
                 const leaf = cat?.name ?? o.label;
                 return (
-                  <tr key={o.id} className="border-t border-gray-100">
+                  <tr key={o.id} className="border-t border-gray-100 hover:bg-gray-50">
                     <td className="px-4 py-2">
                       <button
                         type="button"
                         onClick={() => setEditId(o.id)}
-                        className="text-left font-medium text-blue-700 hover:underline"
+                        className="text-left font-medium text-indigo-700 hover:underline"
                         style={search.trim() ? undefined : { paddingLeft: `${o.depth * 1.25}rem` }}
                       >
                         {o.depth > 0 && !search.trim() && (

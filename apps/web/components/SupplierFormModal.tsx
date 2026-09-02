@@ -24,7 +24,7 @@ type Form = { name: string; cnpj: string; phone: string; email: string; address:
 const EMPTY: Form = { name: '', cnpj: '', phone: '', email: '', address: '', notes: '' };
 
 const inputClass =
-  'mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900';
+  'mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100';
 
 /** Monta o payload sem os opcionais vazios (e-mail vazio reprova na validação de e-mail). */
 function buildPayload(form: Form): Record<string, string> {
@@ -133,7 +133,9 @@ export function SupplierFormModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">{isEdit ? 'Editar fornecedor' : 'Novo fornecedor'}</h2>
+          <h2 className="w-fit bg-gradient-to-r from-indigo-700 to-indigo-500 bg-clip-text text-lg font-semibold text-transparent">
+            {isEdit ? 'Editar fornecedor' : 'Novo fornecedor'}
+          </h2>
           <button
             onClick={onClose}
             className="rounded-lg px-2 py-1 text-sm text-gray-600 hover:bg-gray-100"
@@ -248,7 +250,7 @@ export function SupplierFormModal({
               <button
                 type="submit"
                 disabled={saving || removing}
-                className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+                className="rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-500 px-4 py-2 text-sm font-medium text-white shadow-sm hover:from-indigo-700 hover:to-indigo-600 disabled:opacity-50"
               >
                 {saving ? 'Salvando…' : isEdit ? 'Salvar' : 'Cadastrar'}
               </button>

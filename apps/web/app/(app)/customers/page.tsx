@@ -112,20 +112,26 @@ export default function CustomersPage() {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <h1 className="mb-6 text-2xl font-bold">Clientes</h1>
+      <h1 className="w-fit bg-gradient-to-r from-indigo-700 to-indigo-500 bg-clip-text text-2xl font-bold text-transparent">
+        Clientes
+      </h1>
+      <p className="mb-5 text-sm text-gray-500">
+        Cadastre e consulte seus clientes. Toque no <strong>nome</strong> para ver o perfil,
+        observações e histórico de compras.
+      </p>
 
       {/* Tela online-only (ADR-012 (c)): offline mostra o aviso de rede, não o erro cru. */}
       <OfflineNotice />
 
       <form
         onSubmit={onCreate}
-        className="mb-6 grid grid-cols-1 gap-3 rounded-2xl bg-white p-4 shadow-sm sm:grid-cols-4"
+        className="mb-6 grid grid-cols-1 gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-md sm:grid-cols-4"
       >
         <input
           placeholder="Nome"
           value={form.name}
           onChange={(e) => setForm({ ...form, name: e.target.value })}
-          className="rounded-lg border border-gray-300 px-3 py-2 sm:col-span-2"
+          className="rounded-lg border border-gray-300 px-3 py-2 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 sm:col-span-2"
         />
         <MaskedInput
           placeholder="CPF/CNPJ"
@@ -133,7 +139,7 @@ export default function CustomersPage() {
           onChange={(v) => setForm({ ...form, cpfCnpj: v })}
           format={formatCpfCnpj}
           maxDigits={14}
-          className="rounded-lg border border-gray-300 px-3 py-2"
+          className="rounded-lg border border-gray-300 px-3 py-2 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
         />
         <MaskedInput
           placeholder="Telefone"
@@ -142,14 +148,14 @@ export default function CustomersPage() {
           format={formatPhoneBr}
           maxDigits={11}
           inputMode="tel"
-          className="rounded-lg border border-gray-300 px-3 py-2"
+          className="rounded-lg border border-gray-300 px-3 py-2 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
         />
         <input
           placeholder="E-mail"
           type="email"
           value={form.email}
           onChange={(e) => setForm({ ...form, email: e.target.value })}
-          className="rounded-lg border border-gray-300 px-3 py-2 sm:col-span-2"
+          className="rounded-lg border border-gray-300 px-3 py-2 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 sm:col-span-2"
         />
         <textarea
           placeholder="Observações (opcional)"
@@ -157,12 +163,12 @@ export default function CustomersPage() {
           onChange={(e) => setForm({ ...form, notes: e.target.value })}
           rows={2}
           maxLength={500}
-          className="rounded-lg border border-gray-300 px-3 py-2 sm:col-span-4"
+          className="rounded-lg border border-gray-300 px-3 py-2 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 sm:col-span-4"
         />
         <button
           type="submit"
           disabled={saving}
-          className="rounded-lg bg-gray-900 py-2 font-medium text-white hover:bg-gray-800 disabled:opacity-60 sm:col-span-4"
+          className="rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-500 py-2 font-medium text-white shadow-sm hover:from-indigo-700 hover:to-indigo-600 disabled:opacity-60 sm:col-span-4"
         >
           {saving ? 'Salvando…' : 'Adicionar cliente'}
         </button>
@@ -175,16 +181,16 @@ export default function CustomersPage() {
           placeholder="Buscar cliente (nome, CPF/CNPJ, telefone ou e-mail)…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2"
+          className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
           aria-label="Buscar cliente"
         />
       </div>
 
       {error && online && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
-      <div className="overflow-x-auto rounded-2xl bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-md">
         <table className="w-full text-sm">
-          <thead className="bg-blue-200 text-left text-blue-900">
+          <thead className="bg-indigo-50 text-left text-indigo-900">
             <tr>
               <th className="px-4 py-2">Nome</th>
               <th className="px-4 py-2">CPF/CNPJ</th>
@@ -204,13 +210,13 @@ export default function CustomersPage() {
               </tr>
             ) : (
               customers.map((c) => (
-                <tr key={c.id} className="border-t border-gray-100">
+                <tr key={c.id} className="border-t border-gray-100 hover:bg-gray-50">
                   <td className="px-4 py-2">
                     {/* Clicar no nome abre o perfil (dados + observações + histórico). */}
                     <button
                       type="button"
                       onClick={() => setProfileId(c.id)}
-                      className="font-medium text-blue-700 hover:underline"
+                      className="font-medium text-indigo-700 hover:underline"
                     >
                       {c.name}
                     </button>
