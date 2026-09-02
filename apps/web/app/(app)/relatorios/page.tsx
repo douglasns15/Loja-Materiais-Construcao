@@ -581,7 +581,7 @@ export default function RelatoriosPage() {
           <DailyRevenueChart from={dRange.from ?? null} to={dRange.to ?? null} />
         ) : (
         <table className="w-full text-sm">
-          <thead className="bg-blue-200 text-left text-blue-900">
+          <thead className="bg-indigo-50 text-left text-indigo-900">
             <tr>
               <th className="px-4 py-2">Forma</th>
               <th className="px-4 py-2 text-right">Recebido</th>
@@ -672,7 +672,7 @@ export default function RelatoriosPage() {
           )}
         </div>
         <table className="w-full text-sm">
-          <thead className="bg-blue-200 text-left text-blue-900">
+          <thead className="bg-indigo-50 text-left text-indigo-900">
             <tr>
               <th className="px-4 py-2">Fechado em</th>
               <th className="px-4 py-2 text-right">Abertura</th>

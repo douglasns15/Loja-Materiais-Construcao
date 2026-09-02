@@ -192,7 +192,9 @@ export default function ConfiguracoesPage() {
   if (!isAdmin) {
     return (
       <div className="mx-auto max-w-2xl">
-        <h1 className="mb-2 text-2xl font-bold">Configurações da loja</h1>
+        <h1 className="mb-2 w-fit bg-gradient-to-r from-indigo-700 to-indigo-500 bg-clip-text text-2xl font-bold text-transparent">
+          Configurações da loja
+        </h1>
         {/* Offline (tela online-only, ADR-012 (c)): o `GET /me` falha e o papel não pode ser
             confirmado — mostra o aviso de rede em vez de "acesso restrito", que soaria como
             problema de permissão. Online + não-Admin → o gate de RBAC de verdade (ADR-008). */}
@@ -209,9 +211,14 @@ export default function ConfiguracoesPage() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <h1 className="mb-6 text-2xl font-bold">Configurações da loja</h1>
+      <h1 className="w-fit bg-gradient-to-r from-indigo-700 to-indigo-500 bg-clip-text text-2xl font-bold text-transparent">
+        Configurações da loja
+      </h1>
+      <p className="mb-6 mt-1 text-sm text-gray-500">
+        Personalize a loja: logo, dados cadastrais, taxas da maquininha e quem tem acesso.
+      </p>
 
-      <section className="rounded-2xl bg-white p-6 shadow-sm">
+      <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-md">
         <h2 className="text-lg font-semibold">Logo</h2>
         <p className="mt-1 text-sm text-gray-600">
           Aparece no cabeçalho dos comprovantes e orçamentos. PNG, JPG ou WebP, até{' '}
@@ -234,13 +241,13 @@ export default function ConfiguracoesPage() {
               type="file"
               accept={LOGO_ALLOWED_TYPES.join(',')}
               onChange={onPick}
-              className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-gray-900 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-gray-800"
+              className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-600 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-indigo-700"
             />
             <div className="mt-3 flex gap-2">
               <button
                 onClick={onUpload}
                 disabled={busy || !file}
-                className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+                className="rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-500 px-4 py-2 text-sm font-medium text-white shadow-sm hover:from-indigo-700 hover:to-indigo-600 disabled:opacity-50"
               >
                 {busy ? 'Enviando…' : 'Salvar logo'}
               </button>
@@ -261,7 +268,7 @@ export default function ConfiguracoesPage() {
         {success && <p className="mt-4 text-sm text-green-600">{success}</p>}
       </section>
 
-      <section className="mt-6 rounded-2xl bg-white p-6 shadow-sm">
+      <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-md">
         <h2 className="text-lg font-semibold">Dados da loja</h2>
         <p className="mt-1 text-sm text-gray-600">
           Nome, CNPJ e telefone usados nos comprovantes e orçamentos.
@@ -279,7 +286,7 @@ export default function ConfiguracoesPage() {
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
               maxLength={120}
               required
-              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
             />
           </div>
 
@@ -300,7 +307,7 @@ export default function ConfiguracoesPage() {
                 onBlur={() => setForm((f) => ({ ...f, cnpj: formatCnpj(f.cnpj) }))}
                 maxLength={18}
                 placeholder="Só números (ex.: 11222333000144)"
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
               />
             </div>
             <div>
@@ -319,7 +326,7 @@ export default function ConfiguracoesPage() {
                 onBlur={() => setForm((f) => ({ ...f, phone: formatPhoneBr(f.phone) }))}
                 maxLength={20}
                 placeholder="Só números (ex.: 11987654321)"
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
               />
             </div>
           </div>
@@ -353,7 +360,7 @@ export default function ConfiguracoesPage() {
                     setForm((f) => ({ ...f, cardFeeDebitPercent: e.target.value }))
                   }
                   placeholder="ex.: 1,5"
-                  className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+                  className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
                 />
               </div>
               <div>
@@ -371,7 +378,7 @@ export default function ConfiguracoesPage() {
                     setForm((f) => ({ ...f, cardFeeCreditPercent: e.target.value }))
                   }
                   placeholder="ex.: 3,5"
-                  className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+                  className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
                 />
               </div>
             </div>
@@ -414,7 +421,7 @@ export default function ConfiguracoesPage() {
             <button
               type="submit"
               disabled={savingData || !dataChanged}
-              className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+              className="rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-500 px-4 py-2 text-sm font-medium text-white shadow-sm hover:from-indigo-700 hover:to-indigo-600 disabled:opacity-50"
             >
               {savingData ? 'Salvando…' : 'Salvar dados'}
             </button>

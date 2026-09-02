@@ -128,11 +128,13 @@ export default function OrcamentosPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <h1 className="mb-2 text-2xl font-bold">Orçamentos</h1>
-      <p className="mb-4 text-sm text-gray-600">
+      <h1 className="w-fit bg-gradient-to-r from-indigo-700 to-indigo-500 bg-clip-text text-2xl font-bold text-transparent">
+        Orçamentos
+      </h1>
+      <p className="mb-4 mt-1 text-sm text-gray-500">
         Orçamentos salvos, com código <strong>O-000045</strong>. Busque por código ou cliente, filtre
         por status, reimprima e acompanhe o ciclo de vida. Para criar, use{' '}
-        <Link href="/venda" className="font-medium text-blue-700 hover:underline">
+        <Link href="/venda" className="font-medium text-indigo-700 hover:underline">
           Nova Venda → Salvar orçamento
         </Link>
         .
@@ -141,7 +143,7 @@ export default function OrcamentosPage() {
       <OfflineNotice />
 
       {/* Filtros */}
-      <form onSubmit={buscar} className="mb-4 rounded-2xl bg-white p-3 shadow-sm">
+      <form onSubmit={buscar} className="mb-4 rounded-2xl border border-gray-200 bg-white p-3 shadow-md">
         <div className="flex flex-wrap items-end gap-2">
           <label className="flex flex-col text-xs text-gray-600">
             Buscar por código
@@ -151,7 +153,7 @@ export default function OrcamentosPage() {
               value={codeInput}
               onChange={(e) => setCodeInput(e.target.value)}
               placeholder="Ex.: O-000045 ou 45"
-              className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
+              className="rounded-lg border border-gray-300 px-2 py-1 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
             />
           </label>
           <label className="flex flex-col text-xs text-gray-600">
@@ -161,12 +163,12 @@ export default function OrcamentosPage() {
               value={qInput}
               onChange={(e) => setQInput(e.target.value)}
               placeholder="Nome do cliente"
-              className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
+              className="rounded-lg border border-gray-300 px-2 py-1 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
             />
           </label>
           <button
             type="submit"
-            className="rounded-lg bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800"
+            className="rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-500 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:from-indigo-700 hover:to-indigo-600"
           >
             Buscar
           </button>
@@ -184,7 +186,7 @@ export default function OrcamentosPage() {
             <select
               value={status}
               onChange={(e) => trocarStatus(e.target.value)}
-              className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
+              className="rounded-lg border border-gray-300 px-2 py-1 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
             >
               <option value="">Todos</option>
               <option value="DRAFT">Rascunho</option>
@@ -203,7 +205,7 @@ export default function OrcamentosPage() {
       {loading ? (
         <p className="text-gray-600">Carregando…</p>
       ) : rows.length === 0 ? (
-        <p className="rounded-2xl bg-white p-6 text-center text-gray-600 shadow-sm">
+        <p className="rounded-2xl border border-gray-200 bg-white p-6 text-center text-gray-600 shadow-md">
           Nenhum orçamento encontrado.
         </p>
       ) : (
@@ -212,11 +214,11 @@ export default function OrcamentosPage() {
             <button
               key={r.id}
               onClick={() => setDetailId(r.id)}
-              className="flex w-full items-center justify-between gap-3 rounded-2xl bg-white p-4 text-left shadow-sm hover:bg-gray-50"
+              className="flex w-full items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-white p-4 text-left shadow-md hover:bg-gray-50"
             >
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-mono text-sm font-medium text-gray-800">
+                  <span className="font-mono text-sm font-semibold text-indigo-700">
                     {formatQuoteNumber(r.quoteNumber)}
                   </span>
                   <span
@@ -404,7 +406,9 @@ function QuoteDetailModal({
           <>
             <div className="flex items-start justify-between">
               <div>
-                <h2 className="font-mono text-xl font-bold">{formatQuoteNumber(detail.quoteNumber)}</h2>
+                <h2 className="w-fit bg-gradient-to-r from-indigo-700 to-indigo-500 bg-clip-text font-mono text-xl font-bold text-transparent">
+                  {formatQuoteNumber(detail.quoteNumber)}
+                </h2>
                 <p className="text-xs text-gray-600">
                   {detail.customerName ?? 'Sem cliente'} · {dt(detail.createdAt)}
                   {detail.createdByName ? ` · ${detail.createdByName}` : ''}
@@ -460,7 +464,7 @@ function QuoteDetailModal({
                 <div className="flex flex-wrap gap-2">
                   <button
                     onClick={() => router.push(`/venda?quoteId=${detail.id}`)}
-                    className="rounded-lg bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700"
+                    className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700"
                   >
                     Gerar venda
                   </button>
@@ -482,7 +486,7 @@ function QuoteDetailModal({
                       value={detail.status}
                       disabled={busy}
                       onChange={(e) => patch({ status: e.target.value })}
-                      className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
+                      className="rounded-lg border border-gray-300 px-2 py-1 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
                     >
                       <option value="DRAFT">Rascunho</option>
                       <option value="SENT">Enviado</option>
@@ -496,7 +500,7 @@ function QuoteDetailModal({
                       type="date"
                       value={validUntil}
                       onChange={(e) => setValidUntil(e.target.value)}
-                      className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
+                      className="rounded-lg border border-gray-300 px-2 py-1 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
                     />
                   </label>
                   {/* Nome livre (2.B): só quando não há cliente cadastrado vinculado. */}
@@ -509,7 +513,7 @@ function QuoteDetailModal({
                         onChange={(e) => setCustName(e.target.value)}
                         maxLength={120}
                         placeholder="Opcional"
-                        className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
+                        className="rounded-lg border border-gray-300 px-2 py-1 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
                       />
                     </label>
                   )}
@@ -520,7 +524,7 @@ function QuoteDetailModal({
                       onChange={(e) => setNotes(e.target.value)}
                       rows={2}
                       maxLength={500}
-                      className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
+                      className="rounded-lg border border-gray-300 px-2 py-1 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
                     />
                   </label>
                   <div className="sm:col-span-2">
@@ -533,7 +537,7 @@ function QuoteDetailModal({
                         })
                       }
                       disabled={busy}
-                      className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+                      className="rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-500 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:from-indigo-700 hover:to-indigo-600 disabled:opacity-50"
                     >
                       Salvar alterações
                     </button>
@@ -548,7 +552,7 @@ function QuoteDetailModal({
               <select
                 value={printModel}
                 onChange={(e) => setPrintModel(e.target.value as '80mm' | 'A4')}
-                className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
+                className="rounded-lg border border-gray-300 px-2 py-1 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
               >
                 <option value="80mm">Térmica 80mm</option>
                 <option value="A4">A4</option>

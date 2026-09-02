@@ -228,7 +228,7 @@ export default function ContasAReceberPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Buscar cliente…"
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm sm:max-w-xs"
+          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 sm:max-w-xs"
         />
       </div>
 
@@ -284,7 +284,7 @@ export default function ContasAReceberPage() {
                 value={amount}
                 onChange={setAmount}
                 placeholder="0,00"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
               />
               <button
                 type="button"
@@ -303,7 +303,7 @@ export default function ContasAReceberPage() {
                 id="acct-forma"
                 value={method}
                 onChange={(e) => setMethod(e.target.value as PaymentMethod)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
               >
                 {(Object.keys(PAYMENT_METHOD_LABELS) as PaymentMethod[]).map((m) => (
                   <option key={m} value={m}>

@@ -110,7 +110,7 @@ export function UsersSection({ currentUserId }: { currentUserId: string | null }
   const isOwner = (u: StoreUser) => u.role === 'OWNER';
 
   return (
-    <section className="mt-6 rounded-2xl bg-white p-6 shadow-sm">
+    <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-md">
       <h2 className="text-lg font-semibold">Usuários</h2>
       <p className="mt-1 text-sm text-gray-600">
         Defina quem é <strong>Admin</strong> (acesso total) ou <strong>Usuário</strong>{' '}
@@ -121,7 +121,7 @@ export function UsersSection({ currentUserId }: { currentUserId: string | null }
 
       <div className="mt-4 overflow-hidden rounded-xl border border-gray-200">
         <table className="w-full text-sm">
-          <thead className="bg-blue-200 text-left text-blue-900">
+          <thead className="bg-indigo-50 text-left text-indigo-900">
             <tr>
               <th className="px-4 py-2">Nome</th>
               <th className="px-4 py-2">E-mail</th>
@@ -133,7 +133,7 @@ export function UsersSection({ currentUserId }: { currentUserId: string | null }
             {users.map((u) => {
               const locked = isOwner(u) || u.id === currentUserId || busyId === u.id;
               return (
-                <tr key={u.id} className="border-t border-gray-100">
+                <tr key={u.id} className="border-t border-gray-100 hover:bg-gray-50">
                   <td className="px-4 py-2 font-medium">
                     {u.name}
                     {u.id === currentUserId && (
@@ -153,7 +153,7 @@ export function UsersSection({ currentUserId }: { currentUserId: string | null }
                         onChange={(e) =>
                           patch(u.id, { storeRole: e.target.value as StoreRole })
                         }
-                        className="rounded-lg border border-gray-300 px-2 py-1 text-sm disabled:opacity-50"
+                        className="rounded-lg border border-gray-300 px-2 py-1 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 disabled:opacity-50"
                       >
                         {(['ADMIN', 'USER'] as StoreRole[]).map((r) => (
                           <option key={r} value={r}>
@@ -212,7 +212,7 @@ export function UsersSection({ currentUserId }: { currentUserId: string | null }
               value={inviteEmail}
               onChange={(e) => setInviteEmail(e.target.value)}
               placeholder="pessoa@exemplo.com"
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none"
+              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
             />
           </div>
           <div>
@@ -223,7 +223,7 @@ export function UsersSection({ currentUserId }: { currentUserId: string | null }
               id="invite-role"
               value={inviteRole}
               onChange={(e) => setInviteRole(e.target.value as StoreRole)}
-              className="mt-1 rounded-lg border border-gray-300 px-2 py-2 text-sm focus:border-gray-900 focus:outline-none"
+              className="mt-1 rounded-lg border border-gray-300 px-2 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
             >
               {(['USER', 'ADMIN'] as StoreRole[]).map((r) => (
                 <option key={r} value={r}>
@@ -235,7 +235,7 @@ export function UsersSection({ currentUserId }: { currentUserId: string | null }
           <button
             type="submit"
             disabled={inviting}
-            className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+            className="rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-500 px-4 py-2 text-sm font-medium text-white shadow-sm hover:from-indigo-700 hover:to-indigo-600 disabled:opacity-50"
           >
             {inviting ? 'Enviando…' : 'Convidar'}
           </button>

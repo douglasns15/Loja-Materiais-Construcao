@@ -498,7 +498,7 @@ export default function CaixaPage() {
                 setClosing(v);
                 saveCashDraft('close', { amount: v });
               }}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
             />
             <textarea
               placeholder="Observações (opcional)"
@@ -507,7 +507,7 @@ export default function CaixaPage() {
                 setNotes(e.target.value);
                 saveCashDraft('close', { notes: e.target.value });
               }}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
               rows={2}
             />
 
@@ -553,7 +553,7 @@ export default function CaixaPage() {
             <button
               type="submit"
               disabled={busy}
-              className="w-full rounded-lg bg-gray-900 py-2 font-medium text-white hover:bg-gray-800 disabled:opacity-60"
+              className="w-full rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-500 py-2 font-medium text-white shadow-sm hover:from-indigo-700 hover:to-indigo-600 disabled:opacity-60"
             >
               {busy ? 'Fechando…' : 'Fechar caixa'}
             </button>
@@ -620,12 +620,12 @@ export default function CaixaPage() {
                 saveCashDraft('open', { amount: v });
               }}
               disabled={!online}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 disabled:bg-gray-100"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 disabled:bg-gray-100"
             />
             <button
               type="submit"
               disabled={busy || !online}
-              className="w-full rounded-lg bg-gray-900 py-2 font-medium text-white hover:bg-gray-800 disabled:opacity-60"
+              className="w-full rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-500 py-2 font-medium text-white shadow-sm hover:from-indigo-700 hover:to-indigo-600 disabled:opacity-60"
             >
               {busy ? 'Abrindo…' : !online ? 'Sem conexão para abrir o caixa' : 'Abrir caixa'}
             </button>
