@@ -195,6 +195,36 @@ grava a ficha automaticamente:
   a sincronização só preenchia campo vazio e nunca tocava no nome.)* O campo EAN da edição também tem o
   leitor de câmera (`BarcodeScanButton`), igual ao cadastro novo.
 
+### 7. Casamento por GTIN canônico (GTIN-14) + fallback de SKU no auto-vínculo (✅ NO AR — 2026-09-03)
+
+O auto-vínculo do De-Para (`matchProduct` em `NfeImportModal.tsx`) casava o item da nota com um produto
+do cadastro comparando o EAN por **texto exato** (`onlyDigits(p.ean) === item.ean`) e olhando **só** o
+campo `ean`. Isso deixava dois furos, achados numa importação real (loja Maria ConstruLar):
+
+1. **Larguras diferentes do mesmo código.** A NF-e traz o EAN-13 da unidade (`7896202400440`); o cadastro
+   podia ter a forma de caixa **GTIN-14** (`07896202400440`). Como GTIN-8/UPC-12/EAN-13/GTIN-14 são o
+   MESMO número zero-preenchido a 14, a comparação de texto falhava e o produto não casava.
+2. **Código de barras no SKU.** A causa nº 1 histórica: o barcode fora cadastrado no `sku` com `ean` vazio
+   → o matcher nunca casava por EAN.
+
+**Decisão.** Comparar pela **chave canônica GTIN-14**: novo helper puro `gtinKey(raw)` em
+`packages/shared/src/catalog.ts` devolve os dígitos de um GTIN válido **zero-preenchidos até 14** (forma
+que a GS1 usa para comparar GTINs — *lossless*). O matcher passou a casar `gtinKey(item.ean)` contra
+`gtinKey(p.ean)` **OU** `gtinKey(p.sku)` (SKU como fallback). Só um GTIN estruturalmente válido vira
+chave dos dois lados, então é **igualdade forte**, não a busca frouxa de balcão.
+
+**Por que NÃO "cortar o zero à esquerda":** um EAN-13 pode legitimamente começar com 0 (todo UPC-A de 12
+dígitos vira EAN-13 com um 0 na frente); cortar corromperia o código. Zero-padding a 14 é a única
+normalização segura. O servidor NÃO mudou: o backfill de `ean` (`nfe.ts`) já é teste de vazio, e com o
+matcher casando os produtos com barcode-no-SKU o campo `ean` deles se preenche na 1ª nota que casar.
+
+**Limpeza de dados (única, 2026-09-03).** Além do fix de código, os produtos legados com `ean` vazio +
+barcode válido no `sku` tiveram o código copiado para `ean` (script de leitura + `UPDATE` em transação,
+guarda `ean IS NULL`; loja Maria ConstruLar: 53 produtos, 0 colisões). Isso já vale sem depender do
+deploy. Sem migração e sem mudança de contrato de API (regra 7 não se aplica). Gates: shared **vitest
+11/11** (novos testes de `gtinKey`), tsc web+shared 0. NO AR: web Version `6c875ae0`. Evidências em
+`docs/testes/registro-de-testes.md` → "Estoque.ImportacaoNFe — casamento por GTIN-14".
+
 ## Consequências
 
 - **Positivas:** cadastro mais rápido; cobertura crescente e custo-zero (cache global + NF-e); nenhum

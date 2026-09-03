@@ -5568,3 +5568,25 @@ Sino no topo (ao lado da cesta) que reúne pendências **calculadas sob demanda*
 **Refino pós-E2E** (feedback do 1º teste): (1) badge por nº de alertas; (2) pop-up "Ver"; (3) `/alerts/detail` com as datas do bloco C.
 
 **NO AR** — sem migration. API Versions `58c7c4d9`→`b0240d76`; web em 2 deploys (smokes pós-deploy OK: `/alerts` e `/alerts/detail` 401 sem token; health 200; HTML no-store + CSS 200). Commits `9ee5c91` (5 fatias) + `0ff3c73` (refino) em `main` — push do Owner. **E2E do Owner ✅ VALIDADO (2026-09-02) — "tudo validado com sucesso".** Docs: [ADR-029](../adr/ADR-029-central-de-pendencias-computada.md) + [plano-central-de-alertas.md](../plano-central-de-alertas.md) + doc técnica §8.2.
+
+---
+
+## Estoque.ImportacaoNFe — casamento por GTIN-14 + limpeza de EANs (ADR-025 §7) (2026-09-03)
+
+Levantado pelo Owner após uma importação real na loja **Maria ConstruLar (PRD)**: (1) produtos que casaram por link atualizaram o EAN quando o cadastro estava sem código? (2) um "Suporte (Cantoneira)" **tinha** EAN cadastrado mas **não** lincou. Auditoria dos dados reais (só leitura, via `DIRECT_URL`) + correção de código + limpeza de dados.
+
+**Diagnóstico (dados reais).** O auto-matcher (`matchProduct`) comparava EAN por **texto exato** e olhava só `p.ean`. Dois furos: EAN-13 da nota (`7896202400440`) ≠ forma de caixa GTIN-14 do cadastro (`07896202400440`); e barcode cadastrado no **SKU** com `ean` vazio. Varredura dos 497 produtos: **53** com barcode válido no SKU + `ean` vazio (não casariam por EAN); 6 com EAN de largura ≠13; 0 EAN inválido.
+
+| O que foi testado | Método | Resultado |
+|---|---|---|
+| `gtinKey(raw)` — zero-padding até 14 (GTIN-8/UPC-12/EAN-13/GTIN-14), zero à esquerda REAL preservado, caso `7896202400440` vs `07896202400440` | Vitest (`packages/shared/src/catalog.test.ts`, +3 casos) | ✅ shared 11/11 |
+| `matchProduct` casa por `gtinKey(item.ean)` contra `gtinKey(p.ean)` **OU** `gtinKey(p.sku)` (fallback) | `apps/web` `tsc --noEmit` | ✅ 0 erros |
+| Backfill do servidor inalterado (teste de vazio; barcode-no-SKU se auto-preenche na 1ª nota que casar) | leitura (`nfe.ts:173`) | ✅ sem mudança de contrato |
+| Backfill na última nota real: dos itens que lincaram, todos com GTIN na nota ficaram com EAN; o único sem EAN ("Luva LL 3/4") veio "SEM GTIN" na nota (nada a gravar) | auditoria da nota 3556305 | ✅ comportamento esperado |
+| Limpeza única: `UPDATE` em transação (guarda `ean IS NULL`) copiando barcode do SKU → `ean` | script (leitura+escrita) | ✅ **53 produtos, 0 colisões** (comEAN 87→140; grupo "barcode-no-SKU" → 0) |
+| Verificação dos 6 EANs de largura ≠13 (cache do catálogo + Cosmos + busca web) | consulta | ✅ todos apontam para o produto certo |
+| tsc shared+web | `tsc --noEmit` | ✅ 0 erros |
+
+**Os 6 de largura ≠13 (auditados, sem ação):** *Caps Soldável* e *Fita Veda Rosca* confirmados pela **Cosmos** (cache); *Lápis Carpinteiro* = Irwin 66305SL (busca web, UPC-A); *Broca 4,0mm*, *Luva 3/4* e *Suporte 20cm* são **GTIN-14 (código da caixa)** — e o Owner confirmou que **Broca e Suporte não têm código de barras na unidade, só na embalagem**, então o GTIN-14 é o código correto e único. A *Luva 3/4* mantém a caixa no `ean` (`17897801302194`) e a unidade no `sku` (`7897801302197`) — o matcher novo cobre os dois; deixar como está é o ideal.
+
+**NO AR** — sem migration, sem mudança de contrato de API (regra 7 não se aplica). Fix de código: commit `8b83cda` em `main` (push do Owner); web Version `6c875ae0` (smoke pós-deploy OK). Limpeza de dados aplicada em produção 2026-09-03 (já vale, independe do deploy). Docs: [ADR-025 §7](../adr/ADR-025-catalogo-global-ean.md).
