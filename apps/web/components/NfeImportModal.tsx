@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from 'react';
 import {
   formatCnpj,
+  gtinKey,
   onlyDigits,
   unitTypeLabels,
   type NFeDoc,
@@ -87,8 +88,15 @@ type EntryResponse = {
 
 /**
  * Casa o item da nota com um produto do cadastro, para PRÉ-VINCULAR e pré-marcar a linha:
- *  1º por EAN (confiável — GTIN é chave universal do produto);
+ *  1º por GTIN (confiável — código de barras é chave universal do produto);
  *  2º por NOME idêntico (normalizado: sem acento/caixa/espaços nas pontas).
+ *
+ * O casamento por GTIN compara pela CHAVE CANÔNICA (`gtinKey`, zero-padding até 14): assim o EAN-13
+ * da nota casa com o cadastro mesmo que este esteja na forma de caixa GTIN-14 (o "07896202400440"
+ * vs "7896202400440" que não lincava por comparação de texto exata). E olha tanto o `ean` QUANTO o
+ * `sku` do produto — a causa nº 1 de "não linca por EAN" é o código de barras ter sido cadastrado no
+ * SKU (o servidor faz o backfill p/ o campo `ean` na 1ª importação que casar). Só um GTIN
+ * ESTRUTURALMENTE válido vira chave dos dois lados, então isto é igualdade forte, não busca frouxa.
  *
  * Aqui é AUTO-vínculo (o operador confirma sem escolher), então o casamento por nome tem de ser
  * ESTRITO — igualdade exata, não a busca frouxa de balcão (`productMatchesQuery`). A busca frouxa
@@ -98,9 +106,12 @@ type EntryResponse = {
  * (aí a busca frouxa é ok — é humano decidindo).
  */
 function matchProduct(item: NFeItem, products: NfeProduct[]): string {
-  if (item.ean) {
-    const byEan = products.find((p) => p.ean && onlyDigits(p.ean) === item.ean);
-    if (byEan) return byEan.id;
+  const itemKey = item.ean ? gtinKey(item.ean) : null;
+  if (itemKey) {
+    const byGtin = products.find(
+      (p) => gtinKey(p.ean ?? '') === itemKey || gtinKey(p.sku) === itemKey,
+    );
+    if (byGtin) return byGtin.id;
   }
   if (item.name) {
     const target = normalizeSearchText(item.name);

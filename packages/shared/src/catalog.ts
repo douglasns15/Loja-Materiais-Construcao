@@ -50,6 +50,24 @@ export function normalizeGtin(raw: string): string | null {
 }
 
 /**
+ * Chave CANÔNICA de um GTIN para COMPARAÇÃO/casamento: os dígitos de um GTIN válido preenchidos com
+ * zeros à ESQUERDA até 14 (forma GTIN-14). GTIN-8/UPC-12/EAN-13/GTIN-14 são o MESMO número zero-
+ * preenchido a 14, então padronizar a 14 unifica as diferentes larguras do MESMO item numa única
+ * string comparável (ex.: EAN-13 "7896202400440" e a forma de caixa "07896202400440" viram a mesma
+ * chave). Devolve `null` quando não é um GTIN válido.
+ *
+ * IMPORTANTE: NUNCA "remove" zeros à esquerda — só COMPLETA até 14. Um EAN-13 pode legitimamente
+ * começar com 0 (todo UPC-A de 12 dígitos vira EAN-13 com um 0 na frente); cortar o zero corromperia
+ * o código. Zero-padding é lossless e é a forma que a GS1 usa para comparar GTINs. Use esta chave só
+ * para IGUALDADE de códigos; para GRAVAR no cadastro/catálogo continue usando `normalizeGtin` (mantém
+ * a largura de origem, legível para humanos).
+ */
+export function gtinKey(raw: string): string | null {
+  const digits = onlyDigits(raw);
+  return isValidGtin(digits) ? digits.padStart(14, '0') : null;
+}
+
+/**
  * Normaliza um NCM para 8 dígitos (a NF-e às vezes traz com pontos: "2523.29.10"). Devolve `null`
  * se, após limpar, não sobrarem exatamente 8 dígitos — evita gravar NCM malformado.
  */
