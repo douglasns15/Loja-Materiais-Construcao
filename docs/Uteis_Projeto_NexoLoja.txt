@@ -46,6 +46,20 @@ http://localhost:3000/
 
 <> Tela de permissões
 
+<> No comprar novamente, quando adiciono os itens no PDV, se for item casado, tipo parafuso+bucha, ele está lançando eles separados e não juntos. Se foram vendidos casados, tem que adicionar ao PDV casados. 
+
+<> Testar adição de divida, a uma já existente, confirmar se o valor inserido no PDV como pendente, no caso do cliente pagar uma parte no ato, será inserida na divida e não o inverso, cenário Edson.
+
+<> Criar possibilidade de destacar tela;
+
+<> Em Entregas, o contador está mostrando errado na capa, mostra que tem a retirar, sendo que foi 1 retirado
+
+<> Em Entregas, quando tiver mais de um produto para retirar, hj temos que selecionar a quantidade e clicar em Retirar ao lado e fazer isso um a um, tem q ter uma possibilidade de diminuir os itens produto por produto e clicar uma única vez para fazer a retira... para tirar 100% do que ainda falta já temos o botão "Retirar tudo que falta".
+
+<> Comprovante de fechamento de caixa, pelo app não aparece a opção de imprimir o comprovante completo.. e verificar pelo pc se depois de sair da tela e voltar se tmbm não some
+
+<> Pelo Cel, a tela de notificações fica ruim de rolar, quando vc tenta rolar a página, mtas vezes rola a página debaixo
+
 <> 
 
 ## Subir servidor
