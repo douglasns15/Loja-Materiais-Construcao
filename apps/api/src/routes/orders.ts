@@ -6,6 +6,7 @@ import {
   availableQty,
   calcSaleItemTotal,
   calcSaleTotals,
+  closedSaleStep,
   closedStockMeters,
   creditSaleBalances,
   hasAltUnit,
@@ -415,15 +416,18 @@ orders.post('/', requireActiveTenant, async (c) => {
       let baseQty: number;
       let soldUnit: (typeof products)[number]['unit'];
       if (isClosedPrimary(altCfg)) {
-        // ADR-017: unidade fechada como principal. `saleMode` BASE = barra/rolo INTEIRO (baixa
-        // `qtd × tamanho` metros); ALT = por metro (baixa `qtd` metros). O ledger é em metros e a
-        // unidade vendida no comprovante INVERTE (barra ⇒ `unit`; metro ⇒ `altUnit`).
+        // ADR-017/ADR-030: unidade fechada como principal. `saleMode` BASE = fechado INTEIRO
+        // (baixa `qtd × tamanho` na régua fina); ALT = corte avulso (baixa `qtd` na régua fina).
+        // Barra/rolo cortam por metro (passo 0,5); pacote abre em unidade inteira (passo 1). O
+        // ledger é na régua fina e a unidade vendida no comprovante INVERTE (fechado ⇒ `unit`;
+        // avulso ⇒ `altUnit`).
         const mode = item.saleMode === 'ALT' ? 'METER' : 'WHOLE';
-        if (mode === 'METER' && !isOffline && !isValidMeterStep(item.quantity)) {
-          return c.json(
-            { ok: false, error: `A venda por metro de "${p.name}" deve ser em múltiplos de 0,5 m.` },
-            400,
-          );
+        if (mode === 'METER' && !isOffline && !isValidMeterStep(item.quantity, closedSaleStep(p.unit))) {
+          const msg =
+            p.unit === 'PACK'
+              ? `A venda avulsa de "${p.name}" deve ser em unidades inteiras.`
+              : `A venda por metro de "${p.name}" deve ser em múltiplos de 0,5 m.`;
+          return c.json({ ok: false, error: msg }, 400);
         }
         baseQty = closedStockMeters(altCfg, mode, item.quantity);
         soldUnit = mode === 'WHOLE' ? p.unit : (p.altUnit ?? p.unit);

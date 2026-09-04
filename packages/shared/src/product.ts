@@ -17,6 +17,7 @@ export const unitTypeSchema = z.enum([
   'BAG',
   'ROLL',
   'BARRA',
+  'PACK',
 ]);
 export type UnitType = z.infer<typeof unitTypeSchema>;
 
@@ -33,7 +34,41 @@ export const unitTypeLabels: Record<UnitType, string> = {
   BAG: 'Saco (sc)',
   ROLL: 'Rolo',
   BARRA: 'Barra',
+  PACK: 'Pacote',
 };
+
+/**
+ * Vocabulário PT-BR de uma unidade FECHADA como principal (ADR-017/ADR-030), para os rótulos
+ * das telas concordarem em gênero e na régua fina certa — sem espalhar `unit === 'ROLL'` por
+ * toda parte. `barra`/`pacote` são femininos/masculinos e a subdivisão fina muda: barra/rolo
+ * são cortados por **metro** (m), pacote é aberto em **unidade** avulsa (un).
+ *
+ * - `article`  → "da barra" | "do rolo" | "do pacote" (para "Preço {article}").
+ * - `noun`     → "barra" | "rolo" | "pacote" (singular, minúsculo; some com "s" no plural).
+ * - `wholeAdj` → "inteira" | "inteiro" (concordância de "{noun} {wholeAdj}").
+ * - `fine*`    → a régua fina: "metro"/"metros"/"m" para barra/rolo; "unidade"/"unidades"/"un"
+ *               para pacote. É o que o estoque conta e o corte avulso vende.
+ *
+ * Fallback (unidade não fechada): trata como pacote/unidade — nunca é usado nesse caminho, mas
+ * mantém a função total.
+ */
+export function closedUnitTerms(unit: UnitType | string): {
+  article: string;
+  noun: string;
+  wholeAdj: string;
+  fineNoun: string;
+  fineNounPlural: string;
+  fineAbbrev: string;
+} {
+  if (unit === 'BARRA') {
+    return { article: 'da barra', noun: 'barra', wholeAdj: 'inteira', fineNoun: 'metro', fineNounPlural: 'metros', fineAbbrev: 'm' };
+  }
+  if (unit === 'ROLL') {
+    return { article: 'do rolo', noun: 'rolo', wholeAdj: 'inteiro', fineNoun: 'metro', fineNounPlural: 'metros', fineAbbrev: 'm' };
+  }
+  // PACK (e fallback): a régua fina é a unidade avulsa, contada em inteiros.
+  return { article: 'do pacote', noun: 'pacote', wholeAdj: 'inteiro', fineNoun: 'unidade', fineNounPlural: 'unidades', fineAbbrev: 'un' };
+}
 
 /// Payload para criar um produto. `tenantId` NÃO entra aqui — vem do contexto
 /// (header temporário na Fase 1; claim do JWT na Fase 2).

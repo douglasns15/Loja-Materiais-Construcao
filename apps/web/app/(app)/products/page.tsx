@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { createProductSchema, onlyDigits, unitTypeLabels, type UnitType } from '@nexoloja/shared';
-import { productMatchesQuery } from '@nexoloja/core';
+import { closedUnitTerms, createProductSchema, onlyDigits, unitTypeLabels, type UnitType } from '@nexoloja/shared';
+import { CLOSED_PRIMARY_UNITS, closedFineUnit, productMatchesQuery } from '@nexoloja/core';
 import { apiGet, apiPatch, apiPost } from '@/lib/api';
 import { useOnline } from '@/lib/useOnline';
 import { OfflineNotice } from '@/components/OfflineNotice';
@@ -277,14 +277,15 @@ export default function ProductsPage() {
     document.getElementById(`prod-row-${highlightId}`)?.scrollIntoView({ block: 'center' });
   }, [highlightId, products]);
 
-  // ADR-017: unidade fechada (barra/rolo) como principal — muda a apresentação do cadastro
-  // (tamanho + preço da barra + preço por metro opcional) e a conversão da entrada em barras.
-  const isClosedUnit = form.unit === 'BARRA' || form.unit === 'ROLL';
-  // Artigo correto por unidade fechada (evita "Preço da Rolo"): rolo é masculino, barra feminino.
-  const unitArticle = form.unit === 'ROLL' ? 'do rolo' : 'da barra';
-  // Substantivo da unidade fechada (singular/minúsculo) p/ rótulos que contam quantidade:
-  // "rolo"/"barra" → plural com "s" ("Estoque inicial (rolos)"). Evita "barra" fixo no Rolo.
-  const unitNoun = form.unit === 'ROLL' ? 'rolo' : 'barra';
+  // ADR-017/ADR-030: unidade fechada (barra/rolo/pacote) como principal — muda a apresentação do
+  // cadastro (tamanho + preço do fechado + preço avulso opcional) e a conversão da entrada em
+  // unidades fechadas. Barra/rolo cortam por metro; pacote abre em unidade avulsa.
+  const isClosedUnit = (CLOSED_PRIMARY_UNITS as readonly string[]).includes(form.unit);
+  // Vocabulário concordado da unidade fechada (artigo/substantivo/régua fina), centralizado no
+  // shared p/ não espalhar `unit === 'ROLL'`. Evita "Preço da Rolo" e "estoque em metros" no pacote.
+  const terms = closedUnitTerms(form.unit);
+  const unitArticle = terms.article; // "da barra" | "do rolo" | "do pacote"
+  const unitNoun = terms.noun; // "barra" | "rolo" | "pacote"
 
   async function onCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -316,17 +317,18 @@ export default function ProductsPage() {
       weightKg,
       minStockQty: form.minStockQty ? Number(form.minStockQty) : undefined,
       // Se preenchido, a API gera a Entrada de estoque atomicamente (ADR-001); vazio = nasce em 0.
-      // ADR-017: p/ unidade fechada (barra/rolo) o estoque inicial é digitado em BARRAS e vira
-      // metros (× tamanho), pois o ledger é em metros.
+      // ADR-017/ADR-030: p/ unidade fechada (barra/rolo/pacote) o estoque inicial é digitado em
+      // unidades FECHADAS e vira régua fina (× tamanho) — metros p/ barra/rolo, unidades p/ pacote.
       initialStock: form.initialStock
         ? isClosedUnit && Number(form.conversionFactor) > 0
           ? Number(form.initialStock) * Number(form.conversionFactor)
           : Number(form.initialStock)
         : undefined,
       // Unidade alternativa (EF-3): só envia se preenchido; os 3 juntos habilitam o modo no PDV.
-      // ADR-017: na unidade fechada, altUnit é fixo em METER (a régua fina) e o preço por metro
-      // (opcional) mora em altSalePrice; conversionFactor é o tamanho da barra em metros.
-      altUnit: isClosedUnit ? 'METER' : form.altUnit || undefined,
+      // ADR-017/ADR-030: na unidade fechada, altUnit é fixo na régua fina (METER p/ barra/rolo,
+      // UNIT p/ pacote) e o preço avulso (opcional) mora em altSalePrice; conversionFactor é o
+      // tamanho da unidade fechada na régua fina.
+      altUnit: isClosedUnit ? closedFineUnit(form.unit) : form.altUnit || undefined,
       conversionFactor: form.conversionFactor ? Number(form.conversionFactor) : undefined,
       altSalePrice: form.altSalePrice ? Number(form.altSalePrice) : undefined,
       // Par (ADR-015): só vale com os dois preenchidos; sem produto agregado o preço é ignorado.
@@ -706,7 +708,7 @@ export default function ProductsPage() {
             onChange={(e) => setForm({ ...form, initialStock: e.target.value })}
             title={
               isClosedUnit
-                ? 'Quantas barras/rolos inteiros entram no cadastro. Convertido para metros pelo tamanho (ex.: 10 barras × 6 m = 60 m).'
+                ? `Quantos ${unitNoun}s inteiros entram no cadastro. Convertido para ${terms.fineNounPlural} pelo tamanho (ex.: 10 ${unitNoun}s × ${terms.noun === 'pacote' ? '6 un = 60 un' : '6 m = 60 m'}).`
                 : "Se preenchido, gera uma Entrada de estoque no cadastro (aparece no Estoque como 'Estoque inicial'). Deixe vazio para o produto nascer com 0."
             }
             className="w-full rounded-lg border border-gray-300 px-3 py-2"
@@ -729,40 +731,37 @@ export default function ProductsPage() {
           />
         </Field>
         </section>
-        {/* ADR-017: barra/rolo como principal — tamanho da barra + preço por metro (opcional).
+        {/* ADR-017/ADR-030: barra/rolo/pacote como principal — tamanho + preço avulso (opcional).
             Fica VISÍVEL (não nas avançadas): para unidade fechada o tamanho é essencial. */}
         {isClosedUnit && (
           <section className="border-t border-gray-200 p-4">
           <fieldset className="rounded-xl border border-dashed border-indigo-300 bg-indigo-50/40 p-3">
             <legend className="px-1 text-xs font-medium text-indigo-700">
-              {unitTypeLabels[form.unit]} — tamanho e venda por metro
+              {unitTypeLabels[form.unit]} — tamanho e venda avulsa por {terms.fineNoun}
             </legend>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <input
-                placeholder={`Tamanho: 1 ${unitTypeLabels[form.unit]} = ? metros`}
+                placeholder={`Tamanho: 1 ${unitTypeLabels[form.unit]} = ? ${terms.fineNounPlural}`}
                 type="number"
                 step="any"
                 min="0"
                 value={form.conversionFactor}
                 onChange={(e) => setForm({ ...form, conversionFactor: e.target.value })}
-                title="Comprimento de 1 barra/rolo em metros (ex.: barra de 6 m → 6). O estoque é contado em metros."
+                title={`Quantos ${terms.fineNounPlural} há em 1 ${unitNoun} (ex.: ${unitNoun} de ${terms.noun === 'pacote' ? '6 unidades → 6' : '6 m → 6'}). O estoque é contado em ${terms.fineNounPlural}.`}
                 className="rounded-lg border border-gray-300 px-3 py-2"
               />
               <MoneyInput
-                placeholder="Preço por metro (opcional)"
+                placeholder={`Preço por ${terms.fineNoun} (opcional)`}
                 value={form.altSalePrice}
                 onChange={(v) => setForm({ ...form, altSalePrice: v })}
-                title="Preço do corte avulso por metro. Deixe vazio para vender só a barra/rolo inteiro."
+                title={`Preço da venda avulsa por ${terms.fineNoun}. Deixe vazio para vender só o ${unitNoun} inteiro.`}
                 className="rounded-lg border border-gray-300 px-3 py-2"
               />
             </div>
             <p className="mt-2 text-xs text-gray-600">
-              Custo e preço acima são{' '}
-              <strong>
-                {unitArticle} {form.unit === 'ROLL' ? 'inteiro' : 'inteira'}
-              </strong>
-              . O estoque é contado em metros e mostrado como {unitNoun}s + sobra. Preço por metro
-              vazio ⇒ só vende inteiro.
+              Custo e preço acima são <strong>{unitArticle} {terms.wholeAdj}</strong>. O estoque é
+              contado em {terms.fineNounPlural} e mostrado como {unitNoun}s + sobra. Preço por{' '}
+              {terms.fineNoun} vazio ⇒ só vende inteiro.
             </p>
           </fieldset>
           </section>

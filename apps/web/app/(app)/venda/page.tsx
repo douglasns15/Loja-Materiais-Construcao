@@ -7,6 +7,7 @@ import {
   buildSaleMutation,
   createSaleSchema,
   formatOrderNumber,
+  closedUnitTerms,
   formatQuoteNumber,
   paymentMethodLabel,
   unitTypeLabels,
@@ -20,6 +21,8 @@ import {
 import {
   calcMarginPercent,
   calcSaleTotals,
+  closedFineUnit,
+  closedSaleStep,
   closedStockMeters,
   hasAltUnit,
   hasPair,
@@ -1020,7 +1023,8 @@ export default function VendaPage() {
       };
       const barLen = Number(p.conversionFactor);
       const closedMode = mode === 'ALT' && sellsByMeter(ccfg) ? 'METER' : 'WHOLE';
-      if (closedMode === 'METER' && !isValidMeterStep(quantity)) meterInvalid = true;
+      // Corte avulso: barra/rolo em múltiplos de 0,5 m; pacote em unidade inteira (passo 1).
+      if (closedMode === 'METER' && !isValidMeterStep(quantity, closedSaleStep(p.unit))) meterInvalid = true;
       const r = resolveClosedSale(ccfg, closedMode);
       unitPrice = r.unitPrice;
       factorToBase = r.metersPerUnit; // barra = tamanho; metro = 1
@@ -1056,7 +1060,9 @@ export default function VendaPage() {
       stockQty: Number(p.stockQty),
       saleMode: effMode,
       unitType,
-      baseUnitType: closed ? ('METER' as UnitType) : p.unit,
+      // Régua fina da linha: barra/rolo ⇒ METER (passo 0,5); pacote ⇒ UNIT (passo 1). É o que
+      // distingue o corte por metro do corte por unidade avulsa no stepper e na validação.
+      baseUnitType: closed ? (closedFineUnit(p.unit) as UnitType) : p.unit,
       conversionFactor: factorToBase,
       closed,
       surchargeDebit,
@@ -1077,7 +1083,11 @@ export default function VendaPage() {
     }
     const { line, factorToBase, meterInvalid } = buildCartLine(p, mode, q);
     if (meterInvalid) {
-      setError('A venda por metro deve ser em múltiplos de 0,5 m (mín. 0,5 m).');
+      setError(
+        p.unit === 'PACK'
+          ? 'A venda avulsa deve ser em unidades inteiras (1, 2, 3…).'
+          : 'A venda por metro deve ser em múltiplos de 0,5 m (mín. 0,5 m).',
+      );
       return;
     }
     const key = line.key;
@@ -1233,8 +1243,11 @@ export default function VendaPage() {
     setError(null);
   }
 
-  /** Linha vendida por metro (ADR-017): quantidade em múltiplos de 0,5 m. */
+  /** Linha vendida por metro (ADR-017): quantidade em múltiplos de 0,5 m (barra/rolo). */
   const isMeterLine = (c: CartItem) => c.saleMode === 'ALT' && c.baseUnitType === 'METER';
+  /** Linha vendida por unidade avulsa de um pacote (ADR-030): quantidade inteira (passo 1). */
+  const isPackUnitLine = (c: CartItem) =>
+    c.closed && c.saleMode === 'ALT' && c.baseUnitType === 'UNIT';
 
   /**
    * Edita a quantidade de uma linha JÁ no carrinho (− / + ou digitação direta), reusando a mesma
@@ -1252,6 +1265,10 @@ export default function VendaPage() {
     }
     if (isMeterLine(item) && !isValidMeterStep(nextQty)) {
       setError('A venda por metro deve ser em múltiplos de 0,5 m (mín. 0,5 m).');
+      return;
+    }
+    if (isPackUnitLine(item) && !isValidMeterStep(nextQty, 1)) {
+      setError('A venda avulsa deve ser em unidades inteiras (1, 2, 3…).');
       return;
     }
     if (item.pair) {
@@ -2137,8 +2154,8 @@ export default function VendaPage() {
             filteredProducts.map((p) => {
               const stock = Number(p.stockQty);
               const out = !(stock > 0);
-              // ADR-017: unidade fechada (barra/rolo) como principal — botões próprios (barra
-              // inteira × por metro) e estoque exibido em barras + sobra em metros.
+              // ADR-017/ADR-030: unidade fechada (barra/rolo/pacote) como principal — botões
+              // próprios (fechado inteiro × corte avulso) e estoque exibido em fechados + sobra.
               const closedP = isClosedPrimary({
                 unit: p.unit,
                 conversionFactor: p.conversionFactor != null ? Number(p.conversionFactor) : null,
@@ -2152,6 +2169,7 @@ export default function VendaPage() {
                   altSalePrice: p.altSalePrice != null ? Number(p.altSalePrice) : null,
                 });
                 const unitName = unitShort(p.unit);
+                const fine = closedUnitTerms(p.unit); // régua fina: m (barra/rolo) | un (pacote)
                 return (
                   <li key={p.id} className="px-3 py-2">
                     <div className="flex items-center justify-between gap-3">
@@ -2169,7 +2187,7 @@ export default function VendaPage() {
                       <span className={`shrink-0 text-xs ${out ? 'text-red-500' : 'text-gray-500'}`}>
                         {out
                           ? 'sem estoque'
-                          : `est. ${whole} ${unitName.toLowerCase()}${remainderMeters > 0 ? ` + ${remainderMeters} m` : ''}`}
+                          : `est. ${whole} ${unitName.toLowerCase()}${remainderMeters > 0 ? ` + ${remainderMeters} ${fine.fineAbbrev}` : ''}`}
                       </span>
                     </div>
                     <div className="mt-2 flex flex-wrap gap-2">
@@ -2177,20 +2195,24 @@ export default function VendaPage() {
                         type="button"
                         onClick={() => addToCart(p.id, 'BASE')}
                         disabled={out}
-                        title={`1 ${unitName} = ${barLen} m`}
+                        title={`1 ${unitName} = ${barLen} ${fine.fineAbbrev}`}
                         className="rounded-lg border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        + {unitName} ({barLen} m) · {BRL(p.salePrice)}
+                        + {unitName} ({barLen} {fine.fineAbbrev}) · {BRL(p.salePrice)}
                       </button>
                       {canMeter && (
                         <button
                           type="button"
                           onClick={() => addToCart(p.id, 'ALT')}
                           disabled={out}
-                          title="Venda por metro — digite a metragem em múltiplos de 0,5 m no campo Qtd"
+                          title={
+                            p.unit === 'PACK'
+                              ? 'Venda avulsa — digite a quantidade de unidades no campo Qtd'
+                              : 'Venda por metro — digite a metragem em múltiplos de 0,5 m no campo Qtd'
+                          }
                           className="rounded-lg border border-indigo-300 bg-indigo-50 px-2 py-1 text-xs text-indigo-700 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                          + por metro · {BRL(p.altSalePrice as string)}/m
+                          + por {fine.fineNoun} · {BRL(p.altSalePrice as string)}/{fine.fineAbbrev}
                         </button>
                       )}
                     </div>
@@ -2405,9 +2427,19 @@ export default function VendaPage() {
                 </div>
 
                 {/* Selos por item. */}
-                {i.saleMode === 'ALT' && !i.pair && (
+                {/* EF-3: linha ALT de produto comum = embalagem FECHADA (rolo de fio). Para a
+                    unidade fechada como principal (ADR-017/ADR-030), a linha ALT é o oposto — o
+                    CORTE avulso (metro da barra/rolo, unidade do pacote) —, então o selo muda. */}
+                {i.saleMode === 'ALT' && !i.pair && !i.closed && (
                   <span className="mt-0.5 block text-xs text-gray-500">
                     embalagem fechada · ≈ {i.quantity * i.conversionFactor} {unitShort(i.baseUnitType)}
+                  </span>
+                )}
+                {i.saleMode === 'ALT' && !i.pair && i.closed && (
+                  <span className="mt-0.5 block text-xs text-indigo-600">
+                    {i.baseUnitType === 'METER'
+                      ? `corte por metro · ${i.quantity} m`
+                      : `unidade avulsa · ${i.quantity} un`}
                   </span>
                 )}
                 {/* Par (ADR-015): mostra que a linha baixa os dois produtos. */}

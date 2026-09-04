@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
+  closedUnitTerms,
   createStockMovementSchema,
   inventoryAdjustmentSchema,
   unitTypeLabels,
@@ -80,8 +81,9 @@ function Chevron({ open, className = 'text-gray-500' }: { open: boolean; classNa
 }
 
 /**
- * Saldo legível (ADR-017). Para unidade fechada (barra/rolo), o `stockQty` é em metros: mostra
- * "X barras + Y m". Para os demais, o número na unidade de venda, como sempre.
+ * Saldo legível (ADR-017/ADR-030). Para unidade fechada, o `stockQty` é na régua fina: mostra
+ * "X barras + Y m" (barra/rolo) ou "X pacotes + Y un" (pacote). Para os demais, o número na
+ * unidade de venda, como sempre.
  */
 function fmtStock(p: { unit: string; stockQty: string; conversionFactor: string | null }): string {
   const qty = Number(p.stockQty);
@@ -89,7 +91,8 @@ function fmtStock(p: { unit: string; stockQty: string; conversionFactor: string 
     const barLen = Number(p.conversionFactor);
     const { whole, remainderMeters } = splitWholeAndRemainder(qty, barLen);
     const unitName = unitTypeLabels[p.unit as UnitType].toLowerCase();
-    return `${whole} ${unitName}${remainderMeters > 0 ? ` + ${QTY(remainderMeters)} m` : ''}`;
+    const fineAbbrev = closedUnitTerms(p.unit).fineAbbrev;
+    return `${whole} ${unitName}${remainderMeters > 0 ? ` + ${QTY(remainderMeters)} ${fineAbbrev}` : ''}`;
   }
   return QTY(qty);
 }
@@ -383,8 +386,9 @@ export default function EstoquePage() {
     setError(null);
     setNotice(null);
 
-    // ADR-017: para unidade fechada a entrada é em BARRAS → converte para metros (ledger em
-    // metros); o custo, se informado, é por barra → por metro.
+    // ADR-017/ADR-030: para unidade fechada a entrada é em unidades FECHADAS → converte para a
+    // régua fina (ledger em metros p/ barra/rolo, unidades p/ pacote); o custo, se informado, é
+    // por unidade fechada → por unidade fina.
     const barLen = entryClosed ? Number(entryProduct!.conversionFactor) : 1;
     const qtyMeters = entryClosed ? Number(entry.quantity) * barLen : Number(entry.quantity);
     const unitCostMeters = entry.unitCost
@@ -606,7 +610,7 @@ export default function EstoquePage() {
               onChange={(e) => setEntry({ ...entry, quantity: e.target.value })}
               title={
                 entryClosed
-                  ? `A quantidade é em ${unitWord(entryProduct)}s inteiros; convertemos para metros pelo tamanho.`
+                  ? `A quantidade é em ${unitWord(entryProduct)}s inteiros; convertemos para ${closedUnitTerms(entryProduct!.unit).fineNounPlural} pelo tamanho.`
                   : undefined
               }
               className="rounded-lg border border-gray-300 px-3 py-2"

@@ -109,6 +109,7 @@ enum UnitType {
   BAG // Saco (sc) — ex: cimento
   ROLL // Rolo — ex: manta, tela
   BARRA // Barra — ex: vergalhão/perfil vendido em barra fechada, cortável por metro (ADR-017)
+  PACK // Pacote — ex: kit/caixa fechada que abre e vende a unidade avulsa (ADR-030, generaliza o ADR-017)
 }
 
 /// Papel do usuário dentro de um tenant

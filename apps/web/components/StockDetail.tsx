@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { unitTypeLabels, type UnitType } from '@nexoloja/shared';
+import { closedUnitTerms, unitTypeLabels, type UnitType } from '@nexoloja/shared';
 import { isClosedPrimary, splitWholeAndRemainder } from '@nexoloja/core';
 import { apiGet } from '@/lib/api';
 
@@ -64,7 +64,7 @@ const EMPTY_FILTERS = { type: '', reason: '', dateFrom: '', dateTo: '' };
 /** Quantas movimentações mostrar antes do "Mostrar mais" (evita tela corrida gigante). */
 const PAGE = 30;
 
-/** Saldo legível (ADR-017): unidade fechada (barra/rolo) vira "X barras + Y m". */
+/** Saldo legível (ADR-017/ADR-030): unidade fechada vira "X barras + Y m" ou "X pacotes + Y un". */
 function stockLabel(p: StockProduct): string {
   const qty = Number(p.stockQty);
   const closed = isClosedPrimary({
@@ -75,7 +75,8 @@ function stockLabel(p: StockProduct): string {
   const barLen = Number(p.conversionFactor);
   const { whole, remainderMeters } = splitWholeAndRemainder(qty, barLen);
   const unitName = unitTypeLabels[p.unit as UnitType].toLowerCase();
-  return `${whole} ${unitName}${remainderMeters > 0 ? ` + ${QTY(remainderMeters)} m` : ''}`;
+  const fineAbbrev = closedUnitTerms(p.unit).fineAbbrev;
+  return `${whole} ${unitName}${remainderMeters > 0 ? ` + ${QTY(remainderMeters)} ${fineAbbrev}` : ''}`;
 }
 
 export function StockDetail({
@@ -149,9 +150,10 @@ export function StockDetail({
     unit: product.unit,
     conversionFactor: product.conversionFactor != null ? Number(product.conversionFactor) : null,
   });
-  // Artigo correto p/ os rótulos de custo/preço da unidade fechada (ADR-017): reflete a unidade
-  // REAL do produto (evita "Custo da barra" fixo quando o item é vendido em rolo).
-  const savedUnitArticle = product.unit === 'ROLL' ? 'do rolo' : 'da barra';
+  // Vocabulário concordado da unidade fechada (ADR-017/ADR-030): reflete a unidade REAL do produto
+  // (evita "Custo da barra" fixo no rolo/pacote e traz a régua fina certa — m/un).
+  const savedTerms = closedUnitTerms(product.unit);
+  const savedUnitArticle = savedTerms.article;
 
   const labelCls = 'text-xs font-medium text-gray-600';
   const Row = ({ label, value }: { label: string; value: React.ReactNode }) => (
@@ -206,8 +208,8 @@ export function StockDetail({
           <Row label="Margem" value={`${product.marginPercent}%`} />
           {closed && (
             <Row
-              label="Venda por metro"
-              value={product.altSalePrice ? `${BRL(product.altSalePrice)}/m` : null}
+              label={`Venda por ${savedTerms.fineNoun}`}
+              value={product.altSalePrice ? `${BRL(product.altSalePrice)}/${savedTerms.fineAbbrev}` : null}
             />
           )}
           <Row

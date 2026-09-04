@@ -681,11 +681,31 @@ export function splitWholeAndRemainder(
 }
 
 /**
- * Unidades fechadas que podem ser a PRINCIPAL com corte por metro (ADR-017). A barra/rolo é
- * o `unit` do produto; o estoque fica na unidade fina (metro), desacoplado. Distingue-se do
- * EF-3 antigo (base fina + `altUnit` fechada), que NÃO entra por aqui.
+ * Unidades fechadas que podem ser a PRINCIPAL com corte fracionado (ADR-017/ADR-030). A
+ * barra/rolo/pacote é o `unit` do produto; o estoque fica na unidade fina (metro p/ barra/rolo,
+ * unidade avulsa p/ pacote), desacoplado. Distingue-se do EF-3 antigo (base fina + `altUnit`
+ * fechada), que NÃO entra por aqui.
  */
-export const CLOSED_PRIMARY_UNITS = ['BARRA', 'ROLL'] as const;
+export const CLOSED_PRIMARY_UNITS = ['BARRA', 'ROLL', 'PACK'] as const;
+
+/**
+ * Passo/incremento mínimo do corte avulso de uma unidade fechada. Barra/rolo cortam por metro em
+ * múltiplos de 0,5 m (ADR-017); pacote abre em **unidade inteira** (passo 1 — não existe "meio
+ * tubo de cola"). É o step que a validação (`isValidMeterStep`) e os steppers do PDV usam.
+ */
+export function closedSaleStep(unit: string): number {
+  return unit === 'PACK' ? 1 : METER_SALE_STEP;
+}
+
+/**
+ * `UnitType` da régua fina de uma unidade fechada — o que o ledger conta e o corte avulso vende:
+ * barra/rolo ⇒ `METER`; pacote ⇒ `UNIT`. Usado no cadastro (fixa o `altUnit` da unidade fechada)
+ * e no PDV (`baseUnitType` da linha), para o corte por metro (passo 0,5) não se confundir com o
+ * corte por unidade avulsa (passo 1).
+ */
+export function closedFineUnit(unit: string): 'METER' | 'UNIT' {
+  return unit === 'PACK' ? 'UNIT' : 'METER';
+}
 
 /** Config de um produto de unidade fechada (ADR-017). Preços já como número (Decimal→number). */
 export interface ClosedPrimaryConfig {
