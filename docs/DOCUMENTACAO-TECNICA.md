@@ -673,7 +673,17 @@ de negócio ou contrato de rotas — a referência de endpoints §8.2 permanece 
 | **Remediar** | `withDbRetry()` re-tenta a **leitura** de usuário/admin nos middlewares de auth (o 500 do auth ocorre **antes** de qualquer escrita → seguro). | `apps/api/src/lib/dbRetry.ts`, `middleware/auth.ts` |
 | **Remediar** | *Timeout* de transação folgado (`maxWait 10s / timeout 20s`) p/ a venda não morrer com o pool frio. | `packages/db/src/index.ts` |
 | **Atacar a causa** | **Keep-alive**: cron de 5 min dispara o handler `scheduled`, que faz `SELECT 1` via Hyperdrive e mantém uma conexão **quente** — absorve o cold start no lugar da venda. Invocação separada do `fetch`; nunca bloqueia requisições. | `apps/api/src/index.ts` + `wrangler.toml [triggers]` |
+| **Auto-recuperar (tela)** | A tela sai **sozinha** do *fallback* offline / erro de carga: re-tenta a cada 15 s e ao `online`/`visibilitychange`. venda/caixa (nativo, com botão manual) + hook `useReloadOnReconnect` em **todas as telas de dados**; gatilho `loadFailed` dedicado (nunca re-tenta sob erro de validação). Faz o soluço se curar em segundos em vez de virar parada de minutos. | `apps/web/lib/useReloadOnReconnect.ts` + páginas `(app)/*` |
+| **Atacar a causa (concorrência)** | **Conexão única por requisição**: `getPrisma(c)` memoiza o PrismaClient no **contexto do Hono** (`c.set('prisma')`) → **1 conexão por request** (era 2: `requireAuth` + handler). Reduz a rajada que abria ~10-12 conexões ao abrir o PDV. Complementa o **throttle** do sino (`/alerts` por foco só ≥60 s). | `apps/api/src/lib/request.ts`, `AlertsChip.tsx` |
 | **Diagnóstico** | `[observability] enabled=true` retém logs/exceções (~3 dias) p/ investigar incidentes **após** ocorrerem. | `apps/api/wrangler.toml` |
+
+> **Incidente 2026-09-04 (rajada de concorrência).** Sob uso real, o soluço voltava **no meio do
+> expediente** (não ocioso): abrir o PDV dispara ~5-6 requests em paralelo e, com **2 conexões por
+> request**, isso abria ~10-12 conexões de uma vez — as frias estouravam o retry → 500 no
+> `/cash-sessions/current` → *fallback* offline. As camadas **Auto-recuperar** e **Conexão única por
+> requisição** acima nasceram daí. ⚠️ **Não** reusar o PrismaClient/`pg.Pool` **entre** requests (foi
+> tentado e revertido: o Workers proíbe I/O cross-request → *"Cannot perform I/O on behalf of a different
+> request"*, ~50% de 500). O reuso seguro é só **dentro da mesma request** (via contexto). Ver [[ADR-005]].
 
 Detalhamento e histórico dos commits: **ADR-005 → Adendo "Resiliência ao cold start"**. Limite honesto:
 retry e keep-alive **reduzem** a incidência, não a **eliminam** — a solução definitiva é o **Supabase Pro**

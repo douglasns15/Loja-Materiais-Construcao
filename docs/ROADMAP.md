@@ -3,7 +3,33 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-09-02 — **Central de Pendências (sino de alertas — ADR-029) — CONCLUÍDA
+> **Última atualização:** 2026-09-04 — **Infra.Resiliencia — "preso no cache offline por minutos,
+> ~3×/dia" RESOLVIDO em 4 frentes + E2E DO OWNER VALIDADO (2026-09-04, vendas no ambiente de testes).
+> NO AR.** O operador ficava preso ~7 min na mensagem "Caixa recuperado do cache offline" (o
+> `GET /cash-sessions/current` caía no *fallback* e a tela **nunca re-tentava sozinha**), no MEIO do
+> expediente. **Causa raiz (investigada):** rajada de concorrência — cada request abria **2 conexões**
+> (`requireAuth` + handler, pois `createPrismaClient` criava um `pg.Pool` novo por chamada); abrir o PDV
+> dispara ~5-6 requests → ~10-12 conexões de uma vez; o keep-alive mantém só 1 quente → as frias
+> estouravam o retry → 500 → *fallback* offline. O sino piorava (re-`GET /alerts` a cada foco). **Frentes
+> (sem schema/contrato de rota — §8.2 intocada; muda o fluxo de como o client é obtido, aprovado — regra
+> 4):** (1) **auto-recuperação da tela** — venda/caixa saem sozinhos do *fallback* (re-tenta 15s + eventos
+> `online`/`visibilitychange`; banner com botão manual) + hook **`useReloadOnReconnect`** aplicado a
+> **todas as telas de dados** (estoque, produtos, clientes, fornecedores, categorias, vendas, orçamentos,
+> contas-a-receber, entregas, relatórios), com gatilho `loadFailed` DEDICADO (nunca re-tenta sob erro de
+> validação); (2) **"Conexão única por requisição"** — helper `getPrisma(c)` memoiza o PrismaClient no
+> **contexto do Hono** (`c.set('prisma')`): 1 por request, reusado pelos ~90 handlers da MESMA request →
+> **2→1 conexão/request**; (3) **throttle do sino** (`/alerts` por foco só se ≥60s). **❌ Tentativa
+> revertida:** cachear o PrismaClient **entre requests** do isolate (parte "B") — QUEBROU (~50% de 500
+> *"Cannot perform I/O on behalf of a different request"*, medido no `/db-check`); o Workers **proíbe**
+> reusar I/O entre requests. Revertida; a versão segura é o escopo de REQUISIÇÃO acima. **Gate:** api/web
+> `tsc` 0; web build; testes 354/354 core + shared; stress `/db-check` pós-deploy 0 falhas (15 seq + 10
+> paralelo). **NO AR:** API `c918e8e4` + web `9b3c36ca` (smokes OK); commits `da6fa48` (auto-recup+hook+
+> throttle) + `392d081` (revert B) + `f1be37d` (doc) + `662ac7d` (conexão única) em `main` — push do Owner.
+> Docs: [[ADR-005]] (seções "auto-recuperação", "investigação da causa raiz", "conexão única"). **Limite
+> honesto:** reduz frequência (throttle+conexão única) e faz o soluço se **curar sozinho em segundos**
+> (antes: minutos), mas não elimina o teto do free tier — definitivo = Supabase Pro + Workers pago.
+>
+> **Antes:** 2026-09-02 — **Central de Pendências (sino de alertas — ADR-029) — CONCLUÍDA
 > (plano de 5 fatias + refino pós-E2E) e E2E DO OWNER VALIDADO (2026-09-02, "tudo validado com
 > sucesso"). NO AR.** Sino no topo (ao lado da cesta) que reúne pendências **calculadas sob demanda** —
 > **sem tabela, sem push, sem migração** (custo-zero). Nasce **visível a todos os papéis** (o `roles` de
