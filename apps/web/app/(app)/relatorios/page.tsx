@@ -12,6 +12,7 @@ import {
 } from '@nexoloja/shared';
 import { calcVariation } from '@nexoloja/core';
 import { apiGet } from '@/lib/api';
+import { useReloadOnReconnect } from '@/lib/useReloadOnReconnect';
 import { useOnline } from '@/lib/useOnline';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { csvNumber, downloadCsv, toCsv } from '@/lib/csv';
@@ -253,6 +254,8 @@ export default function RelatoriosPage() {
   const [topCustomers, setTopCustomers] = useState<TopCustomerRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Falha na CARGA do relatório: liga a auto-recuperação (ADR-005).
+  const [loadFailed, setLoadFailed] = useState(false);
   // Drill-down do extrato por fechamento: lazy (busca só ao expandir) e cacheado por sessão,
   // para reabrir sem novo request. Um fechamento expandido por vez (toggle).
   const [expandedSession, setExpandedSession] = useState<string | null>(null);
@@ -318,8 +321,10 @@ export default function RelatoriosPage() {
       setProjections(proj);
       setTopProducts(prods);
       setTopCustomers(custs);
+      setLoadFailed(false);
     } catch (e) {
       setError((e as Error).message);
+      setLoadFailed(true);
     } finally {
       setLoading(false);
     }
@@ -328,6 +333,9 @@ export default function RelatoriosPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Auto-recuperação (ADR-005): se a carga do relatório falhar por um soluço transitório, re-tenta sozinha.
+  useReloadOnReconnect(load, loadFailed);
 
   const totalDivergence = useMemo(
     () => sessions.reduce((acc, s) => acc + s.divergence, 0),

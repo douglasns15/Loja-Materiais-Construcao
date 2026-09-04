@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createCustomerSchema, formatCpfCnpj, formatPhoneBr } from '@nexoloja/shared';
 import { apiGet, apiPost } from '@/lib/api';
+import { useReloadOnReconnect } from '@/lib/useReloadOnReconnect';
 import { useOnline } from '@/lib/useOnline';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { MaskedInput } from '@/components/MaskedInput';
@@ -42,6 +43,8 @@ export default function CustomersPage() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Falha na CARGA da listagem (≠ erro de validação/ação): liga a auto-recuperação (ADR-005).
+  const [loadFailed, setLoadFailed] = useState(false);
   const [form, setForm] = useState({ name: '', cpfCnpj: '', phone: '', email: '', notes: '' });
   const [saving, setSaving] = useState(false);
   // Busca no servidor: `search` é o que está no campo; a query dispara com debounce.
@@ -75,11 +78,26 @@ export default function CustomersPage() {
   // base inteira. Roda também na montagem (termo vazio = primeiros PAGE_SIZE em ordem alfabética).
   useEffect(() => {
     const t = setTimeout(() => {
-      load(search).catch((e) => setError((e as Error).message));
+      load(search)
+        .then(() => setLoadFailed(false))
+        .catch((e) => {
+          setError((e as Error).message);
+          setLoadFailed(true);
+        });
     }, 300);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
+
+  // Auto-recuperação (ADR-005): se a carga falhar por um soluço transitório, re-tenta sozinha.
+  useReloadOnReconnect(() => {
+    load(search)
+      .then(() => setLoadFailed(false))
+      .catch((e) => {
+        setError((e as Error).message);
+        setLoadFailed(true);
+      });
+  }, loadFailed);
 
   async function onCreate(e: React.FormEvent) {
     e.preventDefault();

@@ -12,6 +12,7 @@ import {
 } from '@nexoloja/shared';
 import { groupPairedItems, calcVariation } from '@nexoloja/core';
 import { apiGet, apiPost } from '@/lib/api';
+import { useReloadOnReconnect } from '@/lib/useReloadOnReconnect';
 import { useOnline } from '@/lib/useOnline';
 import { printArea } from '@/lib/print';
 import { PeriodFilter, defaultRange } from '@/components/PeriodFilter';
@@ -169,6 +170,8 @@ export default function VendasPage() {
   // (que varre todo o histórico) fica oculta, pois os números seriam de um recorte diferente.
   const [report, setReport] = useState<SalesReport | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Falha na CARGA inicial (≠ erro de ação): liga a auto-recuperação (ADR-005).
+  const [loadFailed, setLoadFailed] = useState(false);
   // Modal de ação: qual venda e se é cancelamento ou devolução.
   const [action, setAction] = useState<{ id: string; mode: ActionMode } | null>(null);
   const [reason, setReason] = useState('');
@@ -324,21 +327,32 @@ export default function VendasPage() {
     void loadReport(range);
   }
 
+  // Carga inicial da tela (reusada no mount E na auto-recuperação). Função comum (não memoizada) para
+  // fechar sempre sobre os loaders/filtros atuais — o hook lê a versão mais recente via ref.
+  async function reloadInitial() {
+    try {
+      apiGet<Store>('/tenant').then(setStore).catch(() => {});
+      const session = await apiGet<{ id: string } | null>('/cash-sessions/current');
+      setOpenSessionId(session?.id ?? null);
+      await loadOrders();
+      void loadReport();
+      setError(null);
+      setLoadFailed(false);
+    } catch (e) {
+      setError((e as Error).message);
+      setLoadFailed(true);
+    } finally {
+      setReady(true);
+    }
+  }
+
   useEffect(() => {
-    (async () => {
-      try {
-        apiGet<Store>('/tenant').then(setStore).catch(() => {});
-        const session = await apiGet<{ id: string } | null>('/cash-sessions/current');
-        setOpenSessionId(session?.id ?? null);
-        await loadOrders();
-        void loadReport();
-      } catch (e) {
-        setError((e as Error).message);
-      } finally {
-        setReady(true);
-      }
-    })();
+    void reloadInitial();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Auto-recuperação (ADR-005): se a carga inicial falhar por um soluço transitório, re-tenta sozinha.
+  useReloadOnReconnect(reloadInitial, loadFailed);
 
   /** Abre o diálogo de impressão. O PDF sai nomeado pelo código da venda (V-000128) em vez do
    *  genérico "NexoLoja.pdf". Ver lib/print.ts. */

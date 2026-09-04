@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   openCashSessionSchema,
   closeCashSessionSchema,
@@ -121,6 +121,43 @@ export default function CaixaPage() {
     load();
     loadTodaySessions();
   }, []);
+
+  // Auto-recuperação do fallback offline (mesmo fix do PDV): `load()` roda uma vez no mount; se um
+  // soluço transitório do free tier (cold start / teto de CPU do Worker) fizer a leitura cair no
+  // cache offline (`cachedSession != null`), a tela SÓ voltava com um recarregar manual. Enquanto
+  // estiver nesse fallback, re-tenta a API sozinho — a cada 15 s e, imediatamente, ao reconectar
+  // (`online`) ou a aba voltar a ficar visível. No sucesso, `load()` zera `cachedSession` → o efeito
+  // se desliga. `loadRef` sempre aponta para o `load` atual (sem re-assinar o intervalo a cada
+  // render); o outro ref evita tentativas sobrepostas (cada apiGet já tem ~7 s de retry interno).
+  const loadRef = useRef(load);
+  loadRef.current = load;
+  const reconnectingRef = useRef(false);
+  useEffect(() => {
+    if (!cachedSession) return; // online — nada a recuperar
+    let cancelled = false;
+    const tryReconnect = async () => {
+      if (cancelled || reconnectingRef.current) return;
+      reconnectingRef.current = true;
+      try {
+        await loadRef.current();
+      } finally {
+        reconnectingRef.current = false;
+      }
+    };
+    const interval = setInterval(() => void tryReconnect(), 15000);
+    const onOnline = () => void tryReconnect();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void tryReconnect();
+    };
+    window.addEventListener('online', onOnline);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      window.removeEventListener('online', onOnline);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [cachedSession]);
 
   // Hidrata os campos com o rascunho salvo (feito em effect, não no render, para não quebrar a
   // hidratação do SSR — o servidor não tem localStorage). Restaura valor de abertura, valor
@@ -579,11 +616,24 @@ export default function CaixaPage() {
             <dt className="text-gray-600">Valor de abertura</dt>
             <dd className="text-right">{BRL(cachedSession.openingAmount)}</dd>
           </dl>
-          <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-            Sem conexão — dados de{' '}
-            {new Date(cachedSession.cachedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.
-            Os valores do caixa e o fechamento voltam quando a internet retornar.
-          </p>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            <span>
+              Sem conexão — dados de{' '}
+              {new Date(cachedSession.cachedAt).toLocaleTimeString('pt-BR', {
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+              . Os valores do caixa e o fechamento voltam quando a internet retornar —
+              reconectando automaticamente…
+            </span>
+            <button
+              type="button"
+              onClick={() => void load()}
+              className="shrink-0 rounded-lg border border-amber-300 bg-white px-3 py-1 font-medium text-amber-800 hover:bg-amber-100"
+            >
+              Tentar reconectar agora
+            </button>
+          </div>
         </div>
       ) : me?.tenantActive === false ? (
         // Loja desativada (ADR-009): abrir caixa bloqueado. Aviso já ao abrir a tela.

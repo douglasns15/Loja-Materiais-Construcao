@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { closedUnitTerms, createProductSchema, onlyDigits, unitTypeLabels, type UnitType } from '@nexoloja/shared';
 import { CLOSED_PRIMARY_UNITS, closedFineUnit, productMatchesQuery } from '@nexoloja/core';
 import { apiGet, apiPatch, apiPost } from '@/lib/api';
+import { useReloadOnReconnect } from '@/lib/useReloadOnReconnect';
 import { useOnline } from '@/lib/useOnline';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { BarcodeScanButton } from '@/components/BarcodeScanButton';
@@ -92,6 +93,8 @@ export default function ProductsPage() {
   const online = useOnline();
   const [products, setProducts] = useState<Product[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // Falha na CARGA da listagem (≠ erro de validação/ação): liga a auto-recuperação (ADR-005).
+  const [loadFailed, setLoadFailed] = useState(false);
   const [form, setForm] = useState({
     name: '',
     popularName: '',
@@ -228,11 +231,27 @@ export default function ProductsPage() {
   // inteira. Roda também na montagem (termo vazio = primeiros PAGE_SIZE em ordem alfabética).
   useEffect(() => {
     const t = setTimeout(() => {
-      loadListing(search).catch((e) => setError((e as Error).message));
+      loadListing(search)
+        .then(() => setLoadFailed(false))
+        .catch((e) => {
+          setError((e as Error).message);
+          setLoadFailed(true);
+        });
     }, 300);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
+
+  // Auto-recuperação (ADR-005): se a carga da listagem falhar por um soluço transitório, re-tenta
+  // sozinha (para o termo atual) até voltar, sem o operador recarregar a página.
+  useReloadOnReconnect(() => {
+    loadListing(search)
+      .then(() => setLoadFailed(false))
+      .catch((e) => {
+        setError((e as Error).message);
+        setLoadFailed(true);
+      });
+  }, loadFailed);
 
   useEffect(() => {
     // As taxas da maquininha (ADR-016) vêm do Prisma como `Decimal` → JSON as **string**

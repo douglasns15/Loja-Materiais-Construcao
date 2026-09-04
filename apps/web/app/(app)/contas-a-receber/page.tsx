@@ -18,6 +18,7 @@ import {
   type ReceiveAccountResult,
 } from '@nexoloja/shared';
 import { apiGet, apiPost } from '@/lib/api';
+import { useReloadOnReconnect } from '@/lib/useReloadOnReconnect';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { MoneyInput } from '@/components/MoneyInput';
 import { CustomerAccountModal } from '@/components/CustomerAccountModal';
@@ -45,6 +46,8 @@ export default function ContasAReceberPage() {
   const [tab, setTab] = useState<Tab>('open');
   const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // Falha na CARGA de uma aba (≠ erro de recebimento/ação): liga a auto-recuperação (ADR-005).
+  const [loadFailed, setLoadFailed] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
 
   // ---- Aba EM ABERTO (a conta/dívida aberta de cada cliente) ----
@@ -78,8 +81,10 @@ export default function ContasAReceberPage() {
       const res = await apiGet<CustomerAccountsResponse>(`/receivables/accounts?${p.toString()}`);
       setAccounts(res.rows);
       setError(null);
+      setLoadFailed(false);
     } catch (e) {
       setError((e as Error).message);
+      setLoadFailed(true);
     } finally {
       setAccountsLoaded(true);
     }
@@ -101,8 +106,10 @@ export default function ContasAReceberPage() {
       setPaidDebts(page.rows);
       setPaidCursor(page.nextCursor);
       setError(null);
+      setLoadFailed(false);
     } catch (e) {
       setError((e as Error).message);
+      setLoadFailed(true);
     } finally {
       setPaidLoaded(true);
     }
@@ -120,6 +127,9 @@ export default function ContasAReceberPage() {
     const t = setTimeout(run, 300);
     return () => clearTimeout(t);
   }, [tab, loadAccounts, loadPaid]);
+
+  // Auto-recuperação (ADR-005): se a carga da aba ativa falhar por um soluço transitório, re-tenta sozinha.
+  useReloadOnReconnect(() => (tab === 'open' ? loadAccounts() : loadPaid()), loadFailed);
 
   async function loadMorePaid() {
     if (!paidCursor || loadingMore) return;

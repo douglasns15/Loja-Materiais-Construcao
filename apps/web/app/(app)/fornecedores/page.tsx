@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createSupplierSchema, formatCnpj, formatPhoneBr } from '@nexoloja/shared';
 import { normalizeSearchText } from '@nexoloja/core';
 import { apiGet, apiPost } from '@/lib/api';
+import { useReloadOnReconnect } from '@/lib/useReloadOnReconnect';
 import { useOnline } from '@/lib/useOnline';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { MaskedInput } from '@/components/MaskedInput';
@@ -16,6 +17,8 @@ export default function SuppliersPage() {
   const online = useOnline();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // Falha na CARGA da lista (≠ erro de validação/ação): liga a auto-recuperação (ADR-005).
+  const [loadFailed, setLoadFailed] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
@@ -30,8 +33,23 @@ export default function SuppliersPage() {
   }
 
   useEffect(() => {
-    load().catch((e) => setError((e as Error).message));
+    load()
+      .then(() => setLoadFailed(false))
+      .catch((e) => {
+        setError((e as Error).message);
+        setLoadFailed(true);
+      });
   }, []);
+
+  // Auto-recuperação (ADR-005): se a carga falhar por um soluço transitório, re-tenta sozinha.
+  useReloadOnReconnect(() => {
+    load()
+      .then(() => setLoadFailed(false))
+      .catch((e) => {
+        setError((e as Error).message);
+        setLoadFailed(true);
+      });
+  }, loadFailed);
 
   // Filtro por nome/CNPJ/telefone/e-mail, acento-insensível (mesma normalização do resto do app).
   const filtered = useMemo(() => {

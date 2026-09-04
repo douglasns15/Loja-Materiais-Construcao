@@ -14,6 +14,7 @@ import {
   type QuotesPage,
 } from '@nexoloja/shared';
 import { apiDelete, apiGet, apiPatch } from '@/lib/api';
+import { useReloadOnReconnect } from '@/lib/useReloadOnReconnect';
 import { printArea } from '@/lib/print';
 import { shareReceiptImage, shareReceiptPdf } from '@/lib/receiptShare';
 import { OfflineNotice } from '@/components/OfflineNotice';
@@ -60,6 +61,8 @@ export default function OrcamentosPage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Falha na CARGA da lista (≠ erro de ação): liga a auto-recuperação (ADR-005).
+  const [loadFailed, setLoadFailed] = useState(false);
 
   // Filtros aplicados (o que a lista está mostrando).
   const [codeInput, setCodeInput] = useState('');
@@ -80,8 +83,10 @@ export default function OrcamentosPage() {
       const page = await apiGet<QuotesPage>(quotesQuery(null, code, q, st));
       setRows(page.rows);
       setNextCursor(page.nextCursor);
+      setLoadFailed(false);
     } catch (e) {
       setError((e as Error).message);
+      setLoadFailed(true);
     } finally {
       setLoading(false);
     }
@@ -106,6 +111,9 @@ export default function OrcamentosPage() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Auto-recuperação (ADR-005): se a carga da lista falhar por um soluço transitório, re-tenta sozinha.
+  useReloadOnReconnect(() => void load(), loadFailed);
 
   function buscar(e: React.FormEvent) {
     e.preventDefault();

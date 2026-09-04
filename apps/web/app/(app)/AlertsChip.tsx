@@ -52,6 +52,13 @@ function loadSnoozed(): Record<string, number> {
   }
 }
 
+// Janela mínima entre um refetch de `/alerts` e o próximo disparado por FOCO da janela. No balcão o
+// operador alterna para calculadora/WhatsApp o tempo todo; sem esse throttle, cada volta re-disparava
+// `/alerts` (4 queries), somando concorrência e ajudando a estourar conexões frias no Worker (o
+// "travado no cache offline" — ver [[pdv-caixa-auto-recuperacao-offline]] e ADR-005). O sino é
+// secundário: um atraso de até 1 min para atualizar a contagem é imperceptível.
+const ALERTS_FOCUS_REFRESH_MS = 60_000;
+
 export function AlertsChip() {
   const [items, setItems] = useState<AlertSummary[]>([]);
   const [open, setOpen] = useState(false);
@@ -60,19 +67,26 @@ export function AlertsChip() {
   const [viewing, setViewing] = useState<AlertSummary | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
+  // Horário do último `/alerts` bem-sucedido — alimenta o throttle do refetch por foco (abaixo).
+  const lastLoadedAtRef = useRef(0);
   const load = useCallback(async () => {
     try {
       const data = await apiGet<AlertSummary[]>('/alerts');
       setItems(data);
+      lastLoadedAtRef.current = Date.now();
     } catch {
       // Offline / cold start: mantém o estado atual sem "piscar" erro no sino (é secundário na tela).
     }
   }, []);
 
-  // Puxa ao montar e sempre que a janela volta ao foco (o dado pode ter mudado noutra aba/dispositivo).
+  // Puxa ao montar; ao voltar o foco, só re-puxa se passou a janela do throttle (evita a rajada de
+  // `/alerts` a cada alt-tab no balcão — ADR-005). O sino vive no shell (não remonta ao navegar),
+  // então o foco é o gatilho de atualização — o throttle o limita a no máximo 1×/min.
   useEffect(() => {
     load();
-    const onFocus = () => load();
+    const onFocus = () => {
+      if (Date.now() - lastLoadedAtRef.current >= ALERTS_FOCUS_REFRESH_MS) load();
+    };
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
   }, [load]);

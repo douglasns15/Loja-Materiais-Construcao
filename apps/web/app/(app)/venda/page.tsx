@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   PAYMENT_METHOD_LABELS,
@@ -488,36 +488,52 @@ export default function VendaPage() {
     void cacheProducts(list);
   }
 
+  // Carrega o estado do caixa a partir da REDE (não do cache). Reusado no mount E na
+  // auto-recuperação (efeito abaixo). Retorna `true` se conseguiu falar com a API — aí some o
+  // banner "cache offline"; `false` se falhou — aí preserva o estado atual (nunca piora a tela).
+  const refreshCaixaFromNetwork = useCallback(async (): Promise<boolean> => {
+    try {
+      const session = await apiGet<{
+        id: string;
+        openedAt: string;
+        openingAmount: string;
+        openedByName: string | null;
+      } | null>('/cash-sessions/current');
+      // Rede venceu (ADR-012 (a)): sobrescreve/limpa o cache do caixa e opera com dado fresco.
+      cacheCashSession(session);
+      setCaixaOpen(!!session);
+      setSessionId(session?.id ?? null);
+      setCachedSessionAt(null);
+      setError(null);
+      if (session) await loadProducts();
+      return true;
+    } catch {
+      return false;
+    }
+    // loadProducts/setters são estáveis o bastante para o propósito (mesmo padrão do mount []).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     (async () => {
-      try {
-        // O mesmo GET traz as taxas da maquininha (ADR-016), usadas só no tooltip de margem real.
-        apiGet<Store & StoreCardFees>('/tenant')
-          .then((s) => {
-            setStore(s);
-            setCardFees({
-              cardFeeDebitPercent:
-                s.cardFeeDebitPercent == null ? null : Number(s.cardFeeDebitPercent),
-              cardFeeCreditPercent:
-                s.cardFeeCreditPercent == null ? null : Number(s.cardFeeCreditPercent),
-            });
-          })
-          .catch(() => {});
-        const session = await apiGet<{
-          id: string;
-          openedAt: string;
-          openingAmount: string;
-          openedByName: string | null;
-        } | null>('/cash-sessions/current');
-        // Rede venceu (ADR-012 (a)): sobrescreve/limpa o cache do caixa e opera com dado fresco.
-        cacheCashSession(session);
-        setCaixaOpen(!!session);
-        setSessionId(session?.id ?? null);
-        setCachedSessionAt(null);
-        if (session) await loadProducts();
-      } catch (e) {
+      // O mesmo GET traz as taxas da maquininha (ADR-016), usadas só no tooltip de margem real.
+      apiGet<Store & StoreCardFees>('/tenant')
+        .then((s) => {
+          setStore(s);
+          setCardFees({
+            cardFeeDebitPercent:
+              s.cardFeeDebitPercent == null ? null : Number(s.cardFeeDebitPercent),
+            cardFeeCreditPercent:
+              s.cardFeeCreditPercent == null ? null : Number(s.cardFeeCreditPercent),
+          });
+        })
+        .catch(() => {});
+      const ok = await refreshCaixaFromNetwork();
+      if (!ok) {
         // Offline (cold-start): sem a API, recupera o último caixa aberto conhecido e o catálogo em
         // cache para o PDV seguir vendável após remontar/reabrir (achados 3.E.2 / ADR-012 CS-1+CS-2).
+        // O banner "cache offline" fica visível e o efeito de auto-recuperação abaixo assume: quando a
+        // API voltar (segundos depois), a tela troca sozinha para o dado fresco — sem recarregar.
         const cached = readCachedCashSession();
         if (cached) {
           setCaixaOpen(true);
@@ -525,13 +541,49 @@ export default function VendaPage() {
           setCachedSessionAt(cached.cachedAt);
           setProducts(await readCachedProducts());
         } else {
-          setError((e as Error).message);
+          setError('Não foi possível conectar ao servidor. Tentando reconectar…');
         }
-      } finally {
-        setReady(true);
       }
+      setReady(true);
     })();
-  }, []);
+  }, [refreshCaixaFromNetwork]);
+
+  // Auto-recuperação do fallback offline (fix "PDV preso no cache offline por minutos"): a leitura do
+  // caixa roda UMA vez no mount; se ela falhar por um soluço transitório do free tier (cold start /
+  // teto de CPU do Worker), a tela caía no cache offline e SÓ voltava se o operador recarregasse à mão
+  // — daí os "7 minutos sem conseguir usar". Enquanto estiver nesse fallback (`cachedSessionAt != null`),
+  // este efeito re-tenta a API sozinho: a cada 15 s e, imediatamente, quando o navegador reconecta
+  // (`online`) ou a aba volta a ficar visível. No primeiro sucesso, `refreshCaixaFromNetwork` zera
+  // `cachedSessionAt` → o banner some e o efeito se desliga. O ref evita tentativas sobrepostas (cada
+  // apiGet já tem ~7 s de retry interno). Não substitui o keep-alive/retry do ADR-005 — é a rede de
+  // segurança que faltava na CAMADA DA TELA para o soluço não virar uma parada de minutos.
+  const reconnectingRef = useRef(false);
+  useEffect(() => {
+    if (cachedSessionAt === null) return; // já está online — nada a recuperar
+    let cancelled = false;
+    const tryReconnect = async () => {
+      if (cancelled || reconnectingRef.current) return;
+      reconnectingRef.current = true;
+      try {
+        await refreshCaixaFromNetwork();
+      } finally {
+        reconnectingRef.current = false;
+      }
+    };
+    const interval = setInterval(() => void tryReconnect(), 15000);
+    const onOnline = () => void tryReconnect();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void tryReconnect();
+    };
+    window.addEventListener('online', onOnline);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      window.removeEventListener('online', onOnline);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [cachedSessionAt, refreshCaixaFromNetwork]);
 
   // Busca de cliente para a venda a prazo (fiado). Debounce; usa a busca no servidor (`?q=`) da
   // fatia UI.Busca.Servidor. Só dispara com o campo aberto e ao menos 2 caracteres.
@@ -2075,10 +2127,23 @@ export default function VendaPage() {
       {/* Cold-start offline (ADR-012 CS-1, decisão (a)): o caixa veio do último snapshot conhecido.
           Rotula a origem para o operador saber que o dado pode estar defasado. */}
       {cachedSessionAt !== null && (
-        <p className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
-          Caixa recuperado do cache offline — dados de{' '}
-          {new Date(cachedSessionAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.
-        </p>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+          <span>
+            Caixa recuperado do cache offline — dados de{' '}
+            {new Date(cachedSessionAt).toLocaleTimeString('pt-BR', {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+            . Reconectando automaticamente…
+          </span>
+          <button
+            type="button"
+            onClick={() => void refreshCaixaFromNetwork()}
+            className="shrink-0 rounded-lg border border-amber-300 bg-white px-3 py-1 font-medium text-amber-800 hover:bg-amber-100"
+          >
+            Tentar reconectar agora
+          </button>
+        </div>
       )}
 
       {/* Indicador de vendas pendentes de sincronização (ADR-011 AI 6/9). */}

@@ -18,6 +18,7 @@ import {
   splitWholeAndRemainder,
 } from '@nexoloja/core';
 import { apiGet, apiPost } from '@/lib/api';
+import { useReloadOnReconnect } from '@/lib/useReloadOnReconnect';
 import { useOnline } from '@/lib/useOnline';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { useMe } from '@/lib/useMe';
@@ -148,6 +149,9 @@ export default function EstoquePage() {
   // Resumo consolidado por produto (Σ entradas/saídas) para a visão "saldo × mínimo × histórico".
   const [summary, setSummary] = useState<Record<string, { income: number; expense: number }>>({});
   const [error, setError] = useState<string | null>(null);
+  // Falha na CARGA de dados (≠ erro de validação/ação, que também usa `error`): liga a
+  // auto-recuperação (ADR-005) para a tela voltar sozinha quando a rede/servidor recuperar.
+  const [loadFailed, setLoadFailed] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
   // Filtros das movimentações. `productId` é resolvido no servidor (?productId=);
@@ -213,8 +217,10 @@ export default function EstoquePage() {
         Object.fromEntries(sum.map((r) => [r.productId, { income: r.income, expense: r.expense }])),
       );
       setError(null);
+      setLoadFailed(false);
     } catch (e) {
       setError((e as Error).message);
+      setLoadFailed(true);
     }
   }
 
@@ -240,6 +246,13 @@ export default function EstoquePage() {
   useEffect(() => {
     loadCatalog();
   }, []);
+
+  // Auto-recuperação (ADR-005): se a carga inicial falhar por um soluço transitório, re-tenta
+  // sozinha (catálogo + movimentações) até voltar, sem o operador recarregar a página.
+  useReloadOnReconnect(() => {
+    void loadCatalog();
+    void loadMovements();
+  }, loadFailed);
 
   // Recarrega as movimentações quando QUALQUER filtro muda (tudo resolvido no servidor).
   // Debounce de 300 ms para o campo de Motivo não disparar uma busca por tecla; os demais

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createCategorySchema } from '@nexoloja/shared';
 import { normalizeSearchText } from '@nexoloja/core';
 import { apiGet, apiPost } from '@/lib/api';
+import { useReloadOnReconnect } from '@/lib/useReloadOnReconnect';
 import { useOnline } from '@/lib/useOnline';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { CategoryFormModal } from '@/components/CategoryFormModal';
@@ -13,6 +14,8 @@ export default function CategoriesPage() {
   const online = useOnline();
   const [categories, setCategories] = useState<Category[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // Falha na CARGA da lista (≠ erro de validação/ação): liga a auto-recuperação (ADR-005).
+  const [loadFailed, setLoadFailed] = useState(false);
   const [name, setName] = useState('');
   const [parentId, setParentId] = useState('');
   const [saving, setSaving] = useState(false);
@@ -28,8 +31,23 @@ export default function CategoriesPage() {
   }
 
   useEffect(() => {
-    load().catch((e) => setError((e as Error).message));
+    load()
+      .then(() => setLoadFailed(false))
+      .catch((e) => {
+        setError((e as Error).message);
+        setLoadFailed(true);
+      });
   }, []);
+
+  // Auto-recuperação (ADR-005): se a carga falhar por um soluço transitório, re-tenta sozinha.
+  useReloadOnReconnect(() => {
+    load()
+      .then(() => setLoadFailed(false))
+      .catch((e) => {
+        setError((e as Error).message);
+        setLoadFailed(true);
+      });
+  }, loadFailed);
 
   // Lista achatada com caminho completo (pai › filho) e profundidade para indentar.
   const options = useMemo(() => buildCategoryOptions(categories), [categories]);

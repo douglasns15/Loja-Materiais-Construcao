@@ -14,6 +14,7 @@ import {
   type DeliveryOrderRow,
 } from '@nexoloja/shared';
 import { apiGet } from '@/lib/api';
+import { useReloadOnReconnect } from '@/lib/useReloadOnReconnect';
 import { printArea } from '@/lib/print';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { DeliveryDetailModal } from '@/components/DeliveryDetailModal';
@@ -256,6 +257,8 @@ export default function EntregasPage() {
   const [loaded, setLoaded] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Falha na CARGA da lista (≠ erro de ação/impressão): liga a auto-recuperação (ADR-005).
+  const [loadFailed, setLoadFailed] = useState(false);
 
   const [status, setStatus] = useState<StatusFilter>('pending');
   // Busca por código (conta E-000X ou venda V-000XXX) ou por nome do cliente. `searchInput` = o que
@@ -368,8 +371,10 @@ export default function EntregasPage() {
       setCards(page.cards);
       setNextCursor(page.nextCursor);
       setError(null);
+      setLoadFailed(false);
     } catch (e) {
       setError((e as Error).message);
+      setLoadFailed(true);
     } finally {
       setLoaded(true);
     }
@@ -382,6 +387,9 @@ export default function EntregasPage() {
     }
     load();
   }, [load]);
+
+  // Auto-recuperação (ADR-005): se a carga da lista falhar por um soluço transitório, re-tenta sozinha.
+  useReloadOnReconnect(load, loadFailed);
 
   async function loadMore() {
     if (!nextCursor || loadingMore) return;
