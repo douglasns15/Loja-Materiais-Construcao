@@ -5,22 +5,20 @@ import { PrismaPg } from '@prisma/adapter-pg';
 export * from '@prisma/client';
 
 /**
- * Cache de `PrismaClient` por CONNECTION STRING, vivo pelo tempo do isolate (ADR-005 — rajada de
- * concorrência). Antes, `createPrismaClient` era chamado a cada camada: uma vez no `requireAuth`
- * (leitura do usuário) e DE NOVO dentro de cada handler — e cada chamada instanciava um `pg.Pool`
- * novo. Abrir o PDV dispara ~5-6 requests em paralelo (`/me`, `/alerts`, `/tenant`,
- * `/cash-sessions/current`, `/products`, carrinho); com 2 clients por request, isso abria ~10-12
- * conexões de uma vez. O keep-alive mantém só UMA conexão quente, então a rajada abria conexões
- * FRIAS que estouravam a janela de retry → 500 no `/cash-sessions/current` → o falso "caixa
- * recuperado do cache offline" (ver [[pdv-caixa-auto-recuperacao-offline]]). Cachear o client:
- *   - (A) uma única instância por request — auth e handler compartilham (a connection string é a
- *     mesma), cortando as conexões por request de 2 → 1;
- *   - (B) reuso ENTRE requests do mesmo isolate — quase zera o churn de abrir pools.
- * Seguro neste código: NINGUÉM chama `$disconnect()`/`pool.end()` por request (os pools de hoje já
- * vivem até o isolate morrer — só que sem reuso, vazando); o `pg.Pool` cacheado se auto-cura de
- * conexões mortas e o `withDbRetry` cobre o soluço transitório. O cache é lazy (criado DENTRO da
- * request, nunca no escopo de módulo) — o padrão aceito no Workers. A `connectionString` do
- * Hyperdrive é estável por isolate, então serve de chave.
+ * Cria um PrismaClient usando o driver adapter `pg`. **UMA instância por chamada** — de propósito.
+ *
+ * ⚠️ NÃO cachear/reusar este client (nem o `pg.Pool` interno) ENTRE requests do Worker. Foi tentado
+ * (ADR-005, "parte B": um `Map` por connection string, vivo pelo isolate) para cortar o churn de
+ * conexões da rajada de concorrência — e **quebrou em produção**: o Cloudflare Workers proíbe usar
+ * um objeto de I/O (o socket do pool, aberto no contexto de UMA request) em OUTRA request → 500
+ * "Cannot perform I/O on behalf of a different request". Sintoma medido: ~50% das requisições
+ * falhando (1 falha / 1 ok, alternado), MUITO pior que o soluço intermitente que se queria resolver.
+ * Revertido para criação por chamada (estado conhecido-bom). O churn segue mitigado pela camada de
+ * cima (keep-alive + retry do `apiGet`) e pela auto-recuperação da tela; a redução real do churn
+ * (uma instância por REQUEST, compartilhada entre `requireAuth` e o handler) exige injeção via
+ * contexto do Hono (`c.set('prisma')`), que é seguro por ser DENTRO da mesma request — fica para
+ * uma fatia futura. É a API (Cloudflare Workers) onde o engine binário padrão do Prisma não roda —
+ * a conexão chega pela edge via Hyperdrive/Supavisor.
  *
  * `transactionOptions` afrouxa os prazos das transações INTERATIVAS (`$transaction(cb)`)
  * para o cenário de COLD START do free tier: na 1ª venda depois de ociosa, o pool
@@ -34,18 +32,12 @@ export * from '@prisma/client';
  *
  * @param connectionString String de conexão Postgres (Hyperdrive ou DATABASE_URL).
  */
-const clientCache = new Map<string, PrismaClient>();
-
 export function createPrismaClient(connectionString: string): PrismaClient {
-  const cached = clientCache.get(connectionString);
-  if (cached) return cached;
   const adapter = new PrismaPg({ connectionString });
-  const client = new PrismaClient({
+  return new PrismaClient({
     adapter,
     transactionOptions: { maxWait: 10_000, timeout: 20_000 },
   });
-  clientCache.set(connectionString, client);
-  return client;
 }
 
 let nodeClient: PrismaClient | undefined;
