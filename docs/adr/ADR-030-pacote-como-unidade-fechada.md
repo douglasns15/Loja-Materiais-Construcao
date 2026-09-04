@@ -1,7 +1,9 @@
 # ADR-030 — Pacote como unidade fechada (generaliza o ADR-017 para corte por unidade avulsa)
 
-- **Status:** **Aceito e IMPLEMENTADO (2026-09-04), aguardando deploy + E2E do Owner.** Owner
-  aprovou a migração do enum e o desenho (Pacote como unidade fechada, igual a Barra/Rolo).
+- **Status:** **Aceito e NO AR (2026-09-04), aguardando E2E do Owner.** Owner aprovou a migração do
+  enum e o desenho (Pacote como unidade fechada, igual a Barra/Rolo). Migration `0037` aplicada no
+  Supabase; API Version `02d20a6c` (health 200); web Version `2c28a241` (smoke OK — CSS + no-store).
+  Commit `21edc34` em `main` (push do Owner pendente).
 - **Data:** 2026-09-04
 - **Contexto de fase:** Fase 3, evolução do módulo de estoque fino. **Generaliza** o
   [ADR-017](./ADR-017-unidade-fechada-como-principal-barra.md) — não o substitui.
