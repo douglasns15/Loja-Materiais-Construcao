@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
-import { createPrismaClient } from '@nexoloja/db';
+
 import { cartSnapshotSchema } from '@nexoloja/shared';
-import { type Env, getConnectionString, getTenantId } from '../lib/request';
+import { type Env, getConnectionString, getPrisma, getTenantId } from '../lib/request';
 import { requireAuth } from '../middleware/auth';
 
 /**
@@ -24,7 +24,7 @@ cart.get('/', async (c) => {
     return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
   }
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const row = await prisma.cart.findUnique({
       where: { userId },
       select: { items: true, updatedAt: true },
@@ -61,7 +61,7 @@ cart.post('/', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const now = new Date();
     // Prisma não gerencia `@updatedAt` no upsert quando não há outra mudança de campo; setamos
     // explícito para o relógio do last-write-wins avançar em toda gravação.
@@ -95,7 +95,7 @@ cart.delete('/', async (c) => {
     return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
   }
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const now = new Date();
     const row = await prisma.cart.upsert({
       where: { userId },

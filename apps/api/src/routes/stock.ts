@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
-import { createPrismaClient, Prisma } from '@nexoloja/db';
+import { Prisma } from '@nexoloja/db';
 import { applyStockMovement, calcInventoryAdjustment } from '@nexoloja/core';
 import { createStockMovementSchema, inventoryAdjustmentSchema } from '@nexoloja/shared';
-import { type Env, getConnectionString, getTenantId } from '../lib/request';
+import { type Env, getConnectionString, getPrisma, getTenantId } from '../lib/request';
 import { requireActiveTenant, requireAuth } from '../middleware/auth';
 
 const stock = new Hono<Env>();
@@ -50,7 +50,7 @@ stock.get('/movements', async (c) => {
   const createdAt = buildDateFilter(c.req.query('from'), c.req.query('to'));
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const items = await prisma.stockMovement.findMany({
       where: {
         tenantId,
@@ -96,7 +96,7 @@ stock.get('/summary', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const rows = await prisma.stockMovement.groupBy({
       by: ['productId', 'type'],
       where: { tenantId },
@@ -147,7 +147,7 @@ stock.post('/movements', requireActiveTenant, async (c) => {
   const mov = parsed.data;
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const product = await prisma.product.findFirst({
       where: { id: mov.productId, tenantId, deletedAt: null },
       select: { id: true, name: true, stockQty: true, costPrice: true },
@@ -243,7 +243,7 @@ stock.post('/adjust', async (c) => {
   const adj = parsed.data;
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const product = await prisma.product.findFirst({
       where: { id: adj.productId, tenantId, deletedAt: null },
       select: { id: true, name: true, stockQty: true },

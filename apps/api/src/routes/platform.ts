@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { createPrismaClient } from '@nexoloja/db';
+
 import {
   MODULE_OFFLINE_SALES,
   createTenantSchema,
@@ -7,7 +7,7 @@ import {
   setTenantModuleSchema,
   slugify,
 } from '@nexoloja/shared';
-import { type Env, getConnectionString } from '../lib/request';
+import { type Env, getConnectionString, getPrisma } from '../lib/request';
 import { inviteAuthUser } from '../lib/authAdmin';
 import { signSupportToken } from '../lib/supportToken';
 import { requirePlatformAuth } from '../middleware/auth';
@@ -44,7 +44,7 @@ platform.get('/tenants', async (c) => {
     return c.json({ ok: false, error: 'Sem conexão com o banco.' }, 500);
   }
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const tenants = await prisma.tenant.findMany({
       orderBy: [{ isActive: 'desc' }, { createdAt: 'desc' }],
       select: {
@@ -145,7 +145,7 @@ platform.post('/tenants', async (c) => {
 
   const actorId = c.get('platformAdminId');
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
 
     // Checagem amigável ANTES do convite externo (evita criar conta no Auth à toa).
     if (await prisma.tenant.findUnique({ where: { slug }, select: { id: true } })) {
@@ -239,7 +239,7 @@ platform.patch('/tenants/:id', async (c) => {
 
   const actorId = c.get('platformAdminId');
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const target = await prisma.tenant.findUnique({
       where: { id },
       select: { id: true, isActive: true },
@@ -294,7 +294,7 @@ platform.patch('/tenants/:id/modules', async (c) => {
   const actorId = c.get('platformAdminId');
   const { moduleKey, isActive } = parsed.data;
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const target = await prisma.tenant.findUnique({ where: { id }, select: { id: true } });
     if (!target) {
       return c.json({ ok: false, error: 'Loja não encontrada.' }, 404);
@@ -351,7 +351,7 @@ platform.post('/tenants/:id/support', async (c) => {
   const id = c.req.param('id');
   const platformAdminId = c.get('platformAdminId');
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const tenant = await prisma.tenant.findUnique({
       where: { id },
       select: { id: true, name: true, slug: true, isActive: true },

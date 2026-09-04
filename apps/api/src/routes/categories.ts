@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
-import { createPrismaClient, Prisma } from '@nexoloja/db';
+import { Prisma } from '@nexoloja/db';
 import { createCategorySchema, updateCategorySchema } from '@nexoloja/shared';
-import { type Env, getConnectionString, getTenantId } from '../lib/request';
+import { type Env, getConnectionString, getPrisma, getTenantId } from '../lib/request';
 import { requireAuth } from '../middleware/auth';
 
 const categories = new Hono<Env>();
@@ -21,7 +21,7 @@ categories.get('/', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     // SEM teto: o `take: 100` truncava silenciosamente em ordem alfabética — passando de 100
     // categorias, as de nome "tardio" sumiam da lista mesmo existindo no banco (mesma classe do
     // bug de Produtos). Escopo já é o do tenant (RLS); catálogo grande → busca no servidor.
@@ -48,7 +48,7 @@ categories.get('/:id', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const item = await prisma.category.findFirst({
       where: { id: c.req.param('id'), tenantId, deletedAt: null },
     });
@@ -83,7 +83,7 @@ categories.post('/', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     // Garante que a categoria-pai (se houver) pertença ao mesmo tenant.
     if (parsed.data.parentId) {
       const parent = await prisma.category.findFirst({
@@ -128,7 +128,7 @@ categories.patch('/:id', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const id = c.req.param('id');
     if (parsed.data.parentId) {
       if (parsed.data.parentId === id) {
@@ -173,7 +173,7 @@ categories.delete('/:id', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const result = await prisma.category.updateMany({
       where: { id: c.req.param('id'), tenantId, deletedAt: null },
       data: { deletedAt: new Date() },

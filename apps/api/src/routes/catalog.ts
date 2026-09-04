@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { createPrismaClient } from '@nexoloja/db';
+
 import {
   type EanLookupResult,
   type ProductCatalog,
@@ -8,7 +8,7 @@ import {
   normalizeNcm,
   onlyDigits,
 } from '@nexoloja/shared';
-import { type Bindings, type Env, getConnectionString, getTenantId } from '../lib/request';
+import { type Bindings, type Env, getConnectionString, getPrisma, getTenantId } from '../lib/request';
 import { requireAuth } from '../middleware/auth';
 
 /**
@@ -167,7 +167,7 @@ catalog.get('/ean/:ean', async (c) => {
   const gtin = normalizeGtin(digits);
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
 
     // A loja já cadastrou esse código? (por `ean` OU pelo `sku` legado, que podia guardar o barcode).
     const existing = digits

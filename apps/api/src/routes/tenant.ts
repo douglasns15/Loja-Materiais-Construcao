@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
-import { createPrismaClient, Prisma } from '@nexoloja/db';
+import { Prisma } from '@nexoloja/db';
 import { updateTenantSchema, validateLogo } from '@nexoloja/shared';
-import { type Env, getConnectionString, getTenantId } from '../lib/request';
+import { type Env, getConnectionString, getPrisma, getTenantId } from '../lib/request';
 import { requireAdmin, requireAuth } from '../middleware/auth';
 
 /** Chave do objeto da logo no R2 — uma por loja; reenviar sobrescreve (ADR-007). */
@@ -22,7 +22,7 @@ tenant.get('/', async (c) => {
     return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
   }
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const data = await prisma.tenant.findUnique({
       where: { id: tenantId },
       // ADR-016: as taxas da maquininha viajam junto — a UI usa para exibir a margem real.
@@ -64,7 +64,7 @@ tenant.patch('/', requireAdmin, async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     await prisma.tenant.update({ where: { id: tenantId }, data: parsed.data });
     const data = await prisma.tenant.findUnique({
       where: { id: tenantId },
@@ -124,7 +124,7 @@ tenant.post('/logo', requireAdmin, async (c) => {
       httpMetadata: { contentType: contentType as string },
     });
     const url = logoUrl(new URL(c.req.url).origin, tenantId);
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     await prisma.tenant.update({ where: { id: tenantId }, data: { logoUrl: url } });
     return c.json({ ok: true, data: { logoUrl: url } });
   } catch (err) {
@@ -146,7 +146,7 @@ tenant.delete('/logo', requireAdmin, async (c) => {
   }
   try {
     await bucket.delete(logoKey(tenantId));
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     await prisma.tenant.update({ where: { id: tenantId }, data: { logoUrl: null } });
     return c.json({ ok: true, data: { logoUrl: null } });
   } catch (err) {

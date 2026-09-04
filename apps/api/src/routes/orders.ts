@@ -29,7 +29,7 @@ import {
   returnOrderSchema,
   STORE_CREDIT_METHOD,
 } from '@nexoloja/shared';
-import { type Env, getConnectionString, getTenantId } from '../lib/request';
+import { type Env, getConnectionString, getPrisma, getTenantId } from '../lib/request';
 import { requireActiveTenant, requireAuth } from '../middleware/auth';
 
 const orders = new Hono<Env>();
@@ -190,7 +190,7 @@ orders.get('/', async (c) => {
   const scope = c.req.query('scope');
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
 
     if (scope === 'all') {
       // Página: `limit` saneado (1..MAX) e cursor keyset opcional.
@@ -331,7 +331,7 @@ orders.post('/', requireActiveTenant, async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
 
     // Idempotência (ADR-011 §2): venda offline já sincronizada = no-op. Devolve a persistida.
     if (sale.id) {
@@ -886,7 +886,7 @@ orders.post('/:id/cancel', async (c) => {
   const { reason } = parsed.data;
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
 
     // ADR-018: caixa por loja — cancela vendas do caixa aberto da loja (independe de quem operou).
     const session = await prisma.cashSession.findFirst({
@@ -1046,7 +1046,7 @@ orders.post('/:id/return', async (c) => {
   const { reason } = parsed.data;
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
 
     // ADR-018: caixa por loja — destino da saída de dinheiro da devolução é o caixa aberto da loja.
     const session = await prisma.cashSession.findFirst({
@@ -1241,7 +1241,7 @@ orders.post('/:id/return-items', async (c) => {
   const { items: reqItems, reason, target } = parsed.data;
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const order = await prisma.order.findFirst({
       where: { id: orderId, tenantId },
       include: {

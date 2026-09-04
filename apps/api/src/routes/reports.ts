@@ -29,7 +29,7 @@ import {
   type TopCustomerRow,
   type TopProductRow,
 } from '@nexoloja/shared';
-import { type Env, getConnectionString, getTenantId } from '../lib/request';
+import { type Env, getConnectionString, getPrisma, getTenantId } from '../lib/request';
 import { requireAuth } from '../middleware/auth';
 
 const reports = new Hono<Env>();
@@ -192,7 +192,7 @@ reports.get('/sales', async (c) => {
   const compare = c.req.query('compare') === '1';
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
 
     // Janela atual + (quando `?compare=1` e há intervalo) a ANTERIOR equivalente, em paralelo. Sem
     // intervalo (todo o histórico) não há "período anterior" — `previous` fica null.
@@ -254,7 +254,7 @@ reports.get('/payment-composition', async (c) => {
   const paidAt = createdAt; // mesmo intervalo, aplicado ao RECEBIMENTO da dívida (regime de caixa)
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     // Teto de segurança (mesmo padrão do `/cash-sessions`): um período real por forma fica muito
     // abaixo disso; existe só para nunca devolver uma resposta gigante num "todo o histórico".
     const CAP = 5000;
@@ -361,7 +361,7 @@ reports.get('/top-products', async (c) => {
   const range = buildDateFilter(from, to);
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const conditions: Prisma.Sql[] = [
       Prisma.sql`o."tenantId" = ${tenantId}::uuid`,
       Prisma.sql`o."status" <> 'CANCELLED'`,
@@ -462,7 +462,7 @@ reports.get('/product-customers/:productId', async (c) => {
   const range = buildDateFilter(from, to);
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const conditions: Prisma.Sql[] = [
       Prisma.sql`o."tenantId" = ${tenantId}::uuid`,
       Prisma.sql`o."status" <> 'CANCELLED'`,
@@ -529,7 +529,7 @@ reports.get('/top-customers', async (c) => {
   const range = buildDateFilter(from, to);
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const conditions: Prisma.Sql[] = [
       Prisma.sql`o."tenantId" = ${tenantId}::uuid`,
       Prisma.sql`o."status" <> 'CANCELLED'`,
@@ -639,7 +639,7 @@ reports.get('/customer-products/:customerId', async (c) => {
   const range = buildDateFilter(from, to);
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const conditions: Prisma.Sql[] = [
       Prisma.sql`o."tenantId" = ${tenantId}::uuid`,
       Prisma.sql`o."status" <> 'CANCELLED'`,
@@ -696,7 +696,7 @@ reports.get('/projections', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const DAY = 86_400_000;
     const now = new Date();
     // "Hoje" no fuso da loja (Brasil, UTC-3): desloca o relógio para ler ano/mês/dia locais.
@@ -838,7 +838,7 @@ reports.get('/daily', async (c) => {
   const paidAt = createdAt;
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const cashConditions: Prisma.Sql[] = [
       Prisma.sql`o."tenantId" = ${tenantId}::uuid`,
       Prisma.sql`o."status" <> 'CANCELLED'`,
@@ -938,7 +938,7 @@ reports.get('/cash-sessions', async (c) => {
   const closedAt = buildDateFilter(from, to);
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     // Teto de segurança (não paginação): a tela sempre manda período (default 30 dias) e o caixa
     // cresce ~1 fechamento/dia, então 2000 cobre ~5 anos de um período escolhido — folgado. Fica só
     // para evitar uma resposta gigante num "tudo o histórico" extremo, sem truncar o uso real.

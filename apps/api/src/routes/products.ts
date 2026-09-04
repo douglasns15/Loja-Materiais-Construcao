@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { createPrismaClient, Prisma } from '@nexoloja/db';
 import { calcMarginPercent } from '@nexoloja/core';
 import { createProductSchema, updateProductSchema } from '@nexoloja/shared';
-import { type Env, getConnectionString, getTenantId } from '../lib/request';
+import { type Env, getConnectionString, getPrisma, getTenantId } from '../lib/request';
 import { requireAuth } from '../middleware/auth';
 
 /**
@@ -98,7 +98,7 @@ products.get('/', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const includeInactive = c.req.query('includeInactive') === 'true';
     // SEM teto: um PDV jamais pode esconder um produto do catálogo. O `take: 100` anterior
     // truncava silenciosamente em ordem alfabética — passando de 100 produtos, os de nome
@@ -160,7 +160,7 @@ products.get('/search', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const includeInactive = c.req.query('includeInactive') === 'true';
 
     const limitRaw = Number(c.req.query('limit'));
@@ -235,7 +235,7 @@ products.get('/:id', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const item = await prisma.product.findFirst({
       where: { id: c.req.param('id'), tenantId, deletedAt: null },
     });
@@ -270,7 +270,7 @@ products.post('/', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     // Autoria (ADR-010): na criação, criado = alterado (mesmo operador/nome-snapshot).
     const userId = c.get('userId');
     const userName = c.get('userName');
@@ -351,7 +351,7 @@ products.patch('/:id', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const id = c.req.param('id');
     // Par (ADR-015): mesmas guardas da criação, agora com o id para pegar auto-referência.
     if (parsed.data.pairedProductId !== undefined) {
@@ -404,7 +404,7 @@ products.delete('/:id', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const id = c.req.param('id');
     const userId = c.get('userId');
     const userName = c.get('userName');

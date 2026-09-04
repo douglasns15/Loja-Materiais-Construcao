@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { createPrismaClient, Prisma } from '@nexoloja/db';
+import { Prisma } from '@nexoloja/db';
 import {
   ALERT_META,
   alertDetailQuerySchema,
@@ -19,7 +19,7 @@ import {
   isCashOpenTooLong,
   isDebtStale,
 } from '@nexoloja/core';
-import { type Env, getConnectionString, getTenantId } from '../lib/request';
+import { type Env, getConnectionString, getPrisma, getTenantId } from '../lib/request';
 import { requireAuth } from '../middleware/auth';
 
 /**
@@ -96,7 +96,7 @@ alerts.get('/', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
 
     // Uma única varredura agregada de produtos (cost-zero, sem `findMany` — guarda de CPU do Worker):
     // um `COUNT FILTER` por alerta do bloco, com aliases posicionais `c0..cN` (a ordem = PRODUCT_ALERT_KINDS).
@@ -209,7 +209,7 @@ alerts.get('/products', async (c) => {
   const { kind, cursor } = parsed.data;
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
 
     const conditions: Prisma.Sql[] = [
       Prisma.sql`"tenantId" = ${tenantId}::uuid`,
@@ -291,7 +291,7 @@ alerts.get('/detail', async (c) => {
   const { kind } = parsed.data;
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const now = new Date();
     let rows: AlertDetailRow[] = [];
 

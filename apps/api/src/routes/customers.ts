@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
-import { createPrismaClient, Prisma } from '@nexoloja/db';
+import { Prisma } from '@nexoloja/db';
 import { receivableBalance } from '@nexoloja/core';
 import { createCustomerSchema, updateCustomerSchema } from '@nexoloja/shared';
-import { type Env, getConnectionString, getTenantId } from '../lib/request';
+import { type Env, getConnectionString, getPrisma, getTenantId } from '../lib/request';
 import { requireAuth } from '../middleware/auth';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -62,7 +62,7 @@ customers.get('/', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
 
     const limitRaw = Number(c.req.query('limit'));
     const limit =
@@ -142,7 +142,7 @@ customers.get('/:id', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const item = await prisma.customer.findFirst({
       where: { id: c.req.param('id'), tenantId, deletedAt: null },
     });
@@ -171,7 +171,7 @@ customers.get('/:id/history', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const [orders, receivables] = await Promise.all([
       // Vendas do cliente (mais recentes; teto de 50 — é um resumo, não o Histórico completo).
       prisma.order.findMany({
@@ -255,7 +255,7 @@ customers.post('/', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     // Autoria (ADR-010): na criação, criado = alterado (mesmo operador/nome-snapshot).
     const userId = c.get('userId');
     const userName = c.get('userName');
@@ -305,7 +305,7 @@ customers.patch('/:id', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const id = c.req.param('id');
     // updateMany garante o escopo do tenant (proteção antes do RLS da Fase 2).
     const result = await prisma.customer.updateMany({
@@ -339,7 +339,7 @@ customers.delete('/:id', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const result = await prisma.customer.updateMany({
       where: { id: c.req.param('id'), tenantId, deletedAt: null },
       // Autoria (ADR-010): quem excluiu + snapshot (o "quando" é o próprio deletedAt).

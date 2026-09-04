@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
-import { createPrismaClient, Prisma } from '@nexoloja/db';
+import { Prisma } from '@nexoloja/db';
 import { createSupplierSchema, updateSupplierSchema } from '@nexoloja/shared';
-import { type Env, getConnectionString, getTenantId } from '../lib/request';
+import { type Env, getConnectionString, getPrisma, getTenantId } from '../lib/request';
 import { requireAuth } from '../middleware/auth';
 
 const suppliers = new Hono<Env>();
@@ -21,7 +21,7 @@ suppliers.get('/', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     // SEM teto: o `take: 100` truncava silenciosamente em ordem alfabética — passando de 100
     // fornecedores, os de nome "tardio" sumiam da lista mesmo existindo no banco (mesma classe
     // do bug de Produtos). Escopo já é o do tenant (RLS); catálogo grande → busca no servidor.
@@ -48,7 +48,7 @@ suppliers.get('/:id', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const item = await prisma.supplier.findFirst({
       where: { id: c.req.param('id'), tenantId, deletedAt: null },
     });
@@ -83,7 +83,7 @@ suppliers.post('/', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const created = await prisma.supplier.create({
       data: { ...parsed.data, tenantId },
     });
@@ -123,7 +123,7 @@ suppliers.patch('/:id', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const id = c.req.param('id');
     // updateMany garante o escopo do tenant (proteção antes do RLS da Fase 2).
     const result = await prisma.supplier.updateMany({
@@ -156,7 +156,7 @@ suppliers.delete('/:id', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const result = await prisma.supplier.updateMany({
       where: { id: c.req.param('id'), tenantId, deletedAt: null },
       data: { deletedAt: new Date() },

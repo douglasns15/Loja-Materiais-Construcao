@@ -14,7 +14,7 @@ import {
   openCashSessionSchema,
   reverseCashMovementSchema,
 } from '@nexoloja/shared';
-import { type Env, getConnectionString, getTenantId } from '../lib/request';
+import { type Env, getConnectionString, getPrisma, getTenantId } from '../lib/request';
 import { requireActiveTenant, requireAuth } from '../middleware/auth';
 
 const cashSessions = new Hono<Env>();
@@ -70,7 +70,7 @@ cashSessions.get('/current', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     // ADR-018: caixa por loja — sem filtro por `userId`.
     const session = await prisma.cashSession.findFirst({
       where: { tenantId, closedAt: null },
@@ -115,7 +115,7 @@ cashSessions.post('/open', requireActiveTenant, async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     // ADR-018: caixa por loja — bloqueia se a LOJA já tem um caixa aberto (qualquer operador).
     const existing = await prisma.cashSession.findFirst({
       where: { tenantId, closedAt: null },
@@ -156,7 +156,7 @@ cashSessions.post('/close', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     // ADR-018: caixa por loja — fecha o caixa aberto da loja (independe de quem abriu).
     const session = await prisma.cashSession.findFirst({
       where: { tenantId, closedAt: null },
@@ -229,7 +229,7 @@ cashSessions.get('/movements', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     // Com `sessionId`: um caixa específico da loja. Sem: o caixa aberto da loja (ADR-018).
     const session = sessionIdParam
       ? await prisma.cashSession.findFirst({
@@ -283,7 +283,7 @@ cashSessions.post('/movement', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     // ADR-018: caixa por loja — movimenta o caixa aberto da loja (independe de quem abriu).
     const session = await prisma.cashSession.findFirst({
       where: { tenantId, closedAt: null },
@@ -338,7 +338,7 @@ cashSessions.post('/movement/:id/reverse', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     // ADR-018: só se pode estornar no caixa ABERTO da loja (caixa fechado é imutável).
     const session = await prisma.cashSession.findFirst({
       where: { tenantId, closedAt: null },

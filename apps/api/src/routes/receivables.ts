@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { createPrismaClient, type Prisma } from '@nexoloja/db';
+import { type Prisma } from '@nexoloja/db';
 import {
   applyReceivablePayment,
   customerAccountBalance,
@@ -9,7 +9,7 @@ import {
   receivableBalance,
 } from '@nexoloja/core';
 import { receiveReceivableSchema, updateReceivableSchema } from '@nexoloja/shared';
-import { type Env, getConnectionString, getTenantId } from '../lib/request';
+import { type Env, getConnectionString, getPrisma, getTenantId } from '../lib/request';
 import { requireActiveTenant, requireAuth } from '../middleware/auth';
 
 const receivables = new Hono<Env>();
@@ -157,7 +157,7 @@ receivables.get('/', async (c) => {
     : {};
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const list = await prisma.receivable.findMany({
       where: { tenantId, ...statusWhere, ...qWhere, ...keyset },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -224,7 +224,7 @@ receivables.get('/accounts', async (c) => {
     filterRaw === 'credit' || filterRaw === 'all' ? filterRaw : 'debt';
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
 
     // Linha da conta acumulada por cliente (dívida + crédito), montada de duas fontes.
     type Acc = {
@@ -385,7 +385,7 @@ receivables.post('/accounts/:customerId/receive', requireActiveTenant, async (c)
   const surcharge = isCard ? Number((parsed.data.surcharge ?? 0).toFixed(2)) : 0;
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     // Dívidas em aberto do cliente, da mais antiga para a mais nova (ordem do FIFO).
     const open = await prisma.receivable.findMany({
       where: { tenantId, customerId, status: 'OPEN' },
@@ -537,7 +537,7 @@ receivables.get('/accounts/:customerId', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const customer = await prisma.customer.findFirst({
       where: { id: customerId, tenantId },
       select: { id: true, name: true, debtNotes: true, creditBalance: true },
@@ -789,7 +789,7 @@ receivables.get('/debts', async (c) => {
       : ([{ openedAt: 'desc' }, { id: 'desc' }] as const);
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const list = await prisma.debt.findMany({
       where: { tenantId, status, ...qWhere, ...keyset },
       orderBy: [...orderBy],
@@ -862,7 +862,7 @@ receivables.get('/debts/:id', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const debt = await prisma.debt.findFirst({
       where: { id, tenantId },
       select: {
@@ -998,7 +998,7 @@ receivables.get('/:id', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const r = await prisma.receivable.findFirst({
       where: { id, tenantId },
       select: {
@@ -1119,7 +1119,7 @@ receivables.patch('/:id', async (c) => {
   const notes = parsed.data.notes?.trim() ? parsed.data.notes.trim() : null;
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     // Garante que a conta é da loja antes de atualizar (RLS reforçado no código).
     const found = await prisma.receivable.findFirst({ where: { id, tenantId }, select: { id: true } });
     if (!found) {
@@ -1161,7 +1161,7 @@ receivables.post('/:id/receive', requireActiveTenant, async (c) => {
   const surcharge = isCard ? Number((parsed.data.surcharge ?? 0).toFixed(2)) : 0;
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const receivable = await prisma.receivable.findFirst({
       where: { id, tenantId },
       select: {

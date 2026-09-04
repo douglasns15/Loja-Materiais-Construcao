@@ -1,4 +1,5 @@
 import type { Context } from 'hono';
+import { createPrismaClient, type PrismaClient } from '@nexoloja/db';
 
 export type Bindings = {
   /** Conexão injetada pelo Cloudflare Hyperdrive (ADR-005). */
@@ -53,6 +54,13 @@ export type Variables = {
    * rotas `/support/*`. `supportTenantId` é a loja-alvo que o token autoriza (read-only). */
   supportPlatformAdminId: string;
   supportTenantId: string;
+  /**
+   * Client Prisma com escopo da REQUISIÇÃO atual (ADR-005, "Conexão única por requisição").
+   * Criado uma vez por request (no `requireAuth` ou sob demanda via `getPrisma`) e reusado pelos
+   * handlers da MESMA request — 1 conexão por request em vez de 2. NUNCA reusar entre requests
+   * (o Workers proíbe I/O cross-request; ver `createPrismaClient`).
+   */
+  prisma: PrismaClient;
 };
 
 export type Env = { Bindings: Bindings; Variables: Variables };
@@ -60,6 +68,26 @@ export type Env = { Bindings: Bindings; Variables: Variables };
 /** Resolve a string de conexão (Hyperdrive na edge; DATABASE_URL no dev local). */
 export function getConnectionString(env: Bindings): string | null {
   return env.HYPERDRIVE?.connectionString ?? env.DATABASE_URL ?? null;
+}
+
+/**
+ * Client Prisma com escopo de REQUISIÇÃO (ADR-005, "Conexão única por requisição"). Cria o client
+ * na 1ª chamada dentro da request e o guarda no contexto do Hono; chamadas seguintes NA MESMA
+ * request (ex.: `requireAuth` e depois o handler) reusam a MESMA instância → 1 conexão por request
+ * em vez de 2. Seguro porque o client nasce e morre dentro da request; NÃO cachear entre requests
+ * (o Workers proíbe usar I/O de outra request — ver `createPrismaClient`). Lança se faltar a
+ * connection string (o try/catch do chamador converte em erro amigável).
+ */
+export function getPrisma(c: Context<Env>): PrismaClient {
+  const existing = c.get('prisma');
+  if (existing) return existing;
+  const connectionString = getConnectionString(c.env);
+  if (!connectionString) {
+    throw new Error('Sem conexão com o banco (HYPERDRIVE/DATABASE_URL ausente).');
+  }
+  const prisma = createPrismaClient(connectionString);
+  c.set('prisma', prisma);
+  return prisma;
 }
 
 /**

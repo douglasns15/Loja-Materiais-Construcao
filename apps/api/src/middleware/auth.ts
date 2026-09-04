@@ -1,8 +1,8 @@
 import { createMiddleware } from 'hono/factory';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
-import { createPrismaClient } from '@nexoloja/db';
+
 import { isAdminRole } from '@nexoloja/shared';
-import { type Env, getConnectionString } from '../lib/request';
+import { type Env, getConnectionString, getPrisma } from '../lib/request';
 import { verifySupportToken } from '../lib/supportToken';
 import { withDbRetry } from '../lib/dbRetry';
 
@@ -55,7 +55,7 @@ export const requireAuth = createMiddleware<Env>(async (c, next) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     // Retry curto: o cold start do free tier faz esta leitura estourar na 1ª chamada depois de
     // ociosa e devolver 500 ("Falha na autenticação." abaixo). Re-tentar a leitura é seguro.
     const user = await withDbRetry('requireAuth.user', () =>
@@ -156,7 +156,7 @@ export const requirePlatformAuth = createMiddleware<Env>(async (c, next) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const admin = await withDbRetry('requirePlatformAuth.admin', () =>
       prisma.platformAdmin.findUnique({
         where: { id: sub },
@@ -213,7 +213,7 @@ export const requireSupportSession = createMiddleware<Env>(async (c, next) => {
   try {
     // Revalida o super usuário na fonte de verdade (a tabela, não o token): se foi desativado,
     // a sessão de suporte deixa de valer na hora — mesmo antes de o token expirar.
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const admin = await withDbRetry('requireSupportSession.admin', () =>
       prisma.platformAdmin.findUnique({
         where: { id: scope.platformAdminId },

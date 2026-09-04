@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
-import { createPrismaClient } from '@nexoloja/db';
+
 import { MODULE_OFFLINE_SALES, toStoreRole, updateMeSchema } from '@nexoloja/shared';
-import { type Env, getConnectionString, getTenantId } from '../lib/request';
+import { type Env, getConnectionString, getPrisma, getTenantId } from '../lib/request';
 import { requireAuth } from '../middleware/auth';
 
 const me = new Hono<Env>();
@@ -18,7 +18,7 @@ me.get('/', async (c) => {
     return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
   }
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const user = await prisma.user.findUnique({ where: { id: userId }, select: SELECT });
     if (!user) {
       return c.json({ ok: false, error: 'Usuário não encontrado.' }, 404);
@@ -65,7 +65,7 @@ me.patch('/', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     await prisma.user.update({ where: { id: userId }, data: parsed.data });
     const user = await prisma.user.findUnique({ where: { id: userId }, select: SELECT });
     return c.json({ ok: true, data: user ? { ...user, storeRole: toStoreRole(user.role) } : null });

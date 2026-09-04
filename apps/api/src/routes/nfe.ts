@@ -8,7 +8,7 @@ import {
   normalizeNcm,
   onlyDigits,
 } from '@nexoloja/shared';
-import { type Env, getConnectionString, getTenantId } from '../lib/request';
+import { type Env, getConnectionString, getPrisma, getTenantId } from '../lib/request';
 import { requireActiveTenant, requireAuth } from '../middleware/auth';
 
 /**
@@ -102,7 +102,7 @@ nfe.post('/entry', requireActiveTenant, async (c) => {
   const reason = (entry.notaNumber ? `Compra NF ${entry.notaNumber}` : 'Compra NF-e').slice(0, 150);
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const supplier = await resolveSupplier(prisma, tenantId, entry);
     const supplierId = supplier?.id ?? null;
     // Snapshot p/ o histórico: nome do fornecedor (resolvido) e nome do arquivo XML importado.
@@ -315,7 +315,7 @@ nfe.get('/imported', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     type Imported = { nItem: number; productId: string | null; importedAt: string };
     const [rows, events] = await Promise.all([
       prisma.nfeImportItem.findMany({
@@ -382,7 +382,7 @@ nfe.get('/imports', async (c) => {
   const before = beforeRaw ? new Date(beforeRaw) : null;
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     // HAVING dinâmico: cursor de paginação + busca. Os campos de resumo são constantes no grupo,
     // então filtramos pelos seus `MAX()` (funciona igual a filtrar o valor da coluna).
     const having: Prisma.Sql[] = [];
@@ -460,7 +460,7 @@ nfe.get('/imports/:accessKey', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const rows = await prisma.nfeImportItem.findMany({
       where: { tenantId, accessKey },
       select: {

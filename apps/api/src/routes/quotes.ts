@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { createPrismaClient } from '@nexoloja/db';
+
 import { calcSaleItemTotal, calcSaleTotals } from '@nexoloja/core';
 import {
   createQuoteSchema,
@@ -9,7 +9,7 @@ import {
   type QuoteEffectiveStatus,
   type QuoteStatus,
 } from '@nexoloja/shared';
-import { type Env, getConnectionString, getTenantId } from '../lib/request';
+import { type Env, getConnectionString, getPrisma, getTenantId } from '../lib/request';
 import { requireActiveTenant, requireAuth } from '../middleware/auth';
 
 const quotes = new Hono<Env>();
@@ -115,7 +115,7 @@ quotes.get('/', async (c) => {
     : null;
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const list = await prisma.quote.findMany({
       where: {
         tenantId,
@@ -185,7 +185,7 @@ quotes.get('/:id', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const row = await prisma.quote.findFirst({
       where: { id, tenantId, deletedAt: null },
       select: {
@@ -281,7 +281,7 @@ quotes.post('/', requireActiveTenant, async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     // Cliente informado precisa ser da loja (quando presente).
     if (quote.customerId) {
       const cust = await prisma.customer.findFirst({
@@ -364,7 +364,7 @@ quotes.patch('/:id', async (c) => {
     !!body && typeof body === 'object' && Array.isArray((body as { items?: unknown }).items);
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
 
     if (isRevision) {
       const parsed = reviseQuoteSchema.safeParse(body);
@@ -503,7 +503,7 @@ quotes.delete('/:id', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const existing = await prisma.quote.findFirst({
       where: { id, tenantId, deletedAt: null },
       select: { id: true, status: true },

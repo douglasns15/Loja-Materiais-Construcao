@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
-import { createPrismaClient } from '@nexoloja/db';
+
 import { calcMarginPercent, needsReplenishment } from '@nexoloja/core';
-import { type Env, getConnectionString } from '../lib/request';
+import { type Env, getConnectionString, getPrisma } from '../lib/request';
 import { requireSupportSession } from '../middleware/auth';
 import type { Context } from 'hono';
 
@@ -56,7 +56,7 @@ support.post('/end', async (c) => {
   const tenantId = c.get('supportTenantId');
   const platformAdminId = c.get('supportPlatformAdminId');
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     await prisma.auditEvent.create({
       data: {
         tenantId,
@@ -91,7 +91,7 @@ support.get('/:tenantId/overview', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const tenant = await prisma.tenant.findUnique({
       where: { id: tenantId },
       select: {
@@ -204,7 +204,7 @@ support.get('/:tenantId/orders', async (c) => {
   const createdAt = buildDateFilter(from, to);
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const orders = await prisma.order.findMany({
       where: { tenantId, ...(status ? { status } : {}), ...(createdAt ? { createdAt } : {}) },
       orderBy: { createdAt: 'desc' },
@@ -267,7 +267,7 @@ support.get('/:tenantId/products', async (c) => {
   const lowOnly = c.req.query('lowStock') === '1';
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const products = await prisma.product.findMany({
       where: {
         tenantId,
@@ -338,7 +338,7 @@ support.get('/:tenantId/stock-movements', async (c) => {
   const productId = c.req.query('productId') || undefined;
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const movements = await prisma.stockMovement.findMany({
       where: { tenantId, ...(productId ? { productId } : {}) },
       orderBy: { createdAt: 'desc' },

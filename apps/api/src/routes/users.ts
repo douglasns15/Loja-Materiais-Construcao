@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { createPrismaClient } from '@nexoloja/db';
+
 import {
   inviteUserSchema,
   isOwnerRole,
@@ -7,7 +7,7 @@ import {
   toStoreRole,
   updateUserSchema,
 } from '@nexoloja/shared';
-import { type Env, getConnectionString, getTenantId } from '../lib/request';
+import { type Env, getConnectionString, getPrisma, getTenantId } from '../lib/request';
 import { deleteAuthUser, inviteAuthUser } from '../lib/authAdmin';
 import { requireAdmin, requireAuth } from '../middleware/auth';
 
@@ -25,7 +25,7 @@ users.get('/', async (c) => {
     return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
   }
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const items = await prisma.user.findMany({
       where: { tenantId },
       orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
@@ -69,7 +69,7 @@ users.patch('/:id', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const target = await prisma.user.findFirst({
       where: { id: targetId, tenantId },
       select: { id: true, role: true, isActive: true },
@@ -144,7 +144,7 @@ users.delete('/:id', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const target = await prisma.user.findFirst({
       where: { id: targetId, tenantId },
       select: { id: true, email: true, name: true, role: true },
@@ -254,7 +254,7 @@ users.post('/invite', async (c) => {
   const role = storeRoleToUserRole(storeRole);
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
 
     // Já existe alguém com esse e-mail nesta loja? (idempotência amigável)
     const sameEmail = await prisma.user.findFirst({

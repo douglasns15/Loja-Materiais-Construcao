@@ -1,12 +1,12 @@
 import { Hono } from 'hono';
-import { createPrismaClient, type Prisma } from '@nexoloja/db';
+import { type Prisma } from '@nexoloja/db';
 import {
   isValidDelivery,
   orderFulfillmentStatus,
   remainingToDeliver,
 } from '@nexoloja/core';
 import { deliverOrderSchema, updateOrderNotesSchema, parseSeqNumberQuery } from '@nexoloja/shared';
-import { type Env, getConnectionString, getTenantId } from '../lib/request';
+import { type Env, getConnectionString, getPrisma, getTenantId } from '../lib/request';
 import { requireActiveTenant, requireAuth } from '../middleware/auth';
 
 /**
@@ -190,7 +190,7 @@ deliveries.get('/', async (c) => {
       : {};
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     // Dois fluxos, cada um paginado (take limit+1): contas do cliente e vendas avulsas (sem conta).
     const [accounts, orphans] = await Promise.all([
       prisma.deliveryAccount.findMany({
@@ -306,7 +306,7 @@ deliveries.get('/:id', async (c) => {
   }
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const order = await prisma.order.findFirst({
       where: { id, tenantId, deliveryMode: 'SCHEDULED' },
       include: {
@@ -378,7 +378,7 @@ deliveries.patch('/:id', requireActiveTenant, async (c) => {
   const notes = parsed.data.notes?.trim() ? parsed.data.notes.trim() : null;
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const order = await prisma.order.findFirst({
       where: { id: orderId, tenantId, deliveryMode: 'SCHEDULED' },
       select: { id: true },
@@ -430,7 +430,7 @@ deliveries.post('/:id/deliver', requireActiveTenant, async (c) => {
   const { items: reqItems, notes } = parsed.data;
 
   try {
-    const prisma = createPrismaClient(connectionString);
+    const prisma = getPrisma(c);
     const order = await prisma.order.findFirst({
       where: { id: orderId, tenantId, deliveryMode: 'SCHEDULED' },
       include: { items: true },
