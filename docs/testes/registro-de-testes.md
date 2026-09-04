@@ -5590,3 +5590,23 @@ Levantado pelo Owner após uma importação real na loja **Maria ConstruLar (PRD
 **Os 6 de largura ≠13 (auditados, sem ação):** *Caps Soldável* e *Fita Veda Rosca* confirmados pela **Cosmos** (cache); *Lápis Carpinteiro* = Irwin 66305SL (busca web, UPC-A); *Broca 4,0mm*, *Luva 3/4* e *Suporte 20cm* são **GTIN-14 (código da caixa)** — e o Owner confirmou que **Broca e Suporte não têm código de barras na unidade, só na embalagem**, então o GTIN-14 é o código correto e único. A *Luva 3/4* mantém a caixa no `ean` (`17897801302194`) e a unidade no `sku` (`7897801302197`) — o matcher novo cobre os dois; deixar como está é o ideal.
 
 **NO AR** — sem migration, sem mudança de contrato de API (regra 7 não se aplica). Fix de código: commit `8b83cda` em `main` (push do Owner); web Version `6c875ae0` (smoke pós-deploy OK). Limpeza de dados aplicada em produção 2026-09-03 (já vale, independe do deploy). Docs: [ADR-025 §7](../adr/ADR-025-catalogo-global-ean.md).
+
+## Produto.UnidadePacote — pacote fechado que abre e vende a unidade avulsa (ADR-030) (2026-09-04)
+
+Pedido do Owner: cadastrar produto vendido em **pacote fechado** que também é **aberto e vendido por unidade avulsa** — caso real do **Kit de cola quente** (SKU 8145, Maria ConstruLar): pacote de **6 unidades**, unidade a **R$ 2,00**. Antes impossível (não existia unidade "Pacote"; o motor de unidade fechada — ADR-017 — só cobria barra/rolo por metro). Decisão do Owner: modelar Pacote **igual a Barra/Rolo** (fechado como principal, unidade avulsa como subdivisão opcional). Generaliza o ADR-017 com a régua fina sendo a **unidade** (passo **1**, não 0,5 m).
+
+| O que foi testado | Método | Resultado |
+|---|---|---|
+| `closedSaleStep`/`closedFineUnit` (pacote ⇒ passo 1 / régua UNIT; barra/rolo ⇒ 0,5 / METER); `PACK` em `CLOSED_PRIMARY_UNITS` | Vitest (`packages/core/src/pacote.test.ts`, +13 casos) | ✅ core 354/354 |
+| `isValidMeterStep(qty, 1)` recusa fração e mínimo (não existe meia unidade); venda avulsa inteira | Vitest | ✅ |
+| `resolveClosedSale`/`closedStockMeters` para pacote (inteiro baixa `tamanho` un; avulso baixa 1 un; fallback seguro sem preço avulso) | Vitest | ✅ |
+| tsc api + shared + web | `tsc --noEmit` | ✅ 0 erros (3 erros pré-existentes em `core/src/index.test.ts`, alheios) |
+| build web | `next build` | ✅ 21 rotas (/venda 19.3 kB, /products 16.6 kB, /estoque 17.7 kB) |
+| migration `0037` (`ALTER TYPE "UnitType" ADD VALUE 'PACK'`) — só ela pendente | `prisma migrate deploy` | ✅ aplicada no Supabase |
+| Prisma Client regenerado com `PACK` embutido (lição do client stale) | `grep PACK node_modules/.prisma/client/schema.prisma` + wasm | ✅ schema 1 / wasm 2 |
+| **E2E do Owner** (loja Demo): cadastro de pacote (tamanho + preço avulso), PDV "+ Pacote (6 un)" × "+ por unidade R$/un", estoque "X pacotes + Y un", entrada em pacotes | manual pelo Owner | ✅ "tudo testado e validado com sucesso" |
+
+**Correção de brinde (transversal):** o selo do carrinho no PDV rotulava o **corte avulso** de unidade fechada (metro da barra/rolo **e** unidade do pacote) como "embalagem fechada" (`saleMode==='ALT'` sem checar `i.closed`). Agora `!i.closed` = "embalagem fechada" (EF-3, ADR-013); `i.closed` = "corte por metro" / "unidade avulsa".
+
+**NO AR** — migration `0037` no Supabase; API Version `02d20a6c` (health 200); web Version `2c28a241` (smoke pós-deploy OK — CSS 200 + HTML no-store). Sem mudança de contrato de API (regra 7 não se aplica). Commits `21edc34` + `2e4217f` em `main` (push do Owner pendente). Docs: [ADR-030](../adr/ADR-030-pacote-como-unidade-fechada.md).
+
