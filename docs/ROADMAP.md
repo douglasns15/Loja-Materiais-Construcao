@@ -3,7 +3,37 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-09-04 — **Infra.Resiliencia — "preso no cache offline por minutos,
+> **Última atualização:** 2026-09-05 — **UI.JanelaFlutuante — painel de tela destacável e
+> interativo (ADR-031, Fatia 1) — NO AR e E2E DO OWNER VALIDADO em produção (2026-09-05, "tudo
+> validado e funcionando perfeitamente"). CONCLUÍDA.** Demanda do Owner: **comparar dados** numa
+> análise — destacar uma tela num **painel flutuante** que **persiste ao navegar** para outra tela e
+> continua **pesquisável de forma independente**, sem voltar à origem. **Decisão de arquitetura
+> (ADR-031, Aceito):** **painel interno no mesmo documento** (não `window.open` nem Document PiP —
+> deferidos), renderizando o **próprio componente de página** uma 2ª vez via `createPortal` no `body`.
+> **Por que interno:** um 2º documento reabriria o **duplo dreno do outbox** (ADR-011, instância única
+> no shell) e a **rajada de conexões** que estourava o pool do free tier (ADR-005). **Spike (passo 1)
+> validou** que o Next 15 permite reusar a `page.tsx` fora da rota e que o chunk fica **lazy** (não
+> incha as outras rotas — `/venda` e `/caixa` idênticas no build); as 5 telas são auto-contidas
+> (estado `useState` local, sem `useRouter`/URL/DOM-id), então a busca própria do flutuante saiu **sem
+> tocar as telas**. **Telas (leitura):** Produtos, Estoque, Histórico de Vendas, Contas a Receber,
+> Relatórios. **Escopo v1:** navegar/pesquisar/consultar — **sem** mutação nem impressão pelo flutuante
+> (modais/`#print-area` são portal no `body` e cobririam a tela toda). **Guarda de custo (ADR-005):**
+> **sem polling** — carga só ao **abrir** e ao **pesquisar** (ação do usuário, mesmo custo de navegar
+> 1×); **teto de 2 painéis** simultâneos. **Desktop-only** (o ⧉ some no mobile); geometria/minimizado
+> por tela em `localStorage`. **Custo-zero:** só `apps/web` — 4 novos (`lib/floatingPanels.tsx`,
+> `components/FloatingPanel.tsx` [arrastar/redimensionar/minimizar à mão, **sem dep nova** — regra 4],
+> `FloatingPanelHost.tsx`, `FloatingLauncher.tsx`) + `layout.tsx` (provider + ⧉ no header + host); **as
+> 5 telas não foram tocadas**; **não toca** API/DB/migração/`core`/`shared`. **E2E do Owner (produção):**
+> abrir Produtos flutuante, navegar para Estoque com o painel persistindo, pesquisar dentro do painel
+> (filtrou sozinho sem afetar o fundo), arrastar/redimensionar/minimizar, teto de 2. **Gate:** web `tsc`
+> 0; `next build` (lazy confirmado). **NO AR:** web Version `f10125f8` (smoke ✅ — HTML `no-store` +
+> CSS 200). Commit local em `main` (push do Owner). Docs: [[ADR-031]] (Aceito). **Riscos aceitos
+> (ADR-031 §Consequências):** prefs cosméticas de `localStorage` de chave fixa compartilhadas entre a
+> tela cheia e o flutuante da mesma tela (namespear depois se incomodar); modais/impressão de dentro do
+> flutuante cobrem a tela toda (v1 = consulta). **Refinos possíveis (backlog):** modo "só consulta"
+> (esconder o cadastro no flutuante), botão "Destacar esta tela" por página, mais telas.
+>
+> **Antes:** 2026-09-04 — **Infra.Resiliencia — "preso no cache offline por minutos,
 > ~3×/dia" RESOLVIDO em 4 frentes + E2E DO OWNER VALIDADO (2026-09-04, vendas no ambiente de testes).
 > NO AR.** O operador ficava preso ~7 min na mensagem "Caixa recuperado do cache offline" (o
 > `GET /cash-sessions/current` caía no *fallback* e a tela **nunca re-tentava sozinha**), no MEIO do

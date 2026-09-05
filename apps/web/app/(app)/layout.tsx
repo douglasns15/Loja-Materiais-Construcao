@@ -10,10 +10,13 @@ import { useMe } from '@/lib/useMe';
 import { clearCachedMe } from '@/lib/meCache';
 import { OutboxSyncProvider } from '@/lib/outboxSync';
 import { CartProvider } from '@/lib/cartStore';
+import { FloatingPanelsProvider } from '@/lib/floatingPanels';
 import { ProfileModal } from './ProfileModal';
 import { QueueChip } from './QueueChip';
 import { AlertsChip } from './AlertsChip';
 import { CartChip } from './CartChip';
+import { FloatingLauncher } from '@/components/FloatingLauncher';
+import { FloatingPanelHost } from '@/components/FloatingPanelHost';
 import { OfflineNav } from './OfflineNav';
 
 // Ícones do menu (SVG inline no mesmo estilo do resto do arquivo: viewBox 0 0 24 24, traço
@@ -365,6 +368,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     {/* Cesta persistente (ADR-021): provider único no shell — o PDV e o ícone do topo compartilham
         o mesmo estado. `userId` vem do `me` (a cesta é por usuário). */}
     <CartProvider userId={me?.id ?? null}>
+    {/* Janela flutuante de tela (ADR-031): provider único no shell; os painéis compartilham cesta/
+        outbox/JWT com o app (mesmo documento). Só apresentação — desktop-only. */}
+    <FloatingPanelsProvider>
     {/* CS-3: offline, converte a navegação entre telas em recarga (evita o fetch RSC que falha). */}
     <OfflineNav />
     <div className="flex h-dvh">
@@ -592,6 +598,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <QueueChip />
           {/* Grupo à direita: sino de pendências (ADR-029) + cesta (ADR-021), sempre visíveis. */}
           <div className="ml-auto flex items-center gap-1">
+            {/* Destacar tela em janela flutuante (ADR-031) — desktop-only. */}
+            <FloatingLauncher />
             {/* Central de pendências: alertas de cadastro calculados sob demanda. */}
             <AlertsChip />
             {/* Ícone da cesta: mostra a contagem do carrinho de qualquer tela; leva ao PDV. */}
@@ -627,6 +635,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         />
       )}
     </div>
+    {/* Janela(s) flutuante(s) abertas — em portal no body, por cima do conteúdo (desktop-only). */}
+    <FloatingPanelHost />
+    </FloatingPanelsProvider>
     </CartProvider>
     </OutboxSyncProvider>
   );
