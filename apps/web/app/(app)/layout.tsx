@@ -11,6 +11,7 @@ import { clearCachedMe } from '@/lib/meCache';
 import { OutboxSyncProvider } from '@/lib/outboxSync';
 import { CartProvider } from '@/lib/cartStore';
 import { FloatingPanelsProvider } from '@/lib/floatingPanels';
+import { ShortcutsProvider } from '@/lib/shortcuts';
 import { ProfileModal } from './ProfileModal';
 import { QueueChip } from './QueueChip';
 import { AlertsChip } from './AlertsChip';
@@ -371,6 +372,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     {/* Janela flutuante de tela (ADR-031): provider único no shell; os painéis compartilham cesta/
         outbox/JWT com o app (mesmo documento). Só apresentação — desktop-only. */}
     <FloatingPanelsProvider>
+    {/* Atalhos de teclado (ADR-032): motor único no shell — navegação `N`+letra e `F2` (PDV). */}
+    <ShortcutsProvider>
     {/* CS-3: offline, converte a navegação entre telas em recarga (evita o fetch RSC que falha). */}
     <OfflineNav />
     <div className="flex h-dvh">
@@ -637,6 +640,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     </div>
     {/* Janela(s) flutuante(s) abertas — em portal no body, por cima do conteúdo (desktop-only). */}
     <FloatingPanelHost />
+    </ShortcutsProvider>
     </FloatingPanelsProvider>
     </CartProvider>
     </OutboxSyncProvider>

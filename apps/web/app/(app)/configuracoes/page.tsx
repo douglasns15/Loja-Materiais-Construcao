@@ -14,6 +14,7 @@ import { useMe } from '@/lib/useMe';
 import { useOnline } from '@/lib/useOnline';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { UsersSection } from './UsersSection';
+import { AccessibilitySection } from './AccessibilitySection';
 
 type Store = {
   name: string;
@@ -447,6 +448,9 @@ export default function ConfiguracoesPage() {
       </section>
 
       <UsersSection currentUserId={me?.id ?? null} />
+
+      {/* Atalhos de teclado (ADR-032): ver/editar/restaurar/adicionar — preferência por dispositivo. */}
+      <AccessibilitySection />
     </div>
   );
 }

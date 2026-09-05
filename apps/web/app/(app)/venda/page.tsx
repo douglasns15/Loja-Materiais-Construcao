@@ -47,6 +47,7 @@ import {
   type ReorderPlan,
 } from '@nexoloja/core';
 import { takeReorderPayload } from '@/lib/reorder';
+import { useShortcuts } from '@/lib/shortcuts';
 import { apiGet, apiPatch, apiPost } from '@/lib/api';
 import { cacheCashSession, readCachedCashSession } from '@/lib/cashSessionCache';
 import { cacheProducts, readCachedProducts } from '@/lib/catalog';
@@ -443,6 +444,10 @@ export default function VendaPage() {
   const [reorderPairs, setReorderPairs] = useState<CartItem[]>([]);
   const [reorderPairReview, setReorderPairReview] = useState<string[]>([]);
   const reorderAppliedRef = useRef(false);
+  // Atalhos de teclado (ADR-032, Fatia 3): o campo de busca de produto (foco por F9) e o registro
+  // das ações do PDV no motor global.
+  const { registerAction } = useShortcuts();
+  const productSearchRef = useRef<HTMLInputElement>(null);
   // Venda a prazo (ADR-019): valor deixado a prazo, cliente devedor e vencimento opcional.
   // `creditInput` vazio/0 = venda à vista comum (nenhuma regressão). Online-only nesta fatia.
   // `showCredit` mantém a opção ESCONDIDA por padrão (PDV limpo) — só aparece quando o operador
@@ -1444,6 +1449,26 @@ export default function VendaPage() {
     setView({ kind: 'review' });
   }
 
+  // Atalhos do PDV (ADR-032, Fatia 3): F8 = finalizar (abre a revisão), F9 = focar a busca de
+  // produto. `onConcluir` fecha sobre o estado do carrinho a cada render; guardo a versão atual num
+  // ref e registro um wrapper estável (o motor só dispara quando o PDV está montado).
+  const onConcluirRef = useRef(onConcluir);
+  onConcluirRef.current = onConcluir;
+  useEffect(() => {
+    const offFinalizar = registerAction('pdv-finalizar', () => onConcluirRef.current());
+    const offBusca = registerAction('pdv-focar-busca', () => {
+      const el = productSearchRef.current;
+      if (el) {
+        el.focus();
+        el.select();
+      }
+    });
+    return () => {
+      offFinalizar();
+      offBusca();
+    };
+  }, [registerAction]);
+
   /** Confirmação: AQUI a venda é efetivada. Online → grava direto na API (estoque baixa, caixa
    *  recebe). Offline com o recurso ligado → enfileira na `outbox` (ADR-011) e o worker sincroniza
    *  quando a rede voltar. Offline sem o recurso → orienta nota manual (não enfileira). */
@@ -2260,6 +2285,7 @@ export default function VendaPage() {
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex basis-full gap-2">
             <input
+              ref={productSearchRef}
               type="search"
               placeholder="Buscar ou escanear (nome, popular, fabricante ou SKU)…"
               value={productSearch}
