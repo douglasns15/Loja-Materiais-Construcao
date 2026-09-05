@@ -99,7 +99,7 @@ export function AlertDetailModal({
 
   return (
     <div
-      className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-black/30 p-4"
+      className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto overscroll-contain bg-black/30 p-4"
       onClick={onClose}
     >
       <div
@@ -126,7 +126,7 @@ export function AlertDetailModal({
           </button>
         </div>
 
-        <div className="max-h-[70vh] overflow-y-auto p-4">
+        <div className="max-h-[70vh] overflow-y-auto overscroll-contain p-4">
           {loading ? (
             <p className="py-8 text-center text-sm text-gray-500">Carregando…</p>
           ) : error ? (

@@ -222,7 +222,9 @@ export function AlertsChip() {
             </p>
           </div>
 
-          <div className="max-h-[70vh] overflow-y-auto p-2">
+          {/* overscroll-contain: no celular, ao rolar a lista e chegar no topo/fim, o gesto NÃO "vaza"
+              para a página atrás do painel (scroll chaining) — era o que fazia rolar o fundo. */}
+          <div className="max-h-[70vh] overflow-y-auto overscroll-contain p-2">
             {items.length === 0 ? (
               <p className="px-3 py-6 text-center text-sm text-gray-500">Tudo em ordem ✓</p>
             ) : visibleItems.length === 0 ? (
