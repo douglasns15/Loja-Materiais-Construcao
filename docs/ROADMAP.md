@@ -3,7 +3,28 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-09-05 — **UI.Sino.RolagemMobile — o painel de pendências (sino)
+> **Última atualização:** 2026-09-05 — **Vendas.VenderDeNovo — o "Vender de novo" (reorder) deixa de
+> quebrar itens vendidos em par — NO AR e E2E DO OWNER VALIDADO (2026-09-05, "validado com sucesso,
+> passou"). CONCLUÍDA.** Achado do Owner: ao reusar uma venda pelo Histórico, um item vendido **casado**
+> (par ADR-015, ex.: parafuso + bucha) voltava ao PDV **separado em dois avulsos** em vez de casado.
+> **Causa:** o repasse Histórico→PDV (`lib/reorder.ts`) achatava os itens (produto + unidade + qtd) e
+> **descartava o `pairGroup`** — o vínculo do par; sem o dado, o PDV tratava cada lado como avulso.
+> **Correção (web-only):** o payload passou a carregar `pairKey` (**namespaced por venda**,
+> `${orderId}#${pairGroup}`, para não colidir ao combinar itens de várias vendas) e o PDV separa
+> **pares × avulsos** — os avulsos seguem pelo `planReorder` (core **intocado**) e os pares são
+> **remontados COMO PAR** pelo mesmo motor da reconstrução de orçamento (`resolvePair` +
+> `buildPairCartLine`), repreçados pelo par atual. **Decisão de arquitetura:** o par NÃO foi ensinado ao
+> `core` — é uma linha só que consome **dois** produtos (compartilham estoque), o que não cabe na
+> agregação produto+modo do `planReorder`; reusar o motor do orçamento manteve o core puro. Pares
+> idênticos somam quantidade; o estoque livre dos avulsos já **desconta** o consumo dos pares; par cujo
+> parceiro/produto saiu do catálogo cai na revisão ("Par indisponível"). Na revisão o par aparece como
+> **uma linha "A + B" com selo `par`** e a contagem do botão soma avulsos + pares. **Camadas:** só
+> `apps/web` (`lib/reorder.ts` + `vendas/page.tsx` + `venda/page.tsx`). **Sem** API/migration/core/shared
+> (regra 7 não se aplica). **Gate:** web `tsc` 0 + `next build` (`/venda` 20 kB); core 354/354
+> (`planReorder` intocado). **NO AR:** web Version `670e67cb` (smoke ✅ — HTML `no-store` + CSS 200).
+> Commit `10f228c` em `main` (push do Owner). Ref.: [[ADR-015]].
+>
+> **Antes:** 2026-09-05 — **UI.Sino.RolagemMobile — o painel de pendências (sino)
 > deixa de arrastar a página de baixo ao rolar no celular — NO AR e E2E DO OWNER VALIDADO
 > (2026-09-05, "validado com sucesso"). CONCLUÍDA.** Achado do Owner no celular: ao tentar rolar a
 > **tela de notificações** (o sino, `AlertsChip`), muitas vezes rolava a **página de baixo** em vez da

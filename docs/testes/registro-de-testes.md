@@ -5624,3 +5624,21 @@ Achado do Owner testando no celular: ao rolar a **tela de notificações** (o si
 
 **NO AR** — só apresentação (classe CSS); sem API/migration/core/shared (regra 7 não se aplica). web Version `15ebe9ad` (smoke pós-deploy OK — HTML no-store + CSS 200). Commit `754d6be` em `main` (push do Owner pendente).
 
+## Vendas.VenderDeNovo — reorder preserva itens vendidos em par (ADR-015) (2026-09-05)
+
+Achado do Owner no "Vender de novo" (Histórico de Vendas): ao adicionar os itens no PDV, um item vendido **casado** (par, ex.: parafuso + bucha) voltava **separado em dois avulsos**, não como par. **Causa:** o repasse Histórico→PDV (`lib/reorder.ts`) achatava os itens (produto + unidade + qtd) e **descartava o `pairGroup`** — o vínculo do par (ADR-015). Sem o dado, o PDV tratava cada lado como avulso. **Correção (web-only):** o payload passou a carregar `pairKey` (namespaced por venda, `${orderId}#${pairGroup}`, para não colidir ao combinar vendas); o PDV separa **pares × avulsos** — avulsos seguem pelo `planReorder` (core intocado) e pares são **remontados COMO PAR** pelo mesmo motor da reconstrução de orçamento (`resolvePair` + `buildPairCartLine`), repreçados pelo par atual.
+
+| O que foi testado | Método | Resultado |
+|---|---|---|
+| Payload leva `pairKey` (namespaced por venda); Histórico preenche a partir do `pairGroup` | `tsc` web | ✅ |
+| PDV separa pares × avulsos: avulsos via `planReorder` (core intocado), pares remontados via `resolvePair` + `buildPairCartLine` | `tsc` web | ✅ |
+| Pares idênticos (mesmo principal + parceiro) somam quantidade; estoque livre dos avulsos desconta o consumo dos pares | leitura + `tsc` | ✅ |
+| Par cujo parceiro/produto saiu do catálogo cai na revisão ("Par indisponível") | leitura + `tsc` | ✅ |
+| Revisão mostra o par como uma linha "A + B" com selo `par`; contagem do botão soma avulsos + pares | `tsc` web + build | ✅ |
+| `planReorder` (core) intocado | Vitest `reorder.test.ts` | ✅ core 354/354 |
+| Typecheck web | `tsc --noEmit` | ✅ 0 erros |
+| Build de produção | `next build` | ✅ todas as rotas (/venda 20 kB) |
+| **E2E do Owner** (ambiente de testes): venda com par → Vender de novo → item volta ao PDV **casado**, não em dois avulsos | manual pelo Owner | ✅ "validado com sucesso, passou" |
+
+**NO AR** — só `apps/web` (`lib/reorder.ts` + `vendas/page.tsx` + `venda/page.tsx`); sem API/migration/core/shared (regra 7 não se aplica). web Version `670e67cb` (smoke pós-deploy OK — HTML no-store + CSS 200). Commit `10f228c` em `main` (push do Owner pendente). Ref.: [ADR-015](../adr/ADR-015-venda-em-par.md).
+
