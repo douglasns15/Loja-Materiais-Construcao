@@ -437,6 +437,11 @@ export default function VendaPage() {
   // vendas veio, só para o texto da revisão. Roda uma vez, guardado no ref (depois do catálogo).
   const [reorderPlan, setReorderPlan] = useState<ReorderPlan | null>(null);
   const [reorderSales, setReorderSales] = useState(0);
+  // Pares (ADR-015) do reorder: reconstruídos FORA do `planReorder` (o core não conhece par —
+  // é uma linha só que consome os DOIS produtos). `reorderPairs` = linhas de par prontas; e
+  // `reorderPairReview` = pares que não deu para refazer (produto/parceiro saiu do catálogo).
+  const [reorderPairs, setReorderPairs] = useState<CartItem[]>([]);
+  const [reorderPairReview, setReorderPairReview] = useState<string[]>([]);
   const reorderAppliedRef = useRef(false);
   // Venda a prazo (ADR-019): valor deixado a prazo, cliente devedor e vencimento opcional.
   // `creditInput` vazio/0 = venda à vista comum (nenhuma regressão). Online-only nesta fatia.
@@ -684,9 +689,59 @@ export default function VendaPage() {
     const payload = takeReorderPayload();
     reorderAppliedRef.current = true;
     if (!payload) return;
+
+    // Separa o que foi vendido EM PAR (ADR-015) do que foi avulso. Os dois lados de um par
+    // compartilham `pairKey` (já namespaced por venda), então precisam voltar COMO PAR — não
+    // como dois itens soltos (o bug relatado). Avulsos seguem pelo core (planReorder).
+    const pairGroups = new Map<string, typeof payload.items>();
+    const singleItems: typeof payload.items = [];
+    for (const it of payload.items) {
+      if (it.pairKey) {
+        const arr = pairGroups.get(it.pairKey) ?? [];
+        arr.push(it);
+        pairGroups.set(it.pairKey, arr);
+      } else {
+        singleItems.push(it);
+      }
+    }
+
+    // 1) Reconstrói os pares pelo catálogo ATUAL (resolvePair + buildPairCartLine, o MESMO motor da
+    //    reconstrução de orçamento — 2.B). Pares idênticos (mesmo lado principal + parceiro) somam a
+    //    quantidade; o par que não puder ser refeito (produto/parceiro saiu do catálogo) vai à revisão.
+    const pairAgg = new Map<string, { main: Product; partner: Product; pairPrice: number; quantity: number }>();
+    const pairReview: string[] = [];
+    for (const arr of pairGroups.values()) {
+      const first = arr[0];
+      const qty = Number(first?.quantity) || 0;
+      const main = first?.productId ? products.find((x) => x.id === first.productId) : undefined;
+      const resolved = main ? resolvePair(main) : null;
+      if (!main || !resolved || qty <= 0) {
+        pairReview.push(arr.map((a) => a.productName).join(' + '));
+        continue;
+      }
+      const key = `${main.id}:PAIR:${resolved.partner.id}`;
+      const cur = pairAgg.get(key);
+      if (cur) cur.quantity = Number((cur.quantity + qty).toFixed(4));
+      else pairAgg.set(key, { main, partner: resolved.partner, pairPrice: resolved.pairPrice, quantity: qty });
+    }
+    const pairLines = [...pairAgg.values()].map((g) =>
+      buildPairCartLine(g.main, g.partner, g.pairPrice, g.quantity),
+    );
+
+    // Quanto cada produto já é consumido pelos pares reconstruídos (1 de cada lado por par, em
+    // unidade-base) — para o estoque livre dos avulsos não contar duas vezes o mesmo produto.
+    const pairBaseByProduct = new Map<string, number>();
+    for (const g of pairAgg.values()) {
+      for (const id of [g.main.id, g.partner.id]) {
+        pairBaseByProduct.set(id, (pairBaseByProduct.get(id) ?? 0) + g.quantity);
+      }
+    }
+
+    // 2) Avulsos: fluxo de sempre (core planReorder), mas o estoque livre já desconta o que os
+    //    pares acima vão consumir.
     const sources: ReorderSourceItem[] = [];
     const catalog = new Map<string, ReorderProductInfo>();
-    for (const it of payload.items) {
+    for (const it of singleItems) {
       const qty = Number(it.quantity) || 0;
       const p = products.find((x) => x.id === it.productId);
       if (!p) {
@@ -699,12 +754,18 @@ export default function VendaPage() {
       const { factorToBase } = buildCartLine(p, mode, 1);
       sources.push({ productId: p.id, productName: p.name, saleMode: mode, quantity: qty, factorToBase });
       if (!catalog.has(p.id)) {
-        // Estoque LIVRE = estoque atual − o que o carrinho já consome deste produto (não vende duas vezes).
-        const free = Math.max(0, Number(p.stockQty) - baseUsedByProduct(p.id));
+        // Estoque LIVRE = estoque atual − o que o carrinho já consome − o que os pares vão consumir.
+        const free = Math.max(
+          0,
+          Number(p.stockQty) - baseUsedByProduct(p.id) - (pairBaseByProduct.get(p.id) ?? 0),
+        );
         catalog.set(p.id, { name: p.name, baseStock: free });
       }
     }
+
     setReorderSales(payload.sales);
+    setReorderPairs(pairLines);
+    setReorderPairReview(pairReview);
     setReorderPlan(planReorder(sources, catalog));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [products]);
@@ -715,6 +776,7 @@ export default function VendaPage() {
     setError(null);
     setCart((prev) => {
       const next = [...prev];
+      // Avulsos.
       for (const l of plan.lines) {
         const p = products.find((x) => x.id === l.productId);
         if (!p) continue;
@@ -727,9 +789,26 @@ export default function VendaPage() {
           next.push(line);
         }
       }
+      // Pares (ADR-015): somam à linha de par existente (mesma key) ou entram como nova linha casada.
+      for (const pl of reorderPairs) {
+        const idx = next.findIndex((c) => c.key === pl.key);
+        const existing = idx >= 0 ? next[idx] : undefined;
+        if (existing) {
+          next[idx] = { ...existing, quantity: Number((existing.quantity + pl.quantity).toFixed(4)) };
+        } else {
+          next.push(pl);
+        }
+      }
       return next;
     });
+    closeReorder();
+  }
+
+  /** Fecha a revisão do reorder e zera o estado de pares (avulsos + pares). */
+  function closeReorder() {
     setReorderPlan(null);
+    setReorderPairs([]);
+    setReorderPairReview([]);
   }
 
   /** Abre o diálogo de impressão. O PDF sai nomeado pelo código do documento (venda V-000128 /
@@ -3039,18 +3118,24 @@ export default function VendaPage() {
             <h2 className="bg-gradient-to-r from-indigo-700 to-indigo-500 bg-clip-text text-lg font-bold text-transparent">
               Vender de novo
             </h2>
-            <p className="mt-1 text-sm text-gray-500">
-              {reorderPlan.lineCount > 0 ? (
-                <>
-                  <strong className="text-gray-700">{reorderPlan.lineCount}</strong>{' '}
-                  {reorderPlan.lineCount === 1 ? 'produto vai' : 'produtos vão'} para o carrinho
-                  {reorderSales > 1 ? <> de <strong className="text-gray-700">{reorderSales}</strong> vendas</> : null}
-                  , repreçados pelo preço atual.
-                </>
-              ) : (
-                'Nenhum item pôde ser adicionado desta seleção.'
-              )}
-            </p>
+            {(() => {
+              // Total de LINHAS que entram = avulsos (core) + pares reconstruídos (ADR-015).
+              const total = reorderPlan.lineCount + reorderPairs.length;
+              return (
+                <p className="mt-1 text-sm text-gray-500">
+                  {total > 0 ? (
+                    <>
+                      <strong className="text-gray-700">{total}</strong>{' '}
+                      {total === 1 ? 'item vai' : 'itens vão'} para o carrinho
+                      {reorderSales > 1 ? <> de <strong className="text-gray-700">{reorderSales}</strong> vendas</> : null}
+                      , repreçados pelo preço atual.
+                    </>
+                  ) : (
+                    'Nenhum item pôde ser adicionado desta seleção.'
+                  )}
+                </p>
+              );
+            })()}
 
             {/* Selos-resumo: mesclados / ajustados ao estoque. */}
             {(reorderPlan.mergedCount > 0 || reorderPlan.clampedCount > 0) && (
@@ -3068,9 +3153,21 @@ export default function VendaPage() {
               </div>
             )}
 
-            {/* Linhas que entram. */}
-            {reorderPlan.lines.length > 0 && (
+            {/* Linhas que entram: avulsos (core) + pares casados (ADR-015). */}
+            {(reorderPlan.lines.length > 0 || reorderPairs.length > 0) && (
               <ul className="mt-3 divide-y divide-gray-100 rounded-xl border border-gray-100 text-sm">
+                {/* Pares primeiro, com selo "par" — deixa claro que voltam casados, não soltos. */}
+                {reorderPairs.map((pl) => (
+                  <li key={pl.key} className="flex items-center justify-between gap-2 px-3 py-2">
+                    <span className="min-w-0 truncate text-gray-700">{pl.name}</span>
+                    <span className="flex shrink-0 items-center gap-2">
+                      <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-700">
+                        par
+                      </span>
+                      <span className="tabular-nums font-medium text-gray-900">{pl.quantity}</span>
+                    </span>
+                  </li>
+                ))}
                 {reorderPlan.lines.map((l) => (
                   <li key={`${l.productId}:${l.saleMode}`} className="flex items-center justify-between gap-2 px-3 py-2">
                     <span className="min-w-0 truncate text-gray-700">{l.name}</span>
@@ -3095,8 +3192,8 @@ export default function VendaPage() {
               </ul>
             )}
 
-            {/* Itens que ficaram de fora (sumiram do catálogo ou sem estoque). */}
-            {(reorderPlan.missing.length > 0 || reorderPlan.outOfStock.length > 0) && (
+            {/* Itens que ficaram de fora (sumiram do catálogo, sem estoque, ou par não refazível). */}
+            {(reorderPlan.missing.length > 0 || reorderPlan.outOfStock.length > 0 || reorderPairReview.length > 0) && (
               <div className="mt-3 rounded-xl bg-gray-50 p-3 text-xs text-gray-500">
                 {reorderPlan.missing.length > 0 && (
                   <p>
@@ -3110,22 +3207,28 @@ export default function VendaPage() {
                     {reorderPlan.outOfStock.map((m) => m.name).join(', ')}.
                   </p>
                 )}
+                {reorderPairReview.length > 0 && (
+                  <p className={reorderPlan.missing.length > 0 || reorderPlan.outOfStock.length > 0 ? 'mt-1' : ''}>
+                    <strong className="text-gray-600">Par indisponível:</strong>{' '}
+                    {reorderPairReview.join('; ')}.
+                  </p>
+                )}
               </div>
             )}
 
             <div className="mt-5 flex justify-end gap-2">
               <button
-                onClick={() => setReorderPlan(null)}
+                onClick={closeReorder}
                 className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
               >
-                {reorderPlan.lineCount > 0 ? 'Cancelar' : 'Entendi'}
+                {reorderPlan.lineCount + reorderPairs.length > 0 ? 'Cancelar' : 'Entendi'}
               </button>
-              {reorderPlan.lineCount > 0 && (
+              {reorderPlan.lineCount + reorderPairs.length > 0 && (
                 <button
                   onClick={() => applyReorder(reorderPlan)}
                   className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800"
                 >
-                  Adicionar ao carrinho ({reorderPlan.lineCount})
+                  Adicionar ao carrinho ({reorderPlan.lineCount + reorderPairs.length})
                 </button>
               )}
             </div>

@@ -240,6 +240,9 @@ export default function VendasPage() {
           productName: it.productName,
           unit: it.unit,
           quantity: it.quantity,
+          // Par (ADR-015): preserva o casamento levando a chave namespaced pela venda — os dois lados
+          // do mesmo `pairGroup` viajam juntos e o PDV os remonta COMO PAR, não como dois avulsos.
+          pairKey: it.pairGroup != null ? `${o.id}#${it.pairGroup}` : null,
         });
       }
     }

@@ -17,6 +17,13 @@ export type ReorderPayloadItem = {
   unit: string;
   /** Quantidade na unidade vendida (string, como vem do GET /orders). */
   quantity: string;
+  /**
+   * Venda em par (ADR-015): quando o item foi vendido CASADO (ex.: parafuso + bucha), os dois lados
+   * do par compartilham esta chave, para o PDV remontá-los COMO PAR (não como dois avulsos). É
+   * `null` no item avulso. Já vem **namespaced por venda** (`${orderId}#${pairGroup}`) para não
+   * colidir ao combinar itens de várias vendas na mesma seleção.
+   */
+  pairKey: string | null;
 };
 
 /** O que trafega do Histórico para o PDV: quantas vendas e os itens (já achatados). */
