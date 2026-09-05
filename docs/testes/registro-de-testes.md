@@ -5610,3 +5610,17 @@ Pedido do Owner: cadastrar produto vendido em **pacote fechado** que também é 
 
 **NO AR** — migration `0037` no Supabase; API Version `02d20a6c` (health 200); web Version `2c28a241` (smoke pós-deploy OK — CSS 200 + HTML no-store). Sem mudança de contrato de API (regra 7 não se aplica). Commits `21edc34` + `2e4217f` em `main` (push do Owner pendente). Docs: [ADR-030](../adr/ADR-030-pacote-como-unidade-fechada.md).
 
+## UI.Sino.RolagemMobile — painel de pendências não arrasta mais a página de baixo no celular (2026-09-05)
+
+Achado do Owner testando no celular: ao rolar a **tela de notificações** (o sino de pendências, `AlertsChip`), muitas vezes rolava a **página de baixo** em vez da lista do painel. Causa = **scroll chaining**: a área rolável do painel (`overflow-y-auto`) deixava o gesto "vazar" para o `body` ao chegar no topo/fim. Mesma classe de bug no pop-up "Ver" (`AlertDetailModal`).
+
+| O que foi testado | Método | Resultado |
+|---|---|---|
+| `overscroll-contain` (overscroll-behavior: contain) na lista do sino (`AlertsChip`) | `tsc` web + build | ✅ |
+| `overscroll-contain` no backdrop e no corpo rolável do pop-up "Ver" (`AlertDetailModal`) | `tsc` web + build | ✅ |
+| Typecheck web | `tsc --noEmit` | ✅ 0 erros |
+| Build de produção | `next build` | ✅ todas as rotas (tamanhos estáveis) |
+| **E2E do Owner** (celular): rolar a lista do sino não move mais a página atrás | manual pelo Owner | ✅ "validado com sucesso" |
+
+**NO AR** — só apresentação (classe CSS); sem API/migration/core/shared (regra 7 não se aplica). web Version `15ebe9ad` (smoke pós-deploy OK — HTML no-store + CSS 200). Commit `754d6be` em `main` (push do Owner pendente).
+

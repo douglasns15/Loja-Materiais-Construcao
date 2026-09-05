@@ -3,7 +3,22 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-09-05 — **UI.JanelaFlutuante — painel de tela destacável e
+> **Última atualização:** 2026-09-05 — **UI.Sino.RolagemMobile — o painel de pendências (sino)
+> deixa de arrastar a página de baixo ao rolar no celular — NO AR e E2E DO OWNER VALIDADO
+> (2026-09-05, "validado com sucesso"). CONCLUÍDA.** Achado do Owner no celular: ao tentar rolar a
+> **tela de notificações** (o sino, `AlertsChip`), muitas vezes rolava a **página de baixo** em vez da
+> lista. Causa = **scroll chaining** — a área rolável do painel (`overflow-y-auto`) deixava o gesto
+> "vazar" para o `body` ao chegar no topo/fim. **Correção (só CSS):** `overscroll-contain`
+> (`overscroll-behavior: contain`) na lista do sino e nas duas áreas roláveis do pop-up "Ver"
+> (`AlertDetailModal`: backdrop + corpo) — o gesto fica preso no painel e para no limite em vez de
+> arrastar o fundo. **Camadas:** só `apps/web` (2 arquivos). **Sem** API/migration/core/shared (regra 7
+> não se aplica). **Gate:** web `tsc` 0 + `next build`. **NO AR:** web Version `15ebe9ad` (smoke ✅ — HTML
+> `no-store` + CSS 200). Commit `754d6be` em `main` (push do Owner). **Limite honesto:** é comportamento
+> de toque — validação real foi no aparelho do Owner (o navegador com mouse não reproduz bem). **Refino
+> possível (backlog):** travar o scroll do fundo por completo enquanto o painel está aberto (cobre também
+> o arraste iniciado no cabeçalho índigo, fora da área rolável).
+>
+> **Antes:** 2026-09-05 — **UI.JanelaFlutuante — painel de tela destacável e
 > interativo (ADR-031, Fatia 1) — NO AR e E2E DO OWNER VALIDADO em produção (2026-09-05, "tudo
 > validado e funcionando perfeitamente"). CONCLUÍDA.** Demanda do Owner: **comparar dados** numa
 > análise — destacar uma tela num **painel flutuante** que **persiste ao navegar** para outra tela e
