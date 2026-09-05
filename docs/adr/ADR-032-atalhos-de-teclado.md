@@ -1,6 +1,6 @@
 # ADR-032: Atalhos de teclado (navegação + ações), configuráveis e cross-platform
 
-**Status:** **Aceito** — Fatia 1 (motor + navegação `N`+letra) em implementação. Só `apps/web`; sem API/banco/migração/`core`/`shared`. Persistência em `localStorage` (custo-zero).
+**Status:** **Aceito** — Fatias 1–4 implementadas, **NO AR e E2E do Owner VALIDADO** (2026-09-05, "validado com sucesso"; web Version `b938cc55`; commit `854bd5c`). Só `apps/web`; sem API/banco/migração/`core`/`shared`. Persistência em `localStorage` (custo-zero).
 **Data:** 2026-09-05
 **Deciders:** Owner do produto
 **Relacionados:** [ADR-005](ADR-005-stack-e-arquitetura.md) (custo-zero / só `apps/web`), [ADR-031](ADR-031-janela-flutuante-de-tela.md) (subsistema de UI no shell, desktop-first, prefs em `localStorage`), [ARCHITECTURE §7](../ARCHITECTURE.md) (persistência custo-zero). CLAUDE.md: diretriz de UX "atalhos de teclado no desktop".
@@ -110,9 +110,11 @@ migração + aprovação (regra 1).
 - ⚠️ Sequência exige um pequeno "modo armado" (o `N`), com indicador + timeout — leve curva vs. a
   tecla única, compensada por zero conflito cross-platform.
 
-## Plano (fatias)
+## Plano (fatias) — todas CONCLUÍDAS (2026-09-05)
 
-1. **Motor + navegação** (`N`+letra) + ignorar-em-campos + indicador do "N …". ⬅️ esta fatia
-2. **Overlay de ajuda** (`?`) com a tabela dos atalhos (padrões + sobrescritas).
-3. **Ações do PDV** (F-keys) via registro por tela (`ShortcutsProvider`).
-4. **Configurações → Acessibilidade**: ver/editar/restaurar/adicionar, com detecção de conflito.
+1. ✅ **Motor + navegação** (`N`+letra) + ignorar-em-campos + indicador do "N …".
+2. ✅ **Overlay de ajuda** (`?`, pelo caractere) com a tabela dos atalhos (padrões + sobrescritas + customizados).
+3. ✅ **Ações do PDV** (F8 finalizar, F9 focar busca) via registro por tela (`ShortcutsProvider`).
+4. ✅ **Configurações → Acessibilidade**: ver/editar/restaurar/adicionar/remover, com detecção de conflito.
+
+**Backlog:** expor a edição ao operador (a tela é admin-only); sincronizar atalhos entre dispositivos (banco + migração).

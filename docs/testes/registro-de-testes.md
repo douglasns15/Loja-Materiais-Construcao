@@ -5642,3 +5642,22 @@ Achado do Owner no "Vender de novo" (Histórico de Vendas): ao adicionar os iten
 
 **NO AR** — só `apps/web` (`lib/reorder.ts` + `vendas/page.tsx` + `venda/page.tsx`); sem API/migration/core/shared (regra 7 não se aplica). web Version `670e67cb` (smoke pós-deploy OK — HTML no-store + CSS 200). Commit `10f228c` em `main` (push do Owner pendente). Ref.: [ADR-015](../adr/ADR-015-venda-em-par.md).
 
+## UI.Atalhos — atalhos de teclado configuráveis e cross-platform (ADR-032, Fatias 1–4) (2026-09-05)
+
+Pedido do Owner: teclas que executam ações no sistema (F1 abre PDV etc.), servindo a Windows/Mac/Linux, com **ajuda** e uma tela em **Configurações → Acessibilidade** com atalhos pré-definidos, editáveis e com adição de novos. **Motor por CÓDIGO FÍSICO da tecla (`event.code`)** — igual nos três sistemas, imune a layout (ABNT2/US) e à troca de caractere do macOS (`Option+V`→`√`). Duas famílias: **sequência `N`+letra** para navegar (sem modificador ⇒ zero conflito, sem `fn` no Mac) e **F-keys** para as ações quentes do PDV. Desktop-only, custo-zero (`localStorage`).
+
+| O que foi testado | Método | Resultado |
+|---|---|---|
+| Motor casa por `event.code` + modificadores; sequência `N`+letra (13 telas) + `F2` abrir PDV | `tsc` web + build | ✅ |
+| Indicador "N …" ao armar a sequência; timeout ~1,2 s desarma | leitura + `tsc` | ✅ |
+| Ignora enquanto se digita (input/textarea/select/contenteditable); F-keys e Esc são exceção | leitura + `tsc` | ✅ |
+| Ajuda `?` **pelo caractere** (layout-independente, ABNT2) abre overlay com a tabela | `tsc` web + build | ✅ |
+| Ações do PDV registradas pela tela: `F8` finalizar (revisão), `F9` focar busca | `tsc` web + build | ✅ |
+| Configurações → Acessibilidade: editar (captura single/sequência), restaurar padrão, adicionar p/ tela, remover; conflito barrado | `tsc` web + build | ✅ |
+| Persistência em `localStorage` (por dispositivo); sobrescritas mescladas com os padrões | leitura + `tsc` | ✅ |
+| Typecheck web | `tsc --noEmit` | ✅ 0 erros |
+| Build de produção | `next build` | ✅ todas as rotas (/venda 20,1 kB) |
+| **E2E do Owner**: navegar por `N`+letra, `F2`/`F8`/`F9`, ajuda `?`, editar/adicionar na Acessibilidade | manual pelo Owner | ✅ "validado com sucesso" |
+
+**NO AR** — só `apps/web` (novos: `lib/shortcuts.tsx`, `components/ShortcutsHelp.tsx`, `configuracoes/AccessibilitySection.tsx`; tocados: `layout.tsx`, `venda/page.tsx`, `configuracoes/page.tsx`); sem API/migration/core/shared. web Version `b938cc55` (smoke pós-deploy OK — HTML no-store + CSS 200). Commit `854bd5c` em `main` (push do Owner pendente). Docs: [ADR-032](../adr/ADR-032-atalhos-de-teclado.md). **Nota:** Configurações é admin-only ⇒ só admin personaliza (padrões + `?` valem a todos); expor a edição ao operador é backlog.
+

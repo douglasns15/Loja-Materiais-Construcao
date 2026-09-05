@@ -3,7 +3,33 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-09-05 — **Vendas.VenderDeNovo — o "Vender de novo" (reorder) deixa de
+> **Última atualização:** 2026-09-05 — **UI.Atalhos — atalhos de teclado configuráveis e
+> cross-platform (ADR-032, Fatias 1–4) — NO AR e E2E DO OWNER VALIDADO (2026-09-05, "validado com
+> sucesso"). CONCLUÍDA.** Pedido do Owner: teclas que executam ações no sistema (abrir PDV etc.),
+> servindo a **Windows/Mac/Linux**, com **ajuda** e uma tela em **Configurações → Acessibilidade** com
+> atalhos pré-definidos, **editáveis** e com **adição** de novos. **Decisão de arquitetura (ADR-032):**
+> motor único no shell que casa pelo **CÓDIGO FÍSICO da tecla (`event.code`)** — idêntico nos três
+> sistemas, imune ao **layout** (ABNT2/US) e à **troca de caractere do macOS** (`Option+V`→`√`). **Duas
+> famílias:** **sequência `N`+letra** (de **N**exoLoja) para navegar — sem modificador ⇒ **zero
+> conflito** com navegador/SO e **sem `fn`** no Mac; e **F-keys** para as ações quentes do PDV (memória
+> muscular). **Fatia 1 (motor + navegação):** `N V` PDV · `N H` Histórico · `N C` Caixa · `N R` Contas ·
+> `N E` Estoque · `N P` Produtos · `N O` Orçamentos · `N G` Entregas · `N L` Clientes · `N F`
+> Fornecedores · `N T` Categorias · `N D` Relatórios · `N S` Config; `F2` abre PDV; indicador "N …" ao
+> armar; **não dispara enquanto se digita** (protege o leitor de código de barras; F-keys/Esc são
+> exceção). **Fatia 2 (ajuda):** `?` **pelo caractere** (layout-independente) abre a tabela dos atalhos.
+> **Fatia 3 (ações do PDV):** `F8` finalizar (revisão) e `F9` focar busca — registradas pela tela de
+> Nova Venda (só disparam com ela montada). **Fatia 4 (Acessibilidade):** ver/editar (captura por
+> `event.code`, single ou sequência)/restaurar padrão/adicionar atalho a uma tela/remover, com detecção
+> de conflito; persistência em **`localStorage`** por dispositivo. **Camadas:** só `apps/web` (novos
+> `lib/shortcuts.tsx`, `components/ShortcutsHelp.tsx`, `configuracoes/AccessibilitySection.tsx`; tocados
+> `layout.tsx`, `venda/page.tsx`, `configuracoes/page.tsx`). **Sem** API/migration/core/shared. **Gate:**
+> web `tsc` 0 + `next build`. **NO AR:** web Version `b938cc55` (smoke ✅). Commit `854bd5c` em `main`
+> (push do Owner). Docs: [[ADR-032]]. **Limites/backlog:** F-keys pedem `fn` em muitos MacBooks
+> (contornável por rebind); Configurações é **admin-only** ⇒ só admin personaliza (padrões + `?` valem a
+> todos) — expor a edição ao operador é backlog; sincronizar atalhos **entre dispositivos** (via banco)
+> exigiria migração e fica para depois.
+>
+> **Antes:** 2026-09-05 — **Vendas.VenderDeNovo — o "Vender de novo" (reorder) deixa de
 > quebrar itens vendidos em par — NO AR e E2E DO OWNER VALIDADO (2026-09-05, "validado com sucesso,
 > passou"). CONCLUÍDA.** Achado do Owner: ao reusar uma venda pelo Histórico, um item vendido **casado**
 > (par ADR-015, ex.: parafuso + bucha) voltava ao PDV **separado em dois avulsos** em vez de casado.
