@@ -9,6 +9,7 @@ import {
   type DeliveryDetail,
   type UnitType,
 } from '@nexoloja/shared';
+import { isValidDelivery } from '@nexoloja/core';
 import { apiGet, apiPatch, apiPost } from '@/lib/api';
 import { printArea } from '@/lib/print';
 import { ReceiptPrint, type Store } from '@/components/ReceiptPrint';
@@ -29,6 +30,9 @@ const qty = (v: string | number) => {
   const n = Number(v);
   return Number.isInteger(n) ? String(n) : String(Number(n.toFixed(4)));
 };
+
+/** Compara duas quantidades na precisão do estoque (4 casas), sem ruído de ponto flutuante. */
+const sameQty = (a: number, b: number) => Math.round(a * 10000) === Math.round(b * 10000);
 
 /**
  * Detalhe de um pedido de retirada/entrega futura (ADR-020) — o "lastro" pedido pelo Owner:
@@ -147,16 +151,37 @@ export function DeliveryDetailModal({
     void deliver([{ orderItemId, quantity: q }]);
   }
 
-  /** Retira tudo o que falta de todas as linhas pendentes de uma vez. */
-  function deliverAll() {
+  /** Retira DE UMA VEZ as quantidades informadas em cada linha pendente (campo > 0). Permite a
+   *  retirada parcial de vários itens num só clique (item A 2 + item B 1). Linhas com campo vazio/0
+   *  ficam de fora (dá pra retirar só algumas). Valida cada quantidade contra o que falta pela fonte
+   *  única do core (`isValidDelivery`). Como o campo já vem pré-preenchido com o que falta, sem
+   *  nenhuma edição isto retira 100% — é o antigo "Retirar tudo o que falta". */
+  function deliverDraft() {
     if (!detail) return;
-    const items = detail.items
-      .filter((it) => it.remainingBaseQty > 0)
-      .map((it) => ({ orderItemId: it.id, quantity: it.remainingBaseQty }));
+    const items: { orderItemId: string; quantity: number }[] = [];
+    for (const it of detail.items) {
+      if (it.remainingBaseQty <= 0) continue;
+      const q = Number(draft[it.id]);
+      if (!(q > 0)) continue; // linha não marcada para esta retirada
+      if (!isValidDelivery(q, it.remainingBaseQty)) {
+        setError(`Quantidade inválida para "${it.productName}" (falta ${qty(it.remainingBaseQty)}).`);
+        return;
+      }
+      items.push({ orderItemId: it.id, quantity: q });
+    }
+    if (items.length === 0) {
+      setError('Informe a quantidade a retirar em ao menos um item.');
+      return;
+    }
     void deliver(items);
   }
 
-  const anyPending = detail?.items.some((it) => it.remainingBaseQty > 0) ?? false;
+  const pendingItems = detail?.items.filter((it) => it.remainingBaseQty > 0) ?? [];
+  const anyPending = pendingItems.length > 0;
+  // Há ao menos um item com quantidade informada (campo > 0) — habilita a retirada em lote.
+  const anyDraft = pendingItems.some((it) => Number(draft[it.id]) > 0);
+  // Sem edição para baixo, o lote equivale ao antigo "tudo o que falta" (rótulo adaptativo do botão).
+  const isFullWithdrawal = pendingItems.every((it) => sameQty(Number(draft[it.id]), it.remainingBaseQty));
 
   return (
     <>
@@ -357,6 +382,14 @@ export function DeliveryDetailModal({
 
             {anyPending && (
               <div className="mt-3 space-y-2">
+                {/* Dica: quando há mais de um item pendente, o operador pode ajustar a quantidade de
+                    cada linha acima e retirar TODOS de uma vez neste botão (não precisa item a item). */}
+                {pendingItems.length > 1 && (
+                  <p className="text-xs text-gray-500">
+                    Ajuste a quantidade de cada item acima e retire todos de uma vez — ou use o
+                    <span className="font-medium text-emerald-700"> Retirar</span> ao lado para um item só.
+                  </p>
+                )}
                 <input
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
@@ -365,11 +398,15 @@ export function DeliveryDetailModal({
                 />
                 <button
                   type="button"
-                  disabled={busy}
-                  onClick={deliverAll}
+                  disabled={busy || !anyDraft}
+                  onClick={deliverDraft}
                   className="w-full rounded-lg bg-emerald-600 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60"
                 >
-                  {busy ? 'Registrando…' : 'Retirar tudo o que falta'}
+                  {busy
+                    ? 'Registrando…'
+                    : isFullWithdrawal
+                      ? 'Retirar tudo o que falta'
+                      : 'Retirar itens informados'}
                 </button>
               </div>
             )}
