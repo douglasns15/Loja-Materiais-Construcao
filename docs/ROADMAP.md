@@ -3,7 +3,26 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-09-08 — **Entregas — contador da capa em QUANTIDADE + retirada
+> **Última atualização:** 2026-09-08 — **Caixa.ComprovanteHistorico — o comprovante de um caixa
+> fechado ("Caixas de hoje") passa a itemizar as movimentações do turno — NO AR e E2E DO OWNER
+> VALIDADO (2026-09-08, "validado com sucesso"). CONCLUÍDO.** Achado do Owner: no fechamento aparecem
+> **dois** botões de impressão — um no **topo** (montado no momento do fechamento) e um na linha do
+> caixa em **"Caixas de hoje"** (inferior). O do topo **some** ao sair da tela / abrir novo caixa; e a
+> impressão dos dois era quase idêntica, mas só a do **topo** listava as **entradas/saídas**
+> (suprimentos/sangrias/devoluções) no final. Pedido do Owner: **manter essa visão** também no botão
+> inferior — melhor do que fixar o botão do topo (que poderia gerar conflito no cenário fechar + abrir
+> um novo caixa). **Correção (web-only):** o botão inferior agora chama `printCloseFromHistory`, que
+> **busca as movimentações do turno sob demanda** via `GET /cash-sessions/movements?sessionId=` (o
+> relatório não traz a lista item a item) e as injeta em `CashCloseReceiptData.movements` — que o
+> `CashClosePrint` **já sabia itemizar** ("MOVIMENTAÇÕES DO TURNO"). Feedback "Gerando…" + botão
+> desabilitado durante a busca; se a busca falhar, **degrada** para o resumo sem itemização (não trava
+> a impressão). O botão do **topo fica intocado**. **Efeito:** o comprovante COMPLETO passa a estar
+> **sempre** disponível pelo botão inferior (não some ao sair/voltar). **Camadas:** só `apps/web`
+> (`caixa/page.tsx`); o endpoint por `?sessionId=` **já existia** (checa `tenantId`). **Sem**
+> API/migration/core/shared. **Gate:** web `tsc` 0. **NO AR:** web Version `b2a3904a` (smoke ✅). Commit
+> `554d356` em `main` (push do Owner). Resolve o item da linha 51 do `Uteis_Projeto_NexoLoja.txt`.
+>
+> **Antes:** 2026-09-08 — **Entregas — contador da capa em QUANTIDADE + retirada
 > parcial de vários itens num clique — NO AR e E2E DO OWNER VALIDADO (2026-09-08, "testado com
 > sucesso"). CONCLUÍDO.** Dois ajustes na tela de **Entregas**, pedidos do Owner. **(1) Contador em
 > QUANTIDADE, não em contagem de linhas:** a capa mostrava "X itens a retirar" (e "X / Y" na venda)

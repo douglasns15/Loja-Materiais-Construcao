@@ -48,7 +48,7 @@ http://localhost:3000/
 
 <> ✅ FEITO (2026-09-08, NO AR + E2E do Owner) — Em Entregas, quando tiver mais de um produto para retirar, hj temos que selecionar a quantidade e clicar em Retirar ao lado e fazer isso um a um, tem q ter uma possibilidade de diminuir os itens produto por produto e clicar uma única vez para fazer a retira... para tirar 100% do que ainda falta já temos o botão "Retirar tudo que falta".
 
-<> Comprovante de fechamento de caixa, pelo app não aparece a opção de imprimir o comprovante completo.. e verificar pelo pc se depois de sair da tela e voltar se tmbm não some
+<> ✅ FEITO (2026-09-08, NO AR + E2E do Owner) — Comprovante de fechamento de caixa, pelo app não aparece a opção de imprimir o comprovante completo.. e verificar pelo pc se depois de sair da tela e voltar se tmbm não some [o botão "Comprovante" de "Caixas de hoje" (sempre disponível, app e pc) passou a imprimir o comprovante COMPLETO com as movimentações do turno; o botão do topo segue sumindo ao abrir novo caixa, por decisão do Owner p/ evitar conflito]
 
 <> Na atualização de estoque, mostrar a marca tmbm ao pesquisar um produto para atualizar o estoque
 

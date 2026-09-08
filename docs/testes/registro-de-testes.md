@@ -5683,3 +5683,22 @@ quantidades informadas em cada campo, de uma vez.
 | **E2E do Owner** (ambiente de testes): contador correto + retirada parcial de 2 itens num clique | manual pelo Owner | ✅ "testado com sucesso" |
 
 **NO AR** — `apps/api` (GET /deliveries), `packages/shared` (tipos), `apps/web` (`entregas/page.tsx`, `DeliveryDetailModal.tsx`) + doc §8.2. API Version `968bed68`; web Version `954dc47d`→`3291038c` (smoke ✅ — HTML no-store + CSS 200). Commits `9fda8e2` + `6e3168e` em `main` (push do Owner). Refs.: [ADR-020](../adr/ADR-020-retirada-entrega-futura.md) · [ADR-028](../adr/ADR-028-conta-de-retiradas-do-cliente.md).
+
+## Caixa.ComprovanteHistorico — reimpressão de "Caixas de hoje" itemiza as movimentações do turno (2026-09-08)
+
+Achado do Owner: no fechamento há dois botões de impressão — o do **topo** (montado no fechamento, some
+ao sair da tela / abrir novo caixa) e o **inferior** ("Comprovante" em "Caixas de hoje"). Só o do topo
+listava as entradas/saídas (suprimentos/sangrias/devoluções) no final. Pedido: manter essa visão também
+no inferior (em vez de fixar o do topo, que poderia gerar conflito ao fechar + abrir novo caixa).
+
+| O que foi testado | Método | Resultado |
+|---|---|---|
+| Botão "Comprovante" (Caixas de hoje) busca as movimentações via `GET /cash-sessions/movements?sessionId=` e itemiza "MOVIMENTAÇÕES DO TURNO" | `tsc` web + E2E | ✅ |
+| Reimpressão do inferior fica equivalente ao comprovante do topo (mesma itemização) | E2E do Owner | ✅ |
+| Feedback "Gerando…" + botão desabilitado durante a busca; degrada para resumo sem itemização se a busca falhar | leitura + `tsc` | ✅ |
+| Botão do topo intocado (some ao abrir novo caixa) — sem risco de conflito fechar+abrir | leitura | ✅ |
+| Backend intocado (endpoint por `?sessionId=` já existia, checa `tenantId`) | leitura | ✅ |
+| Typecheck web | `tsc --noEmit` | ✅ 0 erros |
+| **E2E do Owner** (ambiente de testes): comprovante do botão inferior com as movimentações | manual pelo Owner | ✅ "validado com sucesso" |
+
+**NO AR** — só `apps/web` (`caixa/page.tsx`); sem API/migration/core/shared. web Version `b2a3904a` (smoke ✅ — HTML no-store + CSS 200). Commit `554d356` em `main` (push do Owner). Resolve o item da linha 51 do `Uteis_Projeto_NexoLoja.txt` (comprovante completo sempre disponível pelo botão inferior, que não some).
