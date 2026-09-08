@@ -35,6 +35,10 @@ type AccountPrintJob = {
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
+/** Quantidade a retirar (unidade-base) sem casas inúteis: 2 (não "2,0000"), 2,5 no fuso pt-BR. */
+const QTY = (v: number) =>
+  Number.isInteger(v) ? String(v) : Number(v.toFixed(4)).toLocaleString('pt-BR');
+
 type StatusFilter = 'pending' | 'completed' | 'all';
 
 /** Uma previsão está atrasada quando já passou e ainda há item a retirar. A previsão é uma data-only
@@ -97,7 +101,7 @@ function SaleRow({ order, onOpen }: { order: DeliveryOrderRow; onOpen: () => voi
       <div className="shrink-0 text-right">
         <div className="tabular-nums text-gray-900">{BRL(order.total)}</div>
         <div className="text-xs tabular-nums text-gray-500">
-          {order.itemsPending} / {order.itemsCount} a retirar
+          {QTY(order.itemsPending)} / {QTY(order.itemsCount)} a retirar
         </div>
       </div>
     </button>
@@ -149,7 +153,7 @@ function AccountCard({
                   late ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'
                 }`}
               >
-                {account.itemsPending} {account.itemsPending === 1 ? 'item' : 'itens'} a retirar
+                {QTY(account.itemsPending)} {account.itemsPending === 1 ? 'item' : 'itens'} a retirar
               </span>
             )}
             {!done && account.nextPickupAt && (
@@ -236,7 +240,7 @@ function OrderCard({ order, onOpen }: { order: DeliveryOrderRow; onOpen: () => v
         <div className="shrink-0 text-right">
           <div className="text-lg font-bold tabular-nums">{BRL(order.total)}</div>
           <div className="text-xs tabular-nums text-gray-500">
-            {order.itemsPending} / {order.itemsCount} a retirar
+            {QTY(order.itemsPending)} / {QTY(order.itemsCount)} a retirar
           </div>
         </div>
       </button>

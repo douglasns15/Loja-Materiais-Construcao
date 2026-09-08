@@ -106,11 +106,21 @@ type OrderRowRaw = {
   items: { quantity: Prisma.Decimal; baseQuantity: Prisma.Decimal | null; deliveredBaseQty: Prisma.Decimal }[];
 };
 
-/** Quantas linhas de uma venda ainda têm mercadoria a sair (progresso). */
+/** QUANTIDADE (unidade-base) ainda a sair de uma venda: soma o que falta de cada linha. É o número
+ *  que o operador enxerga como "a retirar" — 3 sacos vendidos com 1 já retirado ⇒ 2 (não "1 linha").
+ *  Espelha o "Falta sair" do detalhe. Arredonda a 4 casas (precisão do estoque). */
 function itemsPendingOf(o: OrderRowRaw): number {
-  return o.items.filter(
-    (it) => remainingToDeliver(Number(it.baseQuantity ?? it.quantity), Number(it.deliveredBaseQty)) > 0,
-  ).length;
+  const sum = o.items.reduce(
+    (acc, it) => acc + remainingToDeliver(Number(it.baseQuantity ?? it.quantity), Number(it.deliveredBaseQty)),
+    0,
+  );
+  return Number(sum.toFixed(4));
+}
+
+/** QUANTIDADE total (unidade-base) vendida de uma venda — o denominador do "X / Y a retirar". */
+function itemsCountOf(o: OrderRowRaw): number {
+  const sum = o.items.reduce((acc, it) => acc + Number(it.baseQuantity ?? it.quantity), 0);
+  return Number(sum.toFixed(4));
 }
 
 /** Mapeia uma venda para a linha do extrato (`DeliveryOrderRow`) — mesma forma de antes. */
@@ -126,7 +136,7 @@ function toOrderRow(o: OrderRowRaw) {
     registeredByName: o.registeredByName,
     customerId: o.customer?.id ?? null,
     customerName: o.customer?.name ?? null,
-    itemsCount: o.items.length,
+    itemsCount: itemsCountOf(o),
     itemsPending: itemsPendingOf(o),
   };
 }
@@ -243,7 +253,7 @@ deliveries.get('/', async (c) => {
     for (const a of accounts) {
       const orders = a.orders.map(toOrderRow);
       const total = orders.reduce((acc, o) => acc + Number(o.total), 0);
-      const itemsPending = orders.reduce((acc, o) => acc + o.itemsPending, 0);
+      const itemsPending = Number(orders.reduce((acc, o) => acc + o.itemsPending, 0).toFixed(4));
       // Previsão mais próxima entre as vendas ainda com item a retirar (base do "atrasada").
       const nextPickupAt =
         orders

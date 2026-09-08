@@ -10,7 +10,8 @@ export type FulfillmentStatus = 'PENDING' | 'PARTIAL' | 'COMPLETED';
 
 /**
  * Uma linha da lista de entregas (`GET /deliveries`). `total` é Decimal serializado em string;
- * `itemsPending` resume quantas linhas ainda têm mercadoria a sair (progresso do pedido).
+ * `itemsPending`/`itemsCount` são QUANTIDADES em unidade-base (o que falta sair / o total vendido),
+ * não contagem de linhas — 3 sacos com 1 já retirado ⇒ `itemsPending` 2 (espelha o "Falta sair").
  */
 export type DeliveryOrderRow = {
   id: string;
@@ -49,7 +50,7 @@ export type DeliveryAccountSummary = {
   ordersCount: number;
   /** Σ do total das vendas da conta (Decimal serializado em string). */
   total: string;
-  /** Σ das linhas ainda com mercadoria a sair, somando as vendas. */
+  /** Σ da QUANTIDADE (unidade-base) ainda a sair, somando as vendas da conta. */
   itemsPending: number;
   /** Previsão mais PRÓXIMA entre as vendas com item pendente (base do "atrasada"); null se nenhuma tem data. */
   nextPickupAt: string | null;
