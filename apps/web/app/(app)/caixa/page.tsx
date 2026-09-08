@@ -21,7 +21,7 @@ import { CashMovementModal } from '@/components/CashMovementModal';
 import { CashMovementsList } from '@/components/CashMovementsList';
 import { printArea } from '@/lib/print';
 import { type Store } from '@/components/ReceiptPrint';
-import { CashClosePrint, type CashCloseReceiptData } from '@/components/CashClosePrint';
+import { CashClosePrint, type CashCloseReceiptData, type CashCloseMovement } from '@/components/CashClosePrint';
 import { CashMovementPrint, type CashMovementReceiptData } from '@/components/CashMovementPrint';
 
 type CashSession = {
@@ -82,6 +82,8 @@ export default function CaixaPage() {
   const [movementReceipt, setMovementReceipt] = useState<CashMovementReceiptData | null>(null);
   // Qual comprovante está montado no #print-area (só um por vez — o id é único). null = nenhum.
   const [printKind, setPrintKind] = useState<'close' | 'movement' | null>(null);
+  // Caixa de "hoje" cujo comprovante está sendo montado (busca as movimentações sob demanda).
+  const [printingSessionId, setPrintingSessionId] = useState<string | null>(null);
   // Caixas fechados HOJE (histórico do dia na própria tela do Caixa) — reusa GET /reports/cash-sessions
   // com ?breakdown=1 para poder reimprimir o comprovante de fechamento completo.
   const [todaySessions, setTodaySessions] = useState<CashSessionReport[]>([]);
@@ -234,6 +236,33 @@ export default function CaixaPage() {
       divergence: s.divergence,
       notes: s.notes,
     };
+  }
+
+  // Reimprime o comprovante de fechamento de um caixa de HOJE COM a itemização das movimentações do
+  // turno (suprimentos/sangrias/devoluções). O relatório não traz a lista item a item, então ela é
+  // buscada sob demanda por `?sessionId=`. Assim a reimpressão (botão inferior) fica idêntica ao
+  // comprovante do topo montado no fechamento — sair e voltar à tela não perde essa visão. Se a busca
+  // das movimentações falhar, degrada para o resumo sem itemização (não trava a impressão).
+  async function printCloseFromHistory(s: CashSessionReport, fileName: string) {
+    setPrintingSessionId(s.id);
+    try {
+      let movements: CashCloseMovement[] = [];
+      try {
+        const rows = await apiGet<CashMovementRow[]>(`/cash-sessions/movements?sessionId=${s.id}`);
+        movements = rows.map((m) => ({
+          kind: m.kind,
+          type: m.type,
+          amount: Number(m.amount),
+          reason: m.reason,
+          at: m.createdAt,
+        }));
+      } catch {
+        movements = [];
+      }
+      printClose({ ...receiptFromReport(s), movements }, fileName);
+    } finally {
+      setPrintingSessionId(null);
+    }
   }
 
   // Reimprime uma movimentação do extrato (suprimento/sangria/etc.).
@@ -727,13 +756,14 @@ export default function CaixaPage() {
                   </div>
                   <button
                     type="button"
+                    disabled={printingSessionId === s.id}
                     onClick={() =>
-                      printClose(receiptFromReport(s), `Fechamento-${hhmm(s.closedAt).replace(':', 'h')}`)
+                      printCloseFromHistory(s, `Fechamento-${hhmm(s.closedAt).replace(':', 'h')}`)
                     }
-                    className="shrink-0 rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
-                    title="Reimprimir o comprovante de fechamento"
+                    className="shrink-0 rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                    title="Reimprimir o comprovante de fechamento (com as movimentações do turno)"
                   >
-                    🖨 Comprovante
+                    🖨 {printingSessionId === s.id ? 'Gerando…' : 'Comprovante'}
                   </button>
                 </li>
               );
