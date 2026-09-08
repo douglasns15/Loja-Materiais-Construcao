@@ -5661,3 +5661,25 @@ Pedido do Owner: teclas que executam ações no sistema (F1 abre PDV etc.), serv
 
 **NO AR** — só `apps/web` (novos: `lib/shortcuts.tsx`, `components/ShortcutsHelp.tsx`, `configuracoes/AccessibilitySection.tsx`; tocados: `layout.tsx`, `venda/page.tsx`, `configuracoes/page.tsx`); sem API/migration/core/shared. web Version `b938cc55` (smoke pós-deploy OK — HTML no-store + CSS 200). Commit `854bd5c` em `main` (push do Owner pendente). Docs: [ADR-032](../adr/ADR-032-atalhos-de-teclado.md). **Nota:** Configurações é admin-only ⇒ só admin personaliza (padrões + `?` valem a todos); expor a edição ao operador é backlog.
 
+
+## UI.Entregas — contador em QUANTIDADE + retirada parcial de vários itens num clique (2026-09-08)
+
+Dois pedidos do Owner na tela de Entregas. **(1)** O contador da capa contava **linhas** de produto
+pendentes, não a **quantidade** a sair (3 sacos com 1 retirado mostrava "1 / 1" e "1 item"); agora soma
+a quantidade em unidade-base que falta / o total vendido (→ "2 / 3" e "2 itens"). **(2)** A retirada
+parcial de vários itens exigia clicar "Retirar" linha a linha; o botão global passou a enviar as
+quantidades informadas em cada campo, de uma vez.
+
+| O que foi testado | Método | Resultado |
+|---|---|---|
+| GET /deliveries: `itemsPending` soma `remainingToDeliver` por linha; `itemsCount` soma o vendido (unidade-base, 4 casas) | `tsc` api + leitura | ✅ |
+| Capa: "2 itens a retirar"; venda: "2 / 3 a retirar" (era "1 item" / "1 / 1") | `tsc` web + E2E | ✅ |
+| Formatador de quantidade no web (2, não 2,0000; 2,5 em pt-BR) | leitura + `tsc` | ✅ |
+| Botão em lote envia os campos > 0 de todas as linhas (item A 2 + item B 1) num clique | `tsc` web + E2E | ✅ |
+| Rótulo adaptativo: sem edição "Retirar tudo o que falta"; com redução "Retirar itens informados"; desabilita sem campo > 0 | leitura + `tsc` | ✅ |
+| Validação por `isValidDelivery` (core) antes de enviar; backend revalida; transação atômica multi-item (ADR-001) | leitura | ✅ |
+| Typecheck shared/api/web | `tsc --noEmit` | ✅ 0 erros |
+| Core (regressão) | Vitest | ✅ 354/354 |
+| **E2E do Owner** (ambiente de testes): contador correto + retirada parcial de 2 itens num clique | manual pelo Owner | ✅ "testado com sucesso" |
+
+**NO AR** — `apps/api` (GET /deliveries), `packages/shared` (tipos), `apps/web` (`entregas/page.tsx`, `DeliveryDetailModal.tsx`) + doc §8.2. API Version `968bed68`; web Version `954dc47d`→`3291038c` (smoke ✅ — HTML no-store + CSS 200). Commits `9fda8e2` + `6e3168e` em `main` (push do Owner). Refs.: [ADR-020](../adr/ADR-020-retirada-entrega-futura.md) · [ADR-028](../adr/ADR-028-conta-de-retiradas-do-cliente.md).

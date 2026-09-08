@@ -3,7 +3,27 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-09-05 — **UI.Atalhos — atalhos de teclado configuráveis e
+> **Última atualização:** 2026-09-08 — **Entregas — contador da capa em QUANTIDADE + retirada
+> parcial de vários itens num clique — NO AR e E2E DO OWNER VALIDADO (2026-09-08, "testado com
+> sucesso"). CONCLUÍDO.** Dois ajustes na tela de **Entregas**, pedidos do Owner. **(1) Contador em
+> QUANTIDADE, não em contagem de linhas:** a capa mostrava "X itens a retirar" (e "X / Y" na venda)
+> contando **linhas de produto** pendentes — 3 sacos com 1 já retirado exibia "1 / 1" e "1 item".
+> Agora soma a **quantidade em unidade-base** que falta sair (via `remainingToDeliver` do core) e o
+> total vendido: o exemplo vira **"2 / 3 a retirar"** e **"2 itens a retirar"** (espelha o "Falta
+> sair" do detalhe). **Camadas:** `apps/api` (GET /deliveries), `packages/shared` (comentários dos
+> tipos), `apps/web` (formatador de quantidade) + doc §8.2 (regra 7 — só semântica, contrato igual).
+> **(2) Retirada parcial de VÁRIOS itens num clique:** antes, retirar parcial exigia clicar "Retirar"
+> linha a linha. O botão global agora envia as **quantidades informadas em cada campo** (já
+> pré-preenchidos com o que falta) de todas as linhas com valor > 0, de uma vez (item A 2 + item B 1).
+> **Rótulo adaptativo:** sem edição continua "Retirar tudo o que falta" (100%); ajustando alguma linha
+> vira "Retirar itens informados". Validação por `isValidDelivery` (core); o backend
+> (`POST /deliveries/:id/deliver`) **já aceitava múltiplos itens** numa transação atômica (ADR-001).
+> **Camadas (2):** só `apps/web` (`DeliveryDetailModal.tsx`). **Gates:** `tsc` shared/api/web 0;
+> core 354/354. **NO AR:** API Version `968bed68`; web Version `954dc47d` (contador) → `3291038c`
+> (retirada em lote), smoke ✅. Commits `9fda8e2` + `6e3168e` em `main` (push do Owner). Ref.:
+> [[ADR-020]] · [[ADR-028]]. Resolve os itens das linhas 47 e 49 do `Uteis_Projeto_NexoLoja.txt`.
+>
+> **Antes:** 2026-09-05 — **UI.Atalhos — atalhos de teclado configuráveis e
 > cross-platform (ADR-032, Fatias 1–4) — NO AR e E2E DO OWNER VALIDADO (2026-09-05, "validado com
 > sucesso"). CONCLUÍDA.** Pedido do Owner: teclas que executam ações no sistema (abrir PDV etc.),
 > servindo a **Windows/Mac/Linux**, com **ajuda** e uma tela em **Configurações → Acessibilidade** com
