@@ -5727,7 +5727,8 @@ com defeito".
 | Build do web | `next build` | ✅ 23 rotas, tamanhos estáveis |
 | **E2E do Owner** | manual pelo Owner | ⏭️ pendente (após deploy) |
 
-**IMPLEMENTADA, gates verdes; deploy (aplicar `0038` no Supabase + API/web) + E2E + push PENDENTES (Owner).**
+**NO AR (2026-09-09): migration `0038` aplicada; API `24ab85d2`; web `85eb33b5`. Falta só o E2E do Owner
+(sessão à parte). Commit `7f6d70f` em `main` (push do Owner).**
 Camadas: `packages/db` (migration `0038`), `packages/core`, `packages/shared`, `apps/api` (`orders.ts` +
 nova `returns.ts` + mount) + doc §8.2, `apps/web` (`ReturnItemsModal.tsx`, nova página, `layout.tsx`).
 
@@ -5752,7 +5753,7 @@ devoluções ⇒ mantidos os dois endpoints (semânticas distintas), unificada s
 | Build do web | `next build` | ✅ 23 rotas |
 | **E2E do Owner** | manual pelo Owner | ⏭️ pendente (após deploy) |
 
-**IMPLEMENTADA, gates verdes; deploy (aplicar `0039` no Supabase + API/web) + E2E + push PENDENTES (Owner).**
+**NO AR (2026-09-09): migration `0039` aplicada; API `24ab85d2`; web `85eb33b5`. Falta só o E2E do Owner.**
 Camadas: `packages/db` (migration `0039`), `packages/core` (4 helpers de caixa), `packages/shared`
 (`ReturnTarget` 3-way + `cancelOrderSchema`), `apps/api` (`orders.ts`) + doc §8.2, `apps/web`
 (`ReturnItemsModal.tsx` reescrito + `vendas/page.tsx`). Dívida técnica (ADR-033): `return-items` não
@@ -5777,6 +5778,7 @@ de pagamento `EXCHANGE_CREDIT` (espelha o `STORE_CREDIT`, não toca o caixa).
 | Build do web | `next build` | ✅ |
 | **E2E do Owner** | roteiro em `e2e-adr033-devolucao-troca.md` | ⏭️ pendente (após deploy) |
 
-**IMPLEMENTADA — ADR-033 COMPLETO (Fatias 1+2+3). Deploy (aplicar `0038`+`0039`+`0040` no Supabase +
-API/web) + E2E + push PENDENTES (Owner).** E2E completo das 3 fatias documentado em
+**NO AR — ADR-033 COMPLETO (Fatias 1+2+3), 2026-09-09: migrations `0038`+`0039`+`0040` aplicadas; API
+`24ab85d2`; web `85eb33b5` (smoke ✅). Commit `7f6d70f` em `main`. Falta só o E2E do Owner (sessão à
+parte); push do Owner PENDENTE.** E2E completo das 3 fatias em
 [`e2e-adr033-devolucao-troca.md`](./e2e-adr033-devolucao-troca.md).

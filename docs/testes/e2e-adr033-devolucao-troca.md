@@ -7,8 +7,8 @@
 
 ## Pré-condições (antes de começar)
 
-1. **Deploy aplicado no ambiente de testes:** migrations **`0038` + `0039` + `0040`** no Supabase e
-   **API + web** publicados. Sem isso, os fluxos novos não existem (o E2E falha por ausência, não por bug).
+1. **Deploy — ✅ JÁ APLICADO (2026-09-09):** migrations **`0038` + `0039` + `0040`** no Supabase; **API
+   Version `24ab85d2`**; **web Version `85eb33b5`** (smoke ✅). Os fluxos novos já estão no ar.
 2. **Login** na loja de testes (Owner/admin, para ver "Configurações" e "Devolvidos com defeito").
 3. **Caixa aberto** (a maioria dos cenários de dinheiro exige caixa aberto). Anote o **valor esperado inicial**.
 4. **Produtos de teste** (crie/ajuste antes; anote preço e estoque inicial):

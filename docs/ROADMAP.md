@@ -3,8 +3,10 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-09-09 — **Devolução unificada (ADR-033) — Fatia 3: TROCA integrada
-> ao PDV (vale-troca) — IMPLEMENTADA, gates verdes; migration `0040`, deploy/E2E/push PENDENTES.**
+> **Última atualização:** 2026-09-09 — **Devolução unificada (ADR-033) COMPLETA (Fatias 1+2+3) —
+> NO AR; só falta o E2E do Owner (sessão à parte).** Migrations `0038`+`0039`+`0040` aplicadas no
+> Supabase; **API Version `24ab85d2`**; **web Version `85eb33b5`** (smoke ✅ — HTML no-store + CSS 200).
+> Commit `7f6d70f` em `main` (push do Owner). **Fatia 3 — TROCA integrada ao PDV (vale-troca):**
 > Pedido do Owner (ponto 2): quando o cliente devolve para **trocar** por outro item, o valor vira um
 > **vale** consumido na nova compra. **Fluxo:** o modal unificado ganhou o passo **"O que o cliente
 > quer?"** (Devolver/desistir × **Trocar**); na troca, o `return-items` grava a devolução com
@@ -20,13 +22,14 @@
 > `apps/api` (`orders.ts`: `return-items` intent + `POST /orders` consome o vale) + doc §8.2, `apps/web`
 > (`lib/exchange.ts`, `ReturnItemsModal` passo de intenção, `venda/page.tsx` banner+consumo,
 > `ReceiptPrint`). **Gates:** core **362/362**; `tsc` shared/api/web **0**; `next build` (`/venda`
-> 20.6 kB, `/vendas` 12.7 kB); `prisma validate` OK. **Regra 1:** migration `0040` aditiva, aprovada no
-> desenho; **aplicar `0038`+`0039`+`0040` no Supabase + deploy + E2E + push são do Owner (PENDENTES).**
-> **ADR-033 COMPLETO (Fatias 1+2+3).** A seguir: E2E completo (QA) das três fatias.
+> 20.6 kB, `/vendas` 12.7 kB); `prisma validate` OK. **NO AR:** migrations `0038`+`0039`+`0040`
+> aplicadas; API `24ab85d2`; web `85eb33b5`. **Falta só o E2E do Owner** (roteiro em
+> `docs/testes/e2e-adr033-devolucao-troca.md`, será rodado em sessão à parte); **push do Owner
+> PENDENTE.** **ADR-033 COMPLETO (Fatias 1+2+3).**
 >
 > **Antes:** 2026-09-09 — **Devolução unificada (ADR-033) — Fatia 2: um só botão
-> "Devolver / Estornar" + forma do estorno no caixa (estorno mesma forma × dinheiro) — IMPLEMENTADA,
-> gates verdes; migration `0039`, deploy/E2E/push PENDENTES.** Pedidos do Owner (pontos 3 e 4):
+> "Devolver / Estornar" + forma do estorno no caixa (estorno mesma forma × dinheiro) — NO AR
+> (parte da ADR-033: API `24ab85d2`, web `85eb33b5`); E2E do Owner PENDENTE.** Pedidos do Owner (pontos 3 e 4):
 > perguntar **como o dinheiro voltou** ao cancelar/devolver e descontar do caixa quando for dinheiro;
 > e **unificar** os botões "Cancelar venda" e "Devolver itens". **Descoberta que guiou o desenho:** os
 > relatórios calculam faturamento de vendas `CONFIRMED` e **não** subtraem devoluções — então fundir
@@ -57,8 +60,8 @@
 > trabalho à parte).
 >
 > **Antes:** 2026-09-09 — **Devolução unificada (ADR-033) — Fatia 1: item devolvido
-> com DEFEITO não volta ao estoque + lista/resolução com fornecedor — IMPLEMENTADA, gates verdes;
-> migration `0038`, deploy/E2E/push PENDENTES.** Pedido do Owner: quando uma venda é devolvida por
+> com DEFEITO não volta ao estoque + lista/resolução com fornecedor — NO AR (parte da ADR-033:
+> API `24ab85d2`, web `85eb33b5`); E2E do Owner PENDENTE.** Pedido do Owner: quando uma venda é devolvida por
 > **defeito**, o item **não pode voltar à prateleira**; precisa ficar **rastreável** para, quando o
 > fornecedor **trocar**, dar baixa e repor o substituto no estoque. **Desenho:** [[ADR-033]] (Proposto)
 > unifica devolução/cancelamento/troca num só fluxo; esta Fatia 1 entrega a **condição do item** e o
