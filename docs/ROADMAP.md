@@ -3,7 +3,90 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-09-08 — **Caixa.ComprovanteHistorico — o comprovante de um caixa
+> **Última atualização:** 2026-09-09 — **Devolução unificada (ADR-033) — Fatia 3: TROCA integrada
+> ao PDV (vale-troca) — IMPLEMENTADA, gates verdes; migration `0040`, deploy/E2E/push PENDENTES.**
+> Pedido do Owner (ponto 2): quando o cliente devolve para **trocar** por outro item, o valor vira um
+> **vale** consumido na nova compra. **Fluxo:** o modal unificado ganhou o passo **"O que o cliente
+> quer?"** (Devolver/desistir × **Trocar**); na troca, o `return-items` grava a devolução com
+> `intent = EXCHANGE` (o item volta ao estoque ou vira defeito, mas o valor **não** vira
+> dinheiro/crédito agora), gera o **vale** = valor devolvido e **abre o PDV** já com o vale (banner +
+> abatimento do "a pagar"). A nova venda envia `exchangeReturnId`; o servidor grava a parcela
+> **`EXCHANGE_CREDIT`** (espelha o `STORE_CREDIT` — não toca o caixa) e **amarra** a devolução à venda
+> (`exchangeOrderId`, à prova de corrida — trava contra usar 2×). **Escopo v1:** total da nova venda
+> **≥ vale** (sem troco na troca; trade-down fica para depois), troca **bloqueada** em venda a prazo em
+> aberto, online-only. O comprovante mostra a linha "Vale-troca". **Camadas:** `packages/db` (migration
+> **`0040`**: `ReturnIntent` + `order_returns.intent`/`exchangeOrderId`), `packages/shared`
+> (`EXCHANGE_CREDIT_METHOD`, `intent` no `createReturnSchema`, `exchangeReturnId` no `createSaleSchema`),
+> `apps/api` (`orders.ts`: `return-items` intent + `POST /orders` consome o vale) + doc §8.2, `apps/web`
+> (`lib/exchange.ts`, `ReturnItemsModal` passo de intenção, `venda/page.tsx` banner+consumo,
+> `ReceiptPrint`). **Gates:** core **362/362**; `tsc` shared/api/web **0**; `next build` (`/venda`
+> 20.6 kB, `/vendas` 12.7 kB); `prisma validate` OK. **Regra 1:** migration `0040` aditiva, aprovada no
+> desenho; **aplicar `0038`+`0039`+`0040` no Supabase + deploy + E2E + push são do Owner (PENDENTES).**
+> **ADR-033 COMPLETO (Fatias 1+2+3).** A seguir: E2E completo (QA) das três fatias.
+>
+> **Antes:** 2026-09-09 — **Devolução unificada (ADR-033) — Fatia 2: um só botão
+> "Devolver / Estornar" + forma do estorno no caixa (estorno mesma forma × dinheiro) — IMPLEMENTADA,
+> gates verdes; migration `0039`, deploy/E2E/push PENDENTES.** Pedidos do Owner (pontos 3 e 4):
+> perguntar **como o dinheiro voltou** ao cancelar/devolver e descontar do caixa quando for dinheiro;
+> e **unificar** os botões "Cancelar venda" e "Devolver itens". **Descoberta que guiou o desenho:** os
+> relatórios calculam faturamento de vendas `CONFIRMED` e **não** subtraem devoluções — então fundir
+> tudo num endpoint só (roteando cancelamentos p/ `return-items`, que mantém `CONFIRMED`) **inflaria o
+> faturamento**. Por isso mantive os **dois endpoints** com suas semânticas e **unifiquei só a UI**.
+> **O que mudou:** (1) **forma do estorno** — o enum `ReturnTarget` ganhou `SAME_AS_PAYMENT` (estorno na
+> mesma forma do pagamento): no `return-items`, o destino do troco virou 3 opções (Crédito na loja ×
+> Estorno mesma forma × Dinheiro) e **só a parcela paga em dinheiro sai do caixa** (cartão/PIX é
+> estorno, não toca o caixa); no `cancel`, novo `refundMethod` (`SAME_AS_PAYMENT` padrão × `CASH`) — a
+> exclusão da venda cancelada já retira a parte em dinheiro, e em `CASH` lança a **saída da parte que
+> não era dinheiro** (o caixa bate). (2) **`cancel` ganhou condição por item** (defeito no
+> cancelamento, ponto 1 do Owner p/ o caso "cancelou e o produto tinha defeito") — DEFECTIVE não repõe,
+> entra na fila de defeituosos (OrderReturn de rastreio); e **bloqueio** de cancelar venda que já teve
+> devolução parcial (evita estorno de estoque em dobro — corrige bug latente). (3) **UI unificada:** um
+> único botão **"Devolver / Estornar"** nas vendas imediatas (substitui "Devolver itens" + "Cancelar
+> venda" + "Devolver"); o modal roteia **cancelar** (devolução total, mesma sessão, sem devolução
+> anterior) × **devolver por item**, com atalho "Devolver tudo", condição por item, forma do estorno e
+> **"Sai do caixa: R$X"** ao vivo. Vendas SCHEDULED mantêm o fluxo simples (ADR-020 intocado).
+> **Camadas:** `packages/db` (migration **`0039`**, `ReturnTarget += SAME_AS_PAYMENT`), `packages/core`
+> (`cashPaidOf`, `cashRefundPortion`, `cashOutForReturn`, `cancelCashRefund` +4 testes de caixa),
+> `packages/shared` (`ReturnTarget` 3-way + `cancelOrderSchema` com `refundMethod`/`items`), `apps/api`
+> (`orders.ts` `cancel` + `return-items`) + doc §8.2 (regra 7), `apps/web` (`ReturnItemsModal`
+> reescrito unificado + `vendas/page.tsx`). **Gates:** core **362/362**; `tsc` shared/api/web **0**;
+> `next build` (`/vendas` 12.2 kB); `prisma validate` OK. **Regra 1:** migration `0039` aditiva
+> (`ADD VALUE`), aprovada no desenho; **aplicar no Supabase + deploy + E2E + push são do Owner
+> (PENDENTES).** **Falta:** Fatia 3 (troca integrada ao PDV). **Dívida técnica registrada (ADR-033):**
+> devoluções por `return-items` não reduzem o faturamento nos relatórios (subtrair devoluções é um
+> trabalho à parte).
+>
+> **Antes:** 2026-09-09 — **Devolução unificada (ADR-033) — Fatia 1: item devolvido
+> com DEFEITO não volta ao estoque + lista/resolução com fornecedor — IMPLEMENTADA, gates verdes;
+> migration `0038`, deploy/E2E/push PENDENTES.** Pedido do Owner: quando uma venda é devolvida por
+> **defeito**, o item **não pode voltar à prateleira**; precisa ficar **rastreável** para, quando o
+> fornecedor **trocar**, dar baixa e repor o substituto no estoque. **Desenho:** [[ADR-033]] (Proposto)
+> unifica devolução/cancelamento/troca num só fluxo; esta Fatia 1 entrega a **condição do item** e o
+> **ciclo do defeituoso**. **O que mudou:** (1) o `POST /orders/:id/return-items` (ADR-022) passou a
+> aceitar `condition` por item — `GOOD` (Revenda, volta ao estoque, comportamento atual) × `DEFECTIVE`
+> (Defeito): defeito **não** gera `StockMovement`/`stockQty`, incrementa o **cache** `Product.defectiveQty`
+> e a própria linha `order_return_items` vira o **ledger** (condição + `defectStatus PENDING`) — padrão
+> cache+livro-razão do ADR-001, sem tocar o estoque vendável; a **trava** `returnedBaseQty` e o
+> valor/abatimento valem para as duas condições (o cliente devolveu e recebe de volta; muda só o
+> destino da mercadoria). (2) Nova rota **`/returns`**: `GET /defective` (fila dos pendentes — produto,
+> qtd parada, valor, motivo, venda `V-000XXX`, fornecedor candidato via última entrada) e
+> `POST /defective/:id/resolve` — **`RESTOCK`** (fornecedor trocou → `StockMovement INCOME` + `stockQty`,
+> sai do `defectiveQty`) ou **`WRITE_OFF`** (baixa/perda, só sai do `defectiveQty`), atômico + auditoria
+> `RESOLVE_DEFECT`, trava contra resolver 2×. (3) **UI:** `ReturnItemsModal` ganhou o seletor
+> **Revenda × Defeito** por item (aparece quando há quantidade); nova tela **"Devolvidos com defeito"**
+> (menu, ícone ⚠️) lista os pendentes e resolve com confirmação inline (Repor × Baixa/perda). **Camadas:**
+> `packages/db` (enums `ReturnItemCondition`/`DefectResolution`, `Product.defectiveQty`, 5 colunas em
+> `order_return_items`, índice — migration **`0038`**, aditiva), `packages/core` (`isResolvableDefect`,
+> `applyDefectResolution`, `reconcileDefectiveQty` +4 testes), `packages/shared` (schema `condition` +
+> `resolveDefectSchema` + tipos), `apps/api` (`orders.ts` `return-items` + nova `returns.ts` + mount) +
+> doc §8.2 (regra 7), `apps/web` (`ReturnItemsModal` + nova página + link no `layout.tsx`). **Gates:**
+> core **358/358**; `tsc` shared/api/web **0**; `next build` **23 rotas** (`/devolvidos-com-defeito`
+> 2.25 kB, tamanhos estáveis); `prisma validate` OK. **Regra 1:** migration `0038` aprovada pelo Owner
+> antes de codar; **aplicar no Supabase + deploy (API/web) + E2E + push são do Owner (PENDENTES).**
+> **Próximo:** Fatia 2 (unificar botões Cancelar/Devolver + forma do estorno no caixa) e Fatia 3
+> (troca integrada ao PDV).
+>
+> **Antes:** 2026-09-08 — **Caixa.ComprovanteHistorico — o comprovante de um caixa
 > fechado ("Caixas de hoje") passa a itemizar as movimentações do turno — NO AR e E2E DO OWNER
 > VALIDADO (2026-09-08, "validado com sucesso"). CONCLUÍDO.** Achado do Owner: no fechamento aparecem
 > **dois** botões de impressão — um no **topo** (montado no momento do fechamento) e um na linha do

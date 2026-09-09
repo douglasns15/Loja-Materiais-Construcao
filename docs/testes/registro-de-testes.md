@@ -5702,3 +5702,81 @@ no inferior (em vez de fixar o do topo, que poderia gerar conflito ao fechar + a
 | **E2E do Owner** (ambiente de testes): comprovante do botão inferior com as movimentações | manual pelo Owner | ✅ "validado com sucesso" |
 
 **NO AR** — só `apps/web` (`caixa/page.tsx`); sem API/migration/core/shared. web Version `b2a3904a` (smoke ✅ — HTML no-store + CSS 200). Commit `554d356` em `main` (push do Owner). Resolve o item da linha 51 do `Uteis_Projeto_NexoLoja.txt` (comprovante completo sempre disponível pelo botão inferior, que não some).
+
+## ADR-033 Fatia 1 — item devolvido com DEFEITO não volta ao estoque + lista/resolução (2026-09-09)
+
+Pedido do Owner: item devolvido por **defeito** não pode voltar à prateleira; precisa ficar rastreável para,
+quando o fornecedor **trocar**, dar baixa e repor o substituto. Desenho em [ADR-033](../adr/ADR-033-devolucao-unificada-defeito-estorno-troca.md)
+(migration `0038` aprovada pelo Owner antes de codar — regra 1). Condição por item no `return-items`
+(GOOD × DEFECTIVE); defeito alimenta `Product.defectiveQty` (cache) + `order_return_items` (ledger), sem
+tocar o estoque vendável (ADR-001); nova rota `/returns` (fila + resolução Repor/Baixa); tela "Devolvidos
+com defeito".
+
+| O que foi testado | Método | Resultado |
+|---|---|---|
+| `isResolvableDefect` (só PENDING resolve), `applyDefectResolution` (RESTOCK repõe / WRITE_OFF não), `reconcileDefectiveQty` (Σ DEFECTIVE∧PENDING; ignora não-finito) | Vitest (core, 4 casos novos) | ✅ |
+| Core (regressão + novos) | Vitest | ✅ **358/358** |
+| Schema Prisma válido (2 enums + `defectiveQty` + 5 colunas em `order_return_items` + índice) | `prisma validate` | ✅ "schema is valid" |
+| Geração do client com os campos novos | `prisma generate` | ✅ Client v6.19.3 |
+| `return-items`: DEFECTIVE não cria `StockMovement`/`stockQty`, incrementa `defectiveQty`; trava `returnedBaseQty` + valor/abatimento valem p/ as duas condições | leitura + `tsc` | ✅ |
+| `GET /returns/defective` (fila pendente + fornecedor da última entrada) e `POST /returns/defective/:id/resolve` (RESTOCK/WRITE_OFF, atômico, auditoria, trava 2×) | leitura + `tsc` | ✅ |
+| `ReturnItemsModal`: seletor Revenda × Defeito por item (só com quantidade); payload envia `condition` | leitura + `tsc` | ✅ |
+| Nova tela "Devolvidos com defeito" (lista + confirmação inline Repor/Baixa) + link/ícone no menu | `next build` | ✅ rota `/devolvidos-com-defeito` 2.25 kB |
+| Doc §8.2 atualizada (regra 7): `return-items` `condition` + rotas `/returns` | leitura | ✅ |
+| Typecheck shared/api/web | `tsc --noEmit` | ✅ 0 erros |
+| Build do web | `next build` | ✅ 23 rotas, tamanhos estáveis |
+| **E2E do Owner** | manual pelo Owner | ⏭️ pendente (após deploy) |
+
+**IMPLEMENTADA, gates verdes; deploy (aplicar `0038` no Supabase + API/web) + E2E + push PENDENTES (Owner).**
+Camadas: `packages/db` (migration `0038`), `packages/core`, `packages/shared`, `apps/api` (`orders.ts` +
+nova `returns.ts` + mount) + doc §8.2, `apps/web` (`ReturnItemsModal.tsx`, nova página, `layout.tsx`).
+
+## ADR-033 Fatia 2 — botão único "Devolver / Estornar" + forma do estorno no caixa (2026-09-09)
+
+Pedidos do Owner (pontos 3 e 4): perguntar **como o dinheiro voltou** e descontar do caixa quando for
+dinheiro; e **unificar** "Cancelar venda" + "Devolver itens". Descoberta: relatórios não subtraem
+devoluções ⇒ mantidos os dois endpoints (semânticas distintas), unificada só a UI. Migration `0039`
+(`ReturnTarget += SAME_AS_PAYMENT`).
+
+| O que foi testado | Método | Resultado |
+|---|---|---|
+| `cashPaidOf` (só parcelas CASH), `cashRefundPortion` (fatia proporcional em dinheiro), `cashOutForReturn` (destino do troco), `cancelCashRefund` (sangria extra do cancelamento) — matriz forma-de-pagamento × forma-do-estorno | Vitest (core, 4 casos novos) | ✅ |
+| Core (regressão + novos) | Vitest | ✅ **362/362** |
+| Schema válido (`ReturnTarget` com `SAME_AS_PAYMENT`) + client gerado | `prisma validate`/`generate` | ✅ |
+| `return-items`: destino 3-way; `SAME_AS_PAYMENT` tira só a parcela em dinheiro do caixa (cartão/PIX estorna); exige caixa aberto só se `cashOut>0` | leitura + `tsc` | ✅ |
+| `cancel`: `refundMethod` (`CASH` lança saída da parte não-dinheiro; `SAME` nada); `items[].condition` (defeito não repõe + fila); bloqueio de cancelar venda já devolvida (anti estorno-duplo) | leitura + `tsc` | ✅ |
+| UI unificada: um botão "Devolver / Estornar" (imediata) roteia cancelar × devolver; "Devolver tudo"; condição por item; forma do estorno; "Sai do caixa: R$X" ao vivo | `next build` | ✅ `/vendas` 12.2 kB |
+| SCHEDULED mantém o fluxo simples (ADR-020 intocado) | leitura | ✅ |
+| Doc §8.2 (regra 7): `cancel` + `return-items` | leitura | ✅ |
+| Typecheck shared/api/web | `tsc --noEmit` | ✅ 0 erros |
+| Build do web | `next build` | ✅ 23 rotas |
+| **E2E do Owner** | manual pelo Owner | ⏭️ pendente (após deploy) |
+
+**IMPLEMENTADA, gates verdes; deploy (aplicar `0039` no Supabase + API/web) + E2E + push PENDENTES (Owner).**
+Camadas: `packages/db` (migration `0039`), `packages/core` (4 helpers de caixa), `packages/shared`
+(`ReturnTarget` 3-way + `cancelOrderSchema`), `apps/api` (`orders.ts`) + doc §8.2, `apps/web`
+(`ReturnItemsModal.tsx` reescrito + `vendas/page.tsx`). Dívida técnica (ADR-033): `return-items` não
+reduz o faturamento dos relatórios (subtrair devoluções fica p/ um trabalho à parte).
+
+## ADR-033 Fatia 3 — troca integrada ao PDV (vale-troca) (2026-09-09)
+
+Pedido do Owner (ponto 2): trocar por outro item. O valor devolvido vira um VALE consumido por uma nova
+venda no PDV. Migration `0040` (`ReturnIntent` + `order_returns.intent`/`exchangeOrderId`); nova forma
+de pagamento `EXCHANGE_CREDIT` (espelha o `STORE_CREDIT`, não toca o caixa).
+
+| O que foi testado | Método | Resultado |
+|---|---|---|
+| `return-items` `intent=EXCHANGE`: item volta/vira defeito, valor NÃO vira dinheiro/crédito/abatimento; bloqueia venda a prazo em aberto; resposta traz `exchangeCredit` | leitura + `tsc` | ✅ |
+| `POST /orders` `exchangeReturnId`: valida vale (EXCHANGE, não consumido, tenant), total ≥ vale, grava parcela `EXCHANGE_CREDIT` (não-caixa), amarra `exchangeOrderId` (updateMany where null, anti-corrida) + erro 409 `EXCHANGE_ALREADY_USED` | leitura + `tsc` | ✅ |
+| Carry do vale Histórico→PDV (`lib/exchange.ts`, sessionStorage, consumo único) | leitura + `tsc` | ✅ |
+| Modal: passo "O que o cliente quer?" (Devolver × Trocar); na troca some a forma do estorno e chama `onExchange` | leitura + `next build` | ✅ |
+| PDV: banner do vale, abate `payableNow`, valida total ≥ vale, envia `exchangeReturnId`, limpa após concluir; comprovante mostra "Vale-troca" (`ReceiptPrint`) | `next build` | ✅ `/venda` 20.6 kB |
+| Core (regressão) | Vitest | ✅ 362/362 |
+| Schema válido + client gerado (`ReturnIntent`) | `prisma validate`/`generate` | ✅ |
+| Typecheck shared/api/web | `tsc --noEmit` | ✅ 0 erros |
+| Build do web | `next build` | ✅ |
+| **E2E do Owner** | roteiro em `e2e-adr033-devolucao-troca.md` | ⏭️ pendente (após deploy) |
+
+**IMPLEMENTADA — ADR-033 COMPLETO (Fatias 1+2+3). Deploy (aplicar `0038`+`0039`+`0040` no Supabase +
+API/web) + E2E + push PENDENTES (Owner).** E2E completo das 3 fatias documentado em
+[`e2e-adr033-devolucao-troca.md`](./e2e-adr033-devolucao-troca.md).

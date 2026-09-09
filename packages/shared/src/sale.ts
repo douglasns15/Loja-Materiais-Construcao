@@ -18,10 +18,18 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
  */
 export const STORE_CREDIT_METHOD = 'STORE_CREDIT';
 
+/**
+ * Forma de pagamento "Vale-troca" (ADR-033, Fatia 3). Como o `STORE_CREDIT_METHOD`, NÃO é
+ * selecionável no PDV — o servidor a grava quando uma venda consome o vale de uma troca
+ * (`exchangeReturnId`). Não toca o caixa (o valor já foi reconhecido na devolução que o originou).
+ */
+export const EXCHANGE_CREDIT_METHOD = 'EXCHANGE_CREDIT';
+
 /** Rótulo de QUALQUER forma persistida em `Payment.method`, incluindo o "Crédito da loja" (que não
  * está no enum). Use nas telas que exibem pagamentos já gravados (comprovante, relatório, histórico). */
 export function paymentMethodLabel(method: string): string {
   if (method === STORE_CREDIT_METHOD) return 'Crédito da loja';
+  if (method === EXCHANGE_CREDIT_METHOD) return 'Vale-troca';
   return PAYMENT_METHOD_LABELS[method as PaymentMethod] ?? method;
 }
 
@@ -142,6 +150,13 @@ export const createSaleSchema = z.object({
    * é retaguarda; a fila offline não a usa).
    */
   quoteId: z.string().uuid().optional(),
+  /**
+   * Troca (ADR-033, Fatia 3): quando presente, esta venda CONSOME o vale-troca de uma devolução com
+   * `intent = EXCHANGE`. O servidor valida o vale (não consumido, do tenant), grava uma parcela
+   * `EXCHANGE_CREDIT` = valor do vale e amarra a devolução a esta venda (`exchangeOrderId`). O total
+   * da venda deve ser ≥ o vale (sem "troco" na troca — v1). Online-only.
+   */
+  exchangeReturnId: z.string().uuid().optional(),
 });
 export type CreateSaleInput = z.infer<typeof createSaleSchema>;
 
@@ -175,11 +190,28 @@ export const updateOrderNotesSchema = z.object({
 export type UpdateOrderNotesInput = z.infer<typeof updateOrderNotesSchema>;
 
 /**
- * Payload para cancelar uma venda (ADR-004). O motivo é obrigatório porque o
+ * Payload para cancelar uma venda (ADR-004/ADR-033). O motivo é obrigatório porque o
  * cancelamento é um evento crítico auditado (`AuditEvent CANCEL_ORDER`).
+ *
+ * `refundMethod` (ADR-033): como o dinheiro voltou ao cliente. `SAME_AS_PAYMENT` (padrão) = mesma
+ * forma do pagamento — a exclusão da venda cancelada já acerta o caixa; cartão/PIX é estorno.
+ * `CASH` = devolvido tudo em dinheiro — lança a saída da parte que NÃO era dinheiro (o caixa bate).
+ *
+ * `items` (ADR-033): condição por item (só vendas de entrega imediata). Ausente ⇒ tudo REVENDA
+ * (volta ao estoque, comportamento atual). Itens marcados `DEFECTIVE` não voltam ao estoque —
+ * viram defeituosos rastreados (mesma fila da devolução).
  */
 export const cancelOrderSchema = z.object({
   reason: z.string().min(3, 'Informe o motivo do cancelamento.').max(300),
+  refundMethod: z.enum(['SAME_AS_PAYMENT', 'CASH']).optional(),
+  items: z
+    .array(
+      z.object({
+        orderItemId: z.string().uuid(),
+        condition: z.enum(['GOOD', 'DEFECTIVE']),
+      }),
+    )
+    .optional(),
 });
 export type CancelOrderInput = z.infer<typeof cancelOrderSchema>;
 

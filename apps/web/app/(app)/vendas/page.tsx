@@ -8,7 +8,6 @@ import {
   paymentMethodLabel,
   cancelOrderSchema,
   returnOrderSchema,
-  type PartialReturnResult,
 } from '@nexoloja/shared';
 import { groupPairedItems, calcVariation } from '@nexoloja/core';
 import { apiGet, apiPost } from '@/lib/api';
@@ -20,6 +19,7 @@ import { OfflineNotice } from '@/components/OfflineNotice';
 import { ReceiptPrint, type Store } from '@/components/ReceiptPrint';
 import { ReturnItemsModal } from '@/components/ReturnItemsModal';
 import { writeReorderPayload, type ReorderPayloadItem } from '@/lib/reorder';
+import { writeExchangePayload } from '@/lib/exchange';
 import { shareReceiptImage, shareReceiptPdf } from '@/lib/receiptShare';
 
 type OrderItem = {
@@ -888,7 +888,9 @@ export default function VendasPage() {
                       </svg>
                       {sharing?.id === o.id && sharing.kind === 'pdf' ? 'Gerando…' : 'PDF'}
                     </button>
-                    {/* Devolução POR ITEM (ADR-022): vendas confirmadas de entrega imediata. */}
+                    {/* Devolução/estorno UNIFICADO (ADR-033): vendas confirmadas de entrega imediata.
+                        Um botão só; o modal decide entre cancelar (total, mesma sessão) e devolver
+                        por item, e pergunta a condição do item + a forma do estorno. */}
                     {o.status === 'CONFIRMED' && o.deliveryMode !== 'SCHEDULED' && (
                       <button
                         onClick={() => {
@@ -897,10 +899,14 @@ export default function VendasPage() {
                         }}
                         className="rounded-lg border border-orange-200 px-3 py-1.5 text-sm font-medium text-orange-600 hover:bg-orange-50"
                       >
-                        Devolver itens
+                        Devolver / Estornar
                       </button>
                     )}
-                    {canAct &&
+                    {/* Retirada futura (ADR-020): cancelar/devolver a venda inteira segue o fluxo
+                        simples (o modal unificado é para entrega imediata). */}
+                    {o.status === 'CONFIRMED' &&
+                      o.deliveryMode === 'SCHEDULED' &&
+                      canAct &&
                       (isOpenSessionOrder ? (
                         <button
                           onClick={() => abrirAcao(o.id, 'cancel')}
@@ -999,26 +1005,30 @@ export default function VendasPage() {
         </div>
       )}
 
-      {/* Devolução por item (ADR-022): modal com seleção de itens/quantidades + destino do troco. */}
+      {/* Modal unificado de devolução/estorno (ADR-022 + ADR-033): itens/quantidades + condição
+          (revenda × defeito) + forma do estorno; roteia para cancelar (total, mesma sessão) ou
+          devolver por item. */}
       {returnOrder && (
         <ReturnItemsModal
           orderId={returnOrder.id}
+          orderNumber={returnOrder.orderNumber}
           items={returnOrder.items}
           receivable={returnOrder.receivable ?? null}
           hasCustomer={!!returnOrder.customerId}
+          payments={returnOrder.payments.map((p) => ({ method: p.method, amount: Number(p.amount) }))}
+          orderTotal={Number(returnOrder.total)}
+          isOpenSessionOrder={caixaOpen && returnOrder.cashSession?.id === openSessionId}
           onClose={() => setReturnOrder(null)}
-          onDone={(res: PartialReturnResult) => {
-            const parts = [`Devolução registrada (${BRL(res.totalValue)}).`];
-            if (res.abatedAmount > 0) parts.push(`Abateu ${BRL(res.abatedAmount)} da dívida.`);
-            if (res.excessAmount > 0)
-              parts.push(
-                res.target === 'CASH'
-                  ? `Troco ${BRL(res.excessAmount)} devolvido em dinheiro.`
-                  : `Troco ${BRL(res.excessAmount)} virou crédito na loja.`,
-              );
-            setInfo(parts.join(' '));
+          onDone={(message: string) => {
+            setInfo(message);
             setReturnOrder(null);
             loadOrders().catch((e) => setError((e as Error).message));
+          }}
+          onExchange={(ctx) => {
+            // Troca (ADR-033, Fatia 3): guarda o vale e abre o PDV para montar a nova compra.
+            writeExchangePayload(ctx);
+            setReturnOrder(null);
+            router.push('/venda');
           }}
         />
       )}

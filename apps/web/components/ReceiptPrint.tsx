@@ -44,6 +44,9 @@ type Props = {
   /** Crédito da loja usado (ADR-022, Fatia C): imprime a linha "Crédito da loja". Usado quando o
    *  crédito NÃO vem dentro de `payments` (venda recém-concluída no PDV). */
   storeCreditAmount?: number;
+  /** Vale-troca consumido (ADR-033, Fatia 3): imprime a linha "Vale-troca". Usado quando o vale NÃO
+   *  vem dentro de `payments` (venda recém-concluída no PDV). */
+  exchangeCreditAmount?: number;
   /** Nome do cliente devedor (venda a prazo) — impresso junto da linha "A prazo". */
   customerName?: string | null;
   /** Código sequencial da venda (ADR-023): impresso como "Venda V-000128" abaixo do título. Só em
@@ -88,7 +91,7 @@ const QTY = (v: number) => {
  * e só aparece na impressão (ver regras @media print em globals.css). O modelo
  * (80mm / A4) é controlado pelo atributo data-model, definido antes de imprimir.
  */
-export function ReceiptPrint({ kind, store, items, total, date, discount, payments, method, change, creditAmount, storeCreditAmount, customerName, orderNumber, codeLabel, quoteNumber, validUntil, pickupNotice, pickupPaid, pickupLines, captureMode }: Props) {
+export function ReceiptPrint({ kind, store, items, total, date, discount, payments, method, change, creditAmount, storeCreditAmount, exchangeCreditAmount, customerName, orderNumber, codeLabel, quoteNumber, validUntil, pickupNotice, pickupPaid, pickupLines, captureMode }: Props) {
   const isQuote = kind === 'quote';
   const subtotal = items.reduce((acc, i) => acc + i.unitPrice * i.quantity, 0);
   const hasDiscount = (discount ?? 0) > 0;
@@ -96,9 +99,10 @@ export function ReceiptPrint({ kind, store, items, total, date, discount, paymen
   const pays: ReceiptPayment[] =
     payments && payments.length > 0 ? payments : method ? [{ method, amount: total }] : [];
   const storeCredit = storeCreditAmount ?? 0;
-  // "Dividido" quando há mais de uma forma somando o pagamento (incluindo o crédito da loja).
-  const multiPay = pays.length + (storeCredit > 0 ? 1 : 0) > 1;
-  const hasPayBlock = pays.length > 0 || storeCredit > 0 || (creditAmount ?? 0) > 0;
+  const exchangeCredit = exchangeCreditAmount ?? 0; // ADR-033: vale-troca consumido
+  // "Dividido" quando há mais de uma forma somando o pagamento (incluindo crédito da loja/vale-troca).
+  const multiPay = pays.length + (storeCredit > 0 ? 1 : 0) + (exchangeCredit > 0 ? 1 : 0) > 1;
+  const hasPayBlock = pays.length > 0 || storeCredit > 0 || exchangeCredit > 0 || (creditAmount ?? 0) > 0;
   // Dinheiro recebido (só quando houve troco): as parcelas guardam o dinheiro APLICADO (que fecha o
   // total); o recebido = aplicado + troco. Mostrar o quanto o cliente entregou, além do troco.
   const hasChange = (change ?? 0) > 0;
@@ -211,6 +215,12 @@ export function ReceiptPrint({ kind, store, items, total, date, discount, paymen
             <div>
               <span>Crédito da loja</span>
               <span>{BRL(storeCredit)}</span>
+            </div>
+          ) : null}
+          {exchangeCredit > 0 ? (
+            <div>
+              <span>Vale-troca</span>
+              <span>{BRL(exchangeCredit)}</span>
             </div>
           ) : null}
           {hasChange ? (

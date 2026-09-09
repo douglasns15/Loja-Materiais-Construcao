@@ -49,6 +49,13 @@ import {
   isValidPartialReturn,
   applyItemReturn,
   splitReturnValue,
+  isResolvableDefect,
+  applyDefectResolution,
+  reconcileDefectiveQty,
+  cashPaidOf,
+  cashRefundPortion,
+  cashOutForReturn,
+  cancelCashRefund,
   applyReceivableReturn,
   sumCashCount,
   paymentStatus,
@@ -723,6 +730,94 @@ describe('devolução/troca por item + crédito (ADR-022 Fatia B)', () => {
     const r = applyReceivablePayment(100, 0, 30, 70);
     expect(r.fullyPaid).toBe(true);
     expect(r.status).toBe('PAID');
+  });
+});
+
+describe('item defeituoso (ADR-033, Fatia 1)', () => {
+  it('isResolvableDefect: só PENDING pode ser resolvido', () => {
+    expect(isResolvableDefect('PENDING')).toBe(true);
+    expect(isResolvableDefect('RESTOCKED')).toBe(false);
+    expect(isResolvableDefect('WRITTEN_OFF')).toBe(false);
+    expect(isResolvableDefect(null)).toBe(false); // linha GOOD (sem defectStatus)
+    expect(isResolvableDefect(undefined)).toBe(false);
+  });
+
+  it('applyDefectResolution: RESTOCK repõe no estoque vendável; WRITE_OFF não', () => {
+    expect(applyDefectResolution('RESTOCK')).toEqual({
+      defectStatus: 'RESTOCKED',
+      restockToSellable: true,
+    });
+    expect(applyDefectResolution('WRITE_OFF')).toEqual({
+      defectStatus: 'WRITTEN_OFF',
+      restockToSellable: false,
+    });
+  });
+
+  it('reconcileDefectiveQty: Σ baseQty das linhas DEFECTIVE ainda PENDING', () => {
+    const lines = [
+      { baseQty: 3, condition: 'DEFECTIVE' as const, defectStatus: 'PENDING' as const },
+      { baseQty: 2, condition: 'DEFECTIVE' as const, defectStatus: 'PENDING' as const },
+      { baseQty: 5, condition: 'DEFECTIVE' as const, defectStatus: 'RESTOCKED' as const }, // já saiu
+      { baseQty: 9, condition: 'DEFECTIVE' as const, defectStatus: 'WRITTEN_OFF' as const }, // já saiu
+      { baseQty: 7, condition: 'GOOD' as const, defectStatus: null }, // revenda não conta
+    ];
+    expect(reconcileDefectiveQty(lines)).toBe(5); // só 3 + 2
+  });
+
+  it('reconcileDefectiveQty: ignora valores não finitos e vazio', () => {
+    expect(reconcileDefectiveQty([])).toBe(0);
+    expect(
+      reconcileDefectiveQty([
+        { baseQty: NaN, condition: 'DEFECTIVE', defectStatus: 'PENDING' },
+        { baseQty: 1.5, condition: 'DEFECTIVE', defectStatus: 'PENDING' },
+      ]),
+    ).toBe(1.5);
+  });
+});
+
+describe('forma do estorno e caixa (ADR-033, Fatia 2)', () => {
+  const cash = (a: number) => ({ method: 'CASH', amount: a });
+  const card = (a: number) => ({ method: 'CREDIT_CARD', amount: a });
+
+  it('cashPaidOf: soma só as parcelas em dinheiro (positivas)', () => {
+    expect(cashPaidOf([cash(50), card(50)])).toBe(50);
+    expect(cashPaidOf([card(100)])).toBe(0);
+    expect(cashPaidOf([cash(30), cash(20)])).toBe(50);
+    expect(cashPaidOf([cash(-5), cash(10)])).toBe(10); // ignora inválidas
+  });
+
+  it('cashRefundPortion: fatia do valor proporcional ao que foi pago em dinheiro', () => {
+    // Pago 50 dinheiro + 50 cartão (total 100). Devolver 100 mesma forma → 50 em dinheiro.
+    expect(cashRefundPortion(100, [cash(50), card(50)])).toBe(50);
+    // Devolver 40 → 40 × 50/100 = 20 em dinheiro.
+    expect(cashRefundPortion(40, [cash(50), card(50)])).toBe(20);
+    // Tudo no cartão → estorno, 0 em dinheiro.
+    expect(cashRefundPortion(100, [card(100)])).toBe(0);
+    // Tudo em dinheiro → o valor inteiro.
+    expect(cashRefundPortion(30, [cash(100)])).toBe(30);
+    // Sem pagamento (a prazo não pago) → 0.
+    expect(cashRefundPortion(30, [])).toBe(0);
+  });
+
+  it('cashOutForReturn: caixa por destino do excedente', () => {
+    const pays = [cash(50), card(50)];
+    expect(cashOutForReturn('STORE_CREDIT', 100, pays)).toBe(0); // vira crédito
+    expect(cashOutForReturn('CASH', 100, pays)).toBe(100); // tudo em dinheiro
+    expect(cashOutForReturn('SAME_AS_PAYMENT', 100, pays)).toBe(50); // só a parte em dinheiro
+    expect(cashOutForReturn('CASH', 0, pays)).toBe(0); // sem excedente
+  });
+
+  it('cancelCashRefund: sangria extra do cancelamento (além da exclusão)', () => {
+    // Venda 100 paga em dinheiro. SAME → 0 (exclusão já cobre). CASH → 0 (já era tudo dinheiro).
+    expect(cancelCashRefund('SAME_AS_PAYMENT', 100, 100)).toBe(0);
+    expect(cancelCashRefund('CASH', 100, 100)).toBe(0);
+    // Venda 100 paga no cartão (cashPaid 0). SAME → 0 (estorno). CASH → 100 (tudo sai em dinheiro).
+    expect(cancelCashRefund('SAME_AS_PAYMENT', 100, 0)).toBe(0);
+    expect(cancelCashRefund('CASH', 100, 0)).toBe(100);
+    // Venda 100 mista (60 dinheiro + 40 cartão). CASH → devolve tudo em dinheiro; falta a parte que
+    // não era dinheiro (40). SAME → 0.
+    expect(cancelCashRefund('CASH', 100, 60)).toBe(40);
+    expect(cancelCashRefund('SAME_AS_PAYMENT', 100, 60)).toBe(0);
   });
 });
 

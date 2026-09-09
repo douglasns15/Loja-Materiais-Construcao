@@ -84,6 +84,35 @@ enum DeliveryAccountStatus {
 enum ReturnTarget {
   STORE_CREDIT // Crédito a favor do cliente (Customer.creditBalance + livro-razão customer_credits)
   CASH // Devolução em dinheiro no caixa de hoje (CashMovement RETURN — exige caixa aberto)
+  // Estorno na MESMA forma do pagamento (ADR-033): o valor volta pela forma original. Só a parcela
+  // paga EM DINHEIRO sai do caixa (CashMovement RETURN proporcional); cartão/PIX é estorno e NÃO
+  // toca o caixa. Nunca vira crédito. Usado quando a venda foi paga (à vista ou dividida).
+  SAME_AS_PAYMENT
+}
+
+/// Condição de um item devolvido (ADR-033). REVENDA volta ao estoque vendável (comportamento
+/// padrão, ADR-022); DEFEITO NÃO volta — fica parado como defeituoso (cache Product.defectiveQty +
+/// ledger na própria linha) até ser trocado com o fornecedor (repõe) ou receber baixa/perda.
+enum ReturnItemCondition {
+  GOOD // Revenda — mercadoria boa, volta ao estoque vendável (StockMovement INCOME + stockQty)
+  DEFECTIVE // Defeito — não volta ao estoque; entra na lista de defeituosos aguardando acerto
+}
+
+/// Desfecho de um item devolvido com DEFEITO (ADR-033). Só vale para linhas DEFECTIVE. PENDING
+/// enquanto aguarda; RESTOCKED quando o fornecedor troca (o substituto entra no estoque vendável);
+/// WRITTEN_OFF quando é baixa/perda (nenhum estoque vendável se move).
+enum DefectResolution {
+  PENDING // Aguardando acerto com o fornecedor
+  RESTOCKED // Trocado pelo fornecedor — substituto reposto no estoque vendável
+  WRITTEN_OFF // Baixa/perda — descartado sem reposição
+}
+
+/// Intenção de uma devolução (ADR-033, Fatia 3). REFUND = devolução/estorno normal (o valor vira
+/// dinheiro/crédito/abatimento). EXCHANGE = troca: o valor NÃO se resolve agora — vira um VALE
+/// consumido por uma nova venda no PDV (Payment EXCHANGE_CREDIT), amarrada em `exchangeOrderId`.
+enum ReturnIntent {
+  REFUND
+  EXCHANGE
 }
 
 /// Ciclo de vida do ORÇAMENTO (ADR-024). "Expirado" NÃO entra aqui: é DERIVADO de `validUntil` na
@@ -359,6 +388,13 @@ model Product {
   /// trava pelo DISPONÍVEL = `stockQty − reservedQty` (não vende a mesma peça 2×). Fonte de
   /// verdade = Σ dos itens reservados; existe reconciliação no mesmo espírito do `stockQty`.
   reservedQty      Decimal    @default(0) @db.Decimal(12, 4)
+  /// Cache desnormalizado do total DEFEITUOSO em unidade-base (ADR-033), no mesmo espírito do
+  /// `stockQty`/`reservedQty` (ADR-001). Soma do que foi devolvido com defeito e ainda aguarda acerto
+  /// com o fornecedor (linhas `order_return_items` DEFECTIVE + PENDING). NÃO é vendável: o PDV ignora
+  /// este número (disponível = `stockQty − reservedQty`). Fonte de verdade = Σ das linhas defeituosas
+  /// pendentes; reconciliável (`reconcileDefectiveQty`). Incrementa na devolução com defeito, decrementa
+  /// na resolução (reposição OU baixa).
+  defectiveQty     Decimal    @default(0) @db.Decimal(12, 4)
   minStockQty      Decimal    @default(0) @db.Decimal(12, 4)
   isActive         Boolean    @default(true)
   deletedAt        DateTime? // Soft-delete (ADR-004)
@@ -855,6 +891,11 @@ model OrderReturn {
   cashMovementId   String?       @db.Uuid // Elo com o RETURN no caixa (quando target = CASH), solta
   customerCreditId String?       @db.Uuid // Elo com a linha de crédito (quando target = STORE_CREDIT), solta
   reason           String        @db.VarChar(500) // Motivo (ADR-004)
+  // Troca (ADR-033, Fatia 3). REFUND (padrão) = devolução/estorno resolvido aqui. EXCHANGE = o valor
+  // vira um vale consumido por uma nova venda; `exchangeOrderId` guarda essa venda (referência solta,
+  // SET NULL) e null enquanto o vale não foi consumido (trava contra consumir 2×).
+  intent           ReturnIntent  @default(REFUND)
+  exchangeOrderId  String?       @db.Uuid
   createdAt        DateTime      @default(now())
   // Autoria (ADR-010): quem registrou a devolução. Referência solta; snapshot do nome.
   createdById      String?       @db.Uuid
@@ -879,12 +920,24 @@ model OrderReturnItem {
   orderItemId String  @db.Uuid
   baseQty     Decimal @db.Decimal(12, 4) // Quantidade em unidade-base devolvida (estorno de estoque)
   value       Decimal @db.Decimal(12, 2) // Valor daquele item na devolução
+  // Condição do item devolvido (ADR-033). GOOD (default) = volta ao estoque vendável, comportamento
+  // do ADR-022; DEFECTIVE = não volta, vira defeituoso rastreado por esta própria linha.
+  condition   ReturnItemCondition @default(GOOD)
+  // Desfecho do defeito (ADR-033). Só nas linhas DEFECTIVE: nasce PENDING e vira RESTOCKED (fornecedor
+  // trocou) ou WRITTEN_OFF (baixa). NULL nas linhas GOOD. É o livro-razão do `Product.defectiveQty`.
+  defectStatus DefectResolution?
+  resolvedAt   DateTime? // Quando o defeito foi resolvido (reposto/baixado)
+  // Autoria (ADR-010) da resolução: quem repôs/baixou. Referência solta; snapshot do nome.
+  resolvedById   String? @db.Uuid
+  resolvedByName String? @db.VarChar(100)
 
   tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   orderReturn OrderReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
   orderItem   OrderItem   @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
 
   @@index([returnId])
+  // Consulta da lista "Devolvidos com defeito" (ADR-033): linhas defeituosas pendentes por loja.
+  @@index([tenantId, condition, defectStatus])
   @@map("order_return_items")
 }
 

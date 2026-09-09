@@ -433,6 +433,151 @@ export function applyReceivableReturn(
   return { returnedAmount: newReturned, status: fullySettled ? 'PAID' : 'OPEN', fullySettled };
 }
 
+// ---------------------------------------------------------------------------
+// Item devolvido com DEFEITO — não volta ao estoque, ledger próprio (ADR-033, Fatia 1)
+// ---------------------------------------------------------------------------
+
+/** Condição de um item devolvido — espelha o enum `ReturnItemCondition` do Prisma. */
+export type ReturnItemCondition = 'GOOD' | 'DEFECTIVE';
+
+/** Desfecho de um item defeituoso — espelha o enum `DefectResolution` do Prisma. */
+export type DefectResolutionStatus = 'PENDING' | 'RESTOCKED' | 'WRITTEN_OFF';
+
+/** Ação de resolução escolhida pelo operador na lista de defeituosos. */
+export type DefectResolutionAction = 'RESTOCK' | 'WRITE_OFF';
+
+/**
+ * Só um defeito **PENDING** pode ser resolvido (ADR-033) — trava contra repor/baixar a mesma peça
+ * duas vezes. Espelha a ideia do `isValidPartialReturn` (não agir sobre o que já foi resolvido).
+ */
+export function isResolvableDefect(status: DefectResolutionStatus | null | undefined): boolean {
+  return status === 'PENDING';
+}
+
+/**
+ * Efeito de resolver um defeito PENDING (ADR-033). Em ambos os casos o item **sai** do cache de
+ * defeituosos (`defectiveQty −= base`); só `RESTOCK` ainda **repõe** o substituto no estoque
+ * vendável (`stockQty += base` + `StockMovement INCOME`); `WRITE_OFF` (baixa/perda) não move o
+ * estoque vendável. Não valida — chame `isResolvableDefect` antes. Fonte única da transição.
+ */
+export function applyDefectResolution(action: DefectResolutionAction): {
+  defectStatus: DefectResolutionStatus;
+  restockToSellable: boolean;
+} {
+  return action === 'RESTOCK'
+    ? { defectStatus: 'RESTOCKED', restockToSellable: true }
+    : { defectStatus: 'WRITTEN_OFF', restockToSellable: false };
+}
+
+/** Uma linha de devolução, para reconciliar o cache de defeituosos. */
+export interface DefectiveLine {
+  baseQty: number;
+  condition: ReturnItemCondition;
+  defectStatus?: DefectResolutionStatus | null;
+}
+
+/**
+ * Reconcilia o cache `Product.defectiveQty` (ADR-033) a partir do ledger: Σ `baseQty` das linhas
+ * **DEFECTIVE ainda PENDING** (resolvidas já saíram do estoque parado). Espelha
+ * `reconcileStock`/`reconcileReserved`. Ignora valores não finitos; arredonda a 4 casas.
+ */
+export function reconcileDefectiveQty(lines: DefectiveLine[]): number {
+  const total = lines.reduce(
+    (acc, l) =>
+      l.condition === 'DEFECTIVE' && l.defectStatus === 'PENDING' && Number.isFinite(l.baseQty)
+        ? acc + l.baseQty
+        : acc,
+    0,
+  );
+  return Number(total.toFixed(4));
+}
+
+// ---------------------------------------------------------------------------
+// Forma do estorno e impacto no caixa (ADR-033, Fatia 2)
+// ---------------------------------------------------------------------------
+
+/** Destino do dinheiro do cliente numa devolução — espelha o enum `ReturnTarget` do Prisma. */
+export type ReturnDestination = 'STORE_CREDIT' | 'CASH' | 'SAME_AS_PAYMENT';
+
+/** Forma do estorno no CANCELAMENTO (ADR-033): mesma forma do pagamento × tudo em dinheiro. */
+export type RefundMethod = 'SAME_AS_PAYMENT' | 'CASH';
+
+/** Uma parcela de pagamento (forma livre + valor) — a forma pode ser CASH/cartão/PIX/STORE_CREDIT. */
+export interface RefundPaymentLike {
+  method: string;
+  amount: number;
+}
+
+/** Soma (em reais) o que foi pago EM DINHEIRO numa venda (parcelas `CASH`, só valores positivos). */
+export function cashPaidOf(payments: RefundPaymentLike[]): number {
+  let cents = 0;
+  for (const p of payments) {
+    if (p.method === 'CASH' && Number.isFinite(p.amount) && p.amount > 0) {
+      cents += Math.round(p.amount * 100);
+    }
+  }
+  return Number((cents / 100).toFixed(2));
+}
+
+/**
+ * Quanto de um valor a devolver `V` volta **em dinheiro** num estorno "mesma forma" (ADR-033): a
+ * fatia de `V` **proporcional ao que foi pago em dinheiro** na venda. A parte paga no cartão/PIX é
+ * estorno (não sai do caixa). Se nada foi pago, ou nada foi em dinheiro, retorna 0. Aritmética em
+ * centavos (evita o erro de ponto flutuante).
+ */
+export function cashRefundPortion(value: number, payments: RefundPaymentLike[]): number {
+  const valueCents = Math.round((Number.isFinite(value) ? value : 0) * 100);
+  if (valueCents <= 0) return 0;
+  let totalCents = 0;
+  let cashCents = 0;
+  for (const p of payments) {
+    if (!Number.isFinite(p.amount) || p.amount <= 0) continue;
+    const cents = Math.round(p.amount * 100);
+    totalCents += cents;
+    if (p.method === 'CASH') cashCents += cents;
+  }
+  if (totalCents <= 0 || cashCents <= 0) return 0;
+  const portionCents = Math.round((valueCents * cashCents) / totalCents);
+  return Number((portionCents / 100).toFixed(2));
+}
+
+/**
+ * Quanto **sai do caixa** numa devolução por item (ADR-033), pelo destino escolhido do excedente:
+ *  - `STORE_CREDIT`: 0 (vira crédito, não toca o caixa);
+ *  - `CASH`: o excedente inteiro (dinheiro da gaveta);
+ *  - `SAME_AS_PAYMENT`: só a fatia proporcional paga em dinheiro (o resto é estorno de cartão/PIX).
+ */
+export function cashOutForReturn(
+  destination: ReturnDestination,
+  excess: number,
+  payments: RefundPaymentLike[],
+): number {
+  if (!Number.isFinite(excess) || excess <= 0) return 0;
+  if (destination === 'CASH') return Number(excess.toFixed(2));
+  if (destination === 'SAME_AS_PAYMENT') return cashRefundPortion(excess, payments);
+  return 0; // STORE_CREDIT
+}
+
+/**
+ * Sangria EXTRA que o **cancelamento** precisa lançar no caixa, ALÉM da exclusão da venda cancelada
+ * (ADR-033). O cálculo do esperado já ignora vendas `CANCELLED`, o que retira `cashPaid` do
+ * esperado. Então:
+ *  - `SAME_AS_PAYMENT`: a parte paga em dinheiro volta como dinheiro (a exclusão já cobre) e o
+ *    cartão/PIX é estorno ⇒ **0 extra**.
+ *  - `CASH`: devolve **tudo** em dinheiro; a exclusão só cobriu a parte que já era dinheiro
+ *    (`cashPaid`) ⇒ falta descontar a parte que **não** era dinheiro (`total − cashPaid`).
+ * Nunca negativo. Aritmética em centavos.
+ */
+export function cancelCashRefund(
+  refundMethod: RefundMethod,
+  orderTotal: number,
+  cashPaid: number,
+): number {
+  if (refundMethod !== 'CASH') return 0;
+  const extraCents = Math.round(orderTotal * 100) - Math.round(cashPaid * 100);
+  return Number((Math.max(0, extraCents) / 100).toFixed(2));
+}
+
 /** Valores (em reais) das moedas do Real em circulação, para o contador de gaveta. */
 export const BRL_COIN_VALUES = [0.05, 0.1, 0.25, 0.5, 1] as const;
 /** Valores (em reais) das cédulas do Real em circulação, para o contador de gaveta. */

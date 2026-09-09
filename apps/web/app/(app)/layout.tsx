@@ -33,6 +33,7 @@ type IconName =
   | 'entregas'
   | 'produtos'
   | 'estoque'
+  | 'defeitos'
   | 'cadastros'
   | 'clientes'
   | 'fornecedores'
@@ -109,6 +110,14 @@ const ICON_PATHS: Record<IconName, ReactNode> = {
       <path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z" />
       <path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65" />
       <path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65" />
+    </>
+  ),
+  // Triângulo de atenção — Devolvidos com defeito.
+  defeitos: (
+    <>
+      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+      <path d="M12 9v4" />
+      <path d="M12 17h.01" />
     </>
   ),
   // Pasta — grupo Cadastros.
@@ -195,6 +204,7 @@ const NAV: NavEntry[] = [
   { href: '/entregas', label: 'Entregas', icon: 'entregas' },
   { href: '/products', label: 'Produtos', icon: 'produtos' },
   { href: '/estoque', label: 'Estoque', icon: 'estoque' },
+  { href: '/devolvidos-com-defeito', label: 'Devolvidos com defeito', icon: 'defeitos' },
   {
     group: 'Cadastros',
     icon: 'cadastros',

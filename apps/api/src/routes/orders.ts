@@ -6,6 +6,9 @@ import {
   availableQty,
   calcSaleItemTotal,
   calcSaleTotals,
+  cancelCashRefund,
+  cashOutForReturn,
+  cashPaidOf,
   closedSaleStep,
   closedStockMeters,
   creditSaleBalances,
@@ -27,6 +30,7 @@ import {
   parseMoneyQuery,
   parseOrderNumberQuery,
   returnOrderSchema,
+  EXCHANGE_CREDIT_METHOD,
   STORE_CREDIT_METHOD,
 } from '@nexoloja/shared';
 import { type Env, getConnectionString, getPrisma, getTenantId } from '../lib/request';
@@ -489,8 +493,40 @@ orders.post('/', requireActiveTenant, async (c) => {
         );
       }
     }
-    // "Pago agora" para a cobertura = dinheiro/cartão + crédito da loja (ambos settlam na hora).
-    const paidNow = Number((paid + creditApplied).toFixed(2));
+    // Troca (ADR-033, Fatia 3): esta venda CONSOME o vale de uma devolução EXCHANGE. O vale settla
+    // como "pago agora" (parcela EXCHANGE_CREDIT, não é dinheiro na gaveta) e a devolução é amarrada a
+    // esta venda na transação (trava contra usar 2×). v1: total ≥ vale (sem troco na troca); online-only.
+    let exchangeCredit = 0;
+    if (sale.exchangeReturnId) {
+      if (isOffline) {
+        return c.json({ ok: false, error: 'Troca não está disponível offline.' }, 400);
+      }
+      const ret = await prisma.orderReturn.findFirst({
+        where: { id: sale.exchangeReturnId, tenantId },
+        select: { intent: true, exchangeOrderId: true, totalValue: true },
+      });
+      if (!ret) {
+        return c.json({ ok: false, error: 'Vale-troca não encontrado.' }, 400);
+      }
+      if (ret.intent !== 'EXCHANGE') {
+        return c.json({ ok: false, error: 'Esta devolução não é uma troca.' }, 400);
+      }
+      if (ret.exchangeOrderId) {
+        return c.json({ ok: false, error: 'Este vale-troca já foi usado em outra venda.' }, 409);
+      }
+      exchangeCredit = Number(ret.totalValue);
+      if (exchangeCredit > total + 0.005) {
+        return c.json(
+          {
+            ok: false,
+            error: `A troca precisa ser de valor igual ou maior que o vale (${exchangeCredit.toFixed(2)}). Adicione itens ou faça uma devolução.`,
+          },
+          400,
+        );
+      }
+    }
+    // "Pago agora" para a cobertura = dinheiro/cartão + crédito da loja + vale-troca (todos settlam agora).
+    const paidNow = Number((paid + creditApplied + exchangeCredit).toFixed(2));
     if (credit > 0) {
       if (isOffline) {
         return c.json(
@@ -659,6 +695,11 @@ orders.post('/', requireActiveTenant, async (c) => {
               ...(creditApplied > 0
                 ? [{ tenantId, method: STORE_CREDIT_METHOD, amount: creditApplied }]
                 : []),
+              // Vale-troca (ADR-033, Fatia 3): parcela "EXCHANGE_CREDIT" — mostra a forma no
+              // comprovante/relatório; o caixa a ignora (não é dinheiro na gaveta).
+              ...(exchangeCredit > 0
+                ? [{ tenantId, method: EXCHANGE_CREDIT_METHOD, amount: exchangeCredit }]
+                : []),
             ],
           },
         },
@@ -817,6 +858,19 @@ orders.post('/', requireActiveTenant, async (c) => {
         }
       }
 
+      // Troca (ADR-033, Fatia 3): amarra o vale a esta venda. `updateMany` condicional
+      // (exchangeOrderId ainda nulo) é à prova de corrida: se o vale já foi consumido, `count` é 0 e
+      // abortamos — rollback da venda inteira (devolve o número do pedido).
+      if (sale.exchangeReturnId) {
+        const linked = await tx.orderReturn.updateMany({
+          where: { id: sale.exchangeReturnId, tenantId, intent: 'EXCHANGE', exchangeOrderId: null },
+          data: { exchangeOrderId: created.id },
+        });
+        if (linked.count === 0) {
+          throw new Error('EXCHANGE_ALREADY_USED');
+        }
+      }
+
       return created;
     });
 
@@ -845,6 +899,10 @@ orders.post('/', requireActiveTenant, async (c) => {
     if (err instanceof Error && err.message === 'QUOTE_ALREADY_CONVERTED') {
       return c.json({ ok: false, error: 'Este orçamento já foi convertido em venda.' }, 409);
     }
+    // ADR-033 (Fatia 3): o vale-troca foi consumido por outra venda entre a checagem e o commit.
+    if (err instanceof Error && err.message === 'EXCHANGE_ALREADY_USED') {
+      return c.json({ ok: false, error: 'Este vale-troca já foi usado em outra venda.' }, 409);
+    }
     // Crédito da loja: o saldo mudou entre a checagem e o débito (corrida) — pede para refazer.
     if (err instanceof Error && err.message === 'INSUFFICIENT_CREDIT') {
       return c.json(
@@ -858,14 +916,18 @@ orders.post('/', requireActiveTenant, async (c) => {
 });
 
 /**
- * Cancela uma venda (ADR-004). Restrito ao caixa aberto do operador para não
+ * Cancela uma venda (ADR-004/ADR-033). Restrito ao caixa aberto do operador para não
  * corromper caixas já fechados. Em uma única transação:
- *  - estorna o estoque: para cada item, grava StockMovement INCOME (reverso da
- *    saída da venda) e incrementa Product.stockQty (ADR-001);
+ *  - estorna o estoque: para cada item de REVENDA (GOOD), grava StockMovement INCOME (reverso da
+ *    saída da venda) e incrementa Product.stockQty (ADR-001); item marcado DEFEITO (ADR-033) NÃO
+ *    volta — incrementa Product.defectiveQty e entra na fila de defeituosos (OrderReturn ledger);
  *  - marca o Order como CANCELLED;
- *  - registra AuditEvent CANCEL_ORDER com o motivo.
- * Os Payments são preservados (auditoria); o caixa recalcula sozinho porque o
- * cálculo de entrada em dinheiro ignora pedidos CANCELLED.
+ *  - FORMA DO ESTORNO (ADR-033): o caixa ignora vendas CANCELLED, o que já retira a parte paga em
+ *    dinheiro. Se o cliente foi reembolsado TUDO em dinheiro (`refundMethod = CASH`), lança a SAÍDA
+ *    da parte que NÃO era dinheiro (senão o caixa sobraria). `SAME_AS_PAYMENT` (padrão) não lança
+ *    nada (a exclusão já cobre; cartão/PIX é estorno);
+ *  - registra AuditEvent CANCEL_ORDER com o motivo, a forma e o estorno em dinheiro.
+ * Os Payments são preservados (auditoria).
  */
 orders.post('/:id/cancel', async (c) => {
   const tenantId = getTenantId(c);
@@ -883,7 +945,8 @@ orders.post('/:id/cancel', async (c) => {
       400,
     );
   }
-  const { reason } = parsed.data;
+  const { reason, items: condItems } = parsed.data;
+  const refundMethod = parsed.data.refundMethod ?? 'SAME_AS_PAYMENT';
 
   try {
     const prisma = getPrisma(c);
@@ -916,8 +979,21 @@ orders.post('/:id/cancel', async (c) => {
         400,
       );
     }
+    // ADR-033: cancelar repõe o TOTAL de cada item; se já houve devolução parcial (return-items,
+    // que já repôs parte), cancelar duplicaria o estorno de estoque. Nesse caso, o caminho é
+    // devolver o restante por item. (Vendas SCHEDULED nunca têm devolução parcial.)
+    if (order.items.some((i) => Number(i.returnedBaseQty) > 0)) {
+      return c.json(
+        { ok: false, error: 'Esta venda já teve devoluções; use "Devolver / Estornar" para o restante.' },
+        409,
+      );
+    }
 
     const isScheduled = order.deliveryMode === 'SCHEDULED';
+    const userName = c.get('userName');
+    // Condição por item (ADR-033): mapa orderItemId → GOOD|DEFECTIVE. Só vale p/ venda IMMEDIATE
+    // (o defeito é da mercadoria que já saiu); numa SCHEDULED a condição é ignorada.
+    const condByItem = new Map((condItems ?? []).map((i) => [i.orderItemId, i.condition]));
     const cancelled = await prisma.$transaction(async (tx) => {
       // Estorno de estoque. EF-3 (ADR-013): em UNIDADE-BASE (`baseQuantity`); `?? quantity` cobre
       // pedidos antigos (pré-EF-3, base == vendida, fator 1). Dois caminhos (ADR-020):
@@ -925,11 +1001,26 @@ orders.post('/:id/cancel', async (c) => {
       //  - SCHEDULED: só saiu a parte já RETIRADA (`deliveredBaseQty`) ⇒ INCOME reverso dela; o
       //    RESERVADO remanescente (base − retirado) nunca deixou o estoque, então só se LIBERA a
       //    reserva (decrementa o cache `reservedQty`), sem StockMovement.
+      // ADR-033: item marcado DEFEITO (só IMMEDIATE) NÃO volta ao estoque vendável — incrementa
+      // `defectiveQty` e vira linha na fila de defeituosos (OrderReturn abaixo).
+      const defectiveLines: { item: (typeof order.items)[number]; base: number }[] = [];
       for (const item of order.items) {
         const baseQty = Number(item.baseQuantity ?? item.quantity);
         const delivered = Number(item.deliveredBaseQty ?? 0);
         const returnToStock = isScheduled ? delivered : baseQty;
         const releaseReserved = isScheduled ? Math.max(0, baseQty - delivered) : 0;
+        const isDefective = !isScheduled && condByItem.get(item.id) === 'DEFECTIVE';
+
+        if (isDefective && returnToStock > 0) {
+          // Defeito: não repõe o vendável; entra no cache de defeituosos + ledger (linha abaixo).
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { defectiveQty: { increment: returnToStock } },
+          });
+          defectiveLines.push({ item, base: returnToStock });
+          continue;
+        }
+
         if (returnToStock > 0) {
           await tx.stockMovement.create({
             data: {
@@ -940,7 +1031,7 @@ orders.post('/:id/cancel', async (c) => {
               reason: `Cancelamento da venda ${formatOrderNumber(order.orderNumber)}`,
               syncStatus: 'SYNCED',
               userId, // autoria (ADR-010): quem cancelou/estornou
-              registeredByName: c.get('userName'),
+              registeredByName: userName,
             },
           });
         }
@@ -955,11 +1046,64 @@ orders.post('/:id/cancel', async (c) => {
         }
       }
 
+      // Fila de defeituosos (ADR-033): um OrderReturn "de rastreio" com as linhas defeituosas do
+      // cancelamento. O dinheiro do cliente é tratado pelo cancelamento (abaixo), não por este
+      // registro — daí abated/excess = 0; ele existe só para o defeito aparecer na fila e ser
+      // resolvido (repor/baixa) como qualquer devolução com defeito.
+      if (defectiveLines.length > 0) {
+        await tx.orderReturn.create({
+          data: {
+            tenantId,
+            orderId: order.id,
+            customerId: order.customerId ?? null,
+            totalValue: Number(defectiveLines.reduce((s, d) => s + Number(d.item.total), 0).toFixed(2)),
+            abatedAmount: 0,
+            excessAmount: 0,
+            target: null,
+            reason,
+            createdById: userId,
+            createdByName: userName,
+            items: {
+              create: defectiveLines.map((d) => ({
+                tenantId,
+                orderItemId: d.item.id,
+                baseQty: d.base,
+                value: Number(d.item.total),
+                condition: 'DEFECTIVE',
+                defectStatus: 'PENDING',
+              })),
+            },
+          },
+        });
+      }
+
       const updated = await tx.order.update({
         where: { id: order.id },
         data: { status: 'CANCELLED' },
         include: { items: true, payments: true },
       });
+
+      // Estorno em dinheiro (ADR-033): a exclusão da venda CANCELLED já retira a parte paga em
+      // dinheiro do esperado. Se o reembolso foi TUDO em dinheiro (`CASH`), lança a saída da parte
+      // que NÃO era dinheiro; `SAME_AS_PAYMENT` não lança nada (a exclusão cobre; cartão/PIX estorna).
+      const cashPaid = cashPaidOf(updated.payments.map((p) => ({ method: p.method, amount: Number(p.amount) })));
+      const cashRefund = cancelCashRefund(refundMethod, Number(order.total), cashPaid);
+      if (cashRefund > 0) {
+        await tx.cashMovement.create({
+          data: {
+            tenantId,
+            cashSessionId: session.id,
+            userId,
+            type: 'EXPENSE',
+            kind: 'RETURN',
+            amount: cashRefund,
+            reason: `Cancelamento (estorno em dinheiro) — venda ${formatOrderNumber(order.orderNumber)}`,
+            relatedOrderId: order.id,
+            syncStatus: 'SYNCED',
+            registeredByName: userName,
+          },
+        });
+      }
 
       // Crédito da loja (ADR-022, Fatia C): se a venda usou crédito, cancelar DEVOLVE o crédito ao
       // cliente (a venda deixou de existir). Livro-razão (+X, reversão) + cache `creditBalance`.
@@ -998,6 +1142,9 @@ orders.post('/:id/cancel', async (c) => {
             reason,
             total: Number(order.total),
             itemsCount: order.items.length,
+            defectiveCount: defectiveLines.length, // ADR-033
+            refundMethod, // ADR-033: SAME_AS_PAYMENT | CASH
+            cashRefund, // ADR-033: quanto saiu do caixa além da exclusão
             cashSessionId: session.id,
           },
         },
@@ -1239,6 +1386,7 @@ orders.post('/:id/return-items', async (c) => {
     );
   }
   const { items: reqItems, reason, target } = parsed.data;
+  const isExchange = parsed.data.intent === 'EXCHANGE'; // ADR-033: troca (o valor vira vale)
 
   try {
     const prisma = getPrisma(c);
@@ -1246,6 +1394,8 @@ orders.post('/:id/return-items', async (c) => {
       where: { id: orderId, tenantId },
       include: {
         items: true,
+        // Parcelas de pagamento (ADR-033): base do estorno "mesma forma" (fatia paga em dinheiro).
+        payments: { select: { method: true, amount: true } },
         receivable: {
           select: {
             id: true,
@@ -1277,7 +1427,12 @@ orders.post('/:id/return-items', async (c) => {
     // Prepara e valida cada linha devolvida (quantidade na unidade VENDIDA → base + valor rateado).
     const byId = new Map(order.items.map((i) => [i.id, i]));
     const seen = new Set<string>();
-    const prep: { item: (typeof order.items)[number]; requestedBase: number; value: number }[] = [];
+    const prep: {
+      item: (typeof order.items)[number];
+      requestedBase: number;
+      value: number;
+      condition: 'GOOD' | 'DEFECTIVE'; // ADR-033: DEFECTIVE não volta ao estoque vendável
+    }[] = [];
     for (const req of reqItems) {
       if (seen.has(req.orderItemId)) {
         return c.json({ ok: false, error: 'Item repetido na devolução.' }, 400);
@@ -1299,7 +1454,7 @@ orders.post('/:id/return-items', async (c) => {
         );
       }
       const value = Number((Number(item.total) * (req.quantity / soldQty)).toFixed(2));
-      prep.push({ item, requestedBase, value });
+      prep.push({ item, requestedBase, value, condition: req.condition ?? 'GOOD' });
     }
     const totalValue = Number(prep.reduce((s, p) => s + p.value, 0).toFixed(2));
 
@@ -1309,18 +1464,33 @@ orders.post('/:id/return-items', async (c) => {
       rec && rec.status === 'OPEN'
         ? receivableBalance(Number(rec.originalAmount), Number(rec.settledAmount), Number(rec.returnedAmount))
         : 0;
-    const { abated, excess } = splitReturnValue(totalValue, debtBalance);
+    // ADR-033 (Fatia 3): na TROCA o valor não se resolve agora (vira vale) — não abate dívida nem
+    // gera excedente. v1: bloqueia troca de venda a prazo em aberto (a interação com a dívida fica
+    // para depois; o comum é troca de venda à vista).
+    if (isExchange && debtBalance > 0) {
+      return c.json(
+        { ok: false, error: 'Troca não disponível para venda a prazo em aberto; faça uma devolução.' },
+        400,
+      );
+    }
+    const { abated, excess } = isExchange
+      ? { abated: 0, excess: 0 }
+      : splitReturnValue(totalValue, debtBalance);
 
-    // Excedente exige destino (crédito × dinheiro). Crédito precisa de cliente; dinheiro, caixa aberto.
+    // Excedente exige destino (ADR-033): crédito na loja × dinheiro do caixa × estorno na mesma
+    // forma. Crédito precisa de cliente. Quanto SAI do caixa depende do destino (o estorno só tira a
+    // fatia paga em dinheiro); qualquer saída de caixa exige caixa aberto.
     const customerId = order.customerId;
+    const payments = order.payments.map((p) => ({ method: p.method, amount: Number(p.amount) }));
+    const cashOut = excess > 0 && target ? cashOutForReturn(target, excess, payments) : 0;
     if (excess > 0 && !target) {
-      return c.json({ ok: false, error: 'Escolha o destino do troco: crédito na loja ou dinheiro.' }, 400);
+      return c.json({ ok: false, error: 'Escolha o destino do troco: crédito, dinheiro ou estorno.' }, 400);
     }
     if (excess > 0 && target === 'STORE_CREDIT' && !customerId) {
-      return c.json({ ok: false, error: 'Crédito exige um cliente na venda; devolva em dinheiro.' }, 400);
+      return c.json({ ok: false, error: 'Crédito exige um cliente na venda; devolva em dinheiro ou estorne.' }, 400);
     }
     let openSessionId: string | null = null;
-    if (excess > 0 && target === 'CASH') {
+    if (cashOut > 0) {
       const session = await prisma.cashSession.findFirst({
         where: { tenantId, closedAt: null },
         select: { id: true },
@@ -1333,29 +1503,42 @@ orders.post('/:id/return-items', async (c) => {
 
     const userName = c.get('userName');
     const result = await prisma.$transaction(async (tx) => {
-      // 1) Estorno de estoque + trava por item (returnedBaseQty).
+      // 1) Estorno de estoque + trava por item (returnedBaseQty). A trava (returnedBaseQty) vale
+      //    para as DUAS condições — o item foi devolvido e o cliente recebe de volta em qualquer
+      //    caso; o que muda é o DESTINO da mercadoria (ADR-033):
+      //    - GOOD (revenda): volta ao estoque vendável — StockMovement INCOME + stockQty (ADR-022).
+      //    - DEFECTIVE (defeito): NÃO volta; incrementa o cache `defectiveQty` (o ledger é a própria
+      //      linha `order_return_items`, gravada no passo 4 com defectStatus PENDING). Sem
+      //      StockMovement (o livro do estoque vendável não é tocado — ADR-001 intacto).
       for (const p of prep) {
-        await tx.stockMovement.create({
-          data: {
-            tenantId,
-            productId: p.item.productId,
-            type: 'INCOME',
-            quantity: p.requestedBase,
-            reason: `Devolução parcial da venda ${formatOrderNumber(order.orderNumber)}`,
-            syncStatus: 'SYNCED',
-            userId, // autoria (ADR-010)
-            registeredByName: userName,
-          },
-        });
+        if (p.condition === 'DEFECTIVE') {
+          await tx.product.update({
+            where: { id: p.item.productId },
+            data: { defectiveQty: { increment: p.requestedBase } },
+          });
+        } else {
+          await tx.stockMovement.create({
+            data: {
+              tenantId,
+              productId: p.item.productId,
+              type: 'INCOME',
+              quantity: p.requestedBase,
+              reason: `Devolução parcial da venda ${formatOrderNumber(order.orderNumber)}`,
+              syncStatus: 'SYNCED',
+              userId, // autoria (ADR-010)
+              registeredByName: userName,
+            },
+          });
+          await tx.product.update({
+            where: { id: p.item.productId },
+            data: { stockQty: { increment: p.requestedBase } },
+          });
+        }
         const applied = applyItemReturn(
           Number(p.item.baseQuantity ?? p.item.quantity),
           Number(p.item.returnedBaseQty),
           p.requestedBase,
         );
-        await tx.product.update({
-          where: { id: p.item.productId },
-          data: { stockQty: { increment: p.requestedBase } },
-        });
         await tx.orderItem.update({
           where: { id: p.item.id },
           data: { returnedBaseQty: applied.returnedBaseQty },
@@ -1395,11 +1578,14 @@ orders.post('/:id/return-items', async (c) => {
         }
       }
 
-      // 3) Excedente → dinheiro (caixa) OU crédito (livro-razão + cache).
+      // 3) Excedente → dinheiro/estorno (caixa) OU crédito (livro-razão + cache). A saída de caixa
+      //    (`cashOut`) já considera a forma do estorno (ADR-033): CASH tira o excedente inteiro;
+      //    SAME_AS_PAYMENT tira só a fatia paga em dinheiro (o resto é estorno de cartão/PIX, sem
+      //    tocar o caixa); STORE_CREDIT não tira nada.
       let cashMovementId: string | null = null;
       let customerCreditId: string | null = null;
       let creditBalanceAfter = 0;
-      if (excess > 0 && target === 'CASH' && openSessionId) {
+      if (cashOut > 0 && openSessionId) {
         const mov = await tx.cashMovement.create({
           data: {
             tenantId,
@@ -1407,7 +1593,7 @@ orders.post('/:id/return-items', async (c) => {
             userId,
             type: 'EXPENSE',
             kind: 'RETURN',
-            amount: excess,
+            amount: cashOut,
             reason: `Devolução (troco) — venda ${formatOrderNumber(order.orderNumber)}`,
             relatedOrderId: order.id,
             syncStatus: 'SYNCED',
@@ -1446,6 +1632,7 @@ orders.post('/:id/return-items', async (c) => {
           abatedAmount: abated,
           excessAmount: excess,
           target: excess > 0 ? target ?? null : null,
+          intent: isExchange ? 'EXCHANGE' : 'REFUND', // ADR-033: troca vira vale
           receivableId: rec?.id ?? null,
           cashMovementId,
           customerCreditId,
@@ -1458,6 +1645,10 @@ orders.post('/:id/return-items', async (c) => {
               orderItemId: p.item.id,
               baseQty: p.requestedBase,
               value: p.value,
+              // ADR-033: condição do item + status inicial do defeito (PENDING abre na lista de
+              // defeituosos; GOOD não tem desfecho a acompanhar).
+              condition: p.condition,
+              defectStatus: p.condition === 'DEFECTIVE' ? 'PENDING' : null,
             })),
           },
         },
@@ -1478,7 +1669,9 @@ orders.post('/:id/return-items', async (c) => {
             abated,
             excess,
             target: excess > 0 ? target ?? null : null,
+            intent: isExchange ? 'EXCHANGE' : 'REFUND', // ADR-033
             itemsCount: prep.length,
+            defectiveCount: prep.filter((p) => p.condition === 'DEFECTIVE').length, // ADR-033
             reason,
           },
         },
@@ -1498,6 +1691,9 @@ orders.post('/:id/return-items', async (c) => {
           target: excess > 0 ? target ?? null : null,
           receivableBalance: result.receivableBalanceAfter,
           creditBalance: result.creditBalanceAfter,
+          // ADR-033 (Fatia 3): na troca, o valor devolvido vira o vale a consumir no PDV.
+          intent: isExchange ? ('EXCHANGE' as const) : ('REFUND' as const),
+          exchangeCredit: isExchange ? totalValue : 0,
         },
       },
       201,

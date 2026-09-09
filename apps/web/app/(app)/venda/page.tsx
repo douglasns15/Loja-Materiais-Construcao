@@ -47,6 +47,7 @@ import {
   type ReorderPlan,
 } from '@nexoloja/core';
 import { takeReorderPayload } from '@/lib/reorder';
+import { takeExchangePayload } from '@/lib/exchange';
 import { useShortcuts } from '@/lib/shortcuts';
 import { apiGet, apiPatch, apiPost } from '@/lib/api';
 import { cacheCashSession, readCachedCashSession } from '@/lib/cashSessionCache';
@@ -201,6 +202,8 @@ type View =
       credit?: number;
       /** Crédito da loja usado nesta venda (ADR-022, Fatia C) — mostrado como forma no comprovante. */
       storeCredit?: number;
+      /** Vale-troca consumido nesta venda (ADR-033, Fatia 3) — mostrado como forma no comprovante. */
+      exchangeCredit?: number;
       customerName?: string | null;
       /** Venda com retirada/entrega futura (ADR-020): habilita o 2º botão "Imprimir comprovante de
        *  retirada" na tela final (cupom + faixa "FALTA RETIRAR"). */
@@ -293,13 +296,15 @@ function PaymentsLines({
   payments,
   change,
   storeCredit = 0,
+  exchangeCredit = 0,
 }: {
   payments: PaidPart[];
   change: number;
   storeCredit?: number;
+  exchangeCredit?: number;
 }) {
-  // Com crédito da loja há sempre ≥ 2 "formas" na exibição (a parcela + o crédito).
-  const multi = payments.length + (storeCredit > 0 ? 1 : 0) > 1;
+  // Com crédito da loja / vale-troca há sempre ≥ 2 "formas" na exibição (a parcela + o abatimento).
+  const multi = payments.length + (storeCredit > 0 ? 1 : 0) + (exchangeCredit > 0 ? 1 : 0) > 1;
   return (
     <>
       {payments.map((p, i) => (
@@ -312,6 +317,12 @@ function PaymentsLines({
         <div className="flex justify-between text-sm text-gray-600">
           <span>Pagamento · Crédito da loja</span>
           <span>{BRL(storeCredit)}</span>
+        </div>
+      )}
+      {exchangeCredit > 0 && (
+        <div className="flex justify-between text-sm text-gray-600">
+          <span>Pagamento · Vale-troca</span>
+          <span>{BRL(exchangeCredit)}</span>
         </div>
       )}
       {change > 0 && (
@@ -444,6 +455,12 @@ export default function VendaPage() {
   const [reorderPairs, setReorderPairs] = useState<CartItem[]>([]);
   const [reorderPairReview, setReorderPairReview] = useState<string[]>([]);
   const reorderAppliedRef = useRef(false);
+  // Troca (ADR-033, Fatia 3): vale-troca trazido do Histórico. `null` = venda normal. O vale abate o
+  // "a pagar" e vai como `exchangeReturnId` na venda; o total precisa ser ≥ o vale (sem troco na troca).
+  const [exchange, setExchange] = useState<{ returnId: string; credit: number; fromOrderNumber: number } | null>(
+    null,
+  );
+  const exchangeConsumedRef = useRef(false);
   // Atalhos de teclado (ADR-032, Fatia 3): o campo de busca de produto (foco por F9) e o registro
   // das ações do PDV no motor global.
   const { registerAction } = useShortcuts();
@@ -685,6 +702,16 @@ export default function VendaPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [products]);
 
+  // Troca (ADR-033, Fatia 3): consome o vale-troca deixado pelo Histórico (lib/exchange), UMA vez.
+  // Independe do catálogo (é só o vale). O operador monta a compra nova normalmente; o vale abate o
+  // "a pagar" e vai junto na venda.
+  useEffect(() => {
+    if (exchangeConsumedRef.current) return;
+    exchangeConsumedRef.current = true;
+    const ex = takeExchangePayload();
+    if (ex) setExchange(ex);
+  }, []);
+
   // "Vender de novo" (reorder): repasse do Histórico via sessionStorage (lib/reorder). Espera o
   // catálogo carregar (preço/estoque/fator saem dele) e roda UMA vez. Resolve cada item contra o
   // catálogo ATUAL — deriva o modo pela unidade vendida e o fator-para-base por `buildCartLine` —
@@ -912,7 +939,12 @@ export default function VendaPage() {
       ? Math.min(Math.max(0, Number(storeCreditInput) || 0), maxStoreCredit)
       : 0;
 
-  const payableNow = Number((totals.total - creditValue - storeCreditUsed).toFixed(2));
+  // Vale-troca (ADR-033, Fatia 3): abate o "a pagar agora" (não é dinheiro na gaveta). v1: o total
+  // deve cobrir o vale (sem troco na troca) — a validação em `onConcluir` barra o total < vale.
+  const exchangeCredit = exchange?.credit ?? 0;
+  const payableNow = Number(
+    (totals.total - creditValue - storeCreditUsed - exchangeCredit).toFixed(2),
+  );
 
   // --- Retirada / entrega futura (ADR-020) ---
   // `isScheduled` liga o modo SCHEDULED do pedido (reserva agora, retira depois). Não altera o
@@ -1497,6 +1529,17 @@ export default function VendaPage() {
       setError('A venda com retirada/entrega futura exige conexão.');
       return;
     }
+    // Troca (ADR-033, Fatia 3): online-only e o total deve cobrir o vale (v1 sem troco na troca).
+    if (exchange && !online) {
+      setError('A troca exige conexão.');
+      return;
+    }
+    if (exchange && totals.total + 0.005 < exchange.credit) {
+      setError(
+        `A troca é de valor ≥ ${exchange.credit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} (o vale). Adicione itens.`,
+      );
+      return;
+    }
     // Parcelas que somam o total (troco já fora); o troco (`change`) é o excedente do dinheiro
     // recebido, calculado no core, e é só exibição — a API devolveria 0 porque o enviado fecha o total.
     const persistedPayments = buildPersistedPayments();
@@ -1510,6 +1553,7 @@ export default function VendaPage() {
       date: new Date().toLocaleString('pt-BR'),
       ...(isCredit ? { credit: creditValue, customerName } : {}),
       ...(storeCreditUsed > 0 ? { storeCredit: storeCreditUsed, customerName } : {}),
+      ...(exchangeCredit > 0 ? { exchangeCredit } : {}),
       // Retirada/entrega futura (ADR-020): liga o botão "Imprimir comprovante de retirada" na prévia.
       ...(isScheduled ? { scheduled: true } : {}),
     };
@@ -1600,6 +1644,9 @@ export default function VendaPage() {
       // Conversão de orçamento (ADR-024, 2.B): quando o PDV foi aberto a partir de um orçamento, a
       // venda marca-o CONVERTED (no servidor, na transação da venda). Online-only.
       ...(sourceQuote ? { quoteId: sourceQuote.id } : {}),
+      // Troca (ADR-033, Fatia 3): consome o vale-troca; o servidor grava a parcela EXCHANGE_CREDIT e
+      // amarra a devolução a esta venda. Online-only.
+      ...(exchange ? { exchangeReturnId: exchange.returnId } : {}),
     };
     const parsed = createSaleSchema.safeParse(payload);
     if (!parsed.success) {
@@ -1617,6 +1664,8 @@ export default function VendaPage() {
       // eventual "Voltar e editar → concluir" não reenviar o `quoteId` (que daria 409 já convertido).
       setSourceQuote(null);
       setQuoteReview([]);
+      // Troca (ADR-033, Fatia 3): vale consumido — não pode ser reaplicado numa próxima venda.
+      setExchange(null);
       // Cesta persistente (ADR-021): venda registrada — esvazia a cesta em todos os aparelhos (o
       // comprovante usa o snapshot em `doneBase.items`). Evita reabrir um carrinho já vendido.
       clearCart();
@@ -1991,6 +2040,7 @@ export default function VendaPage() {
             payments={buildPersistedPayments()}
             change={change}
             storeCredit={storeCreditUsed}
+            exchangeCredit={exchangeCredit}
           />
           {isCredit && (
             <div className="flex items-center justify-between rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 ring-1 ring-amber-200">
@@ -2063,6 +2113,7 @@ export default function VendaPage() {
               payments={view.payments}
               change={view.change}
               storeCredit={view.storeCredit}
+              exchangeCredit={view.exchangeCredit}
             />
           )}
           {view.kind === 'done' && view.credit && view.credit > 0 ? (
@@ -2186,6 +2237,7 @@ export default function VendaPage() {
           change={view.kind === 'done' ? view.change : undefined}
           creditAmount={view.kind === 'done' ? view.credit : undefined}
           storeCreditAmount={view.kind === 'done' ? view.storeCredit : undefined}
+          exchangeCreditAmount={view.kind === 'done' ? view.exchangeCredit : undefined}
           customerName={view.kind === 'done' ? view.customerName : undefined}
           orderNumber={view.kind === 'done' ? view.orderNumber : undefined} // ADR-023
           quoteNumber={view.kind === 'quote' ? view.quoteNumber : undefined} // ADR-024
@@ -2222,6 +2274,28 @@ export default function VendaPage() {
               re-adicione à mão: {quoteReview.join('; ')}.
             </p>
           )}
+        </div>
+      )}
+
+      {/* Troca (ADR-033, Fatia 3): banner do vale-troca trazido do Histórico. Abate o "a pagar" e
+          vai como `exchangeReturnId` na venda. O operador pode desistir da troca (limpa o vale). */}
+      {exchange && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm">
+          <p className="font-medium text-emerald-900">
+            Troca da venda <span className="font-mono">{formatOrderNumber(exchange.fromOrderNumber)}</span> — vale
+            de{' '}
+            <strong>
+              {exchange.credit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+            </strong>
+            . Monte a nova compra (valor ≥ o vale).
+          </p>
+          <button
+            type="button"
+            onClick={() => setExchange(null)}
+            className="rounded-lg border border-emerald-300 px-3 py-1 text-xs font-medium text-emerald-800 hover:bg-emerald-100"
+          >
+            Cancelar troca
+          </button>
         </div>
       )}
 
