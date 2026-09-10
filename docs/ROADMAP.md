@@ -5,7 +5,7 @@
 >
 > **Última atualização:** 2026-09-10 — **ADR-034 (Cliente opcional em qualquer venda) RASCUNHADA —
 > status Proposto, aguardando aprovação do Owner. NADA implementado.** Origem: **achado #1
-> (não-bloqueante)** ao preparar o E2E da ADR-033 — o destino **"Crédito na loja"** numa devolução é
+> (não-bloqueante)** durante o E2E da ADR-033 (caso F2.5) — o destino **"Crédito na loja"** numa devolução é
 > **praticamente inalcançável para uma venda paga de balcão**, porque hoje o PDV só anexa cliente
 > dentro dos sub-fluxos de fiado (ADR-019), crédito da loja (ADR-022) e retirada com cliente
 > (ADR-028); uma venda paga imediata (à vista/cartão/PIX) **nunca envia `customerId`, mesmo com
