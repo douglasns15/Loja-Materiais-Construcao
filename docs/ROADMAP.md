@@ -3,7 +3,30 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-09-09 — **Devolução unificada (ADR-033) COMPLETA (Fatias 1+2+3) —
+> **Última atualização:** 2026-09-10 — **ADR-034 (Cliente opcional em qualquer venda) RASCUNHADA —
+> status Proposto, aguardando aprovação do Owner. NADA implementado.** Origem: **achado #1
+> (não-bloqueante)** ao preparar o E2E da ADR-033 — o destino **"Crédito na loja"** numa devolução é
+> **praticamente inalcançável para uma venda paga de balcão**, porque hoje o PDV só anexa cliente
+> dentro dos sub-fluxos de fiado (ADR-019), crédito da loja (ADR-022) e retirada com cliente
+> (ADR-028); uma venda paga imediata (à vista/cartão/PIX) **nunca envia `customerId`, mesmo com
+> cliente selecionado**. **Diagnóstico (verificado no código): é acoplamento acidental de UI, não
+> falta de modelo.** `Order.customerId` já é `String?` (`schema.prisma:586`); `createSaleSchema` já
+> expõe `customerId?` de topo (`sale.ts:104`); a API já persiste (`orders.ts:632`) e só exige cliente
+> em fiado/crédito (`orders.ts:537`/`:478`); o retorno já credita a loja se `order.customerId` existir
+> (`orders.ts:1604`). O **único ponto acoplado** é `venda/page.tsx` (envia `customerId` só em 3 ramos:
+> ~1627 fiado, ~1630 crédito, ~1633 SCHEDULED). **Decisão proposta:** tornar a identificação do
+> cliente opcional em QUALQUER venda (afford "Identificar cliente (opcional)" discreto e colapsado, sem
+> adicionar clique ao caminho anônimo ~90%) e enviar `customerId` sempre que preenchido. **Sem
+> migration, sem mudança de contrato de API.** Destrava "Crédito na loja" no retorno (achado #1) +
+> histórico/garantia/entrega/CPF. **Alternativas na ADR:** attach-na-venda (recomendado) × pick-no-retorno
+> (complemento p/ vendas anônimas já registradas) × não fazer. **PRÓXIMOS PASSOS / DECISÕES PENDENTES
+> DO OWNER** documentados na [ADR-034](adr/ADR-034-cliente-opcional-em-venda.md) §"Próximos passos" e
+> §"Decisões pendentes" (escopo v1: só attach-na-venda × incluir pick-no-retorno? posição do afford?
+> convergir o SCHEDULED-com-cliente? retroatividade?). **Regra 4:** por ser alteração de fluxo UI↔API,
+> exige **aprovação do desenho antes de codar**. Só a ADR + índice do ADR + este registro no working
+> tree; **push do Owner.**
+>
+> **Antes:** 2026-09-09 — **Devolução unificada (ADR-033) COMPLETA (Fatias 1+2+3) —
 > NO AR; só falta o E2E do Owner (sessão à parte).** Migrations `0038`+`0039`+`0040` aplicadas no
 > Supabase; **API Version `24ab85d2`**; **web Version `85eb33b5`** (smoke ✅ — HTML no-store + CSS 200).
 > Commit `7f6d70f` em `main` (push do Owner). **Fatia 3 — TROCA integrada ao PDV (vale-troca):**
