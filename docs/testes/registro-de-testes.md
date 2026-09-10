@@ -5783,7 +5783,7 @@ de pagamento `EXCHANGE_CREDIT` (espelha o `STORE_CREDIT`, não toca o caixa).
 parte); push do Owner PENDENTE.** E2E completo das 3 fatias em
 [`e2e-adr033-devolucao-troca.md`](./e2e-adr033-devolucao-troca.md).
 
-## ADR-033 — E2E completo (QA) (2026-09-10)
+## ADR-033 — E2E completo (QA) (2026-09-09)
 
 **E2E ponta a ponta dirigido por Claude** (não é a validação do Owner — essa segue como passo dele).
 Ambiente `nexoloja-web.imortal.workers.dev` (loja **Demo**, owner) · **API `24ab85d2`** · **web `85eb33b5`**.

@@ -26,7 +26,7 @@
 > exige **aprovação do desenho antes de codar**. Só a ADR + índice do ADR + este registro no working
 > tree; **push do Owner.**
 >
-> **Antes:** 2026-09-10 — **ADR-033 — E2E COMPLETO executado por Claude (QA).** Ponta a ponta em
+> **Antes:** 2026-09-09 — **ADR-033 — E2E COMPLETO executado por Claude (QA).** Ponta a ponta em
 > `nexoloja-web.imortal.workers.dev` (loja Demo), API `24ab85d2`, web `85eb33b5`. **Placar:** Fatia 1
 > **6/6 ✅**; Fatia 2 **7 ✅ / 1 ⚠️** (F2.5-"Crédito na loja" não disparável — Achado #1); Fatia 3
 > **7 ✅ / 1 ⏭️** (F3.8 offline); Regressão **4 ✅ / 1 ⏭️** (R5 caixa-fechado). **Caixa coerente ponta a

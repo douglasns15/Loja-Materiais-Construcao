@@ -152,7 +152,7 @@
 
 ## Registro do resultado
 
-**Executado por Claude (QA), 2026-09-10** — ambiente `nexoloja-web.imortal.workers.dev` (loja Demo, owner),
+**Executado por Claude (QA), 2026-09-09** — ambiente `nexoloja-web.imortal.workers.dev` (loja Demo, owner),
 API `24ab85d2`, web `85eb33b5`. Pré-condições montadas: produtos **QA-ADR033** P1 (R$10, fornecedor
 CONSTRUJA), P2 (R$25), P3 (R$8), estoque 30 cada; caixa aberto (baseline **R$37**); cliente **José Antonio**.
 
