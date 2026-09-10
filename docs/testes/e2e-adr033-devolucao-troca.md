@@ -152,12 +152,40 @@
 
 ## Registro do resultado
 
+**Executado por Claude (QA), 2026-09-10** — ambiente `nexoloja-web.imortal.workers.dev` (loja Demo, owner),
+API `24ab85d2`, web `85eb33b5`. Pré-condições montadas: produtos **QA-ADR033** P1 (R$10, fornecedor
+CONSTRUJA), P2 (R$25), P3 (R$8), estoque 30 cada; caixa aberto (baseline **R$37**); cliente **José Antonio**.
+
+Placar: **Fatia 1 6/6 ✅ · Fatia 2 7 ✅ / 1 ⚠️ · Fatia 3 7 ✅ / 1 ⏭️ · Regressão 4 ✅ / 1 ⏭️.** Caixa fechou
+coerente ponta a ponta: baseline R$37 → esperado final **R$184,50**; os vales-troca nunca inflaram o caixa.
+
 | Caso | Resultado | Observação |
 |---|---|---|
-| F1.0 · F1.1 · F1.2 · F1.3 · F1.4 · F1.5 | ⏭️ | |
-| F2.0 · F2.1 · F2.2 · F2.3 · F2.4 · F2.5 · F2.6 | ⏭️ | |
-| F3.1 · F3.2 · F3.3 · F3.4 · F3.5 · F3.6 · F3.7 · F3.8 | ⏭️ | |
-| R1 · R2 · R3 · R4 · R5 | ⏭️ | |
+| F1.0 · F1.1 · F1.2 · F1.3 · F1.4 · F1.5 | ✅ (6/6) | F1.1 defeito não repõe + fila (fornecedor CONSTRUJA); F1.4 mistura revenda+defeito via cancelamento; F1.5 duplo-clique resolveu 1× |
+| F2.0 · F2.1 · F2.2 · F2.3 · F2.4 · F2.5(1) · F2.6 | ✅ (7) | F2.1 estorno mesma forma R$0; F2.2 cartão→dinheiro R$25; F2.3 mista→dinheiro R$15; F2.4 parcial→mesma forma R$12,50 proporcional; F2.5(1) parcial→dinheiro R$10 |
+| F2.5(2) "Crédito na loja" | ⚠️ | **Não pôde ser disparado** — ver Achado #1 (não há como anexar cliente a venda paga). O gating (botão desabilitado sem cliente) está correto. |
+| F3.1 · F3.2 · F3.3 · F3.4 · F3.5 · F3.6 · F3.7 | ✅ (7) | F3.1 trade-up; F3.2 valor exato; F3.3 trade-down bloqueado; F3.4 vale não reutilizável; F3.5 cancelar troca (deixa vale órfão, aceito na v1); F3.6 troca de defeituoso; F3.7 bloqueio em fiado |
+| F3.8 troca online-only | ⏭️ | Offline não simulável neste navegador. |
+| R1 · R2 · R3 · R4 | ✅ (4) | R1 vendas normais; R2 fiado/crédito; R3 "Vender de novo" sem interferência do vale; R4 caixa esperado R$184,50 coerente |
+| R5 caixa-fechado | ⏭️ | Não fechei o caixa real (dados mantidos). |
 
-> Ao final, consolidar em `docs/testes/registro-de-testes.md` (evidência) e marcar as fatias como
-> **E2E do Owner VALIDADO** no `ROADMAP.md`/ADR-033.
+### Achados
+
+1. **(Fluxo, não-defeito da ADR-033) — "Crédito na loja" no retorno não é alcançável para venda paga de
+   balcão.** Não há como anexar um cliente a uma venda paga: anexar via "Usar crédito da loja" com R$0
+   **não persiste** o cliente; vendas com cliente são fiado, cujo retorno vira "Abate da dívida". O gating
+   está certo — é **limitação de fluxo pré-existente**, não defeito da ADR-033. **→ originou a
+   [ADR-034](../adr/ADR-034-cliente-opcional-em-venda.md) (Proposto).**
+2. **F3.3 (menor):** o trade-down é bloqueado por botão "Concluir" desabilitado + banner "valor ≥ o vale",
+   não pelo toast previsto no roteiro. Comportamento correto, texto diferente.
+3. **F3.5:** cancelar a troca deixa a devolução como vale **não consumido** (aceito na v1, conforme roteiro).
+
+**Conclusão:** todo o comportamento específico da ADR-033 que pôde ser exercitado **passou**. Os 3 itens
+não-verdes são 1 limitação de fluxo pré-existente (Achado #1), 1 diferença de texto (F3.3) e 1 pendência de
+ambiente (F3.8 offline).
+
+> **Nota de autoria:** este é um **E2E de QA dirigido por Claude**, não a validação do Owner. A validação
+> própria do Owner segue como passo dele.
+
+> Consolidado em [`registro-de-testes.md`](./registro-de-testes.md) (§"ADR-033 — E2E completo (QA)"),
+> `ROADMAP.md` e na linha de Status da ADR-033.

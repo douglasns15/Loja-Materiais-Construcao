@@ -5782,3 +5782,81 @@ de pagamento `EXCHANGE_CREDIT` (espelha o `STORE_CREDIT`, não toca o caixa).
 `24ab85d2`; web `85eb33b5` (smoke ✅). Commit `7f6d70f` em `main`. Falta só o E2E do Owner (sessão à
 parte); push do Owner PENDENTE.** E2E completo das 3 fatias em
 [`e2e-adr033-devolucao-troca.md`](./e2e-adr033-devolucao-troca.md).
+
+## ADR-033 — E2E completo (QA) (2026-09-10)
+
+**E2E ponta a ponta dirigido por Claude** (não é a validação do Owner — essa segue como passo dele).
+Ambiente `nexoloja-web.imortal.workers.dev` (loja **Demo**, owner) · **API `24ab85d2`** · **web `85eb33b5`**.
+Pré-condições montadas: produtos **QA-ADR033** P1 (R$10, fornecedor **CONSTRUJA**), P2 (R$25), P3 (R$8),
+estoque 30 cada; **caixa aberto** (baseline **R$37**); cliente **José Antonio**.
+
+**Placar:** Fatia 1 **6/6 ✅** · Fatia 2 **7 ✅ / 1 ⚠️** · Fatia 3 **7 ✅ / 1 ⏭️** · Regressão **4 ✅ / 1 ⏭️**.
+Caixa coerente ponta a ponta: baseline **R$37** → esperado final **R$184,50**; os vales-troca nunca
+inflaram o caixa.
+
+### Fatia 1 — Defeito (6/6 ✅)
+
+| Caso | O que valida | Resultado |
+|---|---|---|
+| F1.0 | Revenda repõe o estoque | ✅ |
+| F1.1 | Defeito **não** repõe + entra na fila (fornecedor CONSTRUJA) | ✅ |
+| F1.2 | Resolver defeito: **repor** (fornecedor trocou) | ✅ |
+| F1.3 | Resolver defeito: **baixa/perda** | ✅ |
+| F1.4 | Mistura revenda + defeito (via cancelamento) | ✅ |
+| F1.5 | Idempotência (duplo-clique resolveu **1×**) | ✅ |
+
+### Fatia 2 — Formas de estorno (7 ✅ / 1 ⚠️)
+
+| Caso | O que valida | Resultado |
+|---|---|---|
+| F2.0 | Botão único "Devolver / Estornar" | ✅ |
+| F2.1 | Cancelar dinheiro → estorno mesma forma (sai R$0) | ✅ |
+| F2.2 | Cancelar cartão → dinheiro (sai R$25) | ✅ |
+| F2.3 | Cancelar mista → dinheiro (sai R$15) | ✅ |
+| F2.4 | Parcial → estorno mesma forma (R$12,50 proporcional) | ✅ |
+| F2.5(1) | Parcial → dinheiro (sai R$10) | ✅ |
+| F2.6 | Bloqueio de cancelar venda já devolvida | ✅ |
+| F2.5(2) | Parcial → **"Crédito na loja"** | ⚠️ **não disparável** — Achado #1 (gating correto) |
+
+### Fatia 3 — Vale-troca (7 ✅ / 1 ⏭️)
+
+| Caso | O que valida | Resultado |
+|---|---|---|
+| F3.1 | Trade-up (item novo mais caro) | ✅ |
+| F3.2 | Valor exato (a pagar R$0) | ✅ |
+| F3.3 | Trade-down bloqueado (v1) | ✅ (ver Achado #2 — texto difere) |
+| F3.4 | Vale não reutilizável | ✅ |
+| F3.5 | Cancelar troca (deixa vale órfão — aceito v1) | ✅ |
+| F3.6 | Troca de item defeituoso | ✅ |
+| F3.7 | Bloqueio em fiado em aberto (mensagem exata) | ✅ |
+| F3.8 | Troca online-only | ⏭️ offline não simulável neste navegador |
+
+### Regressão (4 ✅ / 1 ⏭️)
+
+| Caso | O que valida | Resultado |
+|---|---|---|
+| R1 | Vendas normais (dinheiro/cartão/PIX) | ✅ |
+| R2 | Fiado / crédito da loja | ✅ |
+| R3 | "Vender de novo" (sem interferência do vale) | ✅ |
+| R4 | Caixa esperado **R$184,50** coerente | ✅ |
+| R5 | Devolução de caixa fechado | ⏭️ não fechei o caixa real (dados mantidos) |
+
+### Achados
+
+1. **(Fluxo, não-defeito da ADR-033) — "Crédito na loja" no retorno não é alcançável para venda paga de
+   balcão.** Não há como anexar cliente a uma venda paga (anexar via "Usar crédito da loja" com R$0 **não
+   persiste** o cliente; venda com cliente é sempre fiado, cujo retorno vira "Abate da dívida"). O gating
+   (botão desabilitado sem cliente) está **correto** — é **limitação de fluxo pré-existente**, não defeito
+   da ADR-033. **→ originou a [ADR-034](../adr/ADR-034-cliente-opcional-em-venda.md) (Proposto):** cliente
+   opcional em qualquer venda, sem migration e sem mudança de contrato.
+2. **F3.3 (menor):** trade-down bloqueado por botão "Concluir" desabilitado + banner "valor ≥ o vale", não
+   pelo toast previsto no roteiro. Comportamento correto, texto diferente.
+3. **F3.5:** cancelar a troca deixa a devolução como vale **não consumido** (aceito na v1, conforme roteiro).
+
+**Conclusão:** todo o comportamento específico da ADR-033 que pôde ser exercitado **passou**. Os 3 itens
+não-verdes são 1 limitação de fluxo pré-existente (Achado #1 → ADR-034), 1 diferença de texto (F3.3) e 1
+pendência de ambiente (F3.8 offline).
+
+**Dados de teste deixados na loja Demo** (mantidos, a pedido do Owner): produtos QA-ADR033 P1/P2/P3; vendas
+**V-000092 → V-000110** (algumas canceladas); José Antonio com fiados em aberto (V-101 ~R$10, V-103 R$10) +
+**1 vale órfão** (V-108); **1 defeituoso pendente** na fila (V-109/P1).

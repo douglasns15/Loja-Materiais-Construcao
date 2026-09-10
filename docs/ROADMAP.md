@@ -26,6 +26,21 @@
 > exige **aprovação do desenho antes de codar**. Só a ADR + índice do ADR + este registro no working
 > tree; **push do Owner.**
 >
+> **Antes:** 2026-09-10 — **ADR-033 — E2E COMPLETO executado por Claude (QA).** Ponta a ponta em
+> `nexoloja-web.imortal.workers.dev` (loja Demo), API `24ab85d2`, web `85eb33b5`. **Placar:** Fatia 1
+> **6/6 ✅**; Fatia 2 **7 ✅ / 1 ⚠️** (F2.5-"Crédito na loja" não disparável — Achado #1); Fatia 3
+> **7 ✅ / 1 ⏭️** (F3.8 offline); Regressão **4 ✅ / 1 ⏭️** (R5 caixa-fechado). **Caixa coerente ponta a
+> ponta:** baseline R$37 → esperado final R$184,50; vales-troca nunca inflaram o caixa. **Achados:**
+> (1) "Crédito na loja" no retorno é inalcançável para venda paga de balcão (não há como anexar cliente
+> a venda paga) — **limitação de fluxo pré-existente, não defeito da ADR-033 → originou a
+> [ADR-034](adr/ADR-034-cliente-opcional-em-venda.md), Proposto**; (2) F3.3 trade-down bloqueado por
+> botão+banner em vez do toast do roteiro (correto, texto difere); (3) F3.5 cancelar troca deixa vale
+> órfão (aceito v1). **Todo o comportamento específico da ADR-033 que pôde ser exercitado passou.**
+> Evidência em [`registro-de-testes.md`](testes/registro-de-testes.md) §"ADR-033 — E2E completo (QA)" +
+> roteiro preenchido em [`e2e-adr033-devolucao-troca.md`](testes/e2e-adr033-devolucao-troca.md). **Nota:**
+> é E2E de QA (Claude), não a validação do Owner (que segue como passo dele). Dados de teste mantidos na
+> loja Demo. Só docs no working tree; push do Owner.
+>
 > **Antes:** 2026-09-09 — **Devolução unificada (ADR-033) COMPLETA (Fatias 1+2+3) —
 > NO AR; só falta o E2E do Owner (sessão à parte).** Migrations `0038`+`0039`+`0040` aplicadas no
 > Supabase; **API Version `24ab85d2`**; **web Version `85eb33b5`** (smoke ✅ — HTML no-store + CSS 200).
