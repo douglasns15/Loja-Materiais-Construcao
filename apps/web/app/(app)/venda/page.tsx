@@ -475,6 +475,12 @@ export default function VendaPage() {
   const [customerName, setCustomerName] = useState('');
   const [customerQuery, setCustomerQuery] = useState('');
   const [customerOptions, setCustomerOptions] = useState<{ id: string; name: string }[]>([]);
+  // Identificar cliente (ADR-034): afford opcional e discreto para anexar um cliente a QUALQUER
+  // venda — inclusive à vista/cartão/PIX. Colapsado por padrão: a venda anônima (o caso comum,
+  // ~90%) não ganha nenhum clique. Fiado (ADR-019) e crédito da loja (ADR-022) coletam o cliente
+  // nos próprios blocos (onde ele é obrigatório); a retirada futura (ADR-020/ADR-028) reusa este
+  // afford — uma ÚNICA porta de anexar cliente ao pedido.
+  const [showCustomer, setShowCustomer] = useState(false);
   // Cadastro rápido de cliente no PDV: `null` = fechado; string = modal aberto com esse nome
   // pré-preenchido (o que já foi digitado na busca).
   const [customerModalName, setCustomerModalName] = useState<string | null>(null);
@@ -1578,6 +1584,9 @@ export default function VendaPage() {
         ...(discountValue > 0 ? { discountAmount: discountValue } : {}),
         // Troco (informativo): viaja na fila e é gravado no sync. Omitido quando 0 (servidor grava 0).
         ...(change > 0 ? { changeAmount: change } : {}),
+        // Cliente do pedido (ADR-034): venda comum offline também carrega o cliente quando
+        // identificado (fiado/crédito/troca são online-only). O sync replica o `customerId`.
+        ...(customerId ? { customerId } : {}),
       };
       const parsed = createSaleSchema.safeParse(sale);
       if (!parsed.success) {
@@ -1622,15 +1631,20 @@ export default function VendaPage() {
       ...(discountValue > 0 ? { discountAmount: discountValue } : {}),
       // Troco (informativo — não entra no caixa). Omitido quando 0: o servidor grava 0 por default.
       ...(change > 0 ? { changeAmount: change } : {}),
-      // Venda a prazo (fiado — ADR-019): cliente + valor a prazo + vencimento opcional.
-      ...(isCredit
-        ? { customerId, creditAmount: creditValue, ...(dueDate ? { dueDate } : {}) }
-        : {}),
-      // Crédito da loja (ADR-022, Fatia C): valor usado + cliente (o servidor debita o livro-razão).
-      ...(storeCreditUsed > 0 ? { creditApplied: storeCreditUsed, customerId } : {}),
-      // Cliente do pedido (ADR-020): na retirada futura o cliente é OPCIONAL, mas quando informado
-      // é gravado p/ a Entrega sair com nome. (No fiado o `customerId` já entra acima.)
-      ...(!isCredit && isScheduled && customerId ? { customerId } : {}),
+      // Cliente do pedido (ADR-034): identidade ORTOGONAL ao pagamento — quando um cliente está
+      // selecionado (afford "Identificar cliente"), a venda carrega `customerId` em QUALQUER forma
+      // de pagamento, não só fiado/crédito/retirada. Esta é a PORTA ÚNICA de anexar cliente: fiado
+      // (ADR-019) e crédito da loja (ADR-022) apenas EXIGEM que ela esteja preenchida (guardas do
+      // servidor em orders.ts:537/:478), e a retirada futura (ADR-020/ADR-028) passou a ser um caso
+      // deste afford geral. Habilita "Crédito na loja" no retorno (ADR-033, achado #1) e destrava
+      // histórico/garantia/entrega/CPF para o cliente recorrente.
+      ...(customerId ? { customerId } : {}),
+      // Venda a prazo (fiado — ADR-019): valor a prazo + vencimento opcional (o `customerId` já
+      // entra na porta única acima; o servidor exige o cliente em orders.ts:537).
+      ...(isCredit ? { creditAmount: creditValue, ...(dueDate ? { dueDate } : {}) } : {}),
+      // Crédito da loja (ADR-022, Fatia C): valor usado — o servidor debita o livro-razão e exige o
+      // cliente (orders.ts:478); o `customerId` já vai na porta única acima.
+      ...(storeCreditUsed > 0 ? { creditApplied: storeCreditUsed } : {}),
       // Retirada/entrega futura (ADR-020): modo SCHEDULED + previsão (única ou por item) + a
       // observação livre do pedido. A data por item já vai anexada em cada item por `cartToSaleItems`.
       ...(isScheduled
@@ -2840,6 +2854,44 @@ export default function VendaPage() {
             </p>
           )}
 
+          {/* Identificar cliente (ADR-034) — afford opcional e discreto: anexa um cliente a QUALQUER
+              venda (à vista/cartão/PIX), habilitando "Crédito na loja" no retorno (achado #1 da
+              ADR-033) + histórico/garantia/entrega/CPF. Colapsado por padrão: a venda anônima não
+              ganha clique. Some quando fiado/crédito estão abertos — esses blocos já coletam (e
+              EXIGEM) o cliente no mesmo estado compartilhado. Porta ÚNICA de anexar cliente. */}
+          {!showCredit && !showStoreCredit &&
+            (!showCustomer && !customerId ? (
+              <button
+                type="button"
+                onClick={() => setShowCustomer(true)}
+                className="block text-sm font-medium text-blue-600 hover:text-blue-700"
+              >
+                + Identificar cliente (opcional)
+              </button>
+            ) : (
+              <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-semibold text-gray-800">Cliente (opcional)</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Remove o cliente da venda E recolhe o afford (volta ao caminho anônimo).
+                      setCustomerId('');
+                      setCustomerName('');
+                      setCustomerQuery('');
+                      setShowCustomer(false);
+                    }}
+                    className="shrink-0 rounded-lg px-2 py-1 text-lg leading-none text-gray-500 hover:text-red-600"
+                    aria-label="Remover cliente da venda"
+                    title="Remover cliente da venda"
+                  >
+                    ×
+                  </button>
+                </div>
+                {renderCustomerPicker('border-gray-300')}
+              </div>
+            ))}
+
           {/* Venda a prazo (ADR-019) — opt-in: escondida por padrão para o PDV ficar limpo (padrão
               dos bons PDVs). Um clique revela o bloco; o "×" remove e volta para venda à vista. */}
           {!showCredit ? (
@@ -3008,7 +3060,12 @@ export default function VendaPage() {
           {!showSchedule ? (
             <button
               type="button"
-              onClick={() => setShowSchedule(true)}
+              // ADR-034: abrir a retirada futura também revela o afford "Identificar cliente" — a
+              // entrega costuma sair com nome, e o cliente agora é coletado por uma porta única.
+              onClick={() => {
+                setShowSchedule(true);
+                setShowCustomer(true);
+              }}
               className="mt-2 block text-sm font-medium text-blue-600 hover:text-blue-700"
             >
               + Venda com retirada/entrega posterior
@@ -3083,13 +3140,15 @@ export default function VendaPage() {
                 </div>
               )}
 
-              {/* Cliente (opcional) — para a Entrega sair com nome. Se o fiado ou o crédito da loja já
-                  coletam o cliente (mesmo estado), aqui não repete o seletor. */}
-              {!showCredit && !showStoreCredit && (
-                <div>
-                  <label className="mb-1 block text-sm text-gray-600">Cliente (opcional)</label>
-                  {renderCustomerPicker('border-indigo-300')}
-                </div>
+              {/* Cliente (opcional) do pedido de entrega: agora coletado pelo afford geral
+                  "Identificar cliente" (ADR-034), aberto junto com esta seção — porta única de
+                  anexar cliente, sem um segundo seletor aqui. Só um lembrete quando ainda não há
+                  cliente selecionado (e o fiado/crédito não estão coletando). */}
+              {!showCredit && !showStoreCredit && !customerId && (
+                <p className="rounded-lg bg-indigo-50 px-3 py-2 text-xs text-indigo-700">
+                  Para a entrega sair com nome, identifique o cliente em “Identificar cliente
+                  (opcional)”, acima.
+                </p>
               )}
 
               {/* Observação livre do pedido — informações gerais que quem abrir a Entrega precisa ver

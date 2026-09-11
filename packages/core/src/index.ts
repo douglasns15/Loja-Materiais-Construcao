@@ -1374,6 +1374,32 @@ export function calcAverageTicket(totalRevenue: number, salesCount: number): num
   return Number((totalRevenue / salesCount).toFixed(2));
 }
 
+/**
+ * Faturamento LÍQUIDO de devoluções (ADR-035) = bruto − valor devolvido no período. Subtrai as
+ * devoluções independentemente da forma do estorno (dinheiro/estorno/crédito), porque a mercadoria
+ * voltou. O líquido PODE ficar negativo quando as devoluções do período (reconhecidas na data da
+ * devolução) superam o bruto do período — número honesto, não é travado em zero. `returnsTotal`
+ * negativo é ignorado (tratado como 0 — devolução não soma faturamento). Arredonda a 2 casas.
+ */
+export function calcNetRevenue(grossRevenue: number, returnsTotal: number): number {
+  const returns = returnsTotal > 0 ? returnsTotal : 0;
+  return Number((grossRevenue - returns).toFixed(2));
+}
+
+/**
+ * Uma venda está TOTALMENTE devolvida (ADR-036) quando **todos** os itens já foram devolvidos por
+ * inteiro (`returnedBaseQty ≥ baseQuantity`, com tolerância de arredondamento). Usado pelo
+ * `return-items` para marcar `order.status = RETURNED` (a venda sai do faturamento, como a cancelada)
+ * e pelo Histórico para o selo "Devolvida". Lista vazia ⇒ false (não há o que devolver).
+ */
+export function isOrderFullyReturned(
+  items: { baseQuantity: number; returnedBaseQty: number }[],
+): boolean {
+  if (items.length === 0) return false;
+  const EPS = 1e-6;
+  return items.every((it) => it.returnedBaseQty >= it.baseQuantity - EPS);
+}
+
 /** Total agregado por forma de pagamento (entrada crua vinda do groupBy). */
 export interface PaymentMethodTotal {
   method: string;

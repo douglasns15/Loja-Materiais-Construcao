@@ -1,6 +1,6 @@
 # ADR-034: Cliente opcional em qualquer venda (identidade ortogonal ao pagamento)
 
-**Status:** Proposto
+**Status:** Aceito — **NO AR + E2E do Owner VALIDADO** (2026-09-10; web `ed5e4349`). Sem migration. Push do Owner pendente.
 **Data:** 2026-09-10
 **Deciders:** Owner do produto
 **Relacionados:** [ADR-033](ADR-033-devolucao-unificada-defeito-estorno-troca.md) (devolução unificada — **origem deste ADR**: o achado #1 do E2E), [ADR-022](ADR-022-conta-do-cliente-fiado-acumulado.md) (crédito da loja / `creditBalance` — o destino que hoje não habilita), [ADR-019](ADR-019-venda-a-prazo-contas-a-receber.md) (fiado — hoje o único caminho que anexa cliente), [ADR-028](ADR-028-conta-de-retiradas-do-cliente.md) (retirada com cliente — o outro caminho que anexa), [ADR-026](ADR-026-divida-do-cliente-como-entidade.md) (dívida do cliente), [ADR-025](ADR-025-catalogo-global-ean.md) (CPF/NF-e futura), [ADR-010](ADR-010-atribuicao-de-autoria.md) (autoria)
@@ -109,26 +109,25 @@ Relevante no vertical **material de construção**, onde o cliente recorrente (o
 
 ## Próximos passos
 
-> **Status atual:** ADR **Proposto**, aguardando aprovação do desenho pelo Owner (regra 4 — alteração de fluxo UI↔API). **Nada foi implementado.** Nenhuma migration é prevista.
+> **Status atual:** ADR **Aceito** (Owner aprovou o desenho em 2026-09-10 — regra 4 satisfeita) e **implementado** na branch. **Sem migration, sem mudança de contrato.** Falta **deploy + E2E do Owner + push**.
 
-**Bloqueado por: aprovação do Owner das decisões pendentes abaixo.**
+O que foi implementado (fatia única, só `apps/web`):
 
-Depois de aprovado, o caminho de implementação previsto (fatia única, sem migration, sem mudança de contrato):
+1. **UI do PDV** ([`apps/web/app/(app)/venda/page.tsx`](../../apps/web/app/(app)/venda/page.tsx)) — **feito**:
+   - Novo afford **"+ Identificar cliente (opcional)"** no topo das condições do checkout (reusa `renderCustomerPicker` + os estados `customerId`/`customerName`/busca já existentes), **colapsado por padrão** (estado `showCustomer`). Some quando fiado/crédito estão abertos (esses já coletam e exigem o cliente).
+   - **Porta única de `customerId` no payload:** `...(customerId ? { customerId } : {})` passou a ser enviado em **qualquer** forma de pagamento (online e offline). Os ramos de fiado/crédito/`SCHEDULED` deixaram de mandar `customerId` por conta própria (convergência — decisão #4); fiado/crédito só mantêm seus campos próprios (`creditAmount`/`creditApplied`), e o servidor segue exigindo o cliente neles.
+   - **Convergência do `SCHEDULED`:** abrir "retirada/entrega posterior" também revela o afford geral; o seletor embutido na seção de retirada foi trocado por um lembrete apontando para "Identificar cliente".
+2. **API / shared:** nada a fazer — confirmado; `createSaleSchema.customerId?` e a persistência já suportavam. **Contrato de `POST /orders` inalterado.**
+3. **Gates:** `tsc` do web **0** e `next build` **OK** (`/venda` 20.7 kB) em 2026-09-10. Sem `prisma migrate`. `core`/`api`/`shared` não foram tocados.
+4. **Doc §8.2:** **não** atualizada — o contrato de `POST /orders` não mudou (regra 7 não acionada).
+5. **Validação (pendente — do Owner):** E2E cobrindo o achado #1 da ADR-033 — venda paga (cartão/PIX) **com** cliente identificado → devolução → destino **"Crédito na loja"** habilitado e creditando o `creditBalance`. Registrar em `docs/testes/registro-de-testes.md` quando rodado.
 
-1. **UI do PDV** ([`apps/web/app/(app)/venda/page.tsx`](../../apps/web/app/(app)/venda/page.tsx)):
-   - Expor o afford "Identificar cliente (opcional)" fora dos sub-blocos de fiado/crédito/retirada (reusar os estados `customerId`/`customerName`/busca já existentes, ~linhas 474–486; e o seletor de cliente já renderizado nesses blocos), colapsado por padrão.
-   - **Enviar `customerId` no payload sempre que preenchido**, não só nos três ramos atuais (fiado ~1627, crédito ~1630, `SCHEDULED` ~1633). Essa é a mudança central: hoje uma venda paga imediata **nunca** manda `customerId`.
-2. **API / shared:** nada a fazer — `createSaleSchema.customerId?` ([`sale.ts:104`](../../packages/shared/src/sale.ts)) e a persistência ([`orders.ts:632`](../../apps/api/src/routes/orders.ts)) já suportam; as exigências de cliente em fiado/crédito (`orders.ts:478`/`orders.ts:537`) ficam intactas.
-3. **Gates de sempre:** `tsc` (shared/api/web), `next build`, `core` verde (mesmo sem cálculo novo). Sem `prisma migrate`.
-4. **Doc §8.2:** só atualizar **se** o contrato de `POST /orders` mudar na implementação (não previsto). Regra 7.
-5. **Validação:** E2E do Owner cobrindo especificamente o achado #1 da ADR-033 — venda paga (cartão/PIX) **com** cliente → devolução → destino **"Crédito na loja"** habilitado e creditando o `creditBalance`. Registrar em `docs/testes/registro-de-testes.md` quando rodado.
+## Decisões do Owner (aprovadas em 2026-09-10)
 
-## Decisões pendentes do Owner (antes de codar)
-
-| # | Decisão | Recomendação |
-|---|---------|--------------|
-| 1 | **Aprovar o desenho** (attach opcional na venda, sem migration/contrato)? | Sim — conserto na raiz, baixo risco. |
-| 2 | **Escopo v1:** só *attach-na-venda*, ou já incluir o complemento *pick-no-retorno* (identificar cliente no próprio modal de devolução, para creditar vendas **anônimas já registradas**)? | Só *attach-na-venda* na v1; *pick-no-retorno* como fatia posterior, se necessário. |
-| 3 | **Posição/estilo exato do afford** no PDV (cabeçalho × rodapé do carrinho; texto do controle). | Rodapé do carrinho, colapsado, "Identificar cliente (opcional)". A confirmar na implementação. |
-| 4 | **Convergência do `SCHEDULED`-com-cliente** (ADR-028): o ramo que hoje anexa cliente só na retirada deve virar um caso do afford geral, ou permanecer como está? | Convergir para o afford geral (uma única porta de "anexar cliente"). |
-| 5 | **Retroatividade:** vendas antigas sem cliente continuam sem crédito possível na v1 — aceitável, ou o *pick-no-retorno* (decisão #2) é requisito? | Aceitável na v1 (corrige do ponto em diante). |
+| # | Decisão | Resolução |
+|---|---------|-----------|
+| 1 | **Aprovar o desenho** (attach opcional na venda, sem migration/contrato)? | ✅ **Aprovado.** |
+| 2 | **Escopo v1:** só *attach-na-venda*, ou já incluir *pick-no-retorno*? | ✅ **Só *attach-na-venda*** na v1. *Pick-no-retorno* fica como fatia posterior, se necessário. |
+| 3 | **Posição/estilo do afford** no PDV. | Implementado como opt-in **"+ Identificar cliente (opcional)"** no topo das condições do checkout, colapsado por padrão. |
+| 4 | **Convergência do `SCHEDULED`-com-cliente** (ADR-028). | ✅ **Convergir** — porta única de anexar cliente; a retirada futura passou a reusar o afford geral. |
+| 5 | **Retroatividade:** vendas antigas sem cliente seguem sem crédito na v1. | ✅ **Aceitável** — corrige do ponto em diante (sem *pick-no-retorno* na v1). |

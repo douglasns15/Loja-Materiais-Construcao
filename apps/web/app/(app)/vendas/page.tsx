@@ -68,6 +68,10 @@ type Order = {
     returnedAmount?: string;
     status: 'OPEN' | 'PAID' | 'CANCELLED';
   } | null;
+  // ADR-036: resumo de devolução/troca da venda para o card refletir o desfecho.
+  returnedValue?: number; // Σ devolvido em REFUND (parcial, quando a venda segue CONFIRMED)
+  exchangedValue?: number; // Σ trocado (EXCHANGE)
+  exchangedTo?: number[]; // nº das vendas geradas na troca (V-000XXX)
 };
 
 /** Ação em curso no modal: cancelamento (caixa aberto) ou devolução (caixa fechado). */
@@ -674,6 +678,13 @@ export default function VendasPage() {
             const cancelled = o.status === 'CANCELLED';
             const returned = o.status === 'RETURNED';
             const inactive = cancelled || returned;
+            // ADR-036: desfecho da venda no card. Parcial = segue CONFIRMED com algo devolvido;
+            // trocada = segue CONFIRMED com valor trocado (referência à nova venda).
+            const returnedValue = o.returnedValue ?? 0;
+            const exchangedValue = o.exchangedValue ?? 0;
+            const partialReturned = o.status === 'CONFIRMED' && returnedValue > 0.005;
+            const exchanged = o.status === 'CONFIRMED' && exchangedValue > 0.005;
+            const adjustedTotal = Number(o.total) - returnedValue;
             const selected = selectedIds.has(o.id);
             // Venda do caixa aberto atual → cancelar; de caixa fechado → devolver.
             const isOpenSessionOrder = caixaOpen && o.cashSession?.id === openSessionId;
@@ -733,6 +744,20 @@ export default function VendasPage() {
                           A prazo{o.receivable.status === 'PAID' ? ' · quitada' : ''}
                         </span>
                       )}
+                      {/* ADR-036: troca (referência à nova venda) e devolução parcial. */}
+                      {exchanged && (
+                        <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700">
+                          Trocada
+                          {o.exchangedTo && o.exchangedTo.length > 0
+                            ? ` → ${o.exchangedTo.map((n) => formatOrderNumber(n)).join(', ')}`
+                            : ''}
+                        </span>
+                      )}
+                      {partialReturned && (
+                        <span className="rounded-full bg-orange-50 px-2 py-0.5 text-xs font-medium text-orange-700 ring-1 ring-orange-200">
+                          Devolução parcial
+                        </span>
+                      )}
                     </div>
                     <div className="mt-0.5 text-xs text-gray-600">{time}</div>
                     {/* Cliente da venda (quando vinculado — fiado/crédito/entrega futura). Balcão
@@ -747,9 +772,18 @@ export default function VendasPage() {
                     )}
                   </div>
                   <div className="text-right">
-                    <div className={`text-lg font-bold ${inactive ? 'line-through' : ''}`}>
-                      {BRL(o.total)}
-                    </div>
+                    {/* ADR-036: na devolução parcial, mostra o valor ajustado (original − devolvido)
+                        com o original riscado ao lado. */}
+                    {partialReturned ? (
+                      <div>
+                        <div className="text-lg font-bold">{BRL(adjustedTotal)}</div>
+                        <div className="text-xs text-gray-400 line-through">{BRL(o.total)}</div>
+                      </div>
+                    ) : (
+                      <div className={`text-lg font-bold ${inactive ? 'line-through' : ''}`}>
+                        {BRL(o.total)}
+                      </div>
+                    )}
                     {methods && <div className="text-xs text-gray-600">{methods}</div>}
                   </div>
                 </div>
@@ -888,9 +922,9 @@ export default function VendasPage() {
                       </svg>
                       {sharing?.id === o.id && sharing.kind === 'pdf' ? 'Gerando…' : 'PDF'}
                     </button>
-                    {/* Devolução/estorno UNIFICADO (ADR-033): vendas confirmadas de entrega imediata.
-                        Um botão só; o modal decide entre cancelar (total, mesma sessão) e devolver
-                        por item, e pergunta a condição do item + a forma do estorno. */}
+                    {/* Cancelar/Devolver UNIFICADO (ADR-033 + ADR-035): vendas confirmadas de entrega
+                        imediata. Um botão só; o modal pergunta a INTENÇÃO (devolveu · trocar · cancelar
+                        por erro) e trata condição do item, forma do estorno e o cliente do crédito. */}
                     {o.status === 'CONFIRMED' && o.deliveryMode !== 'SCHEDULED' && (
                       <button
                         onClick={() => {
@@ -899,7 +933,7 @@ export default function VendasPage() {
                         }}
                         className="rounded-lg border border-orange-200 px-3 py-1.5 text-sm font-medium text-orange-600 hover:bg-orange-50"
                       >
-                        Devolver / Estornar
+                        Cancelar / Devolver
                       </button>
                     )}
                     {/* Retirada futura (ADR-020): cancelar/devolver a venda inteira segue o fluxo

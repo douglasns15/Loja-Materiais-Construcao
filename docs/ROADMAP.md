@@ -3,7 +3,86 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-09-10 — **ADR-034 (Cliente opcional em qualquer venda) RASCUNHADA —
+> **Última atualização:** 2026-09-10 — **TRÊS ADRs desta sessão NO AR + E2E do Owner VALIDADO
+> (ADR-034, ADR-035, ADR-036) — sem migration; commit feito, PUSH do Owner pendente.** ADR-034
+> (cliente opcional na venda, web `ed5e4349`), ADR-035 (crédito no retorno + "Cancelar/Devolver" +
+> faturamento líquido, API `adc7c14c`), ADR-036 (relatórios coerentes + card do Histórico, API
+> `61a14ce6`). A **ADR-036 (a mais recente) — gates verdes; E2E VALIDADO:** os blocos de card (A/B/C)
+> foram validados na tela e os relatórios (D/E/F) por **reconstrução dos dados reais da Loja Demo**
+> (relatório de hoje esperado: Recebido R$596, Devoluções R$256,50, Líquido R$339,50, Vendas 12,
+> Canceladas·Devolvidas·Trocas 1·1·2 — bateu com a regra nova). **Sem migration.** Nasceu do E2E da ADR-035 (owner@lojademo.com): fluxos centrais passaram, mas
+> o Owner apontou que o **card do Histórico** não refletia devolução/troca e que os **relatórios**
+> contavam venda devolvida/trocada de forma incoerente. **Decisões aprovadas:** (A) venda **totalmente
+> devolvida** vira `RETURNED` e **sai do faturamento** (como as canceladas); (B) o líquido subtrai só
+> as **devoluções parciais**; (C) **"Recebido" conta só dinheiro real** — crédito da loja e vale-troca
+> (`STORE_CREDIT`/`EXCHANGE_CREDIT`) saem (corrige a **troca contando 2×** e a inflação do Recebido);
+> (D) contadores de **Trocas** e **Devolvidas**; (E) **card** mostra Cancelada/Devolvida/**Trocada →
+> V-XXX**/**Devolução parcial** + **valor ajustado**. **Impl.:** `return-items` marca `RETURNED` no
+> total (core `isOrderFullyReturned` +5 testes); `GET /orders` expõe `returnedValue`/`exchangedValue`/
+> `exchangedTo` (+ doc §8.2); `reports.ts` exclui RETURNED do faturamento/rankings, filtra métodos de
+> crédito do Recebido, `returnsTotal` parcial-only, `exchangeCount`/`returnedCount`; `SalesReport`
+> +campos; `vendas`/`relatorios` UI. **Sem migration** (`RETURNED` já existe no enum). **Gates:** core
+> 372/372, tsc shared/api/web 0, next build OK. **[ADR-036](adr/ADR-036-relatorios-coerentes-devolucoes-trocas-credito.md).**
+>
+> **Antes:** 2026-09-10 — **ADR-035 (Crédito no retorno + botão único "Cancelar /
+> Devolver" com intenção explícita + faturamento líquido) IMPLEMENTADA (Fatias 1+2) + NO AR (API
+> `adc7c14c`, web smoke ✅); E2E do Owner feito (achados viraram a ADR-036). Sem migration.** **Gates:** core 367/367 (+5
+> testes de `calcNetRevenue`), tsc shared/api/web 0, next build OK (`/vendas` 14.3 kB, `/relatorios`
+> 14.1 kB). **Fatia 1 (A+B):** `createReturnSchema += customerId?`; `return-items` valida/anexa/credita
+> o cliente escolhido no ato (pick-no-retorno) + doc §8.2; `ReturnItemsModal` reescrito com botão
+> "Cancelar / Devolver" + 3 intenções (REFUND/EXCHANGE/CANCEL) + crédito na devolução total + busca e
+> cadastro de cliente inline. **Fatia 2 (C):** `calcNetRevenue` no core; `reports.ts` agrega
+> `OrderReturn` REFUND do período → `returnsTotal`/`netRevenue`; `SalesReport`/`SalesComparison` +
+> campos; card "Recebido" mostra **Devoluções** e **Líquido** + CSV. Antes: desenho aprovado
+> INTEGRALMENTE pelo Owner (3 caminhos, rótulo, defaults). Sem migration.**
+> Origem: a validação da ADR-034 (venda `V-000112` paga em Dinheiro **com Cliente: Silas** — prova
+> que o *attach-na-venda* funciona). Pontos do Owner que a ADR-034 não cobre: **(1)** o caso real do
+> balcão é a **venda anônima** — o cliente precisa poder ser **escolhido/cadastrado NO ATO da
+> devolução** ao dar "Crédito na loja" (*pick-no-retorno*); **(2)** a devolução **total** caía no
+> cancelamento (sem crédito); **(3)** resolver **AGORA** a dívida técnica dos relatórios não
+> subtraírem devoluções. **Desenho final ([ADR-035](adr/ADR-035-credito-no-retorno-pick-cliente-e-faturamento-liquido.md)):**
+> **(A) pick-no-retorno** — "Crédito na loja" abre seletor **selecionar/cadastrar cliente** quando a
+> venda não tem um, **anexa** à venda (`order.customerId`) e credita — contrato `createReturnSchema +=
+> customerId?` (+ doc §8.2). **(B) passo de intenção explícito** — botão único renomeado **"Cancelar /
+> Devolver"** abre o motor com **3 caminhos**: (1) Cliente devolveu/desistiu (parcial/total; destino
+> estorno·dinheiro·**crédito**), (2) Trocar (ADR-033 F3), (3) **Venda feita errada — cancelar** (desfaz
+> a venda, sem crédito; só quando elegível). Separar por INTENÇÃO (não por completude) resolve o
+> crédito na total sem ambiguidade e deixa o fluxo **fiscal-ready** (caminho 1 = nota de devolução,
+> caminho 3 = nota de cancelamento — insight do Owner sobre NF-e). Cancelamento e devolução seguem
+> **distintos** com **uma porta única**. **(C) faturamento líquido** — relatórios subtraem devoluções:
+> **bruto E líquido** (líquido em destaque), agregado no banco. **Defaults aprovados:** crédito vale em
+> cartão/PIX; subtração retroativa. **Sem migration** (`Order.customerId?` e `OrderReturn` já existem).
+> **Regra 4/7** satisfeitas (desenho aprovado; doc §8.2 na implementação). Fatias **1** (A+B) **e 2**
+> (C) numa rodada. Só a ADR + índice + este registro no working tree; **push do Owner.**
+>
+> **Antes:** 2026-09-10 — **ADR-034 (Cliente opcional em qualquer venda) APROVADA pelo
+> Owner e IMPLEMENTADA (fatia única, só `apps/web`) — NO AR; aguardando E2E do Owner + push.**
+> **VALIDAÇÃO PARCIAL (2026-09-10):** a venda `V-000112` paga em Dinheiro saiu **com Cliente: Silas**
+> no Histórico — prova que o *attach-na-venda* funciona (antes, venda paga nunca guardava cliente).
+> Deploy do web feito (Version `ed5e4349`, smoke ✅). O caso "Crédito na loja no retorno" completo
+> depende da ADR-035 (acima). **Registro original abaixo:**
+> Conserta na raiz o **achado #1** do E2E da ADR-033: o destino **"Crédito na loja"** numa devolução
+> era inalcançável para venda paga de balcão porque o PDV nunca enviava `customerId` fora de
+> fiado/crédito/retirada. **Decisões do Owner:** (1) desenho aprovado; (2) escopo v1 = **só
+> attach-na-venda** (pick-no-retorno fica para depois); (4) **convergir** o `SCHEDULED`-com-cliente
+> para uma **porta única** de anexar cliente. **O que mudou (só `venda/page.tsx`):** novo afford
+> discreto **"+ Identificar cliente (opcional)"** no topo das condições do checkout (reusa
+> `renderCustomerPicker` + estados existentes; estado `showCustomer`, **colapsado por padrão** — a
+> venda anônima ~90% **não ganha clique**); o payload passou a mandar `customerId` por uma **porta
+> única** `...(customerId ? { customerId } : {})` em **qualquer** forma de pagamento (online e
+> offline), e os ramos fiado/crédito/`SCHEDULED` deixaram de anexar `customerId` por conta própria
+> (só mantêm `creditAmount`/`creditApplied`); abrir "retirada futura" revela o afford geral e o
+> seletor embutido virou um lembrete. **Sem migration, sem mudança de contrato de `POST /orders`**
+> (schema `Order.customerId?`, `createSaleSchema.customerId?` e a persistência já suportavam — regra
+> 1 e regra 7 **não** acionadas). **Habilita, com o mesmo dado:** "Crédito na loja" no retorno +
+> histórico/garantia/entrega/CPF do cliente recorrente. **Gates:** `tsc` web **0**; `next build` OK
+> (`/venda` 20.7 kB); `core`/`api`/`shared` intocados. **Detalhes e decisões em**
+> [ADR-034](adr/ADR-034-cliente-opcional-em-venda.md) (agora **Aceito**). **Limite honesto:** vendas
+> **já registradas sem cliente** seguem sem crédito possível na v1 (corrige do ponto em diante).
+> **Falta (do Owner):** deploy do web + E2E (venda paga com cliente → devolução → "Crédito na loja"
+> creditando o `creditBalance`) + push. Só código do web + estas docs no working tree.
+>
+> **Antes:** 2026-09-10 — **ADR-034 (Cliente opcional em qualquer venda) RASCUNHADA —
 > status Proposto, aguardando aprovação do Owner. NADA implementado.** Origem: **achado #1
 > (não-bloqueante)** durante o E2E da ADR-033 (caso F2.5) — o destino **"Crédito na loja"** numa devolução é
 > **praticamente inalcançável para uma venda paga de balcão**, porque hoje o PDV só anexa cliente

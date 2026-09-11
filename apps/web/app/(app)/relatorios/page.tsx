@@ -357,11 +357,15 @@ export default function RelatoriosPage() {
     rows.push([]);
     rows.push(['Resumo do período']);
     rows.push(['Recebido', csvNumber(sales?.totalRevenue ?? 0)]);
+    rows.push(['Devoluções', csvNumber(sales?.returnsTotal ?? 0)]); // ADR-035
+    rows.push(['Recebido líquido', csvNumber(sales?.netRevenue ?? 0)]); // ADR-035
     rows.push(['Lucro bruto estimado', csvNumber(sales?.grossProfit ?? 0)]);
     rows.push(['Margem %', csvNumber(sales?.marginPercent ?? 0, 1)]);
     rows.push(['Vendas', String(sales?.salesCount ?? 0)]);
     rows.push(['Ticket médio', csvNumber(sales?.averageTicket ?? 0)]);
     rows.push(['Canceladas', String(sales?.cancelledCount ?? 0)]);
+    rows.push(['Devolvidas (total)', String(sales?.returnedCount ?? 0)]); // ADR-036
+    rows.push(['Trocas', String(sales?.exchangeCount ?? 0)]); // ADR-036
     rows.push([]);
     rows.push(['Por forma de pagamento']);
     rows.push(['Forma', 'Recebido', 'Pagamentos', 'Participação %']);
@@ -473,6 +477,22 @@ export default function RelatoriosPage() {
             mode="percent"
             prevText={sales?.previous ? `período anterior: ${BRL(sales.previous.totalRevenue)}` : undefined}
           />
+          {/* Faturamento líquido de devoluções (ADR-035): só aparece quando houve devolução no
+              período. Bruto fica no número grande; o líquido em destaque, com a linha de devoluções. */}
+          {sales != null && sales.returnsTotal > 0 && (
+            <div className="mt-2 border-t border-gray-100 pt-2 text-[11px]">
+              <div className="flex justify-between text-gray-500">
+                <span title="Valor devolvido no período (qualquer forma de estorno). Trocas não entram.">
+                  Devoluções
+                </span>
+                <span className="tabular-nums">−{BRL(sales.returnsTotal)}</span>
+              </div>
+              <div className="flex justify-between font-semibold text-indigo-700">
+                <span title="Recebido menos as devoluções do período (ADR-035).">Líquido</span>
+                <span className="tabular-nums">{BRL(sales.netRevenue)}</span>
+              </div>
+            </div>
+          )}
         </div>
         {/* Lucro bruto ESTIMADO (Fatia 6, ADR-027): base de mercadoria vendida (não é o "Recebido").
             Só vendas com custo carimbado entram — cobertura parcial é sinalizada abaixo. Card em
@@ -524,8 +544,19 @@ export default function RelatoriosPage() {
           />
         </div>
         <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-          <p className="text-xs text-gray-600">Canceladas</p>
-          <p className="mt-1 text-2xl font-bold">{sales?.cancelledCount ?? 0}</p>
+          {/* ADR-036: canceladas + devolvidas por inteiro + trocas, num card só. */}
+          <p className="text-xs text-gray-600" title="Canceladas · Devolvidas por inteiro · Trocas no período.">
+            Canceladas · Devolvidas · Trocas
+          </p>
+          <p className="mt-1 text-2xl font-bold">
+            {sales?.cancelledCount ?? 0}
+            <span className="text-base font-semibold text-gray-500">
+              {' · '}
+              {sales?.returnedCount ?? 0}
+              {' · '}
+              {sales?.exchangeCount ?? 0}
+            </span>
+          </p>
           {/* Em "Canceladas" subir é RUIM (invert): mais cancelamentos = vermelho. */}
           <DeltaBadge
             current={sales?.cancelledCount ?? 0}

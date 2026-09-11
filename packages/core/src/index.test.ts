@@ -19,6 +19,8 @@ import {
   calcSubtotal,
   reconcileStock,
   calcAverageTicket,
+  calcNetRevenue,
+  isOrderFullyReturned,
   withPaymentShare,
   calcProfit,
   previousPeriod,
@@ -413,6 +415,61 @@ describe('calcAverageTicket', () => {
 
   it('retorna 0 quando não há vendas (sem divisão por zero)', () => {
     expect(calcAverageTicket(0, 0)).toBe(0);
+  });
+});
+
+describe('calcNetRevenue', () => {
+  it('líquido = bruto − devoluções', () => {
+    expect(calcNetRevenue(1000, 150)).toBe(850);
+  });
+
+  it('sem devoluções, líquido = bruto', () => {
+    expect(calcNetRevenue(1000, 0)).toBe(1000);
+  });
+
+  it('devoluções de vendas anteriores podem deixar o líquido negativo (número honesto)', () => {
+    expect(calcNetRevenue(100, 250)).toBe(-150);
+  });
+
+  it('devolução negativa é ignorada (tratada como 0)', () => {
+    expect(calcNetRevenue(500, -10)).toBe(500);
+  });
+
+  it('arredonda a 2 casas (remove ruído de ponto flutuante da subtração)', () => {
+    // 0.3 − 0.1 = 0.19999999999999998 em binário; o líquido normaliza para 0.2.
+    expect(calcNetRevenue(0.3, 0.1)).toBe(0.2);
+  });
+});
+
+describe('isOrderFullyReturned', () => {
+  it('true quando todos os itens foram devolvidos por inteiro', () => {
+    expect(
+      isOrderFullyReturned([
+        { baseQuantity: 3, returnedBaseQty: 3 },
+        { baseQuantity: 200, returnedBaseQty: 200 },
+      ]),
+    ).toBe(true);
+  });
+
+  it('false quando algum item não foi totalmente devolvido', () => {
+    expect(
+      isOrderFullyReturned([
+        { baseQuantity: 3, returnedBaseQty: 3 },
+        { baseQuantity: 200, returnedBaseQty: 199 },
+      ]),
+    ).toBe(false);
+  });
+
+  it('false quando nada foi devolvido', () => {
+    expect(isOrderFullyReturned([{ baseQuantity: 3, returnedBaseQty: 0 }])).toBe(false);
+  });
+
+  it('tolera ruído de arredondamento (>= com epsilon)', () => {
+    expect(isOrderFullyReturned([{ baseQuantity: 1, returnedBaseQty: 0.9999995 }])).toBe(true);
+  });
+
+  it('lista vazia ⇒ false', () => {
+    expect(isOrderFullyReturned([])).toBe(false);
   });
 });
 

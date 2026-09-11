@@ -5860,3 +5860,49 @@ pendência de ambiente (F3.8 offline).
 **Dados de teste deixados na loja Demo** (mantidos, a pedido do Owner): produtos QA-ADR033 P1/P2/P3; vendas
 **V-000092 → V-000110** (algumas canceladas); José Antonio com fiados em aberto (V-101 ~R$10, V-103 R$10) +
 **1 vale órfão** (V-108); **1 defeituoso pendente** na fila (V-109/P1).
+
+---
+
+## ADR-034 — E2E do Owner (cliente opcional em qualquer venda) (2026-09-10)
+
+Ambiente: `nexoloja-web.imortal.workers.dev`, loja Demo, `owner@lojademo.com`. Web `ed5e4349`. **VALIDADO ✅.**
+
+| O que foi testado | Resultado |
+|---|---|
+| Venda paga (Dinheiro) **com cliente identificado** pelo afford "+ Identificar cliente (opcional)" | ✅ `V-000112` saiu com **"Cliente: Silas"** no Histórico — antes, venda paga nunca guardava cliente |
+| Caminho anônimo (venda à vista sem cliente) sem clique extra | ✅ afford colapsado, sem atrito |
+
+**Conclusão:** o *attach-na-venda* funciona (prova visual do "Cliente: Silas" numa venda em dinheiro). O caso "Crédito na loja no retorno" completo foi tratado nas ADR-035/036.
+
+---
+
+## ADR-035 — E2E do Owner (crédito no retorno + "Cancelar/Devolver" + faturamento líquido) (2026-09-10)
+
+Ambiente: loja Demo, `owner@lojademo.com`. API `adc7c14c`, web deployado. **Fluxos centrais VALIDADOS ✅** (os achados de relatório/histórico originaram a ADR-036).
+
+| Bloco | O que foi testado | Resultado |
+|---|---|---|
+| A | Pick-no-retorno: venda paga anônima → devolução parcial → "Crédito na loja" → selecionar/cadastrar cliente no ato → credita | ✅ (`V-000114`) — crédito atribuído ao cliente; venda passou a exibir o cliente |
+| B | Crédito na **devolução total** (não cai mais no cancelamento) | ✅ (`V-000115`) — crédito somado ao mesmo cliente |
+| C | Botão único **"Cancelar / Devolver"** com 3 intenções; **cancelar por erro** | ✅ (`V-000116`) — card vira "Cancelada", valor riscado, ações somem |
+| D | Troca (vale-troca no PDV) | ✅ (`V-000117`→`V-000118`) |
+| E/F | Faturamento líquido; fiado; formas de estorno | ✅ com achados → ADR-036 |
+
+**Achados (viraram a [ADR-036](../adr/ADR-036-relatorios-coerentes-devolucoes-trocas-credito.md), implementada e validada):** (1) card do Histórico não refletia devolução/troca; (2) venda totalmente devolvida ainda contava no faturamento; (3) "Recebido" contava crédito da loja/vale-troca como dinheiro (troca contava 2×); (4) faltava contador de trocas.
+
+---
+
+## ADR-036 — E2E do Owner (relatórios coerentes + card do Histórico) (2026-09-10)
+
+Ambiente: loja Demo, `owner@lojademo.com`. API `61a14ce6`, web deployado. **VALIDADO ✅.**
+
+| Bloco | O que foi testado | Resultado |
+|---|---|---|
+| A | Card: **Devolução parcial** (badge + valor ajustado) | ✅ (`V-000121`) |
+| B | Card: **Devolvida** por inteiro (status RETURNED, valor riscado, ações somem) | ✅ (`V-000122`) |
+| C | Card: **Trocada → V-XXX** (referência à nova venda) | ✅ (`V-000123`→`V-000124`) |
+| D/E/F | Relatórios: devolvida total fora do faturamento; Recebido só dinheiro real (crédito/vale fora); contadores Canceladas·Devolvidas·Trocas | ✅ **validado por reconstrução dos dados reais** (o Owner não capturou o "antes"): read-only no banco confirmou que as 4 vendas de teste contribuem **Recebido R$129,50 · Devoluções R$37 · Líquido R$92,50 · Vendas 3 · 0·1·1**, e que a ADR-036 **removeu R$53 de inflação** (R$37 da devolução total + R$16 do vale-troca). Relatório do dia inteiro (esperado): Recebido **R$596**, Devoluções **R$256,50**, Líquido **R$339,50**, Vendas **12**, Canceladas·Devolvidas·Trocas **1·1·2**. |
+
+**Nota:** devoluções/trocas feitas **antes** deste deploy (ex.: `V-000115`) ficaram `CONFIRMED` (o `RETURNED` só é marcado dali em diante), então aparecem como devolução **parcial** nos relatórios de hoje — esperado para dados antigos.
+
+**Conclusão:** as três ADRs desta sessão (034/035/036) estão **NO AR e validadas**. Sem migration em nenhuma. Push do Owner pendente.

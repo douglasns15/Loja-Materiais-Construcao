@@ -14,6 +14,7 @@ import {
   creditSaleBalances,
   hasAltUnit,
   isClosedPrimary,
+  isOrderFullyReturned,
   isValidMeterStep,
   isValidPartialReturn,
   maxStoreCreditForSale,
@@ -257,6 +258,9 @@ orders.get('/', async (c) => {
           receivable: {
             select: { id: true, originalAmount: true, settledAmount: true, returnedAmount: true, status: true },
           },
+          // ADR-036: devoluções/trocas da venda, para o card do Histórico refletir o desfecho
+          // (Devolvida / Devolução parcial / Trocada → V-XXX) e o valor ajustado.
+          returns: { select: { intent: true, totalValue: true, exchangeOrderId: true } },
         },
       });
 
@@ -264,7 +268,43 @@ orders.get('/', async (c) => {
       const rows = hasMore ? list.slice(0, limit) : list;
       const last = rows[rows.length - 1];
       const nextCursor = hasMore && last ? encodeCursor(last, field) : null;
-      return c.json({ ok: true, data: { rows, nextCursor } });
+      // ADR-036: resolve os números das vendas geradas por troca (exchangeOrderId → V-000XXX) e anexa
+      // um resumo por venda (valor devolvido em REFUND, valor trocado, e as vendas da troca).
+      const exchangeIds = [
+        ...new Set(
+          rows.flatMap((o) => o.returns.filter((r) => r.exchangeOrderId).map((r) => r.exchangeOrderId as string)),
+        ),
+      ];
+      const exchangeOrders = exchangeIds.length
+        ? await prisma.order.findMany({
+            where: { tenantId, id: { in: exchangeIds } },
+            select: { id: true, orderNumber: true },
+          })
+        : [];
+      const numById = new Map(exchangeOrders.map((o) => [o.id, o.orderNumber]));
+      const rowsOut = rows.map((o) => {
+        let returnedValue = 0;
+        let exchangedValue = 0;
+        const exchangedTo: number[] = [];
+        for (const r of o.returns) {
+          const v = Number(r.totalValue);
+          if (r.intent === 'EXCHANGE') {
+            exchangedValue += v;
+            const n = r.exchangeOrderId ? numById.get(r.exchangeOrderId) : undefined;
+            if (n != null) exchangedTo.push(n);
+          } else {
+            returnedValue += v;
+          }
+        }
+        const { returns: _returns, ...rest } = o;
+        return {
+          ...rest,
+          returnedValue: Number(returnedValue.toFixed(2)),
+          exchangedValue: Number(exchangedValue.toFixed(2)),
+          exchangedTo,
+        };
+      });
+      return c.json({ ok: true, data: { rows: rowsOut, nextCursor } });
     }
 
     // ADR-018: caixa por loja — lista as vendas do caixa aberto da loja (sem filtro por `userId`).
@@ -1387,6 +1427,7 @@ orders.post('/:id/return-items', async (c) => {
   }
   const { items: reqItems, reason, target } = parsed.data;
   const isExchange = parsed.data.intent === 'EXCHANGE'; // ADR-033: troca (o valor vira vale)
+  const pickedCustomerId = parsed.data.customerId ?? null; // ADR-035: cliente escolhido no ato (crédito)
 
   try {
     const prisma = getPrisma(c);
@@ -1480,14 +1521,29 @@ orders.post('/:id/return-items', async (c) => {
     // Excedente exige destino (ADR-033): crédito na loja × dinheiro do caixa × estorno na mesma
     // forma. Crédito precisa de cliente. Quanto SAI do caixa depende do destino (o estorno só tira a
     // fatia paga em dinheiro); qualquer saída de caixa exige caixa aberto.
-    const customerId = order.customerId;
+    // Cliente do crédito (ADR-035, pick-no-retorno): o do pedido tem prioridade; se a venda NÃO tem
+    // cliente e o operador escolheu/cadastrou um no ato (`pickedCustomerId`), ele será ANEXADO à
+    // venda (`Order.customerId`) e creditado. `willAttachCustomer` marca esse caso.
+    const willAttachCustomer = !order.customerId && !!pickedCustomerId;
+    const effectiveCustomerId = order.customerId ?? pickedCustomerId;
     const payments = order.payments.map((p) => ({ method: p.method, amount: Number(p.amount) }));
     const cashOut = excess > 0 && target ? cashOutForReturn(target, excess, payments) : 0;
     if (excess > 0 && !target) {
       return c.json({ ok: false, error: 'Escolha o destino do troco: crédito, dinheiro ou estorno.' }, 400);
     }
-    if (excess > 0 && target === 'STORE_CREDIT' && !customerId) {
-      return c.json({ ok: false, error: 'Crédito exige um cliente na venda; devolva em dinheiro ou estorne.' }, 400);
+    if (excess > 0 && target === 'STORE_CREDIT' && !effectiveCustomerId) {
+      return c.json({ ok: false, error: 'Crédito exige um cliente; selecione ou cadastre um cliente para o crédito.' }, 400);
+    }
+    // Anexar cliente escolhido no ato exige validar que ele é do tenant (evita anexar/creditar um id
+    // inválido ou de outra loja). Só quando o crédito realmente vai usá-lo.
+    if (willAttachCustomer && excess > 0 && target === 'STORE_CREDIT') {
+      const exists = await prisma.customer.findFirst({
+        where: { id: pickedCustomerId!, tenantId },
+        select: { id: true },
+      });
+      if (!exists) {
+        return c.json({ ok: false, error: 'Cliente do crédito não encontrado.' }, 400);
+      }
     }
     let openSessionId: string | null = null;
     if (cashOut > 0) {
@@ -1510,6 +1566,9 @@ orders.post('/:id/return-items', async (c) => {
       //    - DEFECTIVE (defeito): NÃO volta; incrementa o cache `defectiveQty` (o ledger é a própria
       //      linha `order_return_items`, gravada no passo 4 com defectStatus PENDING). Sem
       //      StockMovement (o livro do estoque vendável não é tocado — ADR-001 intacto).
+      // ADR-036: acumula o novo `returnedBaseQty` por item para decidir, ao fim, se a venda ficou
+      // totalmente devolvida (→ status RETURNED).
+      const newReturned = new Map<string, number>();
       for (const p of prep) {
         if (p.condition === 'DEFECTIVE') {
           await tx.product.update({
@@ -1543,6 +1602,20 @@ orders.post('/:id/return-items', async (c) => {
           where: { id: p.item.id },
           data: { returnedBaseQty: applied.returnedBaseQty },
         });
+        newReturned.set(p.item.id, applied.returnedBaseQty);
+      }
+
+      // ADR-036: se a devolução (REFUND) deixou a venda TOTALMENTE devolvida, marca RETURNED — a
+      // venda sai do faturamento (os relatórios excluem RETURNED como as canceladas) e o card vira
+      // "Devolvida". Troca (EXCHANGE) NÃO marca: o dinheiro da venda de origem foi real.
+      if (!isExchange) {
+        const postState = order.items.map((it) => ({
+          baseQuantity: Number(it.baseQuantity ?? it.quantity),
+          returnedBaseQty: newReturned.get(it.id) ?? Number(it.returnedBaseQty),
+        }));
+        if (isOrderFullyReturned(postState)) {
+          await tx.order.update({ where: { id: order.id }, data: { status: 'RETURNED' } });
+        }
       }
 
       // 2) Abate a dívida (se a prazo e aberta).
@@ -1601,11 +1674,19 @@ orders.post('/:id/return-items', async (c) => {
           },
         });
         cashMovementId = mov.id;
-      } else if (excess > 0 && target === 'STORE_CREDIT' && customerId) {
+      } else if (excess > 0 && target === 'STORE_CREDIT' && effectiveCustomerId) {
+        // ADR-035 (pick-no-retorno): se a venda não tinha cliente e um foi escolhido no ato, ANEXA
+        // agora — na MESMA transação do crédito (histórico retroativo; venda deixa de ser anônima).
+        if (willAttachCustomer) {
+          await tx.order.update({
+            where: { id: order.id },
+            data: { customerId: effectiveCustomerId },
+          });
+        }
         const credit = await tx.customerCredit.create({
           data: {
             tenantId,
-            customerId,
+            customerId: effectiveCustomerId,
             amount: excess, // + (crédito a favor)
             origin: 'RETURN',
             relatedOrderId: order.id,
@@ -1615,7 +1696,7 @@ orders.post('/:id/return-items', async (c) => {
         });
         customerCreditId = credit.id;
         const cust = await tx.customer.update({
-          where: { id: customerId },
+          where: { id: effectiveCustomerId },
           data: { creditBalance: { increment: excess } },
           select: { creditBalance: true },
         });
@@ -1627,7 +1708,8 @@ orders.post('/:id/return-items', async (c) => {
         data: {
           tenantId,
           orderId: order.id,
-          customerId: customerId ?? null,
+          // ADR-035: reflete o cliente efetivo (o do pedido, ou o anexado no ato para o crédito).
+          customerId: effectiveCustomerId,
           totalValue,
           abatedAmount: abated,
           excessAmount: excess,
@@ -1672,6 +1754,8 @@ orders.post('/:id/return-items', async (c) => {
             intent: isExchange ? 'EXCHANGE' : 'REFUND', // ADR-033
             itemsCount: prep.length,
             defectiveCount: prep.filter((p) => p.condition === 'DEFECTIVE').length, // ADR-033
+            // ADR-035: cliente anexado no ato para o crédito (pick-no-retorno), quando houve.
+            attachedCustomerId: willAttachCustomer ? effectiveCustomerId : null,
             reason,
           },
         },

@@ -35,12 +35,27 @@ export interface SalesReport {
    * recebimento). A parte a prazo de uma venda só conta quando é recebida.
    */
   totalRevenue: number;
+  /**
+   * **Devoluções no período** (ADR-035): Σ do valor devolvido (`OrderReturn`, intent REFUND) pela
+   * data da devolução. Trocas (EXCHANGE) não entram (o valor vira vale). Base do faturamento líquido.
+   */
+  returnsTotal: number;
+  /**
+   * **Faturamento líquido** (ADR-035): `totalRevenue − returnsTotal`. Subtrai as devoluções do
+   * período independentemente da forma do estorno (dinheiro/estorno/crédito), porque a mercadoria
+   * voltou. Pode ficar abaixo do bruto do período quando há devoluções de vendas anteriores.
+   */
+  netRevenue: number;
   /** Nº de vendas CONFIRMED no período (pela data da venda). */
   salesCount: number;
   /** Recebido ÷ nº de vendas (0 se não houver vendas). */
   averageTicket: number;
   /** Nº de vendas canceladas no período (fora do recebido). */
   cancelledCount: number;
+  /** Nº de trocas no período (ADR-036): `OrderReturn` com intent EXCHANGE. */
+  exchangeCount: number;
+  /** Nº de vendas totalmente devolvidas no período (ADR-036): status `RETURNED` (fora do faturamento). */
+  returnedCount: number;
   /**
    * Informativo (ADR-019): total de vendas **a prazo geradas** no período (crédito concedido no
    * fiado). NÃO entra no recebido — é o que ficou a receber; conta como recebido conforme entra.
@@ -74,6 +89,8 @@ export interface SalesComparison {
   from: string;
   to: string;
   totalRevenue: number;
+  returnsTotal: number; // ADR-035
+  netRevenue: number; // ADR-035
   salesCount: number;
   averageTicket: number;
   cancelledCount: number;

@@ -6,6 +6,7 @@ import {
   calcCashDivergence,
   calcDaysToStockout,
   calcMonthRunRate,
+  calcNetRevenue,
   calcProfit,
   calcTypicalVelocity,
   grossCashMovements,
@@ -13,6 +14,8 @@ import {
   withPaymentShare,
 } from '@nexoloja/core';
 import {
+  EXCHANGE_CREDIT_METHOD,
+  STORE_CREDIT_METHOD,
   formatDebtNumber,
   formatOrderNumber,
   paymentCompositionSchema,
@@ -78,18 +81,29 @@ async function computeSalesData(
   const paidAt = range; // mesmo intervalo {gte,lte}, aplicado ao campo `paidAt`
   // Base do LUCRO (Fatia 6, ADR-027): mercadoria VENDIDA no período (itens de vendas não canceladas,
   // pela data da venda) — base diferente do "Recebido". SQL cru por causa da expressão `unitCost × base`.
+  // ADR-036: além de CANCELLED, exclui RETURNED (venda totalmente devolvida sai do faturamento).
   const goodsConditions: Prisma.Sql[] = [
     Prisma.sql`o."tenantId" = ${tenantId}::uuid`,
-    Prisma.sql`o."status" <> 'CANCELLED'`,
+    Prisma.sql`o."status" NOT IN ('CANCELLED', 'RETURNED')`,
   ];
   if (range?.gte) goodsConditions.push(Prisma.sql`o."createdAt" >= ${range.gte}`);
   if (range?.lte) goodsConditions.push(Prisma.sql`o."createdAt" <= ${range.lte}`);
 
-  const [salesAgg, cancelledCount, grouped, creditReceipts, creditGenerated, goodsAgg] =
-    await Promise.all([
+  const [
+    salesAgg,
+    cancelledCount,
+    grouped,
+    creditReceipts,
+    creditGenerated,
+    goodsAgg,
+    returnsAgg,
+    exchangeCount,
+    returnedCount,
+  ] = await Promise.all([
       prisma.order.aggregate({
         _count: { _all: true },
-        where: { tenantId, status: { not: 'CANCELLED' }, ...(range ? { createdAt: range } : {}) },
+        // ADR-036: nº de vendas exclui canceladas E devolvidas por inteiro (fora do faturamento).
+        where: { tenantId, status: { notIn: ['CANCELLED', 'RETURNED'] }, ...(range ? { createdAt: range } : {}) },
       }),
       prisma.order.count({
         where: { tenantId, status: 'CANCELLED', ...(range ? { createdAt: range } : {}) },
@@ -98,7 +112,13 @@ async function computeSalesData(
         by: ['method'],
         _sum: { amount: true },
         _count: { _all: true },
-        where: { tenantId, order: { status: { not: 'CANCELLED' }, ...(range ? { createdAt: range } : {}) } },
+        // ADR-036: "Recebido" conta só dinheiro REAL — exclui vendas canceladas/devolvidas e as
+        // parcelas de crédito da loja / vale-troca (não são dinheiro que entrou).
+        where: {
+          tenantId,
+          order: { status: { notIn: ['CANCELLED', 'RETURNED'] }, ...(range ? { createdAt: range } : {}) },
+          method: { notIn: [STORE_CREDIT_METHOD, EXCHANGE_CREDIT_METHOD] },
+        },
       }),
       prisma.receivablePayment.groupBy({
         by: ['method'],
@@ -121,6 +141,26 @@ async function computeSalesData(
           WHERE ${Prisma.join(goodsConditions, ' AND ')}
         `,
       ),
+      // Devoluções PARCIAIS do período (ADR-035 + ADR-036): soma o valor devolvido (OrderReturn
+      // REFUND) das vendas que continuam CONFIRMED. As vendas TOTALMENTE devolvidas viram RETURNED e
+      // já saem do faturamento (ADR-036, Decisão A) — não entram aqui, para não remover em dobro.
+      prisma.orderReturn.aggregate({
+        _sum: { totalValue: true },
+        where: {
+          tenantId,
+          intent: 'REFUND',
+          order: { status: 'CONFIRMED' },
+          ...(range ? { createdAt: range } : {}),
+        },
+      }),
+      // ADR-036: nº de trocas no período (OrderReturn intent EXCHANGE).
+      prisma.orderReturn.count({
+        where: { tenantId, intent: 'EXCHANGE', ...(range ? { createdAt: range } : {}) },
+      }),
+      // ADR-036: nº de vendas totalmente devolvidas no período (status RETURNED).
+      prisma.order.count({
+        where: { tenantId, status: 'RETURNED', ...(range ? { createdAt: range } : {}) },
+      }),
     ]);
 
   // Junta à vista + fiado por forma, para o "recebido" e a quebra baterem (Σ formas = recebido).
@@ -143,6 +183,11 @@ async function computeSalesData(
   );
   const totalRevenue = Number(byPaymentMethod.reduce((acc, m) => acc + m.total, 0).toFixed(2));
   const salesCount = salesAgg._count._all;
+  // Devoluções e faturamento LÍQUIDO (ADR-035): bruto (Recebido) − valor devolvido no período. O
+  // líquido pode ficar abaixo do bruto do período quando devoluções são de vendas anteriores
+  // (reconhecidas na data da devolução) — comportamento aceito pelo Owner (números honestos).
+  const returnsTotal = Number(Number(returnsAgg._sum.totalValue ?? 0).toFixed(2));
+  const netRevenue = calcNetRevenue(totalRevenue, returnsTotal);
 
   // Lucro bruto (Fatia 6) — função pura calcProfit: só vendas com custo entram, nunca custo zero.
   const goods = goodsAgg[0] ?? { goodsRevenue: 0, coveredRevenue: 0, coveredCost: 0 };
@@ -155,9 +200,13 @@ async function computeSalesData(
 
   return {
     totalRevenue,
+    returnsTotal, // ADR-035/036: valor devolvido no período (REFUND, só devoluções PARCIAIS)
+    netRevenue, // ADR-035: Recebido − devoluções parciais
     salesCount,
     averageTicket: calcAverageTicket(totalRevenue, salesCount),
     cancelledCount,
+    exchangeCount, // ADR-036: nº de trocas no período
+    returnedCount, // ADR-036: nº de vendas totalmente devolvidas no período
     creditSalesGenerated: Number(creditGenerated._sum.originalAmount ?? 0),
     byPaymentMethod,
     grossProfit,
@@ -210,6 +259,8 @@ reports.get('/sales', async (c) => {
             from: prevRange.from,
             to: prevRange.to,
             totalRevenue: prev.totalRevenue,
+            returnsTotal: prev.returnsTotal,
+            netRevenue: prev.netRevenue,
             salesCount: prev.salesCount,
             averageTicket: prev.averageTicket,
             cancelledCount: prev.cancelledCount,
@@ -259,12 +310,13 @@ reports.get('/payment-composition', async (c) => {
     // abaixo disso; existe só para nunca devolver uma resposta gigante num "todo o histórico".
     const CAP = 5000;
     const [cashPayments, creditReceipts] = await Promise.all([
-      // À vista: pagamentos daquela forma, de vendas não canceladas, pela data da venda.
+      // À vista: pagamentos daquela forma, de vendas não canceladas nem devolvidas por inteiro
+      // (ADR-036), pela data da venda. Mantém Σ linhas = total da forma no /sales.
       prisma.payment.findMany({
         where: {
           tenantId,
           method,
-          order: { status: { not: 'CANCELLED' }, ...(createdAt ? { createdAt } : {}) },
+          order: { status: { notIn: ['CANCELLED', 'RETURNED'] }, ...(createdAt ? { createdAt } : {}) },
         },
         select: {
           amount: true,
@@ -364,7 +416,7 @@ reports.get('/top-products', async (c) => {
     const prisma = getPrisma(c);
     const conditions: Prisma.Sql[] = [
       Prisma.sql`o."tenantId" = ${tenantId}::uuid`,
-      Prisma.sql`o."status" <> 'CANCELLED'`,
+      Prisma.sql`o."status" NOT IN ('CANCELLED', 'RETURNED')`, // ADR-036: devolvida por inteiro fora
     ];
     if (range?.gte) conditions.push(Prisma.sql`o."createdAt" >= ${range.gte}`);
     if (range?.lte) conditions.push(Prisma.sql`o."createdAt" <= ${range.lte}`);
@@ -465,7 +517,7 @@ reports.get('/product-customers/:productId', async (c) => {
     const prisma = getPrisma(c);
     const conditions: Prisma.Sql[] = [
       Prisma.sql`o."tenantId" = ${tenantId}::uuid`,
-      Prisma.sql`o."status" <> 'CANCELLED'`,
+      Prisma.sql`o."status" NOT IN ('CANCELLED', 'RETURNED')`, // ADR-036: devolvida por inteiro fora
       Prisma.sql`oi."productId" = ${productId}::uuid`,
     ];
     if (range?.gte) conditions.push(Prisma.sql`o."createdAt" >= ${range.gte}`);
@@ -532,7 +584,7 @@ reports.get('/top-customers', async (c) => {
     const prisma = getPrisma(c);
     const conditions: Prisma.Sql[] = [
       Prisma.sql`o."tenantId" = ${tenantId}::uuid`,
-      Prisma.sql`o."status" <> 'CANCELLED'`,
+      Prisma.sql`o."status" NOT IN ('CANCELLED', 'RETURNED')`, // ADR-036: devolvida por inteiro fora
       // Só clientes identificados (venda de balcão sem cadastro não entra no ranking de clientes).
       Prisma.sql`o."customerId" IS NOT NULL`,
     ];
@@ -642,7 +694,7 @@ reports.get('/customer-products/:customerId', async (c) => {
     const prisma = getPrisma(c);
     const conditions: Prisma.Sql[] = [
       Prisma.sql`o."tenantId" = ${tenantId}::uuid`,
-      Prisma.sql`o."status" <> 'CANCELLED'`,
+      Prisma.sql`o."status" NOT IN ('CANCELLED', 'RETURNED')`, // ADR-036: devolvida por inteiro fora
       Prisma.sql`o."customerId" = ${customerId}::uuid`,
     ];
     if (range?.gte) conditions.push(Prisma.sql`o."createdAt" >= ${range.gte}`);
@@ -841,7 +893,7 @@ reports.get('/daily', async (c) => {
     const prisma = getPrisma(c);
     const cashConditions: Prisma.Sql[] = [
       Prisma.sql`o."tenantId" = ${tenantId}::uuid`,
-      Prisma.sql`o."status" <> 'CANCELLED'`,
+      Prisma.sql`o."status" NOT IN ('CANCELLED', 'RETURNED')`, // ADR-036: devolvida por inteiro fora
     ];
     if (createdAt?.gte) cashConditions.push(Prisma.sql`o."createdAt" >= ${createdAt.gte}`);
     if (createdAt?.lte) cashConditions.push(Prisma.sql`o."createdAt" <= ${createdAt.lte}`);

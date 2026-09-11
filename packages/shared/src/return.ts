@@ -42,6 +42,11 @@ export const createReturnSchema = z.object({
   // valor devolvido NÃO vira dinheiro/crédito/abatimento agora: vira um VALE consumido por uma nova
   // venda no PDV. `target` é ignorado quando EXCHANGE.
   intent: z.enum(['REFUND', 'EXCHANGE']).optional(),
+  // Cliente escolhido NO ATO da devolução (ADR-035, pick-no-retorno). Usado só quando o destino é
+  // "Crédito na loja" (STORE_CREDIT) e a venda ainda NÃO tem cliente: o servidor valida que é
+  // cliente do tenant, ANEXA à venda (`Order.customerId`) e credita o `creditBalance`. Se a venda já
+  // tem cliente, este campo é ignorado (o cliente do pedido manda).
+  customerId: z.string().uuid().optional(),
 });
 export type CreateReturnInput = z.infer<typeof createReturnSchema>;
 
