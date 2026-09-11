@@ -5906,3 +5906,21 @@ Ambiente: loja Demo, `owner@lojademo.com`. API `61a14ce6`, web deployado. **VALI
 **Nota:** devoluções/trocas feitas **antes** deste deploy (ex.: `V-000115`) ficaram `CONFIRMED` (o `RETURNED` só é marcado dali em diante), então aparecem como devolução **parcial** nos relatórios de hoje — esperado para dados antigos.
 
 **Conclusão:** as três ADRs desta sessão (034/035/036) estão **NO AR e validadas**. Sem migration em nenhuma. Push do Owner pendente.
+
+---
+
+## ADR-031 — E2E do Owner (correção do "Vender de novo" na janela flutuante) (2026-09-11)
+
+Ambiente: `nexoloja-web.imortal.workers.dev`, loja Demo, `owner@lojademo.com`. Web deployado (2 deploys). **VALIDADO ✅.** Web-only, sem API/core/shared/migration.
+
+**Contexto do bug:** o "Vender de novo" (reorder) do Histórico gravava o repasse no `sessionStorage` e chamava `router.push('/venda')`; o PDV só consumia o repasse **na montagem da rota**. Na janela flutuante (ADR-031) o caso real é ter o PDV já aberto por baixo → o push vira **no-op** (mesma rota) → o PDV não remonta → o repasse ficava sem ser lido. Pela tela direta (rota `/vendas` ≠ `/venda`) sempre funcionou.
+
+| Bloco | O que foi testado | Resultado |
+|---|---|---|
+| A | **Vender de novo pela janela flutuante** (PDV aberto por baixo): selecionar venda(s) → confirmar → PDV recebe o reorder e abre a revisão | ✅ revisão (`z-50`) sobe **por cima** do painel flutuante; itens repreçados entram no carrinho ao "Adicionar ao carrinho" |
+| B | **Caminho antigo** (tela direta `/vendas` → PDV) segue funcionando | ✅ sem regressão |
+| C | **Reset do painel flutuante ao confirmar a revisão**: ao clicar "Adicionar ao carrinho", o Histórico flutuante sai do modo seleção, limpa a seleção e recarrega | ✅ volta à tela normal do Histórico |
+
+**Como foi corrigido:** (1) `writeReorderPayload` dispara `REORDER_SIGNAL`; o PDV já montado escuta, libera o guard e re-roda o efeito de consumo (nova dep `reorderSignal`) — resolve o no-op da rota. (2) `applyReorder` dispara `REORDER_APPLIED_SIGNAL`; o Histórico flutuante escuta e reseta (sai do modo seleção + limpa seleção + `loadOrders`). No fluxo direto ninguém escuta (a tela `/vendas` já desmontou) — inócuo. Sem duplo consumo (`takeReorderPayload` é de uso único). Arquivos: `apps/web/lib/reorder.ts`, `apps/web/app/(app)/venda/page.tsx`, `apps/web/app/(app)/vendas/page.tsx`.
+
+**Conclusão:** os dois pedidos do Owner validados perfeitamente ("agora sim, funcionou perfeitamente"). Commits `3872636` + `a2accfe` em `main` (push do Owner pendente).
