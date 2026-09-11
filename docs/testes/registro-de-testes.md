@@ -5924,3 +5924,23 @@ Ambiente: `nexoloja-web.imortal.workers.dev`, loja Demo, `owner@lojademo.com`. W
 **Como foi corrigido:** (1) `writeReorderPayload` dispara `REORDER_SIGNAL`; o PDV já montado escuta, libera o guard e re-roda o efeito de consumo (nova dep `reorderSignal`) — resolve o no-op da rota. (2) `applyReorder` dispara `REORDER_APPLIED_SIGNAL`; o Histórico flutuante escuta e reseta (sai do modo seleção + limpa seleção + `loadOrders`). No fluxo direto ninguém escuta (a tela `/vendas` já desmontou) — inócuo. Sem duplo consumo (`takeReorderPayload` é de uso único). Arquivos: `apps/web/lib/reorder.ts`, `apps/web/app/(app)/venda/page.tsx`, `apps/web/app/(app)/vendas/page.tsx`.
 
 **Conclusão:** os dois pedidos do Owner validados perfeitamente ("agora sim, funcionou perfeitamente"). Commits `3872636` + `a2accfe` em `main` (push do Owner pendente).
+
+---
+
+## ADR-031 — E2E do Owner (layout responsivo das telas flutuantes) (2026-09-11)
+
+Ambiente: `nexoloja-web.imortal.workers.dev`, loja Demo, `owner@lojademo.com`. Web deployado. **VALIDADO ✅** ("tudo validado com sucesso"). Web-only, sem API/core/shared/migration.
+
+**Contexto do bug:** dentro da janela flutuante (ADR-031) a página é a mesma `page.tsx` reusada, mas os grids usavam breakpoints de **viewport** (`lg:`/`sm:`). Como o painel roda numa viewport desktop porém num container estreito (~490px), os breakpoints achavam que havia espaço e mantinham 4 colunas → cards espremidos e valores (`R$ …`) **cortados**. **Correção geral:** trocar grids fixos por **grids intrínsecos** (`grid-cols-[repeat(auto-fit,minmax(Npx,1fr))]`), que respondem à largura REAL do container (funciona igual na rota e no painel, e reflui ao redimensionar o painel).
+
+| Tela | O que foi testado | Resultado |
+|---|---|---|
+| Relatórios | cards do período (`minmax(160px)`), projeções (`minmax(200px)`), rankings (`minmax(300px)`) reflowam no painel | ✅ 2-up/1-up no painel, 4/3/2-up no desktop; nada cortado |
+| Histórico de Vendas | "Faixa de inteligência" (`minmax(160px)`) | ✅ 2-up no painel, 4-up no desktop |
+| Estoque | dois formulários Entrada×Ajuste (`minmax(320px)`) | ✅ empilham no painel, lado a lado no desktop |
+| Produtos | **mantido** — form é 2-col deliberado com `col-span` (`auto-fit` quebraria o desktop); no painel fica 2-up e usável, sem cortar | ✅ sem regressão |
+| Contas a Receber | **mantido** — sem grid de nível de página (só flex/botões em modal, que cobre a viewport toda) | ✅ nada a ajustar |
+
+**Verificação técnica:** typecheck 0 + build verde; confirmado que o Tailwind JIT gerou as classes arbitrárias (`auto-fit` presente no CSS do bundle). O gráfico "recebido por dia" (`min-w-[480px]`) já fica em wrapper `overflow-x-auto` → rola dentro do card.
+
+**Conclusão:** telas flutuantes reflowam corretamente pela largura do container. Commits `0b60d78` (Relatórios) + `826d5b1` (Histórico/Estoque) em `main` (push do Owner pendente).
