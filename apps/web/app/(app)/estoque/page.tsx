@@ -592,7 +592,10 @@ export default function EstoquePage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      {/* Grid intrínseco (auto-fit/minmax): as duas colunas (Entrada × Ajuste) ficam lado a lado
+          quando há largura e EMPILHAM na janela flutuante estreita (ADR-031), em vez de espremer os
+          formulários. Só 2 filhos → nunca passa de 2 colunas. */}
+      <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(320px,1fr))]">
         {/* Entrada de estoque — bloqueada em loja desativada (ADR-009); ajuste segue liberado. */}
         {me?.tenantActive === false ? (
           <StoreDisabledNotice message="A entrada de estoque está bloqueada. Fale com o suporte para reativar a loja." />

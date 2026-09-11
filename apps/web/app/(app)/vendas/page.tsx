@@ -556,7 +556,10 @@ export default function VendasPage() {
           rev?.direction === 'up' ? 'text-emerald-600' : rev?.direction === 'down' ? 'text-red-600' : 'text-gray-400';
         return (
           <div className="mb-4 rounded-2xl border border-gray-200 bg-white p-3 shadow-md">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {/* Grid intrínseco (auto-fit/minmax): responde à largura REAL do container, não à
+                viewport — cai para 2-up dentro da janela flutuante estreita (ADR-031) sem cortar os
+                valores; 4-up no desktop. Os 4 itens limitam o máximo de colunas. */}
+            <div className="grid gap-3 grid-cols-[repeat(auto-fit,minmax(160px,1fr))]">
               <div className="border-gray-100 sm:border-r">
                 <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Faturamento</div>
                 <div className="mt-0.5 text-lg font-bold tabular-nums text-gray-900">{BRL(report.totalRevenue)}</div>
