@@ -28,8 +28,10 @@ export function ProjectionsSection({ data }: { data: ProjectionsReport | null })
   const idx = risks.length > 0 ? Math.min(riskIdx, risks.length - 1) : 0;
   const risk = risks[idx];
 
+  // Grid intrínseco (auto-fit/minmax) para responder à largura real do container, não à viewport —
+  // cai para menos colunas dentro da janela flutuante estreita (ADR-031). Desktop = 3 cards.
   return (
-    <div className="grid gap-4 sm:grid-cols-3">
+    <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(200px,1fr))]">
       {/* 1. Faturamento projetado do mês (run-rate). */}
       <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
         <p className="text-xs font-medium text-gray-600">🔮 Faturamento projetado do mês</p>

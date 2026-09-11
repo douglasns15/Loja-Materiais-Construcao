@@ -462,8 +462,11 @@ export default function RelatoriosPage() {
 
       <SectionLabel>Resultado do período</SectionLabel>
 
-      {/* Cards de resumo de vendas (Fatia 6: inclui Lucro bruto estimado). */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      {/* Cards de resumo de vendas (Fatia 6: inclui Lucro bruto estimado). Grid intrínseco
+          (auto-fit/minmax) para responder à LARGURA REAL do container, não à viewport — assim a
+          tela cai para menos colunas dentro da janela flutuante estreita (ADR-031), sem cortar os
+          valores. Desktop largo = 4 cards; painel/celular = 2. */}
+      <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(160px,1fr))]">
         <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
           {/* Regime de caixa (ADR-019): dinheiro que entrou no período — inclui recebimentos de
               fiado no dia em que foram recebidos, não a parte a prazo ainda não paga. */}
@@ -673,9 +676,10 @@ export default function RelatoriosPage() {
 
       <SectionLabel>Produtos e clientes</SectionLabel>
 
-      {/* Rankings (Fatia 5) — cards colapsáveis com busca e detalhe em pop-up. Lado a lado no
-          desktop; empilhados no celular. */}
-      <div className="grid gap-4 lg:grid-cols-2">
+      {/* Rankings (Fatia 5) — cards colapsáveis com busca e detalhe em pop-up. Grid intrínseco: lado
+          a lado quando há largura (desktop), empilhados no celular E na janela flutuante estreita
+          (ADR-031). */}
+      <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(300px,1fr))]">
         <TopProductsCard
           from={dRange.from ?? null}
           to={dRange.to ?? null}
