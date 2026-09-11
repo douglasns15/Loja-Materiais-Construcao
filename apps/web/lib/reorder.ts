@@ -9,6 +9,14 @@
  */
 const KEY = 'nexoloja:reorder';
 
+/**
+ * Sinal disparado logo após gravar um repasse. Serve ao caso da janela flutuante (ADR-031): quando o
+ * "Vender de novo" parte do Histórico FLUTUANTE com o PDV (`/venda`) já aberto por baixo, o
+ * `router.push('/venda')` é no-op (mesma rota) e NÃO remonta a tela — então o efeito de montagem que
+ * consome o repasse jamais roda. O PDV já montado escuta este evento e consome na hora.
+ */
+export const REORDER_SIGNAL = 'nexoloja:reorder-signal';
+
 /** Um item de venda a repetir (snapshot do Histórico; o PDV resolve preço/estoque atuais). */
 export type ReorderPayloadItem = {
   productId: string;
@@ -37,6 +45,8 @@ export type ReorderPayload = {
 export function writeReorderPayload(payload: ReorderPayload): void {
   try {
     sessionStorage.setItem(KEY, JSON.stringify(payload));
+    // Avisa um PDV JÁ montado (janela flutuante) para consumir sem depender de remontar a rota.
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event(REORDER_SIGNAL));
   } catch {
     // sessionStorage indisponível (aba privada/limitada): o reorder simplesmente não acontece.
   }

@@ -46,7 +46,7 @@ import {
   type ReorderProductInfo,
   type ReorderPlan,
 } from '@nexoloja/core';
-import { takeReorderPayload } from '@/lib/reorder';
+import { takeReorderPayload, REORDER_SIGNAL } from '@/lib/reorder';
 import { takeExchangePayload } from '@/lib/exchange';
 import { useShortcuts } from '@/lib/shortcuts';
 import { apiGet, apiPatch, apiPost } from '@/lib/api';
@@ -455,6 +455,11 @@ export default function VendaPage() {
   const [reorderPairs, setReorderPairs] = useState<CartItem[]>([]);
   const [reorderPairReview, setReorderPairReview] = useState<string[]>([]);
   const reorderAppliedRef = useRef(false);
+  // Sinal para reconsumir o repasse do reorder SEM remontar a rota. Necessário quando o "Vender de
+  // novo" parte da janela flutuante (ADR-031) com o PDV já aberto por baixo: ali o `router.push`
+  // para `/venda` é no-op e o efeito de montagem não roda de novo. Cada disparo do sinal libera o
+  // guard e faz o efeito de consumo rodar mais uma vez.
+  const [reorderSignal, setReorderSignal] = useState(0);
   // Troca (ADR-033, Fatia 3): vale-troca trazido do Histórico. `null` = venda normal. O vale abate o
   // "a pagar" e vai como `exchangeReturnId` na venda; o total precisa ser ≥ o vale (sem troco na troca).
   const [exchange, setExchange] = useState<{ returnId: string; credit: number; fromOrderNumber: number } | null>(
@@ -722,6 +727,17 @@ export default function VendaPage() {
   // catálogo carregar (preço/estoque/fator saem dele) e roda UMA vez. Resolve cada item contra o
   // catálogo ATUAL — deriva o modo pela unidade vendida e o fator-para-base por `buildCartLine` —
   // e monta o plano no core. Nada entra no carrinho aqui: abre a REVISÃO para o operador confirmar.
+  // Janela flutuante (ADR-031): escuta o sinal de novo repasse para consumir na hora, mesmo com o PDV
+  // já montado (quando o router.push('/venda') vira no-op). Libera o guard e chuta o efeito de consumo.
+  useEffect(() => {
+    function onReorderSignal() {
+      reorderAppliedRef.current = false;
+      setReorderSignal((n) => n + 1);
+    }
+    window.addEventListener(REORDER_SIGNAL, onReorderSignal);
+    return () => window.removeEventListener(REORDER_SIGNAL, onReorderSignal);
+  }, []);
+
   useEffect(() => {
     if (reorderAppliedRef.current || products.length === 0) return;
     const payload = takeReorderPayload();
@@ -806,7 +822,7 @@ export default function VendaPage() {
     setReorderPairReview(pairReview);
     setReorderPlan(planReorder(sources, catalog));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [products]);
+  }, [products, reorderSignal]);
 
   /** Confirma a revisão do reorder: monta as linhas pelo preço ATUAL e SOMA ao carrinho (não
    *  substitui — respeita o que já estava lá). O core já limitou tudo ao estoque livre. */
