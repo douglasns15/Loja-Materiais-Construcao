@@ -18,7 +18,7 @@ import { PeriodFilter, defaultRange } from '@/components/PeriodFilter';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { ReceiptPrint, type Store } from '@/components/ReceiptPrint';
 import { ReturnItemsModal } from '@/components/ReturnItemsModal';
-import { writeReorderPayload, type ReorderPayloadItem } from '@/lib/reorder';
+import { writeReorderPayload, REORDER_APPLIED_SIGNAL, type ReorderPayloadItem } from '@/lib/reorder';
 import { writeExchangePayload } from '@/lib/exchange';
 import { shareReceiptImage, shareReceiptPdf } from '@/lib/receiptShare';
 
@@ -212,6 +212,27 @@ export default function VendasPage() {
   function voltarAoTopo() {
     rootRef.current?.closest('main')?.scrollTo({ top: 0, behavior: 'smooth' });
   }
+
+  // Janela flutuante (ADR-031): quando o "Vender de novo" parte do Histórico flutuante, esta tela
+  // fica montada por baixo, presa no modo seleção. Ao o operador CONFIRMAR a revisão no PDV
+  // (REORDER_APPLIED_SIGNAL), voltamos à tela normal: sai do modo seleção, limpa a seleção e recarrega.
+  // Ref para chamar sempre o `loadOrders` mais recente (range/sort/search atuais) sem re-registrar o
+  // ouvinte a cada render. No fluxo direto esta tela já desmontou (navegou para /venda) — ninguém ouve.
+  const reloadOrdersRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    reloadOrdersRef.current = () => {
+      void loadOrders();
+    };
+  });
+  useEffect(() => {
+    function onReorderApplied() {
+      setSelectMode(false);
+      setSelectedIds(new Set());
+      reloadOrdersRef.current();
+    }
+    window.addEventListener(REORDER_APPLIED_SIGNAL, onReorderApplied);
+    return () => window.removeEventListener(REORDER_APPLIED_SIGNAL, onReorderApplied);
+  }, []);
 
   /** Liga/desliga o modo "Vender de novo" (seleção múltipla). Ao desligar, zera a seleção; ao ligar,
    *  fecha qualquer painel de cancelamento/devolução aberto (os fluxos não se misturam). */

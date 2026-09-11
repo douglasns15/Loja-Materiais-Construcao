@@ -46,7 +46,7 @@ import {
   type ReorderProductInfo,
   type ReorderPlan,
 } from '@nexoloja/core';
-import { takeReorderPayload, REORDER_SIGNAL } from '@/lib/reorder';
+import { takeReorderPayload, REORDER_SIGNAL, signalReorderApplied } from '@/lib/reorder';
 import { takeExchangePayload } from '@/lib/exchange';
 import { useShortcuts } from '@/lib/shortcuts';
 import { apiGet, apiPatch, apiPost } from '@/lib/api';
@@ -856,6 +856,9 @@ export default function VendaPage() {
       return next;
     });
     closeReorder();
+    // Janela flutuante (ADR-031): avisa o Histórico flutuante que originou o reorder para ele sair do
+    // modo seleção e recarregar (volta à tela normal do Histórico). No fluxo direto ninguém escuta.
+    signalReorderApplied();
   }
 
   /** Fecha a revisão do reorder e zera o estado de pares (avulsos + pares). */

@@ -17,6 +17,19 @@ const KEY = 'nexoloja:reorder';
  */
 export const REORDER_SIGNAL = 'nexoloja:reorder-signal';
 
+/**
+ * Sinal disparado quando o operador CONFIRMA a revisão do reorder no PDV (itens somados ao carrinho).
+ * Serve à janela flutuante (ADR-031): o Histórico flutuante que originou o "Vender de novo" continua
+ * montado por baixo, preso no modo seleção. Ao ouvir isto, ele sai do modo seleção, limpa a seleção e
+ * recarrega — voltando à tela normal do Histórico.
+ */
+export const REORDER_APPLIED_SIGNAL = 'nexoloja:reorder-applied';
+
+/** Avisa que a revisão do reorder foi confirmada (ver REORDER_APPLIED_SIGNAL). */
+export function signalReorderApplied(): void {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(REORDER_APPLIED_SIGNAL));
+}
+
 /** Um item de venda a repetir (snapshot do Histórico; o PDV resolve preço/estoque atuais). */
 export type ReorderPayloadItem = {
   productId: string;
