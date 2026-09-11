@@ -44,10 +44,6 @@ http://localhost:3000/
 
 <> Testar adição de divida, a uma já existente, confirmar se o valor inserido no PDV como pendente, no caso do cliente pagar uma parte no ato, será inserida na divida e não o inverso, cenário Edson.
 
-<> Quando uma venda é cancelada por devolução de produto com defeito, precisamos ter como registrar isso e marcar esse item diferente,  para que não volte ao estoque, com isso, temos que ter como buscar itens devolvidos com defeito, para que nos casos em que a gente consiga trocar com o fornecedor, dar baixa e voltar ao estoque
- -- OUtra coisa tmbm, quando a venda é cancelada e o produto devolvido, as vezes a pessoa só desistiu da venda ou vai trocar por outro item. Então isso precisa ser perguntado, para executar essa troca.. Se bem que temos o botão "Devolver Itens" tmbm, seria melhor por ali, ao clicar ali ele pergunta se é uma troca? Qual o fluxo correto ?
- -- Mais um ponto, quando cancelar essa venda e devolvermos o dinheiro, precisa ser perguntado, como foi devolvido esse dinheiro se foi estorno, caso seja em dinheiro, precisa ser descontado do caixa
-
 <> Ter opção de pagar dívida com a troca de mercadoria ... 
 
 <> Pode aparecer nos clientes com crédito da loja, ao clicar, mostrar o que gerou aquele crédito. Importante.. inclusive o código da venda que gerou aquele crédito
