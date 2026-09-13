@@ -59,6 +59,23 @@ describe('FakeFiscalProvider.issue', () => {
     expect(a.accessKey).toBe(b.accessKey);
   });
 
+  it('devolve o número e a série usados', async () => {
+    const outcome = await provider.issue(request());
+    if (outcome.kind !== 'AUTHORIZED') throw new Error('esperava AUTHORIZED');
+    expect(outcome.number).toBe(128); // número explícito é respeitado
+    expect(outcome.series).toBe(1);
+  });
+
+  it('numera sozinho quando o pedido não traz número (ADR-037)', async () => {
+    // Instância própria: a sequência é estado interno do provedor.
+    const p = new FakeFiscalProvider({ now: () => NOW });
+    const a = await p.issue(request('Cimento', { number: undefined, orderId: 'o1' }));
+    const b = await p.issue(request('Cimento', { number: undefined, orderId: 'o2' }));
+    if (a.kind !== 'AUTHORIZED' || b.kind !== 'AUTHORIZED') throw new Error('esperava AUTHORIZED');
+    expect(a.number).toBe(1);
+    expect(b.number).toBe(2); // sequência avança por tenant/série
+  });
+
   it('marca contingência na forma de emissão (tpEmis = 9)', async () => {
     const outcome = await provider.issue(request('Cimento', { contingency: true }));
     if (outcome.kind !== 'AUTHORIZED') throw new Error('esperava AUTHORIZED');

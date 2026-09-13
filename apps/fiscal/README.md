@@ -104,7 +104,7 @@ Cobrem: dígito verificador de CPF/CNPJ, chave de acesso de 44 dígitos (layout,
 
 ## Por onde continuar
 
-1. **ADR-026** — escolher o provedor, desenhar o armazenamento do certificado A1 e a política de contingência.
+1. **ADR-037** — escolher o provedor, desenhar o armazenamento do certificado A1 e a política de contingência.
 2. **Adaptador real** (`providers/focus.ts` ou equivalente), reusando os testes do `fake` como contrato.
 3. **Persistência** — `store/prisma.ts` + tabela `fiscal_documents`. **Exige migration e aprovação explícita do Owner** (regra 1 do `CLAUDE.md`).
 4. **Fila de retransmissão** da contingência — conversa com o ADR-011/012 (offline-first).

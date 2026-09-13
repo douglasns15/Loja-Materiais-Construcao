@@ -19,6 +19,14 @@ export interface AuthorizedOutcome {
   accessKey: string;
   protocol: string;
   authorizedAt: string;
+  /**
+   * Número (nNF) efetivamente usado. Quando a numeração é do provedor
+   * (ADR-037), é aqui que descobrimos qual número saiu — por isso o adaptador
+   * **deve** devolvê-lo, e não apenas ecoar o que foi enviado.
+   */
+  number: number;
+  /** Série efetivamente usada. */
+  series: number;
   /** URL do QR Code / consulta pública, quando o provedor devolve. */
   qrCodeUrl?: string;
 }

@@ -153,6 +153,15 @@ describe('validateIssueRequest', () => {
     expect(issues.map((i) => i.field)).toContain('items');
   });
 
+  it('aceita pedido SEM número — quem numera é o provedor (ADR-037)', () => {
+    expect(validateIssueRequest(request({ number: undefined }))).toEqual([]);
+  });
+
+  it('rejeita número explícito inválido', () => {
+    expect(validateIssueRequest(request({ number: 0 })).map((i) => i.field)).toContain('number');
+    expect(validateIssueRequest(request({ number: 1.5 })).map((i) => i.field)).toContain('number');
+  });
+
   it('valida os códigos tributários de cada item, apontando o índice', () => {
     const issues = validateIssueRequest(
       request({

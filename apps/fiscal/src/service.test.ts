@@ -59,6 +59,17 @@ describe('FiscalService.issue', () => {
     });
   });
 
+  it('grava o número atribuído pelo provedor quando o pedido não numera', async () => {
+    const { service } = makeService();
+    const result = await service.issue(request({ number: undefined }));
+
+    expect(result.kind).toBe('ISSUED');
+    if (result.kind !== 'ISSUED') return;
+    // O documento sai numerado mesmo sem número na entrada (ADR-037).
+    expect(result.document.number).toBe(1);
+    expect(result.document.series).toBe(1);
+  });
+
   it('é IDEMPOTENTE: a mesma venda nunca gera duas notas', async () => {
     const { service } = makeService();
     const first = await service.issue(request());

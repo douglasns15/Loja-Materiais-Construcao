@@ -44,7 +44,7 @@ export interface FakeProviderOptions {
  * idempotência verificável de ponta a ponta.
  */
 function defaultNumericCode(request: IssueRequest): number {
-  const seed = `${request.tenantId}:${request.orderId}:${request.number}`;
+  const seed = `${request.tenantId}:${request.orderId}`;
   let hash = 0;
   for (let i = 0; i < seed.length; i++) {
     hash = (hash * 31 + seed.charCodeAt(i)) % 100_000_000;
@@ -58,10 +58,24 @@ export class FakeFiscalProvider implements FiscalProvider {
 
   private readonly now: () => Date;
   private readonly numericCode: (request: IssueRequest) => number;
+  /**
+   * Sequência de numeração por `(tenant, série)` — simula o `proximo_numero_nfce`
+   * que o provedor real mantém por empresa (ADR-037). Só é usada quando o pedido
+   * NÃO traz `number`.
+   */
+  private readonly sequences = new Map<string, number>();
 
   constructor(options: FakeProviderOptions = {}) {
     this.now = options.now ?? (() => new Date());
     this.numericCode = options.numericCode ?? defaultNumericCode;
+  }
+
+  /** Próximo número da sequência do tenant/série (começa em 1). */
+  private nextNumber(request: IssueRequest): number {
+    const key = `${request.tenantId}:${request.issuer.series}`;
+    const next = (this.sequences.get(key) ?? 0) + 1;
+    this.sequences.set(key, next);
+    return next;
   }
 
   async issue(request: IssueRequest): Promise<IssueOutcome> {
@@ -89,6 +103,8 @@ export class FakeFiscalProvider implements FiscalProvider {
     }
 
     const at = this.now();
+    // Numeração do provedor quando o pedido não traz `number` (ADR-037).
+    const number = request.number ?? this.nextNumber(request);
     const accessKey = buildAccessKey({
       ufCode: request.issuer.ufCode,
       year: at.getUTCFullYear(),
@@ -96,7 +112,7 @@ export class FakeFiscalProvider implements FiscalProvider {
       cnpj: request.issuer.cnpj,
       model: MODEL_NFCE,
       series: request.issuer.series,
-      number: request.number,
+      number,
       emissionType: request.contingency ? EMISSION_OFFLINE_CONTINGENCY : EMISSION_NORMAL,
       numericCode: this.numericCode(request),
     });
@@ -106,6 +122,8 @@ export class FakeFiscalProvider implements FiscalProvider {
       accessKey,
       protocol: `SIM${accessKey.slice(-15)}`,
       authorizedAt: at.toISOString(),
+      number,
+      series: request.issuer.series,
       qrCodeUrl: `https://exemplo.invalid/nfce/qr?chNFe=${accessKey}&tpAmb=2`,
     };
   }

@@ -115,8 +115,20 @@ export interface IssueRequest {
   orderId: string;
   model: FiscalModel;
   issuer: Issuer;
-  /** Número sequencial da nota (nNF), controlado pela loja. */
-  number: number;
+  /**
+   * Número sequencial da nota (nNF). **Opcional** — ver ADR-037.
+   *
+   * A numeração fiscal é, em geral, **controlada pelo provedor** (a Focus NFe,
+   * por exemplo, mantém `proximo_numero_nfce_*` por empresa e incrementa
+   * sozinha). Deixar este campo em branco significa "provedor, numere você" —
+   * que é o caminho recomendado, porque centraliza o controle de sequência num
+   * lugar só e evita buraco/duplicidade de numeração quando há concorrência
+   * entre caixas.
+   *
+   * Informe um número explícito apenas quando a loja controlar a sequência
+   * (ex.: retransmissão de uma nota rejeitada, que reaproveita o número).
+   */
+  number?: number;
   items: FiscalItem[];
   payments: FiscalPayment[];
   consumer?: Consumer;
@@ -137,7 +149,11 @@ export interface FiscalDocument {
   model: FiscalModel;
   environment: FiscalEnvironment;
   status: FiscalStatus;
-  number: number;
+  /**
+   * Número da nota. Ausente enquanto o provedor ainda não numerou (ADR-037):
+   * só é conhecido depois da autorização quando a numeração é do provedor.
+   */
+  number?: number;
   series: number;
   /** Chave de acesso (44 dígitos) — presente quando autorizado. */
   accessKey?: string;

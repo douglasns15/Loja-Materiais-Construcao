@@ -126,6 +126,7 @@ Foco: **fechar o ciclo comercial** e o módulo de material de construção. Depo
 | **Exportação para o contador** | Envio mensal de dados; com NFC-e boa parte vem dos XMLs | — |
 | **Offline-first completo** | Caixa 100% sem internet | Venda offline entregue ([ADR-011](adr/ADR-011-fila-de-sincronizacao-offline.md)); falta cobertura total |
 | **Usuário multi-loja** | Um operador atuando em mais de uma loja | [ADR-014](adr/ADR-014-usuario-multi-loja.md) segue **Proposto**, não implementado |
+| **Empresa agrupando lojas** | Rede/matriz-filial: catálogo e preços compartilhados, fatura consolidada | Decisão de **adiar** registrada em [ADR-038](adr/ADR-038-empresa-acima-da-loja.md), com as invariantes já fixadas. Gatilho: o 1º cliente com duas lojas do mesmo dono |
 
 ---
 
@@ -172,7 +173,7 @@ Cada item abaixo é uma decisão real com trade-offs — exatamente o material d
 
 **Go-live**
 
-- **Emissão fiscal:** qual provedor? Onde guardar o certificado A1 com segurança? Como a contingência offline conversa com a fila de sincronização? → candidato a **nova ADR** (ADR-027+; o número ADR-026 já é a dívida do cliente).
+- ~~**Emissão fiscal:** qual provedor? Onde guardar o certificado A1 com segurança? Como a contingência offline conversa com a fila de sincronização?~~ **Respondido** no [ADR-037](adr/ADR-037-emissao-fiscal-nfce.md) (Focus NFe; certificado fica no provedor; contingência reusa a fila do ADR-011).
 - **Monetização:** quantos planos? O que entra no plano de entrada? A nota fiscal é cobrada à parte (custo variável) ou embutida?
 - **Importação de catálogo:** formato livre com De-Para (como na NF-e) ou template fixo?
 

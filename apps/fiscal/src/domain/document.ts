@@ -124,7 +124,9 @@ export function validateIssueRequest(request: IssueRequest): ValidationIssue[] {
   if (!Number.isInteger(request.issuer.series) || request.issuer.series < 1 || request.issuer.series > 999) {
     issues.push({ field: 'issuer.series', message: 'Série deve estar entre 1 e 999.' });
   }
-  if (!Number.isInteger(request.number) || request.number < 1) {
+  // Numeração é opcional (ADR-037): ausente ⇒ quem numera é o provedor.
+  // Quando informada, precisa ser um inteiro positivo válido.
+  if (request.number !== undefined && (!Number.isInteger(request.number) || request.number < 1)) {
     issues.push({ field: 'number', message: 'Número da nota deve ser inteiro positivo.' });
   }
 

@@ -116,6 +116,10 @@ export class FiscalService {
         accessKey: outcome.accessKey,
         protocol: outcome.protocol,
         authorizedAt: outcome.authorizedAt,
+        // A numeração pode ser do provedor (ADR-037): o número que vale é o que
+        // ele devolve, não o que enviamos — daí sobrescrever `base.number`.
+        number: outcome.number,
+        series: outcome.series,
       };
       await this.store.save(document);
       return { kind: 'ISSUED', document };
