@@ -48,9 +48,6 @@ http://localhost:3000/
 
 <> Pode aparecer nos clientes com crédito da loja, ao clicar, mostrar o que gerou aquele crédito. Importante.. inclusive o código da venda que gerou aquele crédito
 
-<> Na devolução, precisamos considerar que caso o item tenha sido pago com desconto, na devolução inteira ou parcial deste item .. o valor correspondente tem que ser com o valor pago por esse item.. Inclusive, já deixa o gancho para implementarmos o desconto por item no PDV
- <> Outro ponto, quando selecionamos devolução > troca por outro item, ele só pode finalizar e retornar para o estoque, quando o processo é concluído no PDV, se eu atualizar a página, percebi que o Vale troca some e os itens voltam para o estoque como se a transação tivesse sido realmente feita.. E tmbm na tarja azul, se eu clicar em Cancelar Troca, percebi que não funciona, pois os itens tmbm voltam ao estoque, mesmo eu tendo clicado nesse botão.
-
 ## Subir servidor
 
 cd C:\Users\Douglas\Documents\GitHub\Loja-Materiais-Construcao
