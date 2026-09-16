@@ -122,8 +122,11 @@
 2. **Esperado:** o banner de troca **não reaparece** (sessionStorage consumido). (Se por algum caminho um `exchangeReturnId` já usado for reenviado, o servidor responde **"Este vale-troca já foi usado em outra venda."**)
 
 ### F3.5 — "Cancelar troca" no banner
-1. Faça uma troca até abrir o PDV com o banner. Clique **Cancelar troca**.
-2. **Esperado:** o banner some, o "a pagar" volta ao total cheio. (A devolução já registrada permanece como um vale **não consumido** — comportamento aceito na v1; anotar.)
+> **Atualizado 2026-09-16 (troca ATÔMICA — ver [ADR-033 §Revisão 2026-09-16]):** a troca deixou de
+> gravar a devolução adiantada. Agora **nada é gravado até concluir a venda** — o cancelamento (e
+> atualizar a página) **não** deixa vale órfão nem devolve estoque. O antigo "aceito na v1" foi resolvido.
+1. Faça uma troca até abrir o PDV com o banner. Clique **Cancelar troca** (ou **atualize a página**).
+2. **Esperado:** o banner some, o "a pagar" volta ao total cheio, e a venda de origem **fica intacta** — o estoque **não** volta e **não** há devolução `EXCHANGE` órfã (nada foi gravado).
 
 ### F3.6 — Troca de item DEFEITUOSO
 1. Venda **1× P1**. **Trocar** → P1 qtd 1, condição **Defeito** → Ir para a troca.
@@ -164,7 +167,7 @@ coerente ponta a ponta: baseline R$37 → esperado final **R$184,50**; os vales-
 | F1.0 · F1.1 · F1.2 · F1.3 · F1.4 · F1.5 | ✅ (6/6) | F1.1 defeito não repõe + fila (fornecedor CONSTRUJA); F1.4 mistura revenda+defeito via cancelamento; F1.5 duplo-clique resolveu 1× |
 | F2.0 · F2.1 · F2.2 · F2.3 · F2.4 · F2.5(1) · F2.6 | ✅ (7) | F2.1 estorno mesma forma R$0; F2.2 cartão→dinheiro R$25; F2.3 mista→dinheiro R$15; F2.4 parcial→mesma forma R$12,50 proporcional; F2.5(1) parcial→dinheiro R$10 |
 | F2.5(2) "Crédito na loja" | ⚠️ | **Não pôde ser disparado** — ver Achado #1 (não há como anexar cliente a venda paga). O gating (botão desabilitado sem cliente) está correto. |
-| F3.1 · F3.2 · F3.3 · F3.4 · F3.5 · F3.6 · F3.7 | ✅ (7) | F3.1 trade-up; F3.2 valor exato; F3.3 trade-down bloqueado; F3.4 vale não reutilizável; F3.5 cancelar troca (deixa vale órfão, aceito na v1); F3.6 troca de defeituoso; F3.7 bloqueio em fiado |
+| F3.1 · F3.2 · F3.3 · F3.4 · F3.5 · F3.6 · F3.7 | ✅ (7) | F3.1 trade-up; F3.2 valor exato; F3.3 trade-down bloqueado; F3.4 vale não reutilizável; F3.5 cancelar troca (~~deixa vale órfão, aceito na v1~~ → **RESOLVIDO 2026-09-16 pela troca ATÔMICA**); F3.6 troca de defeituoso; F3.7 bloqueio em fiado |
 | F3.8 troca online-only | ⏭️ | Offline não simulável neste navegador. |
 | R1 · R2 · R3 · R4 | ✅ (4) | R1 vendas normais; R2 fiado/crédito; R3 "Vender de novo" sem interferência do vale; R4 caixa esperado R$184,50 coerente |
 | R5 caixa-fechado | ⏭️ | Não fechei o caixa real (dados mantidos). |
@@ -178,7 +181,9 @@ coerente ponta a ponta: baseline R$37 → esperado final **R$184,50**; os vales-
    [ADR-034](../adr/ADR-034-cliente-opcional-em-venda.md) (Proposto).**
 2. **F3.3 (menor):** o trade-down é bloqueado por botão "Concluir" desabilitado + banner "valor ≥ o vale",
    não pelo toast previsto no roteiro. Comportamento correto, texto diferente.
-3. **F3.5:** cancelar a troca deixa a devolução como vale **não consumido** (aceito na v1, conforme roteiro).
+3. **F3.5:** ~~cancelar a troca deixa a devolução como vale **não consumido** (aceito na v1, conforme roteiro).~~
+   **RESOLVIDO 2026-09-16:** a troca virou ATÔMICA — a devolução só é gravada ao concluir a venda, então
+   cancelar (ou atualizar a página) não deixa vale órfão nem devolve estoque. Ver [ADR-033 §Revisão 2026-09-16].
 
 **Conclusão:** todo o comportamento específico da ADR-033 que pôde ser exercitado **passou**. Os 3 itens
 não-verdes são 1 limitação de fluxo pré-existente (Achado #1), 1 diferença de texto (F3.3) e 1 pendência de

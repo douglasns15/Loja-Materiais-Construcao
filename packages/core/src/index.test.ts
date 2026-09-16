@@ -47,6 +47,7 @@ import {
   distributeAccountPayment,
   debtBalance,
   debtStatusAfter,
+  itemPaidValue,
   returnableBaseQty,
   isValidPartialReturn,
   applyItemReturn,
@@ -741,6 +742,41 @@ describe('devolução/troca por item + crédito (ADR-022 Fatia B)', () => {
     expect(b).toEqual({ returnedBaseQty: 10, fullyReturned: true });
   });
 
+  it('itemPaidValue: sem desconto de pedido = itemTotal × fração devolvida', () => {
+    // Linha de 3 un a R$ 10 = R$ 30; devolve 3 → R$ 30; devolve 1 → R$ 10.
+    expect(itemPaidValue({ itemTotal: 30, soldQty: 3, returnQty: 3, orderSubtotal: 30 })).toBe(30);
+    expect(itemPaidValue({ itemTotal: 30, soldQty: 3, returnQty: 1, orderSubtotal: 30 })).toBe(10);
+  });
+
+  it('itemPaidValue: desconto por item já vem em itemTotal (gancho do desconto por linha)', () => {
+    // Linha de 3 un a R$ 10 com R$ 6 de desconto por item = itemTotal 24; devolver tudo estorna 24
+    // (não 30). Subtotal do pedido = 24 (só esta linha), sem desconto de pedido.
+    expect(itemPaidValue({ itemTotal: 24, soldQty: 3, returnQty: 3, orderSubtotal: 24 })).toBe(24);
+    // Devolver 1 de 3 → 24/3 = 8.
+    expect(itemPaidValue({ itemTotal: 24, soldQty: 3, returnQty: 1, orderSubtotal: 24 })).toBe(8);
+  });
+
+  it('itemPaidValue: rateia o desconto do PEDIDO proporcional à linha', () => {
+    // Carrinho: item A 30 + item B 70 = subtotal 100, com R$ 10 de desconto de pedido (paga 90).
+    // Devolver A inteiro deve estornar 30 × 90/100 = 27 (não 30).
+    expect(
+      itemPaidValue({ itemTotal: 30, soldQty: 1, returnQty: 1, orderSubtotal: 100, orderDiscountAmount: 10 }),
+    ).toBe(27);
+    // Devolver B inteiro → 70 × 90/100 = 63. A soma bate com o pago (90).
+    expect(
+      itemPaidValue({ itemTotal: 70, soldQty: 1, returnQty: 1, orderSubtotal: 100, orderDiscountAmount: 10 }),
+    ).toBe(63);
+  });
+
+  it('itemPaidValue: robusto a bordas (soldQty 0, subtotal 0, desconto ≥ subtotal)', () => {
+    expect(itemPaidValue({ itemTotal: 30, soldQty: 0, returnQty: 1, orderSubtotal: 30 })).toBe(0);
+    expect(itemPaidValue({ itemTotal: 0, soldQty: 1, returnQty: 1, orderSubtotal: 0 })).toBe(0);
+    // Desconto do pedido ≥ subtotal (não deveria ocorrer; clamp evita valor negativo) → 0.
+    expect(
+      itemPaidValue({ itemTotal: 30, soldQty: 1, returnQty: 1, orderSubtotal: 30, orderDiscountAmount: 40 }),
+    ).toBe(0);
+  });
+
   it('splitReturnValue: abate a dívida primeiro, resto é excedente', () => {
     // Venda a prazo com R$ 40 de saldo devedor; devolve R$ 30 → abate 30, excedente 0.
     expect(splitReturnValue(30, 40)).toEqual({ abated: 30, excess: 0 });
@@ -1232,7 +1268,14 @@ describe('ADR-015 — venda em par', () => {
         { productName: 'Bucha nº10', quantity: 1, total: 0.17, pairGroup: 1 },
       ]);
       expect(lines).toEqual([
-        { label: 'Parafuso nº10 + Bucha nº10', quantity: 1, total: 0.7, isPair: true },
+        {
+          label: 'Parafuso nº10 + Bucha nº10',
+          quantity: 1,
+          total: 0.7,
+          isPair: true,
+          discount: 0,
+          returnedQuantity: 0,
+        },
       ]);
     });
 
@@ -1260,6 +1303,8 @@ describe('ADR-015 — venda em par', () => {
         quantity: 2,
         total: 1.4,
         isPair: true,
+        discount: 0,
+        returnedQuantity: 0,
       });
       expect(lines[1].label).toBe('Cimento');
       expect(lines[2].isPair).toBe(true);
@@ -1282,7 +1327,7 @@ describe('ADR-015 — venda em par', () => {
         { productName: 'Parafuso', quantity: 1, total: 0.53, pairGroup: 1 },
       ]);
       expect(lines).toEqual([
-        { label: 'Parafuso', quantity: 1, total: 0.53, isPair: false },
+        { label: 'Parafuso', quantity: 1, total: 0.53, isPair: false, discount: 0, returnedQuantity: 0 },
       ]);
     });
 
@@ -1296,7 +1341,37 @@ describe('ADR-015 — venda em par', () => {
         quantity: 2,
         total: 1.4,
         isPair: true,
+        discount: 0,
+        returnedQuantity: 0,
       });
+    });
+
+    it('deriva o desconto por item (quantidade × preço − total) quando há unitPrice', () => {
+      const lines = groupPairedItems([
+        { productName: 'Argamassa', quantity: 2, unitPrice: 18.5, total: 34.5 }, // 37 − 2,50
+        { productName: 'Cimento', quantity: 1, unitPrice: 37, total: 36 }, // 37 − 1,00
+      ]);
+      expect(lines[0].discount).toBe(2.5);
+      expect(lines[1].discount).toBe(1);
+    });
+
+    it('converte o devolvido (base) para a unidade vendida e usa o maior lado no par', () => {
+      // Avulso: vendeu 4 (base 4), devolveu 1 base → 1 na unidade vendida.
+      const [avulso] = groupPairedItems([
+        { productName: 'Tijolo', quantity: 4, total: 40, baseQuantity: 4, returnedBaseQty: 1 },
+      ]);
+      expect(avulso?.returnedQuantity).toBe(1);
+      // Embalagem: vendeu 2 rolos (base 200 m), devolveu 100 m → 1 rolo.
+      const [rolo] = groupPairedItems([
+        { productName: 'Fio', quantity: 2, total: 300, baseQuantity: 200, returnedBaseQty: 100 },
+      ]);
+      expect(rolo?.returnedQuantity).toBe(1);
+      // Par: um lado devolveu 1, o outro 0 → a linha do par mostra 1 (devolvidos juntos).
+      const [par] = groupPairedItems([
+        { productName: 'Parafuso', quantity: 2, total: 1, pairGroup: 1, baseQuantity: 2, returnedBaseQty: 1 },
+        { productName: 'Bucha', quantity: 2, total: 1, pairGroup: 1, baseQuantity: 2, returnedBaseQty: 0 },
+      ]);
+      expect(par?.returnedQuantity).toBe(1);
     });
 
     it('pedido antigo (sem pairGroup em lugar nenhum) passa intacto', () => {

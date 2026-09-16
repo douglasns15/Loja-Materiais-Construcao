@@ -83,3 +83,7 @@ A lista `GET /orders?scope=all` passa a expor, por venda, um resumo: `returnedVa
 ## Próximos passos
 
 > **Status:** Aceito (Owner aprovou as 3 decisões no E2E). Implementar a fatia única acima; gates de sempre (core+testes, tsc, build); deploy API+web; E2E do Owner; push. Sem migration.
+
+## Adendo 2026-09-16 — Valor da devolução = valor PAGO (desconto por item + do pedido)
+
+A devolução (parcial ou total) e a troca passam a estornar o **valor efetivamente pago** por item, não o preço de tabela. Função pura `itemPaidValue(itemTotal, soldQty, returnQty, orderSubtotal, orderDiscountAmount)` no `packages/core` (+ testes, regra 2): o desconto **por item** já está em `OrderItem.total`; o desconto **do pedido** (`Order.discountAmount`) é rateado proporcionalmente ao peso da linha no subtotal; frete não é ratateado (serviço já prestado). Usada como fonte única no servidor (`prepareReturnLines`) e no preview do `ReturnItemsModal`. Habilita o **desconto por item no PDV** (ADR-036): `saleItemSchema.discount`/`QuoteItem.discount`/`cartItemSchema.discount` já existiam; o PDV agora expõe o campo por linha (avulsa; par fica de fora na v1) e o comprovante imprime o total líquido. Sem migration.

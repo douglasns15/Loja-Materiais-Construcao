@@ -113,6 +113,11 @@ type Search = { type: SearchType; term: string };
 
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+/** Quantidade sem casas inúteis (5 em vez de 5,0000; mantém frações reais como 2,5). */
+const fmtQty = (v: number) => {
+  const n = Number(v);
+  return Number.isInteger(n) ? String(n) : String(Number(n.toFixed(2)));
+};
 /** Monta a query de `GET /orders?scope=all` com cursor, período, ordenação e busca.
  *  Toda busca (código/cliente/valor) procura em TODO o histórico — o período é ignorado pelo
  *  servidor. Código casa o inteiro `orderNumber` (0 ou 1 venda); cliente casa por nome
@@ -813,18 +818,57 @@ export default function VendasPage() {
                 </div>
 
                 <ul className="mt-2 divide-y divide-gray-100 border-t border-gray-100 pt-2 text-sm">
-                  {/* Par (ADR-015): os dois itens aparecem como uma linha só, igual ao comprovante. */}
-                  {groupPairedItems(o.items).map((line, idx) => (
-                    <li key={idx} className="flex justify-between py-1 text-gray-600">
-                      <span>
-                        {line.quantity}
-                        {line.isPair ? ` par${line.quantity > 1 ? 'es' : ''} ` : '× '}
-                        {line.label}
-                      </span>
-                      <span>{BRL(line.total)}</span>
-                    </li>
-                  ))}
+                  {/* Par (ADR-015): os dois itens aparecem como uma linha só, igual ao comprovante.
+                      ADR-036: desconto por item + o que sobrou após devolução (qtd/valor antigos
+                      riscados → novos), derivados no core (`groupPairedItems`). */}
+                  {groupPairedItems(o.items).map((line, idx) => {
+                    const hasReturn = line.returnedQuantity > 0.0001;
+                    const remainingQty = Number((line.quantity - line.returnedQuantity).toFixed(4));
+                    const remainingTotal =
+                      line.quantity > 0
+                        ? Number(((line.total * remainingQty) / line.quantity).toFixed(2))
+                        : line.total;
+                    return (
+                      <li key={idx} className="flex justify-between gap-2 py-1 text-gray-600">
+                        <span className="min-w-0">
+                          {hasReturn ? (
+                            <>
+                              <span className="text-gray-400 line-through">{fmtQty(line.quantity)}</span>{' '}
+                              <span className="font-medium text-orange-700">{fmtQty(remainingQty)}</span>
+                            </>
+                          ) : (
+                            fmtQty(line.quantity)
+                          )}
+                          {line.isPair ? ` par${line.quantity > 1 ? 'es' : ''} ` : '× '}
+                          {line.label}
+                          {line.discount > 0 && (
+                            <span className="text-xs text-emerald-600"> · desc. {BRL(line.discount)}</span>
+                          )}
+                          {hasReturn && (
+                            <span className="text-xs text-orange-600"> · devolveu {fmtQty(line.returnedQuantity)}</span>
+                          )}
+                        </span>
+                        {hasReturn ? (
+                          <span className="shrink-0 text-right">
+                            <span className="mr-1 text-xs text-gray-400 line-through">{BRL(line.total)}</span>
+                            <span className="font-medium text-orange-700">{BRL(remainingTotal)}</span>
+                          </span>
+                        ) : (
+                          <span className="shrink-0">{BRL(line.total)}</span>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
+
+                {/* ADR-036: desconto do PEDIDO (além dos descontos por item, que já aparecem na linha).
+                    Deixa explícito no card que a venda teve desconto. */}
+                {Number(o.discountAmount) > 0 && (
+                  <div className="mt-1 flex justify-between text-sm text-emerald-700">
+                    <span>Desconto do pedido</span>
+                    <span>− {BRL(o.discountAmount)}</span>
+                  </div>
+                )}
 
                 {/* Pagamento: formas com valores + "Dinheiro recebido"/"Troco" (migration 0024). O troco
                     é informativo (não entra no caixa; ADR-016). `changeAmount` null = venda antiga sem o
@@ -1075,6 +1119,8 @@ export default function VendasPage() {
           hasCustomer={!!returnOrder.customerId}
           payments={returnOrder.payments.map((p) => ({ method: p.method, amount: Number(p.amount) }))}
           orderTotal={Number(returnOrder.total)}
+          orderSubtotal={Number(returnOrder.subtotal)}
+          orderDiscountAmount={Number(returnOrder.discountAmount)}
           isOpenSessionOrder={caixaOpen && returnOrder.cashSession?.id === openSessionId}
           onClose={() => setReturnOrder(null)}
           onDone={(message: string) => {
@@ -1083,7 +1129,9 @@ export default function VendasPage() {
             loadOrders().catch((e) => setError((e as Error).message));
           }}
           onExchange={(ctx) => {
-            // Troca (ADR-033, Fatia 3): guarda o vale e abre o PDV para montar a nova compra.
+            // Troca ATÔMICA (ADR-033, Fatia 3 revisada): NADA foi gravado — guarda só a intenção da
+            // troca (itens/motivo/vale) e abre o PDV. O servidor devolve o estoque e conclui a venda
+            // na mesma transação; se o operador desistir ou atualizar, o estoque fica intacto.
             writeExchangePayload(ctx);
             setReturnOrder(null);
             router.push('/venda');

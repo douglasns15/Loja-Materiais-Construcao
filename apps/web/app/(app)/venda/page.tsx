@@ -47,7 +47,7 @@ import {
   type ReorderPlan,
 } from '@nexoloja/core';
 import { takeReorderPayload, REORDER_SIGNAL, signalReorderApplied } from '@/lib/reorder';
-import { takeExchangePayload } from '@/lib/exchange';
+import { takeExchangePayload, type ExchangePayload } from '@/lib/exchange';
 import { useShortcuts } from '@/lib/shortcuts';
 import { apiGet, apiPatch, apiPost } from '@/lib/api';
 import { cacheCashSession, readCachedCashSession } from '@/lib/cashSessionCache';
@@ -133,6 +133,14 @@ type CartItem = {
   surchargeDebit: number;
   surchargeCredit: number;
   /**
+   * Desconto POR ITEM (ADR-036) — valor absoluto em R$ **da linha inteira** (não por unidade), como o
+   * `discount` do core (`total = quantidade × preço − desconto`). Opcional; ausente/0 = sem desconto,
+   * o caso da maioria das vendas. Só linhas AVULSAS: no par o preço é rateado entre dois produtos, então
+   * o desconto por item fica de fora (v1). Travado ao bruto da linha na hora de usar (`lineDiscountOf`),
+   * então nunca deixa o total negativo mesmo se a quantidade mudar depois de digitado.
+   */
+  discount?: number;
+  /**
    * Venda em par (ADR-015). Presente ⇒ esta linha é **um par**: no carrinho e no comprovante
    * aparece como UMA linha ("Parafuso + Bucha nº10") com `unitPrice` = preço do par, mas na
    * hora de enviar é **expandida em dois itens** com os preços rateados e o mesmo `pairGroup`
@@ -155,6 +163,16 @@ type CartItem = {
 
 /** Rótulo curto de uma unidade (sem o parêntese): "Metro (m)" → "Metro"; "Rolo" → "Rolo". */
 const unitShort = (u: UnitType) => unitTypeLabels[u].replace(/\s*\(.*\)$/, '');
+
+// Desconto por item (ADR-036) — helpers puros compartilhados entre o carrinho, os totais e o
+// comprovante. `unitPrice` aqui é o da linha já reprecificada (pricedCart, com o acréscimo de
+// cartão embutido), então o desconto incide sobre o preço realmente cobrado.
+/** Total BRUTO da linha (preço da unidade vendida × quantidade), sem o desconto por item. */
+const lineGross = (i: CartItem) => Number((i.unitPrice * i.quantity).toFixed(2));
+/** Desconto por item aplicável (R$ da linha), travado ao bruto e nunca negativo. */
+const lineDiscountOf = (i: CartItem) => Math.min(Math.max(0, i.discount ?? 0), lineGross(i));
+/** Total LÍQUIDO da linha = bruto − desconto por item. Casa com `calcSaleItemTotal` do core. */
+const lineNet = (i: CartItem) => Number((lineGross(i) - lineDiscountOf(i)).toFixed(2));
 
 /** Miniatura do produto no catálogo do PDV: iniciais em bloco tingido com a cor da marca.
  *  Realce visual (Opção A) custo-zero — não depende de foto cadastrada; puramente decorativa. */
@@ -248,7 +266,9 @@ const BRL = (v: string | number) =>
 
 /** Lista de itens + subtotal/desconto/total (reusado em revisão, venda e orçamento). */
 function Summary({ items, total, discount }: { items: CartItem[]; total: number; discount: number }) {
-  const subtotal = items.reduce((acc, i) => acc + i.unitPrice * i.quantity, 0);
+  // Subtotal já LÍQUIDO do desconto por item (ADR-036): cada linha entra pelo seu total líquido, e o
+  // "Desconto" abaixo é só o do PEDIDO. subtotal − desconto do pedido = total (mesma conta do core).
+  const subtotal = items.reduce((acc, i) => acc + lineNet(i), 0);
   return (
     <>
       <ul className="divide-y divide-gray-100 text-sm">
@@ -265,8 +285,11 @@ function Summary({ items, total, discount }: { items: CartItem[]; total: number;
                   (≈ {i.quantity * i.conversionFactor} {unitShort(i.baseUnitType)})
                 </span>
               )}
+              {lineDiscountOf(i) > 0 && (
+                <span className="text-xs text-emerald-600"> · desc. {BRL(lineDiscountOf(i))}</span>
+              )}
             </span>
-            <span>{BRL(i.unitPrice * i.quantity)}</span>
+            <span>{BRL(lineNet(i))}</span>
           </li>
         ))}
       </ul>
@@ -460,11 +483,12 @@ export default function VendaPage() {
   // para `/venda` é no-op e o efeito de montagem não roda de novo. Cada disparo do sinal libera o
   // guard e faz o efeito de consumo rodar mais uma vez.
   const [reorderSignal, setReorderSignal] = useState(0);
-  // Troca (ADR-033, Fatia 3): vale-troca trazido do Histórico. `null` = venda normal. O vale abate o
-  // "a pagar" e vai como `exchangeReturnId` na venda; o total precisa ser ≥ o vale (sem troco na troca).
-  const [exchange, setExchange] = useState<{ returnId: string; credit: number; fromOrderNumber: number } | null>(
-    null,
-  );
+  // Troca ATÔMICA (ADR-033, Fatia 3 revisada): intenção da troca trazida do Histórico. `null` = venda
+  // normal. Nada foi gravado no servidor — o vale (`credit`) abate o "a pagar" e, ao concluir, a venda
+  // envia `exchangeReturn` (fromOrderId + itens + motivo) para o servidor devolver o estoque e fechar
+  // a venda numa transação só. Cancelar a troca ou atualizar a página não devolve estoque (nada
+  // gravado). O total precisa ser ≥ o vale (sem troco na troca).
+  const [exchange, setExchange] = useState<ExchangePayload | null>(null);
   const exchangeConsumedRef = useRef(false);
   // Atalhos de teclado (ADR-032, Fatia 3): o campo de busca de produto (foco por F9) e o registro
   // das ações do PDV no motor global.
@@ -935,7 +959,13 @@ export default function VendaPage() {
   const totals = useMemo(
     () =>
       calcSaleTotals(
-        cartToSaleItems().map((i) => ({ quantity: i.quantity, unitPrice: i.unitPrice })),
+        // Inclui o desconto POR ITEM (ADR-036) para o subtotal/total baterem com o que o servidor
+        // calcula sobre EXATAMENTE os itens enviados (`cartToSaleItems`) — front e servidor não divergem.
+        cartToSaleItems().map((i) => ({
+          quantity: i.quantity,
+          unitPrice: i.unitPrice,
+          discount: (i as { discount?: number }).discount,
+        })),
         { discountAmount: discountValue },
       ),
     // `primaryMethod` entra nas deps porque o acréscimo por forma de pagamento (ADR-016) reprecifica
@@ -1115,6 +1145,8 @@ export default function VendaPage() {
             quantity: c.quantity,
             unitPrice: c.unitPrice,
             saleMode: c.saleMode, // EF-3: o servidor converte a baixa p/ unidade-base
+            // Desconto por item (ADR-036): só linha avulsa; travado ao bruto. Omitido quando 0.
+            ...(lineDiscountOf(c) > 0 ? { discount: lineDiscountOf(c) } : {}),
             ...lineDate(c.key),
           },
         ];
@@ -1484,6 +1516,19 @@ export default function VendaPage() {
     setCart(cart.map((c) => (c.key === key ? { ...c, quantity: nextQty } : c)));
   }
 
+  /**
+   * Desconto por item (ADR-036): grava o desconto absoluto da LINHA (R$) na cesta. Só linhas
+   * avulsas — o par tem o preço rateado entre dois produtos, então o desconto por item fica fora (v1).
+   * Guarda o valor cru (aceita vírgula) e nunca negativo; a trava ao bruto vive em `lineDiscountOf`,
+   * então mudar a quantidade depois nunca deixa o total negativo. 0/vazio remove o desconto.
+   */
+  function setLineDiscount(key: string, canonical: string) {
+    setError(null);
+    // `canonical` já vem normalizado do MoneyInput (ponto decimal, '' se vazio).
+    const v = Math.max(0, Number(canonical) || 0);
+    setCart(cart.map((c) => (c.key === key ? { ...c, discount: v > 0 ? v : undefined } : c)));
+  }
+
   /** "Concluir venda" agora só abre a REVISÃO — nada é gravado ainda. */
   function onConcluir() {
     setError(null);
@@ -1677,9 +1722,13 @@ export default function VendaPage() {
       // Conversão de orçamento (ADR-024, 2.B): quando o PDV foi aberto a partir de um orçamento, a
       // venda marca-o CONVERTED (no servidor, na transação da venda). Online-only.
       ...(sourceQuote ? { quoteId: sourceQuote.id } : {}),
-      // Troca (ADR-033, Fatia 3): consome o vale-troca; o servidor grava a parcela EXCHANGE_CREDIT e
-      // amarra a devolução a esta venda. Online-only.
-      ...(exchange ? { exchangeReturnId: exchange.returnId } : {}),
+      // Troca ATÔMICA (ADR-033, Fatia 3 revisada): executa a devolução da venda de origem + esta
+      // compra na MESMA transação do servidor. Envia os itens/motivo escolhidos no Histórico; o
+      // servidor revalida as quantidades devolvíveis, estorna o estoque, grava a parcela
+      // EXCHANGE_CREDIT e amarra a devolução a esta venda. Online-only.
+      ...(exchange
+        ? { exchangeReturn: { fromOrderId: exchange.fromOrderId, reason: exchange.reason, items: exchange.items } }
+        : {}),
     };
     const parsed = createSaleSchema.safeParse(payload);
     if (!parsed.success) {
@@ -1750,7 +1799,10 @@ export default function VendaPage() {
             saleMode: c.saleMode,
             quantity: c.quantity,
             unitPrice: c.unitPrice,
-            total: Number((c.unitPrice * c.quantity).toFixed(2)),
+            // Desconto por item (ADR-036): o servidor recalcula o total por `calcSaleItemTotal` (que
+            // subtrai o desconto), então mandamos o desconto e o total já LÍQUIDO, coerentes.
+            ...(lineDiscountOf(c) > 0 ? { discount: lineDiscountOf(c) } : {}),
+            total: lineNet(c),
           },
         ];
       }
@@ -2262,6 +2314,9 @@ export default function VendaPage() {
                 : i.name,
             quantity: i.quantity,
             unitPrice: i.unitPrice,
+            // Desconto por item (ADR-036): o comprovante imprime o total líquido da linha. Par não
+            // tem desconto por item (v1), então `lineDiscountOf` já devolve 0 nesses casos.
+            ...(lineDiscountOf(i) > 0 ? { discount: lineDiscountOf(i) } : {}),
           }))}
           total={view.total}
           discount={view.discount}
@@ -2310,8 +2365,9 @@ export default function VendaPage() {
         </div>
       )}
 
-      {/* Troca (ADR-033, Fatia 3): banner do vale-troca trazido do Histórico. Abate o "a pagar" e
-          vai como `exchangeReturnId` na venda. O operador pode desistir da troca (limpa o vale). */}
+      {/* Troca ATÔMICA (ADR-033, Fatia 3 revisada): banner da troca trazida do Histórico. O vale abate
+          o "a pagar" e vai como `exchangeReturn` ao concluir. "Cancelar troca" apenas limpa a intenção
+          local — nada foi gravado, então o estoque da venda de origem fica intacto. */}
       {exchange && (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm">
           <p className="font-medium text-emerald-900">
@@ -2691,7 +2747,16 @@ export default function VendaPage() {
                     </button>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    <span className="font-semibold tabular-nums">{BRL(i.unitPrice * i.quantity)}</span>
+                    {/* Total da linha JÁ LÍQUIDO do desconto por item (ADR-036); com desconto, o bruto
+                        aparece riscado ao lado para o operador conferir. */}
+                    <span className="text-right leading-tight">
+                      {lineDiscountOf(i) > 0 && (
+                        <span className="mr-1 text-xs text-gray-400 line-through tabular-nums">
+                          {BRL(lineGross(i))}
+                        </span>
+                      )}
+                      <span className="font-semibold tabular-nums">{BRL(lineNet(i))}</span>
+                    </span>
                     <button
                       onClick={() => removeFromCart(i.key)}
                       className="rounded px-1 text-lg leading-none text-gray-400 hover:text-red-600"
@@ -2770,6 +2835,28 @@ export default function VendaPage() {
                   </div>
                   <span className="shrink-0 text-xs text-gray-500 tabular-nums">{BRL(i.unitPrice)}/un</span>
                 </div>
+
+                {/* Nível 3 (ADR-036): desconto POR ITEM (R$ da linha). Só em linha avulsa — no par o
+                    preço é rateado entre dois produtos, então o desconto por item fica de fora (v1). */}
+                {!i.pair && (
+                  <div className="mt-1.5 flex items-center justify-between gap-2">
+                    <label className="flex items-center gap-1 text-xs text-gray-500">
+                      <span className="shrink-0">Desconto</span>
+                      <MoneyInput
+                        value={i.discount != null ? String(i.discount) : ''}
+                        onChange={(v) => setLineDiscount(i.key, v)}
+                        placeholder="R$ 0,00"
+                        className="w-24 rounded border border-gray-300 px-1.5 py-1 text-right"
+                        aria-label={`Desconto de ${i.name}`}
+                      />
+                    </label>
+                    {lineDiscountOf(i) > 0 && (
+                      <span className="shrink-0 text-xs text-emerald-600 tabular-nums">
+                        − {BRL(lineDiscountOf(i))}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             ))
           )}

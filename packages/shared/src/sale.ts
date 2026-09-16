@@ -20,8 +20,8 @@ export const STORE_CREDIT_METHOD = 'STORE_CREDIT';
 
 /**
  * Forma de pagamento "Vale-troca" (ADR-033, Fatia 3). Como o `STORE_CREDIT_METHOD`, NÃO é
- * selecionável no PDV — o servidor a grava quando uma venda consome o vale de uma troca
- * (`exchangeReturnId`). Não toca o caixa (o valor já foi reconhecido na devolução que o originou).
+ * selecionável no PDV — o servidor a grava quando uma venda conclui uma troca atômica
+ * (`exchangeReturn`). Não toca o caixa (o valor já foi reconhecido na devolução que o originou).
  */
 export const EXCHANGE_CREDIT_METHOD = 'EXCHANGE_CREDIT';
 
@@ -151,12 +151,31 @@ export const createSaleSchema = z.object({
    */
   quoteId: z.string().uuid().optional(),
   /**
-   * Troca (ADR-033, Fatia 3): quando presente, esta venda CONSOME o vale-troca de uma devolução com
-   * `intent = EXCHANGE`. O servidor valida o vale (não consumido, do tenant), grava uma parcela
-   * `EXCHANGE_CREDIT` = valor do vale e amarra a devolução a esta venda (`exchangeOrderId`). O total
-   * da venda deve ser ≥ o vale (sem "troco" na troca — v1). Online-only.
+   * Troca ATÔMICA (ADR-033, Fatia 3 revisada): quando presente, esta venda executa a DEVOLUÇÃO da
+   * venda de origem (`fromOrderId`) e a nova compra na MESMA transação. Antes a devolução era gravada
+   * adiantada (ao clicar "Ir para a troca") e o vale ficava pendente — se o operador atualizasse a
+   * página ou cancelasse a troca, os itens já tinham voltado ao estoque e ficava uma devolução órfã.
+   * Agora nada é gravado até concluir: o servidor valida as quantidades devolvíveis, calcula o VALOR
+   * PAGO (líquido de descontos — o vale), exige total da venda ≥ vale (sem "troco" na troca — v1),
+   * estorna o estoque (revenda volta / defeito vira defeituoso), cria a devolução `intent = EXCHANGE`
+   * já amarrada a esta venda (`exchangeOrderId`) e grava a parcela `EXCHANGE_CREDIT` = o vale.
+   * Online-only (a troca exige conexão).
    */
-  exchangeReturnId: z.string().uuid().optional(),
+  exchangeReturn: z
+    .object({
+      fromOrderId: z.string().uuid(),
+      reason: z.string().min(1).max(500),
+      items: z
+        .array(
+          z.object({
+            orderItemId: z.string().uuid(),
+            quantity: z.number().positive(), // na unidade VENDIDA (o servidor converte p/ base)
+            condition: z.enum(['GOOD', 'DEFECTIVE']).optional(), // ausente ⇒ GOOD (volta ao estoque)
+          }),
+        )
+        .min(1),
+    })
+    .optional(),
 });
 export type CreateSaleInput = z.infer<typeof createSaleSchema>;
 

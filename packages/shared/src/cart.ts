@@ -32,6 +32,13 @@ export const cartItemSchema = z.object({
   /** Acréscimo por forma de pagamento, por unidade vendida (ADR-016). 0 quando não há. */
   surchargeDebit: z.number().finite().nonnegative(),
   surchargeCredit: z.number().finite().nonnegative(),
+  /**
+   * Desconto POR ITEM (ADR-036), em R$ da LINHA inteira (não por unidade), como o `discount` do core
+   * (`total = quantidade × preço − desconto`). Opcional; ausente/0 = sem desconto, o caso comum. Só
+   * linha avulsa — o par tem o preço rateado entre dois produtos, então não leva desconto por item
+   * (v1). Persistido na cesta para o rascunho lembrar o desconto entre dispositivos.
+   */
+  discount: z.number().finite().nonnegative().optional(),
   /** Venda em par (ADR-015): presente ⇒ a linha é um par, expandido em dois itens no envio. */
   pair: z
     .object({

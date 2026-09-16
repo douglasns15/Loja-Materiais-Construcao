@@ -15,6 +15,7 @@ import {
   cancelCashRefund,
   cashOutForReturn,
   cashPaidOf,
+  itemPaidValue,
   receivableBalance,
   returnableBaseQty,
   splitReturnValue,
@@ -67,6 +68,8 @@ export function ReturnItemsModal({
   hasCustomer,
   payments,
   orderTotal,
+  orderSubtotal,
+  orderDiscountAmount,
   isOpenSessionOrder,
   onClose,
   onDone,
@@ -79,10 +82,20 @@ export function ReturnItemsModal({
   hasCustomer: boolean;
   payments: PaymentLike[];
   orderTotal: number;
+  // Base do "valor pago" por item na devolução (ADR-036): subtotal (Σ das linhas) e desconto do
+  // PEDIDO. O desconto POR ITEM já está em `Item.total`; o do pedido é rateado por `itemPaidValue`.
+  orderSubtotal: number;
+  orderDiscountAmount: number;
   isOpenSessionOrder: boolean;
   onClose: () => void;
   onDone: (message: string) => void;
-  onExchange: (ctx: { returnId: string; credit: number; fromOrderNumber: number }) => void;
+  onExchange: (ctx: {
+    fromOrderId: string;
+    fromOrderNumber: number;
+    credit: number;
+    reason: string;
+    items: { orderItemId: string; quantity: number; condition?: ReturnItemCondition }[];
+  }) => void;
 }) {
   const [intent, setIntent] = useState<Intent>('REFUND');
   // Quantidade a devolver por item (string do input, na unidade vendida).
@@ -151,7 +164,15 @@ export function ReturnItemsModal({
         capped = Math.min(q, r.returnableSold);
       }
       if (capped <= 0) continue;
-      totalValue += Number(r.it.total) * (capped / (r.soldQty || 1));
+      // Valor efetivamente PAGO por esta fatia da linha (ADR-036): desconto por item já em `total`;
+      // desconto do pedido rateado. Mesma função pura do servidor — front e servidor não divergem.
+      totalValue += itemPaidValue({
+        itemTotal: Number(r.it.total),
+        soldQty: r.soldQty || 1,
+        returnQty: capped,
+        orderSubtotal,
+        orderDiscountAmount,
+      });
       chosen.push({ orderItemId: r.it.id, quantity: capped, condition: condition[r.it.id] ?? 'GOOD' });
       if (Math.abs(capped - r.returnableSold) < 1e-6) fullRows += 1;
     }
@@ -168,7 +189,7 @@ export function ReturnItemsModal({
     const defectiveCount = chosen.filter((c) => c.condition === 'DEFECTIVE').length;
     const isFullReturn = eligibleRows > 0 && fullRows === eligibleRows && chosen.length === eligibleRows;
     return { totalValue, abated, excess, chosen, defectiveCount, isFullReturn };
-  }, [isCancel, rows, qty, condition, receivable]);
+  }, [isCancel, rows, qty, condition, receivable, orderSubtotal, orderDiscountAmount]);
 
   // Opções da forma do estorno conforme o caminho. Cancelamento não vira crédito (ADR-035).
   const refundOptions: ReturnTarget[] = isCancel
@@ -238,19 +259,30 @@ export function ReturnItemsModal({
     setBusy(true);
     try {
       if (intent === 'EXCHANGE') {
-        // Troca: registra a devolução como vale e leva o valor ao PDV (o onExchange navega).
-        const payload = { items: preview.chosen, reason: reason.trim(), intent: 'EXCHANGE' as const };
-        const parsed = createReturnSchema.safeParse(payload);
+        // Troca ATÔMICA (ADR-033, Fatia 3 revisada): NÃO grava nada aqui. Só valida localmente e leva
+        // a INTENÇÃO (itens/condições/motivo + o vale calculado) ao PDV. O servidor executa a
+        // devolução + a nova venda na MESMA transação ao concluir — cancelar/atualizar não devolve
+        // estoque, porque nada foi gravado. `createReturnSchema` valida o formato dos itens.
+        const parsed = createReturnSchema.safeParse({
+          items: preview.chosen,
+          reason: reason.trim(),
+          intent: 'EXCHANGE' as const,
+        });
         if (!parsed.success) {
           setError('Informe o motivo (mín. 3) e quantidades válidas.');
           setBusy(false);
           return;
         }
-        const res = await apiPost<PartialReturnResult>(`/orders/${orderId}/return-items`, parsed.data);
         onExchange({
-          returnId: res.returnId,
-          credit: res.exchangeCredit ?? res.totalValue,
+          fromOrderId: orderId,
           fromOrderNumber: orderNumber,
+          credit: preview.totalValue,
+          reason: reason.trim(),
+          items: preview.chosen.map((c) => ({
+            orderItemId: c.orderItemId,
+            quantity: c.quantity,
+            condition: c.condition,
+          })),
         });
         return;
       }

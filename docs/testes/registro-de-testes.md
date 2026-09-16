@@ -5944,3 +5944,17 @@ Ambiente: `nexoloja-web.imortal.workers.dev`, loja Demo, `owner@lojademo.com`. W
 **Verificação técnica:** typecheck 0 + build verde; confirmado que o Tailwind JIT gerou as classes arbitrárias (`auto-fit` presente no CSS do bundle). O gráfico "recebido por dia" (`min-w-[480px]`) já fica em wrapper `overflow-x-auto` → rola dentro do card.
 
 **Conclusão:** telas flutuantes reflowam corretamente pela largura do container. Commits `0b60d78` (Relatórios) + `826d5b1` (Histórico/Estoque) em `main` (push do Owner pendente).
+
+---
+
+## Troca atômica + valor pago na devolução + desconto por item — E2E do Owner (2026-09-16)
+
+Ambiente: `nexoloja-web.imortal.workers.dev`, loja Demo, `owner@lojademo.com`. API `d2cae1b4` + web deployado. **VALIDADO ✅** ("tudo validado com sucesso"). Sem migration.
+
+**Origem:** dois pedidos do Owner no uso real da devolução/troca (ADR-033).
+
+1. **Bug da troca (restock adiantado) → TROCA ATÔMICA.** Antes, escolher "Trocar por outro item" gravava a devolução na hora (restock + vale pendente) antes da nova venda: atualizar a página perdia o vale mas os itens já tinham voltado ao estoque, e "Cancelar troca" não revertia (devolução `EXCHANGE` órfã). Fecha o **achado F3.5** do E2E da ADR-033 (antes "aceito v1"). **Correção:** a devolução da troca roda na MESMA transação da venda (`POST /orders` com `exchangeReturn`); nada é gravado até concluir. `exchangeReturnId` saiu do contrato; `return-items` recusa `intent=EXCHANGE`.
+2. **Valor da devolução = valor PAGO** (`itemPaidValue`): desconto por item (já em `OrderItem.total`) + rateio do desconto do pedido; frete não volta. Fonte única no servidor (`prepareReturnLines`) e no preview do modal.
+3. **Desconto por item no PDV** (campo `MoneyInput` por linha avulsa; formata em R$ no blur). O card do Histórico passou a mostrar o desconto por linha/pedido e, na devolução, **risca a qtd e o valor antigos → novos** (`groupPairedItems` +campos `discount`/`returnedQuantity`).
+
+**Verificação:** core 378/378 (novos testes de `itemPaidValue` e `groupPairedItems`), tsc shared/api/web 0, next build OK (`/venda` 21,2 kB, `/vendas` 15 kB). Refinamentos pós-E2E (formatação do campo em R$ + card) redeployados só no web (API não usa `groupPairedItems`; sem mudança de contrato). **[ADR-033 §Revisão 2026-09-16] + [ADR-036 §Adendo 2026-09-16].**

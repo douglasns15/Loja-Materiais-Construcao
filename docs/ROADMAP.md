@@ -3,7 +3,24 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-09-10 — **TRÊS ADRs desta sessão NO AR + E2E do Owner VALIDADO
+> **Última atualização:** 2026-09-16 — **Troca ATÔMICA + valor pago na devolução + desconto por item
+> no PDV — NO AR + E2E do Owner VALIDADO ("tudo validado com sucesso"); sem migration; commit feito,
+> PUSH do Owner pendente.** Nasceu de dois pedidos do Owner no uso real. (1) **Bug da troca:** a
+> devolução da troca era gravada ADIANTADO (restock + vale) ao clicar "Ir para a troca" — atualizar a
+> página ou "Cancelar troca" deixava a mercadoria de volta ao estoque + devolução `EXCHANGE` órfã
+> (isto **fecha o achado F3.5 do E2E da ADR-033**, antes "aceito v1"). **Correção:** troca ATÔMICA — o
+> Histórico carrega só a INTENÇÃO; `POST /orders` recebe `exchangeReturn { fromOrderId, reason, items }`
+> e executa devolução + venda na MESMA transação (nada gravado até concluir). `exchangeReturnId` saiu
+> do contrato; `return-items` recusa `intent=EXCHANGE`. (2) **Valor da devolução = valor PAGO** (core
+> `itemPaidValue`: desconto por item já em `OrderItem.total` + rateio do desconto do pedido; frete não
+> volta) — e **desconto por item no PDV** (campo `MoneyInput` por linha avulsa; o "gancho" no
+> schema/core já existia). **Card do Histórico** passou a mostrar o desconto por linha/pedido e, na
+> devolução, **risca qtd/valor antigos → novos** (`groupPairedItems` +campos `discount`/
+> `returnedQuantity`). **Sem migration** (schema já suportava). **Gates:** core 378/378, tsc
+> shared/api/web 0, next build OK. **NO AR:** API `d2cae1b4` + web (redeploy dos refinamentos, smokes ✅).
+> **[ADR-033 §Revisão 2026-09-16](adr/ADR-033-devolucao-unificada-defeito-estorno-troca.md) + [ADR-036 §Adendo](adr/ADR-036-relatorios-coerentes-devolucoes-trocas-credito.md).**
+>
+> **Antes:** 2026-09-10 — **TRÊS ADRs desta sessão NO AR + E2E do Owner VALIDADO
 > (ADR-034, ADR-035, ADR-036) — sem migration; commit feito, PUSH do Owner pendente.** ADR-034
 > (cliente opcional na venda, web `ed5e4349`), ADR-035 (crédito no retorno + "Cancelar/Devolver" +
 > faturamento líquido, API `adc7c14c`), ADR-036 (relatórios coerentes + card do Histórico, API

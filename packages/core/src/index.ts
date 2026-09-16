@@ -401,6 +401,38 @@ export function applyItemReturn(
 }
 
 /**
+ * Valor efetivamente PAGO por uma quantidade devolvida de um item, para a devolução refletir o que
+ * o cliente pagou — não o preço de tabela (Issue de desconto, base p/ o desconto por item no PDV):
+ *  - o desconto POR ITEM já está embutido em `itemTotal` (`OrderItem.total = qty×preço − desconto`),
+ *    então nada extra a fazer para ele — é o "gancho" do desconto por linha do PDV;
+ *  - o desconto DO PEDIDO (`Order.discountAmount`, aplicado ao carrinho inteiro) é rateado
+ *    proporcionalmente ao peso da linha no subtotal — senão devolver 1 item de uma venda com
+ *    desconto geral estornaria mais do que se pagou por ele.
+ * Frete NÃO é rateado (serviço já prestado; não volta numa devolução de item). Aritmética a 2 casas.
+ *
+ * `returnQty/soldQty` é a fração da linha devolvida (na unidade vendida). Sem desconto de pedido
+ * (`orderDiscountAmount = 0`) o resultado é `itemTotal × returnQty/soldQty` — idêntico ao de sempre.
+ */
+export function itemPaidValue(params: {
+  itemTotal: number;
+  soldQty: number;
+  returnQty: number;
+  orderSubtotal: number;
+  orderDiscountAmount?: number;
+}): number {
+  const { itemTotal, soldQty, returnQty, orderSubtotal, orderDiscountAmount = 0 } = params;
+  if (soldQty <= 0) return 0;
+  // Rateio do desconto do pedido: fração do subtotal que SOBRA depois do desconto geral. Clamp em
+  // [0,1] por segurança (o desconto do pedido nunca deveria passar do subtotal — a UI já barra).
+  const keepFactor =
+    orderSubtotal > 0
+      ? Math.min(1, Math.max(0, (orderSubtotal - orderDiscountAmount) / orderSubtotal))
+      : 1;
+  const effectiveLine = itemTotal * keepFactor;
+  return Number((effectiveLine * (returnQty / soldQty)).toFixed(2));
+}
+
+/**
  * Reparte o valor devolvido `V` (ADR-022): primeiro **abate a dívida** daquela venda (até o saldo
  * devedor), e o que **sobra** é o EXCEDENTE (vira crédito na loja OU dinheiro, escolha do
  * operador). Numa venda à vista o saldo devedor é 0 ⇒ `V` inteiro é excedente. Aritmética em
@@ -1062,6 +1094,13 @@ export interface PairableItem {
   total: number | string;
   /** Agrupamento do par; itens com o mesmo valor não-nulo foram vendidos juntos. */
   pairGroup?: number | null;
+  /** Preço da unidade vendida (opcional). Com ele, a linha deriva o DESCONTO por item (ADR-036):
+   *  `desconto = quantidade × preço − total`. Ausente ⇒ desconto não é calculado (0). */
+  unitPrice?: number | string | null;
+  /** Quantidade em unidade-base (opcional; ausente ⇒ = quantity). Base p/ converter o devolvido. */
+  baseQuantity?: number | string | null;
+  /** Quanto (em unidade-base) já foi DEVOLVIDO desta linha (ADR-022/ADR-036). Ausente ⇒ 0. */
+  returnedBaseQty?: number | string | null;
 }
 
 /** Linha pronta para exibir/imprimir: um item avulso, ou um par já unificado. */
@@ -1073,6 +1112,11 @@ export interface DisplayLine {
   total: number;
   /** `true` quando a linha representa um par (dois produtos). */
   isPair: boolean;
+  /** Desconto por item da linha, em R$ (ADR-036). 0 quando não houve (ou `unitPrice` ausente). */
+  discount: number;
+  /** Quantidade DEVOLVIDA da linha, na unidade vendida (ADR-036). 0 quando nada foi devolvido. No
+   *  par, é o maior devolvido entre os dois lados (eles são devolvidos juntos). */
+  returnedQuantity: number;
 }
 
 /**
@@ -1090,26 +1134,48 @@ export function groupPairedItems(items: PairableItem[]): DisplayLine[] {
   // Posição da linha de cada grupo já iniciado, para juntar o segundo item no mesmo lugar.
   const groupLineIndex = new Map<number, number>();
 
+  // Desconto por item (ADR-036): `quantidade × preço − total`, ≥ 0. Sem `unitPrice` ⇒ 0.
+  const itemDiscount = (it: PairableItem): number => {
+    if (it.unitPrice == null) return 0;
+    const gross = Number(it.quantity) * Number(it.unitPrice);
+    return Number(Math.max(0, gross - Number(it.total)).toFixed(2));
+  };
+  // Quantidade devolvida na UNIDADE VENDIDA (ADR-036): converte o devolvido (em base) pela razão
+  // base/vendida. Sem base/quantidade válidas ⇒ 0.
+  const itemReturnedSold = (it: PairableItem): number => {
+    const sold = Number(it.quantity);
+    const base = Number(it.baseQuantity ?? it.quantity);
+    const retBase = Number(it.returnedBaseQty ?? 0);
+    if (!(sold > 0) || !(base > 0) || !(retBase > 0)) return 0;
+    return Number(((retBase * sold) / base).toFixed(4));
+  };
+
   for (const item of items) {
     const qty = Number(item.quantity);
     const total = Number(item.total);
     const group = item.pairGroup;
+    const discount = itemDiscount(item);
+    const returnedQuantity = itemReturnedSold(item);
 
     if (group == null) {
-      lines.push({ label: item.productName, quantity: qty, total, isPair: false });
+      lines.push({ label: item.productName, quantity: qty, total, isPair: false, discount, returnedQuantity });
       continue;
     }
     const at = groupLineIndex.get(group);
     const line = at === undefined ? undefined : lines[at];
     if (at === undefined || !line) {
       groupLineIndex.set(group, lines.length);
-      lines.push({ label: item.productName, quantity: qty, total, isPair: false });
+      lines.push({ label: item.productName, quantity: qty, total, isPair: false, discount, returnedQuantity });
     } else {
       lines[at] = {
         label: `${line.label} + ${item.productName}`,
         quantity: line.quantity,
         total: Number((line.total + total).toFixed(2)),
         isPair: true,
+        // Par não tem desconto por item (v1), mas somamos por robustez. O devolvido do par é o maior
+        // dos dois lados (são devolvidos juntos).
+        discount: Number((line.discount + discount).toFixed(2)),
+        returnedQuantity: Math.max(line.returnedQuantity, returnedQuantity),
       };
     }
   }

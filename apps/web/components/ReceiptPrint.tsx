@@ -16,7 +16,14 @@ export type Store = {
   phone: string | null;
 };
 
-export type ReceiptItem = { name: string; quantity: number; unitPrice: number };
+// `discount` (ADR-036): desconto POR ITEM da linha (R$ absoluto), opcional. O total impresso da linha
+// é o LÍQUIDO (bruto − desconto) e o subtotal soma os líquidos, então subtotal − desconto do pedido =
+// total, coerente com o carrinho e com o servidor. Ausente/0 = sem desconto por item.
+export type ReceiptItem = { name: string; quantity: number; unitPrice: number; discount?: number };
+
+/** Total líquido de uma linha do comprovante (ADR-036): bruto − desconto por item, travado ao bruto. */
+const receiptLineNet = (i: ReceiptItem) =>
+  Number((i.unitPrice * i.quantity - Math.min(Math.max(0, i.discount ?? 0), i.unitPrice * i.quantity)).toFixed(2));
 
 // Progresso de retirada por item (ADR-020), em unidade-base (mesma base de `deliveredBaseQty`/
 // `remainingBaseQty` do servidor): quanto já saiu e quanto falta. Alimenta o bloco "Situação da
@@ -93,7 +100,8 @@ const QTY = (v: number) => {
  */
 export function ReceiptPrint({ kind, store, items, total, date, discount, payments, method, change, creditAmount, storeCreditAmount, exchangeCreditAmount, customerName, orderNumber, codeLabel, quoteNumber, validUntil, pickupNotice, pickupPaid, pickupLines, captureMode }: Props) {
   const isQuote = kind === 'quote';
-  const subtotal = items.reduce((acc, i) => acc + i.unitPrice * i.quantity, 0);
+  // Subtotal já LÍQUIDO do desconto por item (ADR-036); o "Desconto" abaixo é só o do PEDIDO.
+  const subtotal = items.reduce((acc, i) => acc + receiptLineNet(i), 0);
   const hasDiscount = (discount ?? 0) > 0;
   // Normaliza as formas de pagamento: usa `payments` (pagamento dividido) ou cai no `method` único.
   const pays: ReceiptPayment[] =
@@ -175,10 +183,15 @@ export function ReceiptPrint({ kind, store, items, total, date, discount, paymen
         <tbody>
           {items.map((i, idx) => (
             <tr key={idx}>
-              <td>{i.name}</td>
+              <td>
+                {i.name}
+                {(i.discount ?? 0) > 0 ? (
+                  <span className="rc-sub"> (desc. {BRL(i.discount as number)})</span>
+                ) : null}
+              </td>
               <td className="right">{i.quantity}</td>
               <td className="right">{BRL(i.unitPrice)}</td>
-              <td className="right">{BRL(i.unitPrice * i.quantity)}</td>
+              <td className="right">{BRL(receiptLineNet(i))}</td>
             </tr>
           ))}
         </tbody>
