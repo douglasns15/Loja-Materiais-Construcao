@@ -48,6 +48,8 @@ http://localhost:3000/
 
 <> Pode aparecer nos clientes com crédito da loja, ao clicar, mostrar o que gerou aquele crédito. Importante.. inclusive o código da venda que gerou aquele crédito
 
+<> Na atualização de estoque via XML, ao sair do pop up ficar salvo igual no contador do Caixa, ter botão de apagar... 
+
 ## Subir servidor
 
 cd C:\Users\Douglas\Documents\GitHub\Loja-Materiais-Construcao
