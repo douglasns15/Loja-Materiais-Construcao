@@ -50,6 +50,8 @@ http://localhost:3000/
 
 <> Na atualização de estoque via XML, ao sair do pop up ficar salvo igual no contador do Caixa, ter botão de apagar... 
 
+<> Utilitários: Tabela de combinação de cores, calculo de quantidade de sacos de areia/pedra/pedrisco/tijolinho para metros de uso, quanto de argamassa usar para determinado espaço cubico ou determinada quantidade de revestimento, quanto de cimento para areia e vice versa,
+
 ## Subir servidor
 
 cd C:\Users\Douglas\Documents\GitHub\Loja-Materiais-Construcao
