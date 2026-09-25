@@ -54,7 +54,13 @@ http://localhost:3000/
 
 <> Em relatórios, ter índice de produtos mais vendidos
 
-<> Realizei uma devolução parcial e o valor Recebido no período não foi atualizado, continuou com o valor cheio sendo contabilizado.
+<> Inserir CNPJ do comprador em uma nota, como funciona?
+
+Três ideias ficaram de fora e anotadas para depois:
+
+Custo zerado dos rolos e pacotes: você já sabia. Dá para acertar junto o custo da entrada manual de estoque de barra e rolo, que ainda deve estar por barra.
+"Mais vendidos" no PDV: um atalho para adicionar ao carrinho com um toque.
+Aviso de "campeão do período" na faixa de avisos do topo dos Relatórios.
 
 ## Subir servidor
 
