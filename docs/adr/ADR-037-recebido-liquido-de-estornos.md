@@ -1,6 +1,6 @@
 # ADR-037: "Recebido" líquido de estornos + lucro e rankings líquidos do devolvido
 
-**Status:** Aceito — implementado 2026-09-25 (gates verdes; validado read-only contra os dados reais de produção). Deploy, E2E do Owner e push PENDENTES. Sem migration.
+**Status:** Aceito — **NO AR** 2026-09-25 (API `61c7d1e8`, web `bce095fa`; gates verdes; validado read-only contra os dados reais de produção). E2E do Owner e push PENDENTES. Sem migration.
 **Data:** 2026-09-25
 **Deciders:** Owner do produto
 **Relacionados:** [ADR-036](ADR-036-relatorios-coerentes-devolucoes-trocas-credito.md) (revisa as Decisões A/B para o Recebido), [ADR-035](ADR-035-credito-no-retorno-pick-cliente-e-faturamento-liquido.md) (faturamento líquido), [ADR-033](ADR-033-devolucao-unificada-defeito-estorno-troca.md) (forma do estorno), [ADR-019](ADR-019-venda-a-prazo-contas-a-receber.md) (Recebido = regime de caixa), [ADR-027](ADR-027-custo-congelado-na-venda.md) (base de lucro)
