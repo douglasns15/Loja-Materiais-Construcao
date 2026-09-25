@@ -14,7 +14,8 @@ const DATETIME = (iso: string) =>
 /**
  * Drill-down de UMA forma de pagamento (Relatórios v2, Fatia 3). Abre em pop-up ao clicar numa
  * forma na tabela "Por forma de pagamento": mostra a COMPOSIÇÃO daquele valor — as vendas à vista
- * (+) e os recebimentos de dívida (+) que somam o "Recebido" da forma no período. Reúsa
+ * (+), os recebimentos de dívida (+) e os estornos de devolução (−, ADR-037) que somam o "Recebido"
+ * da forma no período. Reúsa
  * `GET /reports/payment-composition` (regime de caixa, ADR-019); por construção o total do modal
  * bate com o total da forma no `/reports/sales`.
  */
@@ -89,8 +90,8 @@ export function PaymentCompositionModal({
                 </span>
                 <h2 className="text-xl font-extrabold">Composição do recebido</h2>
                 <span className="text-xs text-gray-500">
-                  O que compõe o &ldquo;Recebido&rdquo; desta forma no período — vendas à vista e
-                  recebimentos de dívida.
+                  O que compõe o &ldquo;Recebido&rdquo; desta forma no período — vendas à vista,
+                  recebimentos de dívida e estornos de devolução.
                 </span>
               </div>
               <button
@@ -123,11 +124,15 @@ export function PaymentCompositionModal({
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-sm font-medium">
-                          {r.tipo === 'venda' ? 'Venda à vista' : 'Recebimento de dívida'}
+                          {r.tipo === 'venda'
+                            ? 'Venda à vista'
+                            : r.tipo === 'estorno'
+                              ? 'Estorno de devolução' // ADR-037: dinheiro que voltou ao cliente
+                              : 'Recebimento de dívida'}
                           {/* O código da VENDA vira link: abre o resumo da venda (mesmas infos do
                               Histórico). Recebimento de dívida referencia a dívida (D-000X), não uma
-                              venda única ⇒ segue como texto. */}
-                          {r.tipo === 'venda' ? (
+                              venda única ⇒ segue como texto. O estorno aponta a venda devolvida. */}
+                          {r.tipo === 'venda' || r.tipo === 'estorno' ? (
                             <button
                               type="button"
                               onClick={() => setSaleCode(r.ref)}
@@ -147,12 +152,19 @@ export function PaymentCompositionModal({
                           className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
                             r.tipo === 'venda'
                               ? 'bg-blue-100 text-blue-800'
-                              : 'bg-amber-100 text-amber-800'
+                              : r.tipo === 'estorno'
+                                ? 'bg-red-100 text-red-800'
+                                : 'bg-amber-100 text-amber-800'
                           }`}
                         >
-                          {r.tipo === 'venda' ? 'à vista' : 'dívida'}
+                          {r.tipo === 'venda' ? 'à vista' : r.tipo === 'estorno' ? 'estorno' : 'dívida'}
                         </span>
-                        <p className="font-semibold tabular-nums text-green-700">+{BRL(r.valor)}</p>
+                        {/* Estorno (ADR-037) vem com valor negativo: sai do Recebido desta forma. */}
+                        {r.valor < 0 ? (
+                          <p className="font-semibold tabular-nums text-red-600">−{BRL(-r.valor)}</p>
+                        ) : (
+                          <p className="font-semibold tabular-nums text-green-700">+{BRL(r.valor)}</p>
+                        )}
                       </div>
                     </div>
                   </li>

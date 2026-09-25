@@ -84,6 +84,8 @@ A lista `GET /orders?scope=all` passa a expor, por venda, um resumo: `returnedVa
 
 > **Status:** Aceito (Owner aprovou as 3 decisões no E2E). Implementar a fatia única acima; gates de sempre (core+testes, tsc, build); deploy API+web; E2E do Owner; push. Sem migration.
 
+> **Revisado pela [ADR-037](ADR-037-recebido-liquido-de-estornos.md) (2026-09-25)** no que toca o "Recebido": o número grande passou a ser LÍQUIDO de estornos (dinheiro devolvido, por forma, no dia da venda); crédito na loja e abatimento de dívida deixaram de ser subtraídos; vendas RETURNED pela devolução por item contam o pago e abatem o estorno (só a rota antiga `/return` segue excluída); lucro/rankings descontam o devolvido/trocado. A Decisão A segue valendo para contagem de vendas e mercadoria; o "Limite honesto" (fiado parcial) foi resolvido.
+
 ## Adendo 2026-09-16 — Valor da devolução = valor PAGO (desconto por item + do pedido)
 
 A devolução (parcial ou total) e a troca passam a estornar o **valor efetivamente pago** por item, não o preço de tabela. Função pura `itemPaidValue(itemTotal, soldQty, returnQty, orderSubtotal, orderDiscountAmount)` no `packages/core` (+ testes, regra 2): o desconto **por item** já está em `OrderItem.total`; o desconto **do pedido** (`Order.discountAmount`) é rateado proporcionalmente ao peso da linha no subtotal; frete não é ratateado (serviço já prestado). Usada como fonte única no servidor (`prepareReturnLines`) e no preview do `ReturnItemsModal`. Habilita o **desconto por item no PDV** (ADR-036): `saleItemSchema.discount`/`QuoteItem.discount`/`cartItemSchema.discount` já existiam; o PDV agora expõe o campo por linha (avulsa; par fica de fora na v1) e o comprovante imprime o total líquido. Sem migration.

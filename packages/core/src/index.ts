@@ -610,6 +610,67 @@ export function cancelCashRefund(
   return Number((Math.max(0, extraCents) / 100).toFixed(2));
 }
 
+/**
+ * Quanto do excedente de uma devolução VOLTOU ao cliente em cada forma de pagamento (ADR-037) — a
+ * base do "Recebido" líquido nos relatórios (dinheiro que entrou − dinheiro que voltou):
+ *  - `STORE_CREDIT`: nada (o dinheiro fica na loja como crédito; ao ser usado, a nova venda não soma
+ *    de novo — subtrair aqui faria o valor sumir do Recebido para sempre);
+ *  - `CASH`: o excedente inteiro sai em dinheiro (da gaveta), qualquer que tenha sido a forma paga;
+ *  - `SAME_AS_PAYMENT`: rateado pelas formas pagas na venda. A fatia em dinheiro é EXATAMENTE a do
+ *    caixa (`cashRefundPortion`, mesma conta da saída da gaveta); o resto é repartido entre as demais
+ *    formas na proporção do que foi pago nelas (sobra de centavo na maior).
+ * Formas repetidas são somadas; só valores positivos. Sem pagamento algum ⇒ nada (a venda não somou
+ * nada no Recebido, então não há o que abater). Aritmética em centavos.
+ */
+export function refundSlicesByMethod(
+  destination: ReturnDestination,
+  excess: number,
+  payments: RefundPaymentLike[],
+): RefundPaymentLike[] {
+  const excessCents = Math.round((Number.isFinite(excess) ? excess : 0) * 100);
+  if (excessCents <= 0 || destination === 'STORE_CREDIT') return [];
+  if (destination === 'CASH') return [{ method: 'CASH', amount: excessCents / 100 }];
+
+  // SAME_AS_PAYMENT: agrega o pago por forma (só positivos), preservando a ordem de aparição.
+  const paidByMethod = new Map<string, number>();
+  for (const p of payments) {
+    if (!Number.isFinite(p.amount) || p.amount <= 0) continue;
+    paidByMethod.set(p.method, (paidByMethod.get(p.method) ?? 0) + Math.round(p.amount * 100));
+  }
+  if (paidByMethod.size === 0) return [];
+
+  const slices = new Map<string, number>();
+  const cashCents = Math.round(cashRefundPortion(excess, payments) * 100);
+  if (cashCents > 0) slices.set('CASH', cashCents);
+
+  // O restante (não-dinheiro) vai para as outras formas, proporcional ao que foi pago em cada uma.
+  const others = [...paidByMethod.entries()].filter(([m]) => m !== 'CASH');
+  const restCents = excessCents - cashCents;
+  const othersPaid = others.reduce((acc, [, v]) => acc + v, 0);
+  if (restCents > 0 && othersPaid > 0) {
+    let given = 0;
+    let largest = others[0]![0];
+    let largestPaid = -1;
+    for (const [m, paid] of others) {
+      const share = Math.floor((restCents * paid) / othersPaid);
+      slices.set(m, share);
+      given += share;
+      if (paid > largestPaid) {
+        largest = m;
+        largestPaid = paid;
+      }
+    }
+    slices.set(largest, (slices.get(largest) ?? 0) + (restCents - given));
+  } else if (restCents > 0) {
+    // Só houve dinheiro, mas o arredondamento deixou centavos de fora: completa no dinheiro.
+    slices.set('CASH', (slices.get('CASH') ?? 0) + restCents);
+  }
+
+  return [...slices.entries()]
+    .filter(([, cents]) => cents > 0)
+    .map(([method, cents]) => ({ method, amount: cents / 100 }));
+}
+
 /** Valores (em reais) das moedas do Real em circulação, para o contador de gaveta. */
 export const BRL_COIN_VALUES = [0.05, 0.1, 0.25, 0.5, 1] as const;
 /** Valores (em reais) das cédulas do Real em circulação, para o contador de gaveta. */
@@ -1446,10 +1507,42 @@ export function calcAverageTicket(totalRevenue: number, salesCount: number): num
  * voltou. O líquido PODE ficar negativo quando as devoluções do período (reconhecidas na data da
  * devolução) superam o bruto do período — número honesto, não é travado em zero. `returnsTotal`
  * negativo é ignorado (tratado como 0 — devolução não soma faturamento). Arredonda a 2 casas.
+ * ADR-037: nos relatórios, `returnsTotal` passou a ser só o DINHEIRO que voltou ao cliente (dinheiro
+ * da gaveta + estorno no cartão/PIX) das vendas do período — crédito na loja e abatimento de dívida
+ * não entram — e o resultado virou o próprio "Recebido no período".
  */
 export function calcNetRevenue(grossRevenue: number, returnsTotal: number): number {
   const returns = returnsTotal > 0 ? returnsTotal : 0;
   return Number((grossRevenue - returns).toFixed(2));
+}
+
+/**
+ * "Recebido" LÍQUIDO por forma de pagamento (ADR-037): o que entrou em cada forma − o que voltou ao
+ * cliente nela (fatias de `refundSlicesByMethod`). `count` segue sendo o nº de pagamentos recebidos.
+ * Uma forma pode ficar NEGATIVA (ex.: venda no cartão estornada em dinheiro — o dinheiro saiu da
+ * gaveta, o cartão ficou): número honesto, não é travado em zero. Formas que zeraram (tudo estornado)
+ * somem da lista. Aritmética em centavos; a ordem/participação vem depois (`withPaymentShare`).
+ */
+export function netReceivedByMethod(
+  received: PaymentMethodTotal[],
+  refunds: RefundPaymentLike[],
+): PaymentMethodTotal[] {
+  const byMethod = new Map<string, { cents: number; count: number }>();
+  for (const r of received) {
+    const cur = byMethod.get(r.method) ?? { cents: 0, count: 0 };
+    cur.cents += Math.round(r.total * 100);
+    cur.count += r.count;
+    byMethod.set(r.method, cur);
+  }
+  for (const f of refunds) {
+    if (!Number.isFinite(f.amount) || f.amount <= 0) continue;
+    const cur = byMethod.get(f.method) ?? { cents: 0, count: 0 };
+    cur.cents -= Math.round(f.amount * 100);
+    byMethod.set(f.method, cur);
+  }
+  return [...byMethod.entries()]
+    .filter(([, v]) => v.cents !== 0)
+    .map(([method, v]) => ({ method, total: v.cents / 100, count: v.count }));
 }
 
 /**

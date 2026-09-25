@@ -86,7 +86,7 @@ export function DailyRevenueChart({ from, to }: { from: string | null; to: strin
   const padB = 28;
   const plotW = W - padL - padR;
   const plotH = H - padT - padB;
-  const max = Math.max(...points.map((p) => p.total));
+  const max = Math.max(0, ...points.map((p) => p.total));
   const n = points.length;
   const slot = plotW / n;
   const barW = Math.max(2, Math.min(slot * 0.7, 42));
@@ -127,17 +127,22 @@ export function DailyRevenueChart({ from, to }: { from: string | null; to: strin
             // colisão do penúltimo com o último que havia no modo 30 dias.
             const showLabel = (n - 1 - i) % labelStep === 0;
             // Empilha as formas de baixo para cima, na ordem estável da legenda.
+            // ADR-037: uma forma pode ficar NEGATIVA no dia (ex.: venda no cartão estornada em
+            // dinheiro). Só as positivas viram segmento, reescaladas para a barra ter a altura do
+            // TOTAL líquido do dia (não a soma bruta das positivas).
+            const positiveSum = methods.reduce((acc, m) => acc + Math.max(0, p.byMethod[m] ?? 0), 0);
+            const scale = positiveSum > 0 ? Math.max(0, p.total) / positiveSum : 0;
             let yCursor = baseY;
             const segments = methods
               .filter((m) => (p.byMethod[m] ?? 0) > 0)
               .map((m) => {
                 const v = p.byMethod[m] ?? 0;
-                const h = max > 0 ? (v / max) * plotH : 0;
+                const h = max > 0 ? ((v * scale) / max) * plotH : 0;
                 yCursor -= h;
                 return { m, v, y: yCursor, h };
               });
             const tip = `${dm(p.day)}${isToday ? ' (hoje)' : ''}: ${BRL(p.total)}\n${methods
-              .filter((m) => (p.byMethod[m] ?? 0) > 0)
+              .filter((m) => (p.byMethod[m] ?? 0) !== 0)
               .map((m) => `${paymentMethodLabel(m)}: ${BRL(p.byMethod[m] ?? 0)}`)
               .join('\n')}`;
             return (

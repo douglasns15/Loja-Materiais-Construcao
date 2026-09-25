@@ -124,4 +124,6 @@ O que foi implementado:
 | 5 | **Cancelamento × devolução:** unificar ou manter distintos? | ✅ **Distintos** (ótica NF-e: nota de cancelamento × nota de devolução), com **um botão único** "Cancelar / Devolver" e **passo de intenção de 3 caminhos** (Devolveu/desistiu · Trocar · Cancelar por erro). O cancelamento (caminho 3) desfaz a venda; sem crédito. |
 | 6 | **Retroatividade dos relatórios:** subtrair devoluções passadas? | ✅ **Sim** — é só cálculo; deixa os números corretos. |
 
+> **Revisado pela [ADR-037](ADR-037-recebido-liquido-de-estornos.md) (2026-09-25):** a Decisão 1 (bruto no número grande + líquido numa linha) foi invertida — o "Recebido" passou a ser o líquido de estornos (dinheiro devolvido, por forma, no dia da venda), com Entradas/Estornos abertos abaixo. A devolução em crédito na loja e o abatimento de dívida deixaram de ser subtraídos (viram informativos).
+
 > **Nota de rumo (NF-e):** os caminhos 1 e 3 do passo de intenção mapeiam, no futuro épico de NF-e, para **nota de devolução** (entrada) e **nota de cancelamento** (com janela de tempo e regras próprias). Esta ADR já deixa o fluxo operacional alinhado a essa distinção fiscal.

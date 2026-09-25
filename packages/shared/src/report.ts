@@ -33,22 +33,28 @@ export interface SalesReport {
    * **Recebido no período** — regime de caixa (ADR-019): dinheiro que efetivamente entrou =
    * pagamentos à vista das vendas do período + recebimentos de fiado do período (pela data do
    * recebimento). A parte a prazo de uma venda só conta quando é recebida.
+   * ADR-037: é LÍQUIDO de estornos — `grossRevenue − returnsTotal` (o dinheiro que voltou ao cliente
+   * nas devoluções das vendas do período sai daqui, na forma em que voltou).
    */
   totalRevenue: number;
+  /** Entradas antes dos estornos (ADR-037): pagamentos das vendas do período + recebimentos de fiado. */
+  grossRevenue: number;
   /**
-   * **Devoluções no período** (ADR-035): Σ do valor devolvido (`OrderReturn`, intent REFUND) pela
-   * data da devolução. Trocas (EXCHANGE) não entram (o valor vira vale). Base do faturamento líquido.
+   * **Estornos** (ADR-037): dinheiro que VOLTOU ao cliente nas devoluções das vendas do período
+   * (dinheiro da gaveta + estorno no cartão/PIX), atribuído ao dia da venda (como a devolução total,
+   * ADR-036). Crédito na loja e abatimento de dívida NÃO entram (não são dinheiro devolvido — ver
+   * `returnsToCredit`/`returnsToDebt`). Trocas não entram (o valor vira vale).
    */
   returnsTotal: number;
-  /**
-   * **Faturamento líquido** (ADR-035): `totalRevenue − returnsTotal`. Subtrai as devoluções do
-   * período independentemente da forma do estorno (dinheiro/estorno/crédito), porque a mercadoria
-   * voltou. Pode ficar abaixo do bruto do período quando há devoluções de vendas anteriores.
-   */
+  /** Mantido por compatibilidade (ADR-035): desde a ADR-037 é igual a `totalRevenue`. */
   netRevenue: number;
+  /** Devoluções das vendas do período que viraram CRÉDITO na loja (informativo; não sai do Recebido). */
+  returnsToCredit: number;
+  /** Devoluções das vendas do período que ABATERAM dívida a prazo (informativo; nunca entrou como dinheiro). */
+  returnsToDebt: number;
   /** Nº de vendas CONFIRMED no período (pela data da venda). */
   salesCount: number;
-  /** Recebido ÷ nº de vendas (0 se não houver vendas). */
+  /** Recebido (líquido de estornos, ADR-037) ÷ nº de vendas (0 se não houver vendas). */
   averageTicket: number;
   /** Nº de vendas canceladas no período (fora do recebido). */
   cancelledCount: number;
@@ -59,9 +65,13 @@ export interface SalesReport {
   /**
    * Informativo (ADR-019): total de vendas **a prazo geradas** no período (crédito concedido no
    * fiado). NÃO entra no recebido — é o que ficou a receber; conta como recebido conforme entra.
+   * ADR-037: líquido do que foi devolvido (abatido da dívida).
    */
   creditSalesGenerated: number;
-  /** Total por forma de pagamento (à vista + recebimentos de fiado). Σ formas = recebido. */
+  /**
+   * Total por forma de pagamento (à vista + recebimentos de fiado − estornos naquela forma, ADR-037).
+   * Σ formas = recebido. Uma forma pode ficar negativa (ex.: cartão estornado em dinheiro).
+   */
   byPaymentMethod: PaymentMethodReport[];
   /**
    * Lucro bruto ESTIMADO do período (Fatia 6, ADR-027): base de **mercadoria vendida** — receita
@@ -74,7 +84,10 @@ export interface SalesReport {
   marginPercent: number;
   /** Fração da receita de mercadoria do período que tem custo carimbado (0..1). `< 1` ⇒ lucro parcial. */
   costCoverage: number;
-  /** Receita de mercadoria vendida no período (Σ itens, não canceladas) — a base do lucro/margem. */
+  /**
+   * Receita de mercadoria vendida no período (Σ itens, não canceladas) — a base do lucro/margem.
+   * ADR-037: líquida dos itens devolvidos/trocados (valor e custo do que voltou saem da conta).
+   */
   goodsRevenue: number;
   /**
    * KPIs do período ANTERIOR equivalente (Fatia 4), para os selos ▲/▼ nos cards. Só vem quando o
@@ -141,17 +154,29 @@ export const paymentCompositionSchema = reportRangeSchema.extend({
 });
 export type PaymentCompositionQuery = z.infer<typeof paymentCompositionSchema>;
 
-/** Uma linha da composição do recebido de uma forma: uma venda à vista OU um recebimento de dívida. */
+/**
+ * Uma linha da composição do recebido de uma forma: uma venda à vista, um recebimento de dívida OU
+ * um estorno de devolução (ADR-037, valor NEGATIVO).
+ */
 export interface PaymentCompositionRow {
-  /** `venda` = pagamento à vista de uma venda; `divida` = recebimento de uma dívida (fiado). */
-  tipo: 'venda' | 'divida';
+  /**
+   * `venda` = pagamento à vista de uma venda; `divida` = recebimento de uma dívida (fiado);
+   * `estorno` = dinheiro devolvido ao cliente nesta forma numa devolução (ADR-037, `valor` < 0).
+   */
+  tipo: 'venda' | 'divida' | 'estorno';
   /** Identificador humano da origem: nº do pedido (`#000123`) ou código da dívida (`D-0001`). */
   ref: string;
   /** Cliente (ou "Consumidor" quando a venda à vista não tem cliente). */
   descricao: string;
-  /** Valor que entrou nesta linha. À vista = `Payment.amount`; dívida = `amount + surcharge` (ADR-022). */
+  /**
+   * Valor que entrou nesta linha. À vista = `Payment.amount`; dívida = `amount + surcharge` (ADR-022);
+   * estorno = −(fatia devolvida nesta forma) (ADR-037).
+   */
   valor: number;
-  /** Data do evento (ISO): venda = data da venda; dívida = data do recebimento (`paidAt`, regime de caixa). */
+  /**
+   * Data do evento (ISO): venda = data da venda; dívida = data do recebimento (`paidAt`, regime de
+   * caixa); estorno = data da VENDA devolvida (o estorno abate o dia da venda, ADR-037).
+   */
   data: string;
 }
 
@@ -187,9 +212,12 @@ export type TopReportQuery = z.infer<typeof topReportSchema>;
 export interface TopProductRow {
   productId: string;
   productName: string;
-  /** Faturamento do produto (Σ dos totais das linhas), inclui vendas sem custo. */
+  /**
+   * Faturamento do produto (Σ dos totais das linhas), inclui vendas sem custo. ADR-037: líquido do
+   * que foi devolvido/trocado (vale para todos os rankings e detalhes de produto/cliente).
+   */
   revenue: number;
-  /** Quantidade vendida (na unidade do produto). */
+  /** Quantidade vendida (na unidade do produto), líquida das devoluções/trocas (ADR-037). */
   qty: number;
   /** Nº de vendas que incluíram o produto (base do ticket). */
   salesCount: number;

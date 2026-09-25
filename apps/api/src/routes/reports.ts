@@ -10,7 +10,9 @@ import {
   calcProfit,
   calcTypicalVelocity,
   grossCashMovements,
+  netReceivedByMethod,
   previousPeriod,
+  refundSlicesByMethod,
   withPaymentShare,
 } from '@nexoloja/core';
 import {
@@ -64,17 +66,123 @@ function buildDateFilter(
 
 type SalesRange = { gte?: Date; lte?: Date } | undefined;
 
+type PrismaLike = ReturnType<typeof createPrismaClient>;
+
+/**
+ * ADR-037: vendas cujo dinheiro entra no "Recebido" — todas menos as CANCELADAS e as devolvidas por
+ * inteiro pela rota ANTIGA `/return` (pré-ADR-033: estorno integral, sem `OrderReturn`). As demais
+ * devolvidas (RETURNED pela devolução por item) contam o que foi pago e ABATEM o que voltou ao cliente
+ * (`loadRefunds`) — assim a devolução total em crédito na loja mantém o dinheiro no Recebido
+ * (o crédito, quando usado, não soma de novo), e a estornada zera como antes.
+ */
+const RECEIVED_ORDER_WHERE: Prisma.OrderWhereInput = {
+  status: { not: 'CANCELLED' },
+  NOT: { status: 'RETURNED', returns: { none: { intent: 'REFUND' } } },
+};
+
+/** Mesma regra do `RECEIVED_ORDER_WHERE`, em SQL cru (alias `o` = orders). */
+const RECEIVED_ORDER_SQL = Prisma.sql`o."status" <> 'CANCELLED' AND NOT (
+  o."status" = 'RETURNED'
+  AND NOT EXISTS (SELECT 1 FROM "order_returns" r WHERE r."orderId" = o."id" AND r."intent" = 'REFUND')
+)`;
+
+/** Formas que NÃO são dinheiro que entrou (ADR-036, Decisão C): crédito da loja e vale-troca. */
+const NON_MONEY_METHODS = [STORE_CREDIT_METHOD, EXCHANGE_CREDIT_METHOD];
+
+/**
+ * ADR-037: fração de uma linha vendida que FICOU com o cliente (1 − devolvido/vendido, em
+ * unidade-base; `returnedBaseQty` soma devoluções e trocas). Multiplica total/quantidade para que
+ * lucro, margem e rankings contem só a mercadoria que não voltou. Alias `oi` = order_items.
+ */
+const KEPT_FRACTION = Prisma.sql`COALESCE(1 - oi."returnedBaseQty" / NULLIF(COALESCE(oi."baseQuantity", oi."quantity"), 0), 1)`;
+/** Receita da linha líquida do devolvido (ADR-037). */
+const NET_ITEM_TOTAL = Prisma.sql`(oi."total" * ${KEPT_FRACTION})`;
+/** Quantidade (unidade vendida) líquida do devolvido (ADR-037). */
+const NET_ITEM_QTY = Prisma.sql`(oi."quantity" * ${KEPT_FRACTION})`;
+/** Custo da linha líquido do devolvido: custo carimbado × base que ficou (ADR-027 + ADR-037). */
+const NET_ITEM_COST = Prisma.sql`(oi."unitCost" * (COALESCE(oi."baseQuantity", oi."quantity") - oi."returnedBaseQty"))`;
+
+/** Um estorno de devolução rateado por forma (ADR-037), com a venda de origem para o extrato. */
+interface RefundSlice {
+  method: string;
+  amount: number;
+  orderNumber: number;
+  orderCreatedAt: Date;
+  customerName: string | null;
+}
+
+/**
+ * Carrega o dinheiro que VOLTOU ao cliente nas devoluções das vendas do período (ADR-037). Atribui
+ * ao DIA DA VENDA (decisão do Owner, coerente com a devolução total da ADR-036) — o caixa, por sua
+ * vez, registra a saída da gaveta no dia do estorno (CashMovement RETURN), sem mudança aqui.
+ * Só devoluções REFUND: o excedente em dinheiro/estorno vira fatias por forma
+ * (`refundSlicesByMethod`, core); o excedente em crédito e o abatimento de dívida são só informativos
+ * (`toCredit`/`toDebt`) — não são dinheiro devolvido. Fatias em crédito/vale são descartadas (nunca
+ * entraram no Recebido). Devoluções são raras — leitura enxuta com teto de segurança.
+ */
+async function loadRefunds(
+  prisma: PrismaLike,
+  tenantId: string,
+  range: SalesRange,
+  method?: string,
+): Promise<{ slices: RefundSlice[]; toCredit: number; toDebt: number }> {
+  const rows = await prisma.orderReturn.findMany({
+    where: {
+      tenantId,
+      intent: 'REFUND',
+      order: { ...RECEIVED_ORDER_WHERE, ...(range ? { createdAt: range } : {}) },
+    },
+    select: {
+      excessAmount: true,
+      abatedAmount: true,
+      target: true,
+      order: {
+        select: {
+          orderNumber: true,
+          createdAt: true,
+          customer: { select: { name: true } },
+          payments: { select: { method: true, amount: true } },
+        },
+      },
+    },
+    take: 5000,
+  });
+
+  const slices: RefundSlice[] = [];
+  let creditCents = 0;
+  let debtCents = 0;
+  for (const r of rows) {
+    const excess = Number(r.excessAmount);
+    debtCents += Math.round(Number(r.abatedAmount) * 100);
+    if (!r.target || excess <= 0) continue;
+    if (r.target === 'STORE_CREDIT') {
+      creditCents += Math.round(excess * 100);
+      continue;
+    }
+    const payments = r.order.payments.map((p) => ({ method: p.method, amount: Number(p.amount) }));
+    for (const s of refundSlicesByMethod(r.target, excess, payments)) {
+      if (NON_MONEY_METHODS.includes(s.method)) continue;
+      if (method && s.method !== method) continue;
+      slices.push({
+        method: s.method,
+        amount: s.amount,
+        orderNumber: r.order.orderNumber,
+        orderCreatedAt: r.order.createdAt,
+        customerName: r.order.customer?.name ?? null,
+      });
+    }
+  }
+  return { slices, toCredit: creditCents / 100, toDebt: debtCents / 100 };
+}
+
 /**
  * Agrega os KPIs de vendas de UMA janela (cost-zero, no banco). Extraído para servir tanto a janela
  * atual quanto a ANTERIOR (Fatia 4, `?compare=1`), garantindo a MESMA regra (ADR-019/ADR-027) nas
  * duas — sem duplicar a lógica. Devolve o recebido (regime de caixa), nº de vendas, canceladas, a
  * quebra por forma e o lucro/margem do período (base de mercadoria vendida).
+ * ADR-037: o recebido e a quebra por forma são LÍQUIDOS de estornos; o lucro, líquido do devolvido.
  */
-async function computeSalesData(
-  prisma: ReturnType<typeof createPrismaClient>,
-  tenantId: string,
-  range: SalesRange,
-) {
+async function computeSalesData(prisma: PrismaLike, tenantId: string, range: SalesRange) {
   // Regime de CAIXA (ADR-019): o "recebido no período" é o dinheiro que efetivamente entrou —
   // pagamentos à vista das vendas do período MAIS os recebimentos de fiado do período (por
   // `paidAt`), contando o fiado no dia em que é recebido, não no dia da venda.
@@ -96,7 +204,7 @@ async function computeSalesData(
     creditReceipts,
     creditGenerated,
     goodsAgg,
-    returnsAgg,
+    refunds,
     exchangeCount,
     returnedCount,
   ] = await Promise.all([
@@ -114,10 +222,12 @@ async function computeSalesData(
         _count: { _all: true },
         // ADR-036: "Recebido" conta só dinheiro REAL — exclui vendas canceladas/devolvidas e as
         // parcelas de crédito da loja / vale-troca (não são dinheiro que entrou).
+        // ADR-037: as devolvidas pela devolução por item voltam a contar o pago — o que voltou ao
+        // cliente é abatido logo abaixo (`loadRefunds`), na forma em que voltou.
         where: {
           tenantId,
-          order: { status: { notIn: ['CANCELLED', 'RETURNED'] }, ...(range ? { createdAt: range } : {}) },
-          method: { notIn: [STORE_CREDIT_METHOD, EXCHANGE_CREDIT_METHOD] },
+          order: { ...RECEIVED_ORDER_WHERE, ...(range ? { createdAt: range } : {}) },
+          method: { notIn: NON_MONEY_METHODS },
         },
       }),
       prisma.receivablePayment.groupBy({
@@ -126,33 +236,27 @@ async function computeSalesData(
         _count: { _all: true },
         where: { tenantId, ...(paidAt ? { paidAt } : {}) },
       }),
+      // ADR-037: a prazo gerado LÍQUIDO do que a devolução abateu da dívida (`returnedAmount`).
       prisma.receivable.aggregate({
-        _sum: { originalAmount: true },
+        _sum: { originalAmount: true, returnedAmount: true },
         where: { tenantId, status: { not: 'CANCELLED' }, ...(range ? { createdAt: range } : {}) },
       }),
+      // ADR-037: receita e custo LÍQUIDOS do que foi devolvido/trocado (só a mercadoria que ficou).
       prisma.$queryRaw<Array<{ goodsRevenue: number; coveredRevenue: number; coveredCost: number }>>(
         Prisma.sql`
           SELECT
-            COALESCE(SUM(oi."total"), 0)::float8 AS "goodsRevenue",
-            COALESCE(SUM(oi."total") FILTER (WHERE oi."unitCost" IS NOT NULL), 0)::float8 AS "coveredRevenue",
-            COALESCE(SUM(oi."unitCost" * COALESCE(oi."baseQuantity", oi."quantity")) FILTER (WHERE oi."unitCost" IS NOT NULL), 0)::float8 AS "coveredCost"
+            COALESCE(SUM(${NET_ITEM_TOTAL}), 0)::float8 AS "goodsRevenue",
+            COALESCE(SUM(${NET_ITEM_TOTAL}) FILTER (WHERE oi."unitCost" IS NOT NULL), 0)::float8 AS "coveredRevenue",
+            COALESCE(SUM(${NET_ITEM_COST}) FILTER (WHERE oi."unitCost" IS NOT NULL), 0)::float8 AS "coveredCost"
           FROM "order_items" oi
           JOIN "orders" o ON o."id" = oi."orderId"
           WHERE ${Prisma.join(goodsConditions, ' AND ')}
         `,
       ),
-      // Devoluções PARCIAIS do período (ADR-035 + ADR-036): soma o valor devolvido (OrderReturn
-      // REFUND) das vendas que continuam CONFIRMED. As vendas TOTALMENTE devolvidas viram RETURNED e
-      // já saem do faturamento (ADR-036, Decisão A) — não entram aqui, para não remover em dobro.
-      prisma.orderReturn.aggregate({
-        _sum: { totalValue: true },
-        where: {
-          tenantId,
-          intent: 'REFUND',
-          order: { status: 'CONFIRMED' },
-          ...(range ? { createdAt: range } : {}),
-        },
-      }),
+      // Estornos (ADR-037, substitui o "Devoluções PARCIAIS" da ADR-035/036): o DINHEIRO que voltou
+      // ao cliente nas devoluções das vendas do período, por forma — abatido do Recebido. Crédito na
+      // loja e abatimento de dívida vêm à parte, só informativos.
+      loadRefunds(prisma, tenantId, range),
       // ADR-036: nº de trocas no período (OrderReturn intent EXCHANGE).
       prisma.orderReturn.count({
         where: { tenantId, intent: 'EXCHANGE', ...(range ? { createdAt: range } : {}) },
@@ -178,16 +282,17 @@ async function computeSalesData(
     cur.count += g._count._all;
     byMethod.set(g.method, cur);
   }
-  const byPaymentMethod = withPaymentShare(
-    [...byMethod.entries()].map(([method, v]) => ({ method, total: v.total, count: v.count })),
-  );
+  const received = [...byMethod.entries()].map(([method, v]) => ({ method, total: v.total, count: v.count }));
+  const grossRevenue = Number(received.reduce((acc, m) => acc + m.total, 0).toFixed(2));
+  // ADR-037: o "Recebido" é LÍQUIDO — cada forma perde o que voltou ao cliente nela (core, puro).
+  // Σ formas = Recebido continua valendo (é o gate do drill-down e do gráfico diário).
+  const byPaymentMethod = withPaymentShare(netReceivedByMethod(received, refunds.slices));
   const totalRevenue = Number(byPaymentMethod.reduce((acc, m) => acc + m.total, 0).toFixed(2));
   const salesCount = salesAgg._count._all;
-  // Devoluções e faturamento LÍQUIDO (ADR-035): bruto (Recebido) − valor devolvido no período. O
-  // líquido pode ficar abaixo do bruto do período quando devoluções são de vendas anteriores
-  // (reconhecidas na data da devolução) — comportamento aceito pelo Owner (números honestos).
-  const returnsTotal = Number(Number(returnsAgg._sum.totalValue ?? 0).toFixed(2));
-  const netRevenue = calcNetRevenue(totalRevenue, returnsTotal);
+  // Estornos (ADR-037): o dinheiro devolvido das vendas do período. Faturamento LÍQUIDO (ADR-035) =
+  // entradas − estornos, que é o próprio Recebido (por construção, igual a `totalRevenue`).
+  const returnsTotal = Number(refunds.slices.reduce((acc, s) => acc + s.amount, 0).toFixed(2));
+  const netRevenue = calcNetRevenue(grossRevenue, returnsTotal);
 
   // Lucro bruto (Fatia 6) — função pura calcProfit: só vendas com custo entram, nunca custo zero.
   const goods = goodsAgg[0] ?? { goodsRevenue: 0, coveredRevenue: 0, coveredCost: 0 };
@@ -199,15 +304,20 @@ async function computeSalesData(
   });
 
   return {
-    totalRevenue,
-    returnsTotal, // ADR-035/036: valor devolvido no período (REFUND, só devoluções PARCIAIS)
-    netRevenue, // ADR-035: Recebido − devoluções parciais
+    totalRevenue, // ADR-037: Recebido LÍQUIDO de estornos
+    grossRevenue, // ADR-037: entradas antes dos estornos
+    returnsTotal, // ADR-037: dinheiro devolvido (gaveta + estorno cartão/PIX) das vendas do período
+    netRevenue, // ADR-035 (compat): = totalRevenue desde a ADR-037
+    returnsToCredit: refunds.toCredit, // ADR-037: virou crédito na loja (não sai do Recebido)
+    returnsToDebt: refunds.toDebt, // ADR-037: abateu dívida a prazo (nunca entrou como dinheiro)
     salesCount,
     averageTicket: calcAverageTicket(totalRevenue, salesCount),
     cancelledCount,
     exchangeCount, // ADR-036: nº de trocas no período
     returnedCount, // ADR-036: nº de vendas totalmente devolvidas no período
-    creditSalesGenerated: Number(creditGenerated._sum.originalAmount ?? 0),
+    creditSalesGenerated: Number(
+      (Number(creditGenerated._sum.originalAmount ?? 0) - Number(creditGenerated._sum.returnedAmount ?? 0)).toFixed(2),
+    ),
     byPaymentMethod,
     grossProfit,
     marginPercent,
@@ -282,8 +392,9 @@ reports.get('/sales', async (c) => {
  * Drill-down por forma de pagamento (Relatórios v2, Fatia 3): a COMPOSIÇÃO do "Recebido" de UMA
  * forma no período. Reaproveita a MESMA regra de caixa (ADR-019) do `/sales`: linhas de venda à
  * vista (`Payment` daquela forma, por data da venda) + recebimentos de dívida (`ReceivablePayment`
- * daquela forma, por `paidAt`, somando o acréscimo de cartão — ADR-022). Por construção,
- * `Σ linhas = total daquela forma` no `/sales` (o gate do drill-down).
+ * daquela forma, por `paidAt`, somando o acréscimo de cartão — ADR-022) + estornos de devolução
+ * naquela forma (linhas negativas, ADR-037). Por construção, `Σ linhas = total daquela forma` no
+ * `/sales` (o gate do drill-down).
  */
 reports.get('/payment-composition', async (c) => {
   const tenantId = getTenantId(c);
@@ -309,14 +420,15 @@ reports.get('/payment-composition', async (c) => {
     // Teto de segurança (mesmo padrão do `/cash-sessions`): um período real por forma fica muito
     // abaixo disso; existe só para nunca devolver uma resposta gigante num "todo o histórico".
     const CAP = 5000;
-    const [cashPayments, creditReceipts] = await Promise.all([
+    const [cashPayments, creditReceipts, refunds] = await Promise.all([
       // À vista: pagamentos daquela forma, de vendas não canceladas nem devolvidas por inteiro
       // (ADR-036), pela data da venda. Mantém Σ linhas = total da forma no /sales.
+      // ADR-037: mesma regra de vendas do /sales (`RECEIVED_ORDER_WHERE`); os estornos entram abaixo.
       prisma.payment.findMany({
         where: {
           tenantId,
           method,
-          order: { status: { notIn: ['CANCELLED', 'RETURNED'] }, ...(createdAt ? { createdAt } : {}) },
+          order: { ...RECEIVED_ORDER_WHERE, ...(createdAt ? { createdAt } : {}) },
         },
         select: {
           amount: true,
@@ -345,6 +457,8 @@ reports.get('/payment-composition', async (c) => {
         orderBy: { paidAt: 'desc' },
         take: CAP,
       }),
+      // ADR-037: estornos de devolução NESTA forma (linhas negativas), pela data da venda.
+      loadRefunds(prisma, tenantId, createdAt, method),
     ]);
 
     const rows: PaymentCompositionRow[] = [];
@@ -369,6 +483,16 @@ reports.get('/payment-composition', async (c) => {
         // Valor que entrou = quitação + acréscimo de cartão (ADR-022, Fatia C.3), como no `/sales`.
         valor: Number((Number(r.amount) + Number(r.surcharge)).toFixed(2)),
         data: r.paidAt.toISOString(),
+      });
+    }
+    // Estornos (ADR-037): o que voltou ao cliente nesta forma — valor negativo, na data da venda.
+    for (const s of refunds.slices) {
+      rows.push({
+        tipo: 'estorno',
+        ref: formatOrderNumber(s.orderNumber),
+        descricao: s.customerName ?? 'Consumidor',
+        valor: -s.amount,
+        data: s.orderCreatedAt.toISOString(),
       });
     }
     // Extrato: mais recente primeiro (por data do evento).
@@ -434,6 +558,8 @@ reports.get('/top-products', async (c) => {
 
     // Cost-zero: uma varredura agregada. O lucro/margem final sai da função pura `calcProfit` (core),
     // mas o ORDER BY por lucro precisa da conta no banco — daí a expressão de `grossProfit` no SQL.
+    // ADR-037: receita/quantidade/custo LÍQUIDOS do devolvido/trocado; linha devolvida por inteiro não
+    // conta como venda do produto, e produto devolvido por inteiro sai do ranking (HAVING).
     const rows = await prisma.$queryRaw<
       Array<{
         productId: string;
@@ -448,20 +574,21 @@ reports.get('/top-products', async (c) => {
       SELECT
         oi."productId" AS "productId",
         COALESCE(MAX(p."name"), MAX(oi."productName")) AS "productName",
-        SUM(oi."total")::float8 AS "revenue",
-        SUM(oi."quantity")::float8 AS "qty",
-        COUNT(DISTINCT oi."orderId")::int AS "salesCount",
-        COALESCE(SUM(oi."total") FILTER (WHERE oi."unitCost" IS NOT NULL), 0)::float8 AS "coveredRevenue",
-        COALESCE(SUM(oi."unitCost" * COALESCE(oi."baseQuantity", oi."quantity")) FILTER (WHERE oi."unitCost" IS NOT NULL), 0)::float8 AS "coveredCost",
+        SUM(${NET_ITEM_TOTAL})::float8 AS "revenue",
+        SUM(${NET_ITEM_QTY})::float8 AS "qty",
+        COUNT(DISTINCT oi."orderId") FILTER (WHERE ${KEPT_FRACTION} > 0)::int AS "salesCount",
+        COALESCE(SUM(${NET_ITEM_TOTAL}) FILTER (WHERE oi."unitCost" IS NOT NULL), 0)::float8 AS "coveredRevenue",
+        COALESCE(SUM(${NET_ITEM_COST}) FILTER (WHERE oi."unitCost" IS NOT NULL), 0)::float8 AS "coveredCost",
         (
-          COALESCE(SUM(oi."total") FILTER (WHERE oi."unitCost" IS NOT NULL), 0)
-          - COALESCE(SUM(oi."unitCost" * COALESCE(oi."baseQuantity", oi."quantity")) FILTER (WHERE oi."unitCost" IS NOT NULL), 0)
+          COALESCE(SUM(${NET_ITEM_TOTAL}) FILTER (WHERE oi."unitCost" IS NOT NULL), 0)
+          - COALESCE(SUM(${NET_ITEM_COST}) FILTER (WHERE oi."unitCost" IS NOT NULL), 0)
         )::float8 AS "grossProfit"
       FROM "order_items" oi
       JOIN "orders" o ON o."id" = oi."orderId"
       LEFT JOIN "products" p ON p."id" = oi."productId"
       WHERE ${Prisma.join(conditions, ' AND ')}
       GROUP BY oi."productId"
+      HAVING SUM(${NET_ITEM_QTY}) > 0
       ORDER BY ${orderExpr}
       LIMIT ${limit}
     `);
@@ -523,19 +650,21 @@ reports.get('/product-customers/:productId', async (c) => {
     if (range?.gte) conditions.push(Prisma.sql`o."createdAt" >= ${range.gte}`);
     if (range?.lte) conditions.push(Prisma.sql`o."createdAt" <= ${range.lte}`);
 
+    // ADR-037: quantidade/receita LÍQUIDAS do devolvido/trocado.
     const rows = await prisma.$queryRaw<
       Array<{ customerId: string | null; customerName: string; qty: number; revenue: number }>
     >(Prisma.sql`
       SELECT
         o."customerId" AS "customerId",
         COALESCE(MAX(c."name"), 'Consumidor') AS "customerName",
-        SUM(oi."quantity")::float8 AS "qty",
-        SUM(oi."total")::float8 AS "revenue"
+        SUM(${NET_ITEM_QTY})::float8 AS "qty",
+        SUM(${NET_ITEM_TOTAL})::float8 AS "revenue"
       FROM "order_items" oi
       JOIN "orders" o ON o."id" = oi."orderId"
       LEFT JOIN "customers" c ON c."id" = o."customerId"
       WHERE ${Prisma.join(conditions, ' AND ')}
       GROUP BY o."customerId"
+      HAVING SUM(${NET_ITEM_QTY}) > 0
       ORDER BY "revenue" DESC
       LIMIT 5
     `);
@@ -610,19 +739,20 @@ reports.get('/top-customers', async (c) => {
       SELECT
         o."customerId" AS "customerId",
         MAX(c."name") AS "customerName",
-        SUM(oi."total")::float8 AS "revenue",
-        COUNT(DISTINCT oi."orderId")::int AS "salesCount",
-        COALESCE(SUM(oi."total") FILTER (WHERE oi."unitCost" IS NOT NULL), 0)::float8 AS "coveredRevenue",
-        COALESCE(SUM(oi."unitCost" * COALESCE(oi."baseQuantity", oi."quantity")) FILTER (WHERE oi."unitCost" IS NOT NULL), 0)::float8 AS "coveredCost",
+        SUM(${NET_ITEM_TOTAL})::float8 AS "revenue",
+        COUNT(DISTINCT oi."orderId") FILTER (WHERE ${KEPT_FRACTION} > 0)::int AS "salesCount",
+        COALESCE(SUM(${NET_ITEM_TOTAL}) FILTER (WHERE oi."unitCost" IS NOT NULL), 0)::float8 AS "coveredRevenue",
+        COALESCE(SUM(${NET_ITEM_COST}) FILTER (WHERE oi."unitCost" IS NOT NULL), 0)::float8 AS "coveredCost",
         (
-          COALESCE(SUM(oi."total") FILTER (WHERE oi."unitCost" IS NOT NULL), 0)
-          - COALESCE(SUM(oi."unitCost" * COALESCE(oi."baseQuantity", oi."quantity")) FILTER (WHERE oi."unitCost" IS NOT NULL), 0)
+          COALESCE(SUM(${NET_ITEM_TOTAL}) FILTER (WHERE oi."unitCost" IS NOT NULL), 0)
+          - COALESCE(SUM(${NET_ITEM_COST}) FILTER (WHERE oi."unitCost" IS NOT NULL), 0)
         )::float8 AS "grossProfit"
       FROM "order_items" oi
       JOIN "orders" o ON o."id" = oi."orderId"
       JOIN "customers" c ON c."id" = o."customerId"
       WHERE ${Prisma.join(conditions, ' AND ')}
       GROUP BY o."customerId"
+      HAVING SUM(${NET_ITEM_QTY}) > 0
       ORDER BY ${orderExpr}
       LIMIT ${limit}
     `);
@@ -706,13 +836,14 @@ reports.get('/customer-products/:customerId', async (c) => {
       SELECT
         oi."productId" AS "productId",
         COALESCE(MAX(p."name"), MAX(oi."productName")) AS "productName",
-        SUM(oi."quantity")::float8 AS "qty",
-        SUM(oi."total")::float8 AS "revenue"
+        SUM(${NET_ITEM_QTY})::float8 AS "qty",
+        SUM(${NET_ITEM_TOTAL})::float8 AS "revenue"
       FROM "order_items" oi
       JOIN "orders" o ON o."id" = oi."orderId"
       LEFT JOIN "products" p ON p."id" = oi."productId"
       WHERE ${Prisma.join(conditions, ' AND ')}
       GROUP BY oi."productId"
+      HAVING SUM(${NET_ITEM_QTY}) > 0 -- ADR-037: líquido do devolvido/trocado
       ORDER BY "revenue" DESC
       LIMIT 5
     `);
@@ -891,9 +1022,13 @@ reports.get('/daily', async (c) => {
 
   try {
     const prisma = getPrisma(c);
+    // ADR-037: mesma regra do /sales — vendas de `RECEIVED_ORDER_SQL`, só formas de dinheiro real
+    // (crédito da loja/vale fora, ADR-036 C — antes o gráfico os somava e não batia com o card) e os
+    // estornos abatidos no dia da venda (abaixo). Mantém Σ dias = Recebido do período.
     const cashConditions: Prisma.Sql[] = [
       Prisma.sql`o."tenantId" = ${tenantId}::uuid`,
-      Prisma.sql`o."status" NOT IN ('CANCELLED', 'RETURNED')`, // ADR-036: devolvida por inteiro fora
+      RECEIVED_ORDER_SQL,
+      Prisma.sql`pay."method" NOT IN (${Prisma.join(NON_MONEY_METHODS)})`,
     ];
     if (createdAt?.gte) cashConditions.push(Prisma.sql`o."createdAt" >= ${createdAt.gte}`);
     if (createdAt?.lte) cashConditions.push(Prisma.sql`o."createdAt" <= ${createdAt.lte}`);
@@ -901,7 +1036,7 @@ reports.get('/daily', async (c) => {
     if (paidAt?.gte) creditConditions.push(Prisma.sql`rp."paidAt" >= ${paidAt.gte}`);
     if (paidAt?.lte) creditConditions.push(Prisma.sql`rp."paidAt" <= ${paidAt.lte}`);
 
-    const [cashByDay, creditByDay] = await Promise.all([
+    const [cashByDay, creditByDay, refunds] = await Promise.all([
       // À vista por dia E forma (pela data da venda, fuso da loja).
       prisma.$queryRaw<Array<{ day: string; method: string; total: number }>>(Prisma.sql`
         SELECT to_char((o."createdAt" - interval '3 hours')::date, 'YYYY-MM-DD') AS "day",
@@ -921,13 +1056,24 @@ reports.get('/daily', async (c) => {
         WHERE ${Prisma.join(creditConditions, ' AND ')}
         GROUP BY 1, 2
       `),
+      // ADR-037: estornos das vendas do período (dinheiro que voltou), por forma.
+      loadRefunds(prisma, tenantId, createdAt),
     ]);
 
-    // Soma as duas fontes por (dia, forma).
+    // Estornos por (dia DA VENDA no fuso da loja, forma), com sinal negativo.
+    const refundRows = refunds.slices.map((s) => ({
+      day: new Date(s.orderCreatedAt.getTime() - 3 * 3_600_000).toISOString().slice(0, 10),
+      method: s.method,
+      total: -s.amount,
+    }));
+
+    // Soma as fontes por (dia, forma). Forma que zerou no dia (tudo estornado) sai da quebra.
     const byDay = new Map<string, Map<string, number>>();
-    for (const r of [...cashByDay, ...creditByDay]) {
+    for (const r of [...cashByDay, ...creditByDay, ...refundRows]) {
       const methods = byDay.get(r.day) ?? new Map<string, number>();
-      methods.set(r.method, Number(((methods.get(r.method) ?? 0) + Number(r.total)).toFixed(2)));
+      const v = Number(((methods.get(r.method) ?? 0) + Number(r.total)).toFixed(2));
+      if (v === 0) methods.delete(r.method);
+      else methods.set(r.method, v);
       byDay.set(r.day, methods);
     }
 

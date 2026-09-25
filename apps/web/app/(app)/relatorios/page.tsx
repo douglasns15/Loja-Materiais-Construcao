@@ -356,9 +356,11 @@ export default function RelatoriosPage() {
     rows.push([`Período: ${periodLabel}`]);
     rows.push([]);
     rows.push(['Resumo do período']);
-    rows.push(['Recebido', csvNumber(sales?.totalRevenue ?? 0)]);
-    rows.push(['Devoluções', csvNumber(sales?.returnsTotal ?? 0)]); // ADR-035
-    rows.push(['Recebido líquido', csvNumber(sales?.netRevenue ?? 0)]); // ADR-035
+    rows.push(['Recebido (líquido de estornos)', csvNumber(sales?.totalRevenue ?? 0)]); // ADR-037
+    rows.push(['Entradas (antes dos estornos)', csvNumber(sales?.grossRevenue ?? 0)]); // ADR-037
+    rows.push(['Estornos (dinheiro devolvido)', csvNumber(sales?.returnsTotal ?? 0)]); // ADR-035/037
+    rows.push(['Devolvido em crédito na loja', csvNumber(sales?.returnsToCredit ?? 0)]); // ADR-037
+    rows.push(['Devolvido abatendo dívida', csvNumber(sales?.returnsToDebt ?? 0)]); // ADR-037
     rows.push(['Lucro bruto estimado', csvNumber(sales?.grossProfit ?? 0)]);
     rows.push(['Margem %', csvNumber(sales?.marginPercent ?? 0, 1)]);
     rows.push(['Vendas', String(sales?.salesCount ?? 0)]);
@@ -470,7 +472,10 @@ export default function RelatoriosPage() {
         <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
           {/* Regime de caixa (ADR-019): dinheiro que entrou no período — inclui recebimentos de
               fiado no dia em que foram recebidos, não a parte a prazo ainda não paga. */}
-          <p className="text-xs text-gray-600" title="Dinheiro recebido no período (inclui recebimentos de fiado no dia do recebimento).">
+          <p
+            className="text-xs text-gray-600"
+            title="Dinheiro recebido no período (inclui recebimentos de fiado no dia do recebimento), já descontado o que foi devolvido ao cliente nas devoluções (ADR-037)."
+          >
             Recebido no período
           </p>
           <p className="mt-1 text-2xl font-bold">{BRL(sales?.totalRevenue ?? 0)}</p>
@@ -481,19 +486,44 @@ export default function RelatoriosPage() {
             prevText={sales?.previous ? `período anterior: ${BRL(sales.previous.totalRevenue)}` : undefined}
           />
           {/* Faturamento líquido de devoluções (ADR-035): só aparece quando houve devolução no
-              período. Bruto fica no número grande; o líquido em destaque, com a linha de devoluções. */}
-          {sales != null && sales.returnsTotal > 0 && (
+              período. Bruto fica no número grande; o líquido em destaque, com a linha de devoluções.
+              ADR-037: inverteu — o número grande JÁ é o líquido (entradas − estornos); aqui fica a
+              conta aberta (Entradas / Estornos) e, à parte, o que foi devolvido SEM sair dinheiro
+              (crédito na loja / abatimento de dívida), só informativo. */}
+          {sales != null && (sales.returnsTotal > 0 || sales.returnsToCredit > 0 || sales.returnsToDebt > 0) && (
             <div className="mt-2 border-t border-gray-100 pt-2 text-[11px]">
-              <div className="flex justify-between text-gray-500">
-                <span title="Valor devolvido no período (qualquer forma de estorno). Trocas não entram.">
-                  Devoluções
-                </span>
-                <span className="tabular-nums">−{BRL(sales.returnsTotal)}</span>
-              </div>
-              <div className="flex justify-between font-semibold text-indigo-700">
-                <span title="Recebido menos as devoluções do período (ADR-035).">Líquido</span>
-                <span className="tabular-nums">{BRL(sales.netRevenue)}</span>
-              </div>
+              {sales.returnsTotal > 0 && (
+                <>
+                  <div className="flex justify-between text-gray-500">
+                    <span title="Pagamentos das vendas do período + recebimentos de fiado, antes dos estornos.">
+                      Entradas
+                    </span>
+                    <span className="tabular-nums">{BRL(sales.grossRevenue)}</span>
+                  </div>
+                  <div className="flex justify-between text-red-600">
+                    <span title="Dinheiro devolvido ao cliente (gaveta ou estorno no cartão/PIX) nas devoluções das vendas do período. Trocas não entram.">
+                      Estornos
+                    </span>
+                    <span className="tabular-nums">−{BRL(sales.returnsTotal)}</span>
+                  </div>
+                </>
+              )}
+              {sales.returnsToCredit > 0 && (
+                <div className="flex justify-between text-gray-500">
+                  <span title="Devolução que virou crédito na loja: o dinheiro continua na loja (quando o cliente usar o crédito, a nova venda não soma de novo).">
+                    Virou crédito na loja
+                  </span>
+                  <span className="tabular-nums">{BRL(sales.returnsToCredit)}</span>
+                </div>
+              )}
+              {sales.returnsToDebt > 0 && (
+                <div className="flex justify-between text-gray-500">
+                  <span title="Devolução de venda a prazo que abateu a dívida do cliente (esse valor nunca entrou como dinheiro).">
+                    Abatido de dívida
+                  </span>
+                  <span className="tabular-nums">{BRL(sales.returnsToDebt)}</span>
+                </div>
+              )}
             </div>
           )}
         </div>

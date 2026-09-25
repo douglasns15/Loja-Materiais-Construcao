@@ -20,6 +20,8 @@ import {
   reconcileStock,
   calcAverageTicket,
   calcNetRevenue,
+  refundSlicesByMethod,
+  netReceivedByMethod,
   isOrderFullyReturned,
   withPaymentShare,
   calcProfit,
@@ -439,6 +441,107 @@ describe('calcNetRevenue', () => {
   it('arredonda a 2 casas (remove ruído de ponto flutuante da subtração)', () => {
     // 0.3 − 0.1 = 0.19999999999999998 em binário; o líquido normaliza para 0.2.
     expect(calcNetRevenue(0.3, 0.1)).toBe(0.2);
+  });
+});
+
+describe('refundSlicesByMethod (ADR-037)', () => {
+  it('V-001025: débito R$48, devolve R$40 na mesma forma ⇒ R$40 volta no débito', () => {
+    expect(refundSlicesByMethod('SAME_AS_PAYMENT', 40, [{ method: 'DEBIT_CARD', amount: 48 }])).toEqual([
+      { method: 'DEBIT_CARD', amount: 40 },
+    ]);
+  });
+
+  it('crédito na loja não devolve dinheiro (nada sai do Recebido)', () => {
+    expect(refundSlicesByMethod('STORE_CREDIT', 40, [{ method: 'CASH', amount: 48 }])).toEqual([]);
+  });
+
+  it('em dinheiro: o excedente inteiro sai em dinheiro, mesmo se pago no cartão', () => {
+    expect(refundSlicesByMethod('CASH', 40, [{ method: 'CREDIT_CARD', amount: 48 }])).toEqual([
+      { method: 'CASH', amount: 40 },
+    ]);
+  });
+
+  it('mesma forma com pagamento misto: fatia do dinheiro = a do caixa; resto no cartão/PIX', () => {
+    const payments = [
+      { method: 'CASH', amount: 30 },
+      { method: 'PIX', amount: 70 },
+    ];
+    const slices = refundSlicesByMethod('SAME_AS_PAYMENT', 50, payments);
+    expect(slices).toEqual([
+      { method: 'CASH', amount: 15 },
+      { method: 'PIX', amount: 35 },
+    ]);
+    // A fatia em dinheiro bate EXATAMENTE com a saída da gaveta.
+    expect(slices[0]!.amount).toBe(cashOutForReturn('SAME_AS_PAYMENT', 50, payments));
+  });
+
+  it('rateio sem perder centavo (Σ fatias = excedente)', () => {
+    const slices = refundSlicesByMethod('SAME_AS_PAYMENT', 10, [
+      { method: 'PIX', amount: 1 },
+      { method: 'DEBIT_CARD', amount: 1 },
+      { method: 'CREDIT_CARD', amount: 1 },
+    ]);
+    const sum = slices.reduce((acc, s) => acc + Math.round(s.amount * 100), 0);
+    expect(sum).toBe(1000);
+  });
+
+  it('soma parcelas repetidas da mesma forma', () => {
+    expect(
+      refundSlicesByMethod('SAME_AS_PAYMENT', 20, [
+        { method: 'PIX', amount: 10 },
+        { method: 'PIX', amount: 30 },
+      ]),
+    ).toEqual([{ method: 'PIX', amount: 20 }]);
+  });
+
+  it('só dinheiro: tudo volta em dinheiro', () => {
+    expect(refundSlicesByMethod('SAME_AS_PAYMENT', 33.33, [{ method: 'CASH', amount: 100 }])).toEqual([
+      { method: 'CASH', amount: 33.33 },
+    ]);
+  });
+
+  it('sem pagamento, excedente zero/negativo ⇒ nada', () => {
+    expect(refundSlicesByMethod('SAME_AS_PAYMENT', 10, [])).toEqual([]);
+    expect(refundSlicesByMethod('CASH', 0, [{ method: 'CASH', amount: 10 }])).toEqual([]);
+    expect(refundSlicesByMethod('CASH', -5, [{ method: 'CASH', amount: 10 }])).toEqual([]);
+  });
+});
+
+describe('netReceivedByMethod (ADR-037)', () => {
+  it('V-001025: débito R$48 − estorno R$40 = R$8 no débito', () => {
+    expect(
+      netReceivedByMethod([{ method: 'DEBIT_CARD', total: 48, count: 1 }], [{ method: 'DEBIT_CARD', amount: 40 }]),
+    ).toEqual([{ method: 'DEBIT_CARD', total: 8, count: 1 }]);
+  });
+
+  it('estorno total zera a forma e ela some da lista', () => {
+    expect(
+      netReceivedByMethod(
+        [
+          { method: 'PIX', total: 50, count: 1 },
+          { method: 'CASH', total: 20, count: 2 },
+        ],
+        [{ method: 'PIX', amount: 50 }],
+      ),
+    ).toEqual([{ method: 'CASH', total: 20, count: 2 }]);
+  });
+
+  it('cartão estornado em dinheiro: a forma dinheiro pode ficar negativa (número honesto)', () => {
+    expect(
+      netReceivedByMethod([{ method: 'CREDIT_CARD', total: 48, count: 1 }], [{ method: 'CASH', amount: 40 }]),
+    ).toEqual([
+      { method: 'CREDIT_CARD', total: 48, count: 1 },
+      { method: 'CASH', total: -40, count: 0 },
+    ]);
+  });
+
+  it('sem estornos, devolve o recebido como veio (sem ruído de ponto flutuante)', () => {
+    expect(
+      netReceivedByMethod([{ method: 'PIX', total: 0.3, count: 1 }], [{ method: 'PIX', amount: 0.1 }]),
+    ).toEqual([{ method: 'PIX', total: 0.2, count: 1 }]);
+    expect(netReceivedByMethod([{ method: 'PIX', total: 10, count: 1 }], [])).toEqual([
+      { method: 'PIX', total: 10, count: 1 },
+    ]);
   });
 });
 
