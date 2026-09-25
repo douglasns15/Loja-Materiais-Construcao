@@ -11,12 +11,13 @@ import {
   type TopCustomerRow,
   type TopProductRow,
 } from '@nexoloja/shared';
-import { calcVariation } from '@nexoloja/core';
+import { calcVariation, closedFineUnit } from '@nexoloja/core';
 import { apiGet } from '@/lib/api';
 import { useReloadOnReconnect } from '@/lib/useReloadOnReconnect';
 import { useOnline } from '@/lib/useOnline';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { csvNumber, downloadCsv, toCsv } from '@/lib/csv';
+import { formatQtyUnit } from '@/lib/qtyUnit';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { CashMovementsList } from '@/components/CashMovementsList';
 import { DailyRevenueChart } from '@/components/DailyRevenueChart';
@@ -392,10 +393,20 @@ export default function RelatoriosPage() {
     );
     rows.push([]);
     rows.push(['Mais vendidos (por quantidade)']);
-    rows.push(['#', 'Produto', 'Quantidade', 'Unidade', 'Vendas', 'Faturamento']);
-    bestSellers.forEach((p, i) =>
-      rows.push([String(i + 1), p.productName, csvNumber(p.baseQty, 3), p.unit ? unitTypeLabels[p.unit] : '', String(p.salesCount), csvNumber(p.revenue)]),
-    );
+    rows.push(['#', 'Produto', 'Quantidade', 'Unidade', 'Quantidade (legível)', 'Vendas', 'Faturamento']);
+    bestSellers.forEach((p, i) => {
+      // Unidade fechada (barra/rolo/pacote): a quantidade numérica está na régua fina (m / un).
+      const baseUnit = p.unit ? (p.closedSize ? closedFineUnit(p.unit) : p.unit) : null;
+      rows.push([
+        String(i + 1),
+        p.productName,
+        csvNumber(p.baseQty, 3),
+        baseUnit ? unitTypeLabels[baseUnit] : '',
+        formatQtyUnit(p.baseQty, p.unit, p.closedSize),
+        String(p.salesCount),
+        csvNumber(p.revenue),
+      ]);
+    });
     rows.push([]);
     rows.push(['Top clientes (por faturamento)']);
     rows.push(['#', 'Cliente', 'Comprado', 'Lucro gerado', 'Dívida atual']);

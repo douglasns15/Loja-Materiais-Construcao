@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   METER_SALE_STEP,
   closedStockMeters,
+  costPerBaseUnit,
   isClosedPrimary,
   isValidMeterStep,
   metersFromWhole,
@@ -112,6 +113,27 @@ describe('ADR-017 — barra/rolo como unidade fechada principal', () => {
 
     it('pedir METER sem preço por metro cai para barra inteira (fallback seguro)', () => {
       expect(resolveClosedSale(barraSemCorte, 'METER')).toEqual({ unitPrice: 48, metersPerUnit: 6 });
+    });
+  });
+
+  describe('costPerBaseUnit (custo carimbado na venda — ADR-027)', () => {
+    it('unidade fechada: custo da barra ÷ tamanho (custo por metro do ledger)', () => {
+      // Caso real (V-000986): 2 barras de 6 m a R$ 19,40 = 12 m no ledger ⇒ custo R$ 38,80.
+      const perMeter = costPerBaseUnit({ unit: 'BARRA', conversionFactor: 6, costPrice: 19.4 });
+      expect(perMeter).toBe(3.2333);
+      expect(Number((perMeter * 12).toFixed(2))).toBe(38.8);
+    });
+
+    it('rolo e pacote seguem a mesma regra (régua fina = metro / unidade avulsa)', () => {
+      expect(costPerBaseUnit({ unit: 'ROLL', conversionFactor: 100, costPrice: 490 })).toBe(4.9);
+      expect(costPerBaseUnit({ unit: 'PACK', conversionFactor: 6, costPrice: 9 })).toBe(1.5);
+    });
+
+    it('produto comum (ou fechado sem tamanho) fica com o custo do cadastro', () => {
+      expect(costPerBaseUnit({ unit: 'BAG', conversionFactor: null, costPrice: 25 })).toBe(25);
+      expect(costPerBaseUnit({ unit: 'METER', conversionFactor: 100, costPrice: 2 })).toBe(2); // EF-3: base já é o metro
+      expect(costPerBaseUnit({ unit: 'BARRA', conversionFactor: null, costPrice: 19.4 })).toBe(19.4);
+      expect(costPerBaseUnit({ unit: 'BARRA', conversionFactor: 6, costPrice: 0 })).toBe(0);
     });
   });
 });

@@ -236,8 +236,14 @@ export interface TopProductRow {
    * é vendido ora na embalagem, ora na base (ex.: rolo × metro) — é o critério dos "mais vendidos".
    */
   baseQty: number;
-  /** Unidade-base do produto (a de `baseQty`); `null` se o produto não existe mais no cadastro. */
+  /**
+   * Unidade do cadastro; `null` se o produto não existe mais. ATENÇÃO — unidade fechada (barra/rolo/
+   * pacote, ADR-017/030): `baseQty` está na régua FINA (metro / unidade avulsa), não em barras; use
+   * `closedSize` para mostrar "2 barras + 3 m".
+   */
   unit: UnitType | null;
+  /** Tamanho da unidade fechada na régua fina (ex.: barra de 6 m ⇒ 6); `null` se não é fechada. */
+  closedSize: number | null;
   /** Nº de vendas que incluíram o produto (base do ticket). */
   salesCount: number;
   /** Lucro bruto (só linhas com custo). Ver `costCoverage`. */
@@ -254,6 +260,8 @@ export interface ProductCustomerRow {
   customerId: string | null;
   customerName: string;
   qty: number;
+  /** Quantidade em unidade-base do produto, líquida (ADR-037) — rotular com `unit`/`closedSize` do produto. */
+  baseQty: number;
   revenue: number;
 }
 
@@ -283,6 +291,12 @@ export interface CustomerProductRow {
   productId: string;
   productName: string;
   qty: number;
+  /** Quantidade em unidade-base, líquida (ADR-037). Ver `TopProductRow.baseQty`. */
+  baseQty: number;
+  /** Unidade do cadastro. Ver `TopProductRow.unit`. */
+  unit: UnitType | null;
+  /** Tamanho da unidade fechada. Ver `TopProductRow.closedSize`. */
+  closedSize: number | null;
   revenue: number;
 }
 

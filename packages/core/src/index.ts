@@ -1015,6 +1015,24 @@ export function closedStockMeters(
   return Number((qty * metersPerUnit).toFixed(4));
 }
 
+/**
+ * Custo por UNIDADE-BASE do ledger — o que a venda carimba em `OrderItem.unitCost` (ADR-027), para o
+ * custo da linha ser `unitCost × baseQuantity`. Produto comum: o próprio `costPrice`. Unidade
+ * fechada (ADR-017/030): o `costPrice` é o custo da barra/rolo/pacote INTEIRO, mas o ledger (e o
+ * `baseQuantity`) conta a régua fina (metro / unidade avulsa) ⇒ custo ÷ tamanho. Sem isso, 2 barras
+ * de 6 m a R$ 19,40 viravam 12 × 19,40 = R$ 232,80 de custo (o certo é R$ 38,80).
+ */
+export function costPerBaseUnit(p: {
+  unit: string;
+  conversionFactor?: number | null;
+  costPrice: number;
+}): number {
+  if (isClosedPrimary(p)) {
+    return Number((p.costPrice / Number(p.conversionFactor)).toFixed(4));
+  }
+  return p.costPrice;
+}
+
 // =============================================================================
 // PRODUTO AGREGADO — venda em par (ADR-015)
 // =============================================================================

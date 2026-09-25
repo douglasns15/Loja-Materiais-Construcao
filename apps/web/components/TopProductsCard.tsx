@@ -170,7 +170,7 @@ export function TopProductsCard({
                     {byQty ? (
                       <span className="shrink-0 text-right">
                         <span className="block text-sm font-semibold tabular-nums text-gray-800">
-                          {formatQtyUnit(r.baseQty, r.unit)}
+                          {formatQtyUnit(r.baseQty, r.unit, r.closedSize)}
                         </span>
                         <span className="block text-xs tabular-nums text-gray-500">
                           {r.salesCount} {r.salesCount === 1 ? 'venda' : 'vendas'} · {BRL(r.revenue)}

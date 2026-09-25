@@ -3,11 +3,11 @@
 import { useEffect, useState } from 'react';
 import type { CustomerProductRow, TopCustomerRow } from '@nexoloja/shared';
 import { apiGet } from '@/lib/api';
+import { formatQtyUnit } from '@/lib/qtyUnit';
 
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-const QTY = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 3 });
 
 /**
  * Pop-up ENXUTO de detalhe de um cliente (Relatórios v2, Fatia 5). Recebe a linha do ranking (total
@@ -156,7 +156,7 @@ export function CustomerDetailModal({
                 >
                   <span className="min-w-0 truncate text-sm text-gray-700">{pr.productName}</span>
                   <span className="shrink-0 text-sm text-gray-500">
-                    {QTY(pr.qty)} un · <span className="font-medium text-gray-700">{BRL(pr.revenue)}</span>
+                    {formatQtyUnit(pr.baseQty, pr.unit, pr.closedSize)} · <span className="font-medium text-gray-700">{BRL(pr.revenue)}</span>
                   </span>
                 </li>
               ))}

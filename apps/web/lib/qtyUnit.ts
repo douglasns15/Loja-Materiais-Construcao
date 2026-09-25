@@ -1,4 +1,5 @@
-import type { UnitType } from '@nexoloja/shared';
+import { splitWholeAndRemainder } from '@nexoloja/core';
+import { closedUnitTerms, type UnitType } from '@nexoloja/shared';
 
 /**
  * Rótulo curto da unidade para exibir junto de uma quantidade ("340 sacos", "800 m"). Siglas para as
@@ -19,9 +20,27 @@ const UNIT_WORDS: Record<UnitType, [singular: string, plural: string]> = {
   PACK: ['pacote', 'pacotes'],
 };
 
-/** "340 sacos", "12,5 m", "1 rolo". Sem unidade conhecida, cai em "un". Plural a partir de 2 (pt-BR). */
-export function formatQtyUnit(qty: number, unit: UnitType | null | undefined): string {
-  const n = qty.toLocaleString('pt-BR', { maximumFractionDigits: 3 });
-  const [singular, plural] = (unit && UNIT_WORDS[unit]) || UNIT_WORDS.UNIT;
-  return `${n} ${Math.abs(qty) >= 2 ? plural : singular}`;
+const NUM = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+const word = (unit: UnitType, qty: number) => UNIT_WORDS[unit][Math.abs(qty) >= 2 ? 1 : 0];
+
+/**
+ * "340 sacos", "12,5 m", "1 rolo". Sem unidade conhecida, cai em "un". Plural a partir de 2 (pt-BR).
+ *
+ * Unidade FECHADA (barra/rolo/pacote — ADR-017/030, `closedSize` > 0): a quantidade-base está na
+ * régua fina (metro / unidade avulsa), então vira "2 barras", "1 barra + 3 m" ou "4,5 m" — o mesmo
+ * formato do saldo na tela de Estoque. Sem isso, 12 m de tubo apareciam como "12 barras".
+ */
+export function formatQtyUnit(
+  qty: number,
+  unit: UnitType | null | undefined,
+  closedSize?: number | null,
+): string {
+  if (unit && closedSize && closedSize > 0) {
+    const { whole, remainderMeters } = splitWholeAndRemainder(qty, closedSize);
+    const fine = `${NUM(remainderMeters)} ${closedUnitTerms(unit).fineAbbrev}`;
+    if (whole === 0) return fine;
+    const head = `${NUM(whole)} ${word(unit, whole)}`;
+    return remainderMeters > 0 ? `${head} + ${fine}` : head;
+  }
+  return `${NUM(qty)} ${word(unit ?? 'UNIT', qty)}`;
 }

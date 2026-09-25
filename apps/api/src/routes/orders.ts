@@ -11,6 +11,7 @@ import {
   cashPaidOf,
   closedSaleStep,
   closedStockMeters,
+  costPerBaseUnit,
   creditSaleBalances,
   hasAltUnit,
   isClosedPrimary,
@@ -890,7 +891,13 @@ orders.post('/', requireActiveTenant, async (c) => {
               // (o outbox drena pelo mesmo POST /orders). Reajustar o custo do produto depois não
               // distorce a margem histórica. `costPrice` é obrigatório no cadastro, então TODA venda
               // nova nasce com custo carimbado; `unitCost = null` fica só nas vendas pré-migration.
-              unitCost: product.costPrice,
+              // Unidade fechada (ADR-017/030): o cadastro guarda o custo da barra/rolo/pacote INTEIRO,
+              // mas a base é a régua fina ⇒ custo ÷ tamanho (`costPerBaseUnit`, core).
+              unitCost: costPerBaseUnit({
+                unit: product.unit,
+                conversionFactor: product.conversionFactor != null ? Number(product.conversionFactor) : null,
+                costPrice: Number(product.costPrice),
+              }),
               discount: item.discount ?? 0,
               total: calcSaleItemTotal(item),
               // Par (ADR-015): agrupa os dois itens vendidos juntos, p/ o comprovante imprimir

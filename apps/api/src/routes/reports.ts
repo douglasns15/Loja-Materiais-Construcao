@@ -10,6 +10,7 @@ import {
   calcProfit,
   calcTypicalVelocity,
   grossCashMovements,
+  isClosedPrimary,
   netReceivedByMethod,
   previousPeriod,
   refundSlicesByMethod,
@@ -106,6 +107,14 @@ const NET_ITEM_QTY = Prisma.sql`(oi."quantity" * ${KEPT_FRACTION})`;
  * dos "mais vendidos": não mistura embalagem e base do mesmo produto (ex.: 2 rolos + 30 m).
  */
 const NET_ITEM_BASE_QTY = Prisma.sql`(COALESCE(oi."baseQuantity", oi."quantity") - oi."returnedBaseQty")`;
+/**
+ * Tamanho da unidade fechada (ADR-017/030) para o front rotular a quantidade-base ("2 barras + 3 m");
+ * `null` se o produto não é fechado (a base já é a unidade do cadastro).
+ */
+function closedSizeOf(unit: UnitType | null, conversionFactor: number | null): number | null {
+  if (!unit || conversionFactor == null) return null;
+  return isClosedPrimary({ unit, conversionFactor }) ? Number(conversionFactor) : null;
+}
 /** Custo da linha líquido do devolvido: custo carimbado × base que ficou (ADR-027 + ADR-037). */
 const NET_ITEM_COST = Prisma.sql`(oi."unitCost" * (COALESCE(oi."baseQuantity", oi."quantity") - oi."returnedBaseQty"))`;
 
@@ -581,6 +590,7 @@ reports.get('/top-products', async (c) => {
         qty: number;
         baseQty: number;
         unit: UnitType | null;
+        conversionFactor: number | null;
         salesCount: number;
         coveredRevenue: number;
         coveredCost: number;
@@ -593,6 +603,7 @@ reports.get('/top-products', async (c) => {
         SUM(${NET_ITEM_QTY})::float8 AS "qty",
         SUM(${NET_ITEM_BASE_QTY})::float8 AS "baseQty",
         MAX(p."unit"::text) AS "unit",
+        MAX(p."conversionFactor")::float8 AS "conversionFactor",
         COUNT(DISTINCT oi."orderId") FILTER (WHERE ${KEPT_FRACTION} > 0)::int AS "salesCount",
         COALESCE(SUM(${NET_ITEM_TOTAL}) FILTER (WHERE oi."unitCost" IS NOT NULL), 0)::float8 AS "coveredRevenue",
         COALESCE(SUM(${NET_ITEM_COST}) FILTER (WHERE oi."unitCost" IS NOT NULL), 0)::float8 AS "coveredCost",
@@ -623,6 +634,7 @@ reports.get('/top-products', async (c) => {
         qty: Number(r.qty),
         baseQty: Number(r.baseQty.toFixed(4)),
         unit: r.unit,
+        closedSize: closedSizeOf(r.unit, r.conversionFactor),
         salesCount: r.salesCount,
         grossProfit,
         marginPercent,
@@ -671,12 +683,13 @@ reports.get('/product-customers/:productId', async (c) => {
 
     // ADR-037: quantidade/receita LÍQUIDAS do devolvido/trocado.
     const rows = await prisma.$queryRaw<
-      Array<{ customerId: string | null; customerName: string; qty: number; revenue: number }>
+      Array<{ customerId: string | null; customerName: string; qty: number; baseQty: number; revenue: number }>
     >(Prisma.sql`
       SELECT
         o."customerId" AS "customerId",
         COALESCE(MAX(c."name"), 'Consumidor') AS "customerName",
         SUM(${NET_ITEM_QTY})::float8 AS "qty",
+        SUM(${NET_ITEM_BASE_QTY})::float8 AS "baseQty",
         SUM(${NET_ITEM_TOTAL})::float8 AS "revenue"
       FROM "order_items" oi
       JOIN "orders" o ON o."id" = oi."orderId"
@@ -692,6 +705,7 @@ reports.get('/product-customers/:productId', async (c) => {
       customerId: r.customerId,
       customerName: r.customerName,
       qty: Number(r.qty),
+      baseQty: Number(r.baseQty.toFixed(4)),
       revenue: Number(r.revenue.toFixed(2)),
     }));
 
@@ -850,12 +864,23 @@ reports.get('/customer-products/:customerId', async (c) => {
     if (range?.lte) conditions.push(Prisma.sql`o."createdAt" <= ${range.lte}`);
 
     const rows = await prisma.$queryRaw<
-      Array<{ productId: string; productName: string | null; qty: number; revenue: number }>
+      Array<{
+        productId: string;
+        productName: string | null;
+        qty: number;
+        baseQty: number;
+        unit: UnitType | null;
+        conversionFactor: number | null;
+        revenue: number;
+      }>
     >(Prisma.sql`
       SELECT
         oi."productId" AS "productId",
         COALESCE(MAX(p."name"), MAX(oi."productName")) AS "productName",
         SUM(${NET_ITEM_QTY})::float8 AS "qty",
+        SUM(${NET_ITEM_BASE_QTY})::float8 AS "baseQty",
+        MAX(p."unit"::text) AS "unit",
+        MAX(p."conversionFactor")::float8 AS "conversionFactor",
         SUM(${NET_ITEM_TOTAL})::float8 AS "revenue"
       FROM "order_items" oi
       JOIN "orders" o ON o."id" = oi."orderId"
@@ -871,6 +896,9 @@ reports.get('/customer-products/:customerId', async (c) => {
       productId: r.productId,
       productName: r.productName ?? 'Produto',
       qty: Number(r.qty),
+      baseQty: Number(r.baseQty.toFixed(4)),
+      unit: r.unit,
+      closedSize: closedSizeOf(r.unit, r.conversionFactor),
       revenue: Number(r.revenue.toFixed(2)),
     }));
 

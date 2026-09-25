@@ -8,7 +8,6 @@ import { formatQtyUnit } from '@/lib/qtyUnit';
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-const QTY = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 3 });
 
 /**
  * Pop-up ENXUTO de detalhe de um produto (Relatórios v2, Fatia 5). Recebe a linha do ranking (já
@@ -77,7 +76,7 @@ export function ProductDetailModal({
             </span>
             <h2 className="text-xl font-extrabold">{product.productName}</h2>
             <span className="text-xs text-gray-500">
-              {formatQtyUnit(product.baseQty, product.unit)} vendidos · {product.salesCount}{' '}
+              {formatQtyUnit(product.baseQty, product.unit, product.closedSize)} vendidos · {product.salesCount}{' '}
               {product.salesCount === 1 ? 'venda' : 'vendas'} no período
             </span>
           </div>
@@ -138,7 +137,7 @@ export function ProductDetailModal({
                 >
                   <span className="min-w-0 truncate text-sm text-gray-700">{b.customerName}</span>
                   <span className="shrink-0 text-sm text-gray-500">
-                    {QTY(b.qty)} un · <span className="font-medium text-gray-700">{BRL(b.revenue)}</span>
+                    {formatQtyUnit(b.baseQty, product.unit, product.closedSize)} · <span className="font-medium text-gray-700">{BRL(b.revenue)}</span>
                   </span>
                 </li>
               ))}
