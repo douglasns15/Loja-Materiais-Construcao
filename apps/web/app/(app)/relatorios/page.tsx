@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   paymentMethodLabel,
+  unitTypeLabels,
   type CashMovementRow,
   type CashSessionReport,
   type ProjectionsReport,
@@ -23,7 +24,7 @@ import { InsightsBand } from '@/components/InsightsBand';
 import { PaymentCompositionModal } from '@/components/PaymentCompositionModal';
 import { PeriodFilter, defaultRange } from '@/components/PeriodFilter';
 import { ProjectionsSection } from '@/components/ProjectionsSection';
-import { TopCustomersCard } from '@/components/TopCustomersCard';
+import { RankingSwitchCard } from '@/components/RankingSwitchCard';
 import { TopProductsCard } from '@/components/TopProductsCard';
 
 const BRL = (v: number) =>
@@ -251,6 +252,8 @@ export default function RelatoriosPage() {
   // a concorrência no pool frio do free tier — ADR-005): projeções + rankings padrão (faturamento).
   const [projections, setProjections] = useState<ProjectionsReport | null>(null);
   const [topProducts, setTopProducts] = useState<TopProductRow[]>([]);
+  // "Mais vendidos" (por quantidade) — padrão do card da direita (RankingSwitchCard).
+  const [bestSellers, setBestSellers] = useState<TopProductRow[]>([]);
   const [topCustomers, setTopCustomers] = useState<TopCustomerRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -304,6 +307,8 @@ export default function RelatoriosPage() {
       const topQs = new URLSearchParams(qs);
       topQs.set('orderBy', 'faturamento');
       topQs.set('limit', '10');
+      const qtyQs = new URLSearchParams(topQs);
+      qtyQs.set('orderBy', 'quantidade');
 
       // 1) "Esquenta" o pool com o request principal (tem retry embutido) ANTES de abrir o leque —
       //    reduz o risco de vários requests baterem no banco frio ao mesmo tempo (ADR-005).
@@ -311,15 +316,20 @@ export default function RelatoriosPage() {
       setSales(s);
       // 2) Demais dados compartilhados em paralelo, já com o pool quente. Buscados aqui UMA vez e
       //    repassados aos filhos (insights, projeções, cards) — antes cada um refazia o request.
-      const [cs, proj, prods, custs] = await Promise.all([
+      const [cs, proj, prods, best, custs] = await Promise.all([
         apiGet<CashSessionReport[]>(`/reports/cash-sessions${q}`),
         apiGet<ProjectionsReport>('/reports/projections'),
         apiGet<TopProductRow[]>(`/reports/top-products?${topQs.toString()}`),
+        // Falha aqui não derruba o relatório: o card "Mais vendidos" só aparece vazio.
+        apiGet<TopProductRow[]>(`/reports/top-products?${qtyQs.toString()}`).catch(
+          () => [] as TopProductRow[],
+        ),
         apiGet<TopCustomerRow[]>(`/reports/top-customers?${topQs.toString()}`),
       ]);
       setSessions(cs);
       setProjections(proj);
       setTopProducts(prods);
+      setBestSellers(best);
       setTopCustomers(custs);
       setLoadFailed(false);
     } catch (e) {
@@ -381,6 +391,12 @@ export default function RelatoriosPage() {
       rows.push([String(i + 1), p.productName, csvNumber(p.revenue), csvNumber(p.grossProfit), csvNumber(p.marginPercent, 1)]),
     );
     rows.push([]);
+    rows.push(['Mais vendidos (por quantidade)']);
+    rows.push(['#', 'Produto', 'Quantidade', 'Unidade', 'Vendas', 'Faturamento']);
+    bestSellers.forEach((p, i) =>
+      rows.push([String(i + 1), p.productName, csvNumber(p.baseQty, 3), p.unit ? unitTypeLabels[p.unit] : '', String(p.salesCount), csvNumber(p.revenue)]),
+    );
+    rows.push([]);
     rows.push(['Top clientes (por faturamento)']);
     rows.push(['#', 'Cliente', 'Comprado', 'Lucro gerado', 'Dívida atual']);
     topCustomers.forEach((c, i) =>
@@ -393,7 +409,7 @@ export default function RelatoriosPage() {
       rows.push([DATETIME(s.closedAt), csvNumber(s.openingAmount), csvNumber(s.expectedAmount), csvNumber(s.closingAmount), csvNumber(s.divergence)]);
     }
     downloadCsv(`relatorio_${dRange.from ?? 'periodo'}_a_${dRange.to ?? ''}`, toCsv(rows));
-  }, [periodLabel, sales, topProducts, topCustomers, sessions, dRange.from, dRange.to]);
+  }, [periodLabel, sales, topProducts, bestSellers, topCustomers, sessions, dRange.from, dRange.to]);
 
   /**
    * Imprime / salva em PDF (Fatia 10): marca `body.print-report` (a folha de impressão esconde a
@@ -716,10 +732,12 @@ export default function RelatoriosPage() {
           initial={topProducts}
           initialLoading={loading}
         />
-        <TopCustomersCard
+        {/* Direita: "Mais vendidos" (quantidade) por padrão; o título alterna p/ "Melhores clientes". */}
+        <RankingSwitchCard
           from={dRange.from ?? null}
           to={dRange.to ?? null}
-          initial={topCustomers}
+          bestSellers={bestSellers}
+          customers={topCustomers}
           initialLoading={loading}
         />
       </div>

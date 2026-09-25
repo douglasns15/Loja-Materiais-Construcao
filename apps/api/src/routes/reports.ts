@@ -23,6 +23,7 @@ import {
   paymentCompositionSchema,
   reportRangeSchema,
   type DailyRevenuePoint,
+  topProductsSchema,
   topReportSchema,
   type CustomerProductRow,
   type PaymentComposition,
@@ -33,6 +34,7 @@ import {
   type StockoutRisk,
   type TopCustomerRow,
   type TopProductRow,
+  type UnitType,
 } from '@nexoloja/shared';
 import { type Env, getConnectionString, getPrisma, getTenantId } from '../lib/request';
 import { requireAuth } from '../middleware/auth';
@@ -99,6 +101,11 @@ const KEPT_FRACTION = Prisma.sql`COALESCE(1 - oi."returnedBaseQty" / NULLIF(COAL
 const NET_ITEM_TOTAL = Prisma.sql`(oi."total" * ${KEPT_FRACTION})`;
 /** Quantidade (unidade vendida) líquida do devolvido (ADR-037). */
 const NET_ITEM_QTY = Prisma.sql`(oi."quantity" * ${KEPT_FRACTION})`;
+/**
+ * Quantidade em UNIDADE-BASE líquida do devolvido (a mesma do estoque, ADR-013 + ADR-037). Critério
+ * dos "mais vendidos": não mistura embalagem e base do mesmo produto (ex.: 2 rolos + 30 m).
+ */
+const NET_ITEM_BASE_QTY = Prisma.sql`(COALESCE(oi."baseQuantity", oi."quantity") - oi."returnedBaseQty")`;
 /** Custo da linha líquido do devolvido: custo carimbado × base que ficou (ADR-027 + ADR-037). */
 const NET_ITEM_COST = Prisma.sql`(oi."unitCost" * (COALESCE(oi."baseQuantity", oi."quantity") - oi."returnedBaseQty"))`;
 
@@ -514,7 +521,8 @@ reports.get('/payment-composition', async (c) => {
  * Ranking de PRODUTOS no período (Relatórios v2, Fatia 5). Agrega `order_items` de vendas não
  * canceladas (cost-zero, no banco): faturamento, quantidade, nº de vendas e — via custo carimbado
  * (ADR-027) — lucro/margem, sinalizando a cobertura (`costCoverage < 1` quando há venda sem custo).
- * Aceita busca `q` (sem acento) e ordena por `faturamento` (padrão) ou `lucro`.
+ * Aceita busca `q` (sem acento) e ordena por `faturamento` (padrão), `lucro` ou `quantidade`
+ * ("mais vendidos": quantidade em unidade-base do produto, devolvida junto com a unidade).
  */
 reports.get('/top-products', async (c) => {
   const tenantId = getTenantId(c);
@@ -523,7 +531,7 @@ reports.get('/top-products', async (c) => {
     return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
   }
 
-  const parsed = topReportSchema.safeParse({
+  const parsed = topProductsSchema.safeParse({
     from: c.req.query('from'),
     to: c.req.query('to'),
     q: c.req.query('q'),
@@ -553,8 +561,13 @@ reports.get('/top-products', async (c) => {
       )`);
     }
     // Ordena pelo alias já projetado (Postgres aceita ORDER BY em alias de saída).
+    // Desempate por faturamento na ordem por quantidade (mesma quantidade ⇒ quem faturou mais antes).
     const orderExpr =
-      orderBy === 'lucro' ? Prisma.sql`"grossProfit" DESC` : Prisma.sql`"revenue" DESC`;
+      orderBy === 'lucro'
+        ? Prisma.sql`"grossProfit" DESC`
+        : orderBy === 'quantidade'
+          ? Prisma.sql`"baseQty" DESC, "revenue" DESC`
+          : Prisma.sql`"revenue" DESC`;
 
     // Cost-zero: uma varredura agregada. O lucro/margem final sai da função pura `calcProfit` (core),
     // mas o ORDER BY por lucro precisa da conta no banco — daí a expressão de `grossProfit` no SQL.
@@ -566,6 +579,8 @@ reports.get('/top-products', async (c) => {
         productName: string | null;
         revenue: number;
         qty: number;
+        baseQty: number;
+        unit: UnitType | null;
         salesCount: number;
         coveredRevenue: number;
         coveredCost: number;
@@ -576,6 +591,8 @@ reports.get('/top-products', async (c) => {
         COALESCE(MAX(p."name"), MAX(oi."productName")) AS "productName",
         SUM(${NET_ITEM_TOTAL})::float8 AS "revenue",
         SUM(${NET_ITEM_QTY})::float8 AS "qty",
+        SUM(${NET_ITEM_BASE_QTY})::float8 AS "baseQty",
+        MAX(p."unit"::text) AS "unit",
         COUNT(DISTINCT oi."orderId") FILTER (WHERE ${KEPT_FRACTION} > 0)::int AS "salesCount",
         COALESCE(SUM(${NET_ITEM_TOTAL}) FILTER (WHERE oi."unitCost" IS NOT NULL), 0)::float8 AS "coveredRevenue",
         COALESCE(SUM(${NET_ITEM_COST}) FILTER (WHERE oi."unitCost" IS NOT NULL), 0)::float8 AS "coveredCost",
@@ -604,6 +621,8 @@ reports.get('/top-products', async (c) => {
         productName: r.productName ?? 'Produto',
         revenue: Number(r.revenue.toFixed(2)),
         qty: Number(r.qty),
+        baseQty: Number(r.baseQty.toFixed(4)),
+        unit: r.unit,
         salesCount: r.salesCount,
         grossProfit,
         marginPercent,

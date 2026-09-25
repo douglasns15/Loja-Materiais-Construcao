@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import type { ProductCustomerRow, TopProductRow } from '@nexoloja/shared';
 import { apiGet } from '@/lib/api';
+import { formatQtyUnit } from '@/lib/qtyUnit';
 
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -76,7 +77,7 @@ export function ProductDetailModal({
             </span>
             <h2 className="text-xl font-extrabold">{product.productName}</h2>
             <span className="text-xs text-gray-500">
-              {QTY(product.qty)} vendidos · {product.salesCount}{' '}
+              {formatQtyUnit(product.baseQty, product.unit)} vendidos · {product.salesCount}{' '}
               {product.salesCount === 1 ? 'venda' : 'vendas'} no período
             </span>
           </div>

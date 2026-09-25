@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import type { TopCustomerRow } from '@nexoloja/shared';
 import { apiGet } from '@/lib/api';
 import { CustomerDetailModal } from './CustomerDetailModal';
@@ -21,6 +21,7 @@ export function TopCustomersCard({
   to,
   initial,
   initialLoading = false,
+  title,
 }: {
   from: string | null;
   to: string | null;
@@ -28,6 +29,8 @@ export function TopCustomersCard({
   initial: TopCustomerRow[];
   /** `true` enquanto a página ainda busca o `initial` (evita o flash de "nenhuma compra"). */
   initialLoading?: boolean;
+  /** Título no lugar de "Melhores clientes" (ex.: o seletor do card compartilhado com os produtos). */
+  title?: ReactNode;
 }) {
   const [open, setOpen] = useState(true);
   const [q, setQ] = useState('');
@@ -74,17 +77,36 @@ export function TopCustomersCard({
     };
   }, [open, from, to, debouncedQ, orderBy, isDefault]);
 
+  const chevron = <span className="text-gray-400">{open ? '▾' : '▸'}</span>;
+
   return (
     <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className="flex w-full items-center justify-between px-4 py-3 text-left"
-      >
-        <h2 className="font-semibold">Melhores clientes</h2>
-        <span className="text-gray-400">{open ? '▾' : '▸'}</span>
-      </button>
+      {title ? (
+        // Título customizado (pode ser interativo, ex.: um seletor) — o recolher fica só na setinha,
+        // para não aninhar controle dentro de botão.
+        <div className="flex w-full items-center justify-between gap-2 px-4 py-3">
+          {title}
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
+            aria-label={open ? 'Recolher' : 'Expandir'}
+            className="rounded px-1"
+          >
+            {chevron}
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="flex w-full items-center justify-between px-4 py-3 text-left"
+        >
+          <h2 className="font-semibold">Melhores clientes</h2>
+          {chevron}
+        </button>
+      )}
 
       {open && (
         <div className="border-t border-gray-100 p-4">

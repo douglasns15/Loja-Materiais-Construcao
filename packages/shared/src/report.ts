@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { UnitType } from './product';
 
 /**
  * Schemas e tipos dos relatórios de vendas e caixa (Fase 2).
@@ -206,6 +207,16 @@ export const topReportSchema = reportRangeSchema.extend({
 export type TopReportQuery = z.infer<typeof topReportSchema>;
 
 /**
+ * Consulta do ranking de PRODUTOS: igual à dos rankings, mais o critério `quantidade` ("mais
+ * vendidos"), que ordena pela quantidade em UNIDADE-BASE do produto (`baseQty`). Só faz sentido para
+ * produto — clientes seguem com `topReportSchema`.
+ */
+export const topProductsSchema = topReportSchema.extend({
+  orderBy: z.enum(['faturamento', 'lucro', 'quantidade']).optional(),
+});
+export type TopProductsQuery = z.infer<typeof topProductsSchema>;
+
+/**
  * Linha do ranking de PRODUTOS no período (Fatia 5). Lucro/margem só das vendas com custo carimbado
  * (ADR-027); `costCoverage < 1` sinaliza que parte do faturamento não tem custo (venda antiga).
  */
@@ -219,6 +230,14 @@ export interface TopProductRow {
   revenue: number;
   /** Quantidade vendida (na unidade do produto), líquida das devoluções/trocas (ADR-037). */
   qty: number;
+  /**
+   * Quantidade vendida em UNIDADE-BASE do produto (`baseQuantity ?? quantity`, a mesma do estoque),
+   * líquida do devolvido/trocado (ADR-037). Diferente de `qty`, não mistura unidades quando o produto
+   * é vendido ora na embalagem, ora na base (ex.: rolo × metro) — é o critério dos "mais vendidos".
+   */
+  baseQty: number;
+  /** Unidade-base do produto (a de `baseQty`); `null` se o produto não existe mais no cadastro. */
+  unit: UnitType | null;
   /** Nº de vendas que incluíram o produto (base do ticket). */
   salesCount: number;
   /** Lucro bruto (só linhas com custo). Ver `costCoverage`. */
