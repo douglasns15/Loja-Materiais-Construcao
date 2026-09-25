@@ -3,7 +3,19 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-09-16 — **Troca ATÔMICA + valor pago na devolução + desconto por item
+> **Última atualização:** 2026-09-25 — **Relatórios: "Mais vendidos" por quantidade + unidade fechada
+> nos rankings + custo carimbado por unidade-base — NO AR + E2E do Owner VALIDADO; sem migration;
+> commits feitos, PUSH do Owner pendente.** (1) Card da direita de "Produtos e clientes" alterna pelo
+> título ("Mais vendidos ▾ / Melhores clientes", padrão Mais vendidos); `GET /reports/top-products`
+> aceita `orderBy=quantidade` (unidade-base). (2) Achados do E2E: barra/rolo/pacote mostravam a régua
+> fina como se fosse a unidade fechada ("12 barras" = 12 m) → "2 barras + 3 m"; "Quem mais compra"
+> tinha "un" fixo → unidade real; e **bug antigo do ADR-027**: o custo carimbado da unidade fechada era
+> o da barra inteira multiplicado pelos metros (lucro do tubo −R$ 175 em vez de +R$ 19) → `costPerBaseUnit`
+> (core) + correção aprovada de 2 itens em prod. **Gates:** core 393/393, tsc shared/api/web 0, next
+> build OK. **NO AR:** API `9379e7ad`, web `f205f812`; commits `f8503c9` + `e6d98a7`. Registro em
+> `testes/registro-de-testes.md` §Relatorios.MaisVendidos.
+>
+> **Antes:** 2026-09-16 — **Troca ATÔMICA + valor pago na devolução + desconto por item
 > no PDV — NO AR + E2E do Owner VALIDADO ("tudo validado com sucesso"); sem migration; commit feito,
 > PUSH do Owner pendente.** Nasceu de dois pedidos do Owner no uso real. (1) **Bug da troca:** a
 > devolução da troca era gravada ADIANTADO (restock + vale) ao clicar "Ir para a troca" — atualizar a

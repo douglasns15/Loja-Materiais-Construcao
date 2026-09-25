@@ -5958,3 +5958,30 @@ Ambiente: `nexoloja-web.imortal.workers.dev`, loja Demo, `owner@lojademo.com`. A
 3. **Desconto por item no PDV** (campo `MoneyInput` por linha avulsa; formata em R$ no blur). O card do Histórico passou a mostrar o desconto por linha/pedido e, na devolução, **risca a qtd e o valor antigos → novos** (`groupPairedItems` +campos `discount`/`returnedQuantity`).
 
 **Verificação:** core 378/378 (novos testes de `itemPaidValue` e `groupPairedItems`), tsc shared/api/web 0, next build OK (`/venda` 21,2 kB, `/vendas` 15 kB). Refinamentos pós-E2E (formatação do campo em R$ + card) redeployados só no web (API não usa `groupPairedItems`; sem mudança de contrato). **[ADR-033 §Revisão 2026-09-16] + [ADR-036 §Adendo 2026-09-16].**
+
+
+---
+
+## Relatorios.MaisVendidos — "Mais vendidos" por quantidade + unidade fechada nos rankings + custo carimbado por unidade-base — E2E do Owner (2026-09-25)
+
+Ambiente: `nexoloja-web.imortal.workers.dev`, lojas Maria ConstruLar e Demo. **VALIDADO ✅** ("tudo validado com sucesso"). Sem migration. Doc técnica §8.2 atualizada (regra 7).
+
+**Pedido do Owner:** ver os produtos mais vendidos. Já existia o ranking "Produtos" por faturamento/lucro (Fatia 5); faltava a visão por **quantidade**. Decisões do Owner: critério = **quantidade com a unidade** (alertado de que unidades pequenas — metro/kg — tendem a dominar; alternativa "nº de vendas" recusada) e troca pelo **título com ▾**.
+
+**Fase 1 (API `dcc1e145`, web `806e17b8`, commit `f8503c9`):**
+- `GET /reports/top-products?orderBy=quantidade` (schema `topProductsSchema`; `/top-customers` não aceita) ordena por `baseQty` (unidade-base = `baseQuantity ?? quantity` − devolvido, ADR-037; desempate por faturamento). Linhas trazem `baseQty` + `unit`.
+- Relatórios → "Produtos e clientes": card da direita vira `RankingSwitchCard` — título-seletor (`<select>` nativo, não é cortado pelo `overflow-hidden`) "Mais vendidos ▾ / Melhores clientes", **padrão Mais vendidos** ("340 sacos · 52 vendas · R$ …"). CSV ganha a seção "Mais vendidos (por quantidade)". Busca dos mais vendidos isolada (`.catch`) — falha não derruba o relatório.
+
+**Achados do E2E da Fase 1 → Fase 2 (API `9379e7ad`, web `f205f812`, commit `e6d98a7`):**
+
+| # | Achado | Causa | Correção |
+|---|---|---|---|
+| 1 | Tubo PVC 25mm aparecia "12 barras" (eram 2 barras = 12 m) | Unidade fechada (ADR-017/030): o ledger e o `baseQuantity` ficam na **régua fina** (metro / unidade avulsa) | `formatQtyUnit(qty, unit, closedSize)` → "2 barras", "1 barra + 3 m", "4,5 m" (`splitWholeAndRemainder`, mesmo formato do Estoque). APIs trazem `closedSize` |
+| 2 | Detalhe do tubo: **lucro −R$ 175,00 / margem −302,8%** | **Bug antigo (ADR-027):** `POST /orders` carimbava `unitCost = costPrice` (custo da BARRA) e o relatório multiplica por metros | `costPerBaseUnit` (core, +3 testes) grava custo ÷ tamanho. **Correção de dados aprovada e aplicada:** 2 `order_items` (Demo V-000079 Arame R$490→R$49; Maria V-000986 Tubo R$232,80→R$38,80) |
+| 3 | "Quem mais compra"/"O que costuma comprar" mostravam "2 un" | "un" fixo no front | `product-customers`/`customer-products` trazem `baseQty` (+ `unit`/`closedSize`); rótulo pela unidade real |
+| 4 | Saco de Areia Média em **kg** | Cadastro: sacos de areia/pedra/pedrisco + tijolinho estavam com unidade Quilograma | Owner corrigiu o cadastro (dado, não código) |
+| 5 | "Tubo 25mm duplicado" / "Tubo esgoto 75mm estranho" | Falso positivo do diagnóstico: eram produtos **desativados** (a consulta não filtrou `deletedAt`) | Conferido: `tub-25` nunca vendido; `TU-7500` vendido 1× (V-000005) ANTES de desativar — conta corretamente. **Nenhuma venda pós-desativação** em nenhuma loja |
+
+**Verificação:** core 393/393 (+3 `costPerBaseUnit`), shared 54/54, tsc shared/api/web 0, next build OK (`/relatorios` 15,6 kB). Deploy da API com Prisma Client regenerado + schema embutido conferido; smokes `/health` 200 e rotas novas 401 sem auth. E2E do Owner: mais vendidos, seletor, detalhe (lucro do tubo ≈ +R$ 19), sacos em unidade, CSV e venda no PDV após o deploy.
+
+**Limitação conhecida:** `stock_movements.unitCost` da entrada manual de unidade fechada provavelmente segue por barra — só exibido no painel de suporte, não entra em lucro/relatórios (tratar junto do acerto dos custos zerados de rolos/pacotes).
