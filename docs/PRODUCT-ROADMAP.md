@@ -46,6 +46,8 @@ Uma loja que vende ao consumidor precisa emitir cupom fiscal. Sem isso o lojista
 
 > Obrigações específicas dependem do regime tributário de cada loja e devem ser confirmadas com o contador do cliente — nada aqui substitui orientação contábil.
 
+> **Estado (2026-09-29):** trabalho iniciado na branch **`feat/nfe-emissao`** (não mergeada) — Worker `apps/fiscal` com domínio, porta do provedor e adaptador fake, + ADRs de emissão NFC-e e "Empresa acima da loja". **Aguardando o Owner sinalizar a retomada.** Ao mergear: a ADR de NFC-e da branch usa o número **037**, que na `main` já é o "Recebido líquido" → **renumerar** para o próximo livre; a ADR-038 (Empresa acima da loja) fica reservada com esse número. A loja de alimentos (mercadinho) torna a NFC-e ainda mais urgente — e o campo NCM do produto (em aberto no [ADR-040](adr/ADR-040-venda-por-peso-balanca-e-producao-propria.md)) é pré-requisito dela.
+
 ### B. Confiabilidade — precondição, não feature
 
 A partir do primeiro cliente pagante, o dado é dele e a falha é sua.
@@ -62,7 +64,9 @@ A partir do primeiro cliente pagante, o dado é dele e a falha é sua.
 
 | Frente | Por que importa |
 |---|---|
-| **Importador de catálogo (CSV/Excel)** | Uma loja real chega com 1.000–3.000 SKUs numa planilha ou sistema antigo. Sem importação, a migração vira semanas de digitação e o cliente desiste. EAN e NF-e resolvem o fluxo daqui pra frente, não o acervo inicial |
+| **Importador de catálogo (CSV/Excel)** | Uma loja real chega com 1.000–3.000 SKUs numa planilha ou sistema antigo. Sem importação, a migração vira semanas de digitação e o cliente desiste. EAN e NF-e resolvem o fluxo daqui pra frente, não o acervo inicial. **Desenhado no [ADR-041](adr/ADR-041-importacao-de-catalogo-por-planilha.md) (Proposto)** |
+| **Lojas de outros ramos** | Primeira loja fora de construção (Mercadinho + Sorveteria + Rotisseria, 2026-09-29): ramo escolhido no painel liga só os módulos relevantes ([ADR-039](adr/ADR-039-ramo-da-loja-e-modulos.md)); venda por kg, etiqueta de balança e produto sem controle de estoque ([ADR-040](adr/ADR-040-venda-por-peso-balanca-e-producao-propria.md)). Ambos **Proposto**. Plano, decisões pendentes e ordem em [`plano-implantacao-multirramo.md`](plano-implantacao-multirramo.md) |
+| **Usuário multi-loja** | Um login, seletor de loja no login. Priorizado pelo Owner em 2026-09-29; desenho pronto no [ADR-014](adr/ADR-014-usuario-multi-loja.md) (Proposto) — também é o caminho para o implantador operar a loja do cliente |
 | **Categorias** | A 2.000 SKUs, catálogo sem categoria é inutilizável. O Owner já sinalizou ("vamos de Categorias") — faltam 2-3 decisões de produto |
 | **Inventário inicial** | Contagem de abertura; o ajuste de estoque já existe, falta o fluxo guiado |
 
@@ -174,7 +178,7 @@ Cada item abaixo é uma decisão real com trade-offs — exatamente o material d
 
 - **Emissão fiscal:** qual provedor? Onde guardar o certificado A1 com segurança? Como a contingência offline conversa com a fila de sincronização? → candidato a **nova ADR** (ADR-027+; o número ADR-026 já é a dívida do cliente).
 - **Monetização:** quantos planos? O que entra no plano de entrada? A nota fiscal é cobrada à parte (custo variável) ou embutida?
-- **Importação de catálogo:** formato livre com De-Para (como na NF-e) ou template fixo?
+- ~~**Importação de catálogo:** formato livre com De-Para (como na NF-e) ou template fixo?~~ — **Proposto** no [ADR-041](adr/ADR-041-importacao-de-catalogo-por-planilha.md): os dois — modelo NexoLoja como caminho feliz + De-Para automático/editável para exportação de sistema anterior.
 
 **Plataforma (Horizonte 3)**
 

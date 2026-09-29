@@ -1,0 +1,128 @@
+# ADR-040 — Venda por peso, etiqueta de balança e produto sem controle de estoque
+
+- **Status:** **Proposto** — aguardando aprovação do Owner. **Nada será codado nem migrado até a aprovação**
+  (regras 1 e 4 do `CLAUDE.md`).
+- **Data:** 2026-09-29
+- **Deciders:** Owner do produto (pendente).
+- **Contexto de fase:** implantação do Mercadinho + Sorveteria + Rotisseria. Depende do
+  [ADR-039](./ADR-039-ramo-da-loja-e-modulos.md) (módulo `SCALE_LABEL`).
+
+---
+
+## Contexto
+
+Verificado no código em 2026-09-29, três coisas impedem hoje a loja de alimentos de vender:
+
+1. **Não há venda fracionada por kg.** O stepper do carrinho só aceita decimal quando a linha é metro de
+   barra/rolo (`isMeterLine` → passo 0,5; demais → passo 1 — `apps/web/app/(app)/venda/page.tsx`). Não se vende
+   0,350 kg de sorvete nem 1,2 kg de comida.
+2. **A venda trava sem estoque.** `POST /orders` bloqueia online quando `disponível < quantidade`
+   (`apps/api/src/routes/orders.ts`, "Estoque insuficiente"). Frango assado, marmita e sorvete são **produzidos
+   no dia**; exigir uma Entrada antes de cada venda é inviável no balcão.
+3. **Não há leitura de etiqueta de balança.** Sorvete, comida por kg, frios e hortifruti são pesados numa
+   balança que **imprime uma etiqueta com código de barras**; o caixa só passa o leitor.
+
+---
+
+## Como funciona a etiqueta de balança (referência para o Owner)
+
+A balança etiquetadora (Toledo Prix, Filizola, Urano, Elgin…) imprime um **EAN-13 que começa com `2`** — faixa
+que a GS1 reserva para **uso interno da loja** (nunca colide com código de fabricante). O código carrega **só
+duas informações**: **qual produto** (o código dele na balança, "PLU") e **quanto** (o preço total **ou** o
+peso). Nome, preço/kg, data e validade vão **impressos em texto** na etiqueta, não no código.
+
+Layout mais comum no Brasil (varia por configuração da balança):
+
+```
+ 2   0123   0   002468   4
+ │    │     │     │      └─ dígito verificador do EAN-13
+ │    │     │     └──────── preço total em centavos (R$ 24,68)  — ou peso em gramas, conforme config
+ │    │     └────────────── dígito de preenchimento/verificação (depende do layout)
+ │    └──────────────────── código do produto na balança (PLU) — 4 ou 5 dígitos
+ └───────────────────────── "2" = código interno de balança
+```
+
+Exemplo: sorvete de PLU `0123` a R$ 59,90/kg, 412 g → total R$ 24,68 → etiqueta `2012300024684`. O PDV lê,
+acha o produto de código de balança `0123`, lança **R$ 24,68** e baixa **0,412 kg** do estoque (24,68 ÷ 59,90).
+
+**"Funciona com qualquer balança?"** — Para **etiquetadora, sim**: o PDV não conversa com a balança, só lê o
+código impresso, e o formato é o mesmo em todas as marcas. Só precisamos saber **2 parâmetros**, que ficam
+configuráveis por loja: nº de dígitos do PLU (4 ou 5) e se o valor embutido é **preço** ou **peso**. Os produtos
+(PLU, nome, preço/kg) são cadastrados **na balança** pelo software do fabricante (ou no teclado dela); numa
+fatia futura o NexoLoja pode **exportar** essa lista no formato de cada marca (ex.: Toledo MGV).
+
+**Balança de checkout ligada ao computador** (o caixa pesa e o peso entra sozinho no PDV) é **outro caso**:
+o protocolo serial muda por marca e, numa PWA, só funciona via Web Serial no **Chrome/Edge de computador**
+(não em celular/tablet). Fica **fora** desta ADR; enquanto isso, o PDV aceita **digitar o peso**.
+
+---
+
+## Decisão
+
+### 1. Venda fracionada por kg e litro — core, qualquer ramo
+
+- Linhas cuja unidade de venda é `KILOGRAM` ou `LITER` aceitam **3 casas decimais** (botões −/+ andam 0,1; a
+  digitação é livre até 3 casas, ex.: `0,412`). Função pura em `packages/core` (`quantityRuleFor(unit) → {step, decimals, min}`)
+  substitui os `isMeterLine`/`step` espalhados, com testes Vitest.
+- Estoque já é `Decimal(12,4)` — **nenhuma mudança de banco** para isto.
+
+### 2. Produto sem controle de estoque — `Product.trackStock` (core)
+
+- Novo campo `trackStock Boolean @default(true)`. Desligado ⇒ a venda **não trava** e **não gera
+  `StockMovement`** nem mexe em `stockQty` (o produto simplesmente não tem estoque, como um serviço).
+- **Coerente com o ADR-001:** a regra "toda mudança de estoque = movimento" continua valendo — o produto sem
+  controle **não tem** estoque para mudar. Religar o controle começa do zero com uma Entrada (contagem).
+- Rotisseria/sorveteria usam no dia 1. Quando o módulo `RECIPES` existir (produção: frango cru → assado), aí
+  sim a produção vira movimento — decisão futura.
+- **Alternativa rejeitada:** "permitir estoque negativo" por produto. Mantém movimentos, mas enche telas e
+  alertas de saldos negativos sem significado e mascara furo real de estoque nos produtos controlados.
+
+### 3. Etiqueta de balança — módulo `SCALE_LABEL`
+
+- Novo campo `Product.scaleCode VarChar(6)?` (o PLU), **único por loja** entre produtos não excluídos
+  (índice parcial). Só aparece no cadastro quando o módulo está ligado.
+- Layout por loja em `TenantModule.config` do `SCALE_LABEL` (sem migration): `{ pluDigits: 4|5, value: 'PRICE'|'WEIGHT' }`.
+- Função pura `parseScaleBarcode(code, layout) → { plu, priceCents } | { plu, grams } | null` em `packages/core`,
+  com testes (DV inválido, prefixo ≠ 2, layouts 4/5 dígitos, preço × peso).
+- No PDV, a leitura de um EAN-13 iniciado em `2` (com módulo ligado) tenta primeiro a balança:
+  - **Valor = preço:** o **total da etiqueta manda** (é o que o cliente viu impresso); quantidade = total ÷ preço/kg,
+    arredondada a 3 casas, só para baixar estoque.
+  - **Valor = peso:** quantidade = gramas ÷ 1000; total = quantidade × preço/kg atual do cadastro.
+- **Recomendação ao comprar a balança:** layout **preço** (sem divergência de centavo entre etiqueta e caixa).
+
+---
+
+## Impacto no banco (a aprovar — regra 1)
+
+Aditiva, pode ir na **mesma migration do [ADR-039](./ADR-039-ramo-da-loja-e-modulos.md)**:
+
+1. `ALTER TABLE products ADD COLUMN "trackStock" BOOLEAN NOT NULL DEFAULT true` — todo produto existente segue controlado.
+2. `ALTER TABLE products ADD COLUMN "scaleCode" VARCHAR(6)` + índice único parcial
+   `(tenantId, scaleCode) WHERE "scaleCode" IS NOT NULL AND "deletedAt" IS NULL`.
+
+**Em aberto (decisão do Owner):** aproveitar a migration para incluir `Product.ncm VARCHAR(8)?`. Não é usado
+agora, mas a NFC-e vai exigir, e a planilha de importação ([ADR-041](./ADR-041-importacao-de-catalogo-por-planilha.md))
+já poderia coletá-lo. Hoje o NCM só existe no catálogo global (`ProductCatalog.ncm`).
+
+---
+
+## Consequências
+
+- `POST /orders` passa a respeitar `trackStock` (não trava, não movimenta) — também no caminho offline (ADR-011)
+  e na devolução/troca (ADR-033: devolver item sem controle não gera Entrada).
+- Relatórios de estoque/reposição (Central de Alertas, ADR-029) ignoram produtos sem controle.
+- Custo/margem continuam valendo (vêm do cadastro/snapshot, não do estoque).
+
+## Fatias
+
+1. **Fatia 1 — kg fracionado** (sem migration): `quantityRuleFor` + PDV/carrinho/offline. Dá para ir antes de tudo.
+2. **Fatia 2 — `trackStock`** (migration): cadastro ("Controlar estoque deste produto"), venda, devolução, alertas.
+3. **Fatia 3 — etiqueta de balança** (migration + módulo): `scaleCode`, `parseScaleBarcode`, config do layout no
+   painel, leitura no PDV. E2E com etiqueta impressa de verdade (ou gerada em tela para teste).
+4. **Futuro:** exportar PLUs para a balança; balança de checkout via Web Serial; `RECIPES`.
+
+## Relacionadas
+
+- [ADR-001](./ADR-001-consistencia-de-estoque.md) — estoque por movimento (preservado).
+- [ADR-017](./ADR-017-unidade-fechada-como-principal-barra.md) / [ADR-030](./ADR-030-pacote-como-unidade-fechada.md) — regras de passo que a `quantityRuleFor` unifica.
+- [ADR-025](./ADR-025-catalogo-global-ean.md) — `gtinKey`; o prefixo `2` nunca vai ao catálogo global (código interno).
