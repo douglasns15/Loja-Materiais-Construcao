@@ -945,6 +945,79 @@ export function closedFineUnit(unit: string): 'METER' | 'UNIT' {
   return unit === 'PACK' ? 'UNIT' : 'METER';
 }
 
+// -----------------------------------------------------------------------------
+// REGRA DE QUANTIDADE POR UNIDADE — venda fracionada por peso/volume (ADR-040 §1)
+// -----------------------------------------------------------------------------
+// Uma função só decide passo, casas decimais e mínimo da quantidade de uma linha de venda,
+// no lugar de `step` espalhados pela tela. kg/L vendem fracionado com 3 casas (0,412 kg de
+// sorvete); o corte de barra/rolo segue em múltiplos de 0,5 m (ADR-017) e o pacote aberto em
+// unidade inteira (ADR-030). As demais unidades mantêm o comportamento de sempre: passo 1 nos
+// botões, sem travar decimais digitados (o ledger guarda 4 casas).
+
+/** Unidades vendidas por peso/volume, com quantidade fracionada até o grama/mililitro. */
+export const FRACTIONAL_UNITS = ['KILOGRAM', 'LITER'] as const;
+
+/** Casas decimais da quantidade no ledger (`Decimal(12,4)`) — teto de qualquer regra. */
+export const LEDGER_QTY_DECIMALS = 4;
+
+export interface QuantityRule {
+  /** Incremento dos botões −/+ do carrinho. */
+  step: number;
+  /** Casas decimais aceitas; a quantidade é arredondada a elas. */
+  decimals: number;
+  /** Menor quantidade vendável (> 0). */
+  min: number;
+  /** `true` ⇒ a quantidade tem de ser MÚLTIPLO do passo (corte de barra/rolo, pacote aberto). */
+  strictStep: boolean;
+}
+
+/**
+ * Regra de quantidade de uma linha de venda. `unit` é a unidade VENDIDA na linha; `closedCut`
+ * marca o corte avulso de uma unidade fechada (ADR-017/030), cuja régua fina é `METER` (passo
+ * 0,5) ou `UNIT` (passo 1), ambos com passo estrito.
+ */
+export function quantityRuleFor(unit: string, opts: { closedCut?: boolean } = {}): QuantityRule {
+  if (opts.closedCut) {
+    return unit === 'METER'
+      ? { step: METER_SALE_STEP, decimals: 1, min: METER_SALE_STEP, strictStep: true }
+      : { step: 1, decimals: 0, min: 1, strictStep: true };
+  }
+  if ((FRACTIONAL_UNITS as readonly string[]).includes(unit)) {
+    return { step: 0.1, decimals: 3, min: 0.001, strictStep: false };
+  }
+  // Comportamento de sempre: botões andam de 1 em 1, mas a digitação livre não é travada.
+  const min = 1 / 10 ** LEDGER_QTY_DECIMALS;
+  return { step: 1, decimals: LEDGER_QTY_DECIMALS, min, strictStep: false };
+}
+
+/**
+ * Arredonda a quantidade às casas da regra, meio para cima (0,1 + 0,2 vira 0,3, não
+ * 0,30000000000000004; 0,4125 vira 0,413). A tolerância evita que `toFixed` arredonde 0,4125
+ * para baixo por ele ser, em binário, 0,41249999…
+ */
+export function roundQuantity(qty: number, rule: QuantityRule): number {
+  const f = 10 ** rule.decimals;
+  return Math.round(qty * f + Math.sign(qty) * 1e-6) / f;
+}
+
+/**
+ * `true` se `qty` é vendável pela regra: finita, ≥ mínimo, sem casas além das permitidas e, se
+ * o passo é estrito, múltiplo dele. Tolerância a ruído de ponto flutuante.
+ */
+export function isValidQuantity(qty: number, rule: QuantityRule): boolean {
+  if (!Number.isFinite(qty) || qty < rule.min - 1e-9) return false;
+  if (Math.abs(qty - roundQuantity(qty, rule)) > 1e-9) return false;
+  return rule.strictStep ? isValidMeterStep(qty, rule.step) : true;
+}
+
+/**
+ * Próxima quantidade ao apertar −/+ (`direction` = -1 | 1), já arredondada. Pode dar ≤ 0 — quem
+ * chama decide (no carrinho, zerar remove a linha).
+ */
+export function stepQuantity(qty: number, direction: 1 | -1, rule: QuantityRule): number {
+  return roundQuantity(qty + direction * rule.step, rule);
+}
+
 /** Config de um produto de unidade fechada (ADR-017). Preços já como número (Decimal→number). */
 export interface ClosedPrimaryConfig {
   unit: string;

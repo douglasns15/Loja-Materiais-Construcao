@@ -28,6 +28,9 @@ import {
   hasPair,
   isClosedPrimary,
   isValidMeterStep,
+  quantityRuleFor,
+  roundQuantity,
+  stepQuantity,
   maxStoreCreditForSale,
   pairAvailableQty,
   paymentStatus,
@@ -164,6 +167,14 @@ type CartItem = {
 /** Rótulo curto de uma unidade (sem o parêntese): "Metro (m)" → "Metro"; "Rolo" → "Rolo". */
 const unitShort = (u: UnitType) => unitTypeLabels[u].replace(/\s*\(.*\)$/, '');
 
+/** Quantidade em pt-BR, até 3 casas (0.412 → "0,412"; 2 → "2"). */
+const QTY = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+
+/** Sigla das unidades vendidas por peso/volume (ADR-040 §1). */
+const WEIGHT_ABBR: Partial<Record<UnitType, string>> = { KILOGRAM: 'kg', LITER: 'L' };
+/** Sigla da linha vendida por peso/volume ("kg"/"L"), ou '' se a linha não é fracionada por peso. */
+const weightAbbr = (c: CartItem) => (c.pair ? '' : (WEIGHT_ABBR[c.unitType] ?? ''));
+
 // Desconto por item (ADR-036) — helpers puros compartilhados entre o carrinho, os totais e o
 // comprovante. `unitPrice` aqui é o da linha já reprecificada (pricedCart, com o acréscimo de
 // cartão embutido), então o desconto incide sobre o preço realmente cobrado.
@@ -275,9 +286,10 @@ function Summary({ items, total, discount }: { items: CartItem[]; total: number;
         {items.map((i) => (
           <li key={i.key} className="flex justify-between py-1">
             <span>
-              {i.quantity}
+              {QTY(i.quantity)}
               {i.pair ? ` par${i.quantity > 1 ? 'es' : ''} ` : ''}
-              {!i.pair && (i.saleMode === 'ALT' ? ` ${unitShort(i.unitType)} ` : '× ')}
+              {!i.pair &&
+                (i.saleMode === 'ALT' ? ` ${unitShort(i.unitType)} ` : weightAbbr(i) ? ` ${weightAbbr(i)} ` : '× ')}
               {i.name}
               {i.saleMode === 'ALT' && !i.pair && (
                 <span className="text-gray-500">
@@ -373,6 +385,8 @@ function QtyInput({
   onCommit,
   ariaLabel,
   className,
+  autoFocusSelect,
+  onEnter,
 }: {
   value: number;
   step: string;
@@ -380,13 +394,32 @@ function QtyInput({
   onCommit: (n: number) => void;
   ariaLabel: string;
   className?: string;
+  /** Venda por peso (ADR-040 §1): ao entrar no carrinho, foca e seleciona o campo para digitar o peso. */
+  autoFocusSelect?: boolean;
+  /** Enter no campo (ex.: devolver o foco à busca para o próximo item). */
+  onEnter?: () => void;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (autoFocusSelect) {
+      ref.current?.focus();
+      ref.current?.select();
+    }
+  }, [autoFocusSelect]);
   return (
     <input
+      ref={ref}
       type="number"
       min={min}
       step={step}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && onEnter) {
+          e.preventDefault();
+          setDraft(null);
+          onEnter();
+        }
+      }}
       value={draft ?? String(value)}
       onChange={(e) => {
         const raw = e.target.value;
@@ -421,6 +454,9 @@ export default function VendaPage() {
   const { cart, setCart, clearCart } = useCart();
   // Linha cujo "i" (informações do item) está aberto — chave do CartItem, ou null.
   const [infoKey, setInfoKey] = useState<string | null>(null);
+  // Linha vendida por peso recém-adicionada sem peso informado (ADR-040 §1): o campo de quantidade
+  // dela recebe o foco para o operador digitar o peso lido na balança.
+  const [weighKey, setWeighKey] = useState<string | null>(null);
   const [selected, setSelected] = useState('');
   const [productSearch, setProductSearch] = useState('');
   const [qty, setQty] = useState('1');
@@ -1301,12 +1337,20 @@ export default function VendaPage() {
   function addToCart(productId: string = selected, mode: SaleUnitMode = 'BASE') {
     setError(null);
     const p = products.find((x) => x.id === productId);
-    const q = Number(qty);
-    if (!p || !(q > 0)) {
+    const typedQty = Number(qty);
+    if (!p || !(typedQty > 0)) {
       setError('Selecione um produto e uma quantidade válida.');
       return;
     }
-    const { line, factorToBase, meterInvalid } = buildCartLine(p, mode, q);
+    const { line, factorToBase, meterInvalid } = buildCartLine(p, mode, typedQty);
+    // kg/L (ADR-040 §1): quantidade arredondada a 3 casas. Regras de passo estrito (metro de
+    // barra, pacote aberto) não arredondam — quem valida é o `meterInvalid` abaixo.
+    const rule = lineRule(line);
+    const q = rule.strictStep ? typedQty : roundQuantity(typedQty, rule);
+    if (!(q > 0)) {
+      setError('Selecione um produto e uma quantidade válida.');
+      return;
+    }
     if (meterInvalid) {
       setError(
         p.unit === 'PACK'
@@ -1317,7 +1361,7 @@ export default function VendaPage() {
     }
     const key = line.key;
     const existing = cart.find((c) => c.key === key);
-    const newQty = (existing?.quantity ?? 0) + q;
+    const newQty = rule.strictStep ? (existing?.quantity ?? 0) + q : roundQuantity((existing?.quantity ?? 0) + q, rule);
     // Trava de estoque em UNIDADE-BASE: soma a base já consumida por OUTRAS linhas do mesmo
     // produto — inclusive as linhas de PAR, que também consomem este produto (ADR-015) — mais
     // a base desta linha (EF-3).
@@ -1330,6 +1374,9 @@ export default function VendaPage() {
       setCart(cart.map((c) => (c.key === key ? { ...c, quantity: newQty } : c)));
     } else {
       setCart([...cart, { ...line, quantity: q }]);
+      // Produto por peso entrou com a quantidade padrão (1) ⇒ o peso ainda não foi informado:
+      // foca o campo da linha para o operador digitar (Enter devolve o foco à busca).
+      if (weightAbbr(line) && qty === '1') setWeighKey(key);
     }
     setSelected('');
     setQty('1');
@@ -1473,6 +1520,17 @@ export default function VendaPage() {
   /** Linha vendida por unidade avulsa de um pacote (ADR-030): quantidade inteira (passo 1). */
   const isPackUnitLine = (c: CartItem) =>
     c.closed && c.saleMode === 'ALT' && c.baseUnitType === 'UNIT';
+  /**
+   * Regra de quantidade da linha (ADR-040 §1, `quantityRuleFor` do core): passo dos botões −/+,
+   * casas decimais e mínimo. Corte de barra/rolo (0,5 m) e pacote aberto (inteiro) mantêm as regras
+   * do ADR-017/030; kg/L vendem com 3 casas (passo 0,1); o resto anda de 1 em 1 como sempre.
+   */
+  const lineRule = (c: CartItem) =>
+    isMeterLine(c)
+      ? quantityRuleFor('METER', { closedCut: true })
+      : isPackUnitLine(c)
+        ? quantityRuleFor('UNIT', { closedCut: true })
+        : quantityRuleFor(c.pair ? 'UNIT' : c.unitType);
 
   /**
    * Edita a quantidade de uma linha JÁ no carrinho (− / + ou digitação direta), reusando a mesma
@@ -1484,6 +1542,10 @@ export default function VendaPage() {
     setError(null);
     const item = cart.find((c) => c.key === key);
     if (!item) return;
+    // kg/L (ADR-040 §1): arredonda a 3 casas (0,4125 → 0,413) e limpa o ruído do −/+ (0,1 + 0,2).
+    // Regras de passo estrito não arredondam: 0,7 m tem de dar erro, não virar 0,5 m calado.
+    const rule = lineRule(item);
+    if (!rule.strictStep) nextQty = roundQuantity(nextQty, rule);
     if (!(nextQty > 0)) {
       removeFromCart(key);
       return;
@@ -2313,6 +2375,8 @@ export default function VendaPage() {
                 ? `${i.name} — ${unitShort(i.unitType)} (${i.conversionFactor} ${unitShort(i.baseUnitType)})`
                 : i.name,
             quantity: i.quantity,
+            // kg/L (ADR-040 §1): o cupom mostra "0,412 kg" na coluna Qtd.
+            ...(weightAbbr(i) ? { unit: weightAbbr(i) } : {}),
             unitPrice: i.unitPrice,
             // Desconto por item (ADR-036): o comprovante imprime o total líquido da linha. Par não
             // tem desconto por item (v1), então `lineDiscountOf` já devolve 0 nesses casos.
@@ -2464,7 +2528,7 @@ export default function VendaPage() {
             <input
               type="number"
               min="0"
-              step="1"
+              step="any"
               value={qty}
               onChange={(e) => setQty(e.target.value)}
               className="w-24 rounded-lg border border-gray-300 px-3 py-2"
@@ -2798,12 +2862,13 @@ export default function VendaPage() {
                 )}
 
                 {/* Nível 2: stepper de quantidade (− / campo / +) + preço unitário. Edição inline:
-                    passo 0,5 no metro, senão 1; a trava de estoque vive em changeLineQty. */}
+                    passo pela regra da linha (lineRule: 0,5 no metro, 0,1 no kg/L, senão 1); a trava
+                    de estoque vive em changeLineQty. */}
                 <div className="mt-1.5 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1">
                     <button
                       type="button"
-                      onClick={() => changeLineQty(i.key, i.quantity - (isMeterLine(i) ? 0.5 : 1))}
+                      onClick={() => changeLineQty(i.key, stepQuantity(i.quantity, -1, lineRule(i)))}
                       className="h-7 w-7 shrink-0 rounded border border-gray-300 text-gray-600 hover:bg-gray-50"
                       aria-label={`Diminuir quantidade de ${i.name}`}
                     >
@@ -2812,14 +2877,20 @@ export default function VendaPage() {
                     <QtyInput
                       value={i.quantity}
                       min="0"
-                      step={isMeterLine(i) ? '0.5' : '1'}
+                      // kg/L: digitação livre até 3 casas ('any'); as demais seguem o passo da regra.
+                      step={weightAbbr(i) ? 'any' : String(lineRule(i).step)}
                       onCommit={(n) => changeLineQty(i.key, n)}
-                      className="w-14 rounded border border-gray-300 px-1 py-1 text-right"
-                      ariaLabel={`Quantidade de ${i.name}`}
+                      className={`${weightAbbr(i) ? 'w-20' : 'w-14'} rounded border border-gray-300 px-1 py-1 text-right`}
+                      ariaLabel={weightAbbr(i) ? `Peso de ${i.name} (${weightAbbr(i)})` : `Quantidade de ${i.name}`}
+                      autoFocusSelect={weighKey === i.key}
+                      onEnter={() => {
+                        setWeighKey(null);
+                        productSearchRef.current?.focus();
+                      }}
                     />
                     <button
                       type="button"
-                      onClick={() => changeLineQty(i.key, i.quantity + (isMeterLine(i) ? 0.5 : 1))}
+                      onClick={() => changeLineQty(i.key, stepQuantity(i.quantity, 1, lineRule(i)))}
                       className="h-7 w-7 shrink-0 rounded border border-gray-300 text-gray-600 hover:bg-gray-50"
                       aria-label={`Aumentar quantidade de ${i.name}`}
                     >
@@ -2830,10 +2901,12 @@ export default function VendaPage() {
                         ? `par${i.quantity > 1 ? 'es' : ''}`
                         : i.saleMode === 'ALT' && !i.pair
                           ? unitShort(i.unitType)
-                          : ''}
+                          : weightAbbr(i)}
                     </span>
                   </div>
-                  <span className="shrink-0 text-xs text-gray-500 tabular-nums">{BRL(i.unitPrice)}/un</span>
+                  <span className="shrink-0 text-xs text-gray-500 tabular-nums">
+                    {BRL(i.unitPrice)}/{weightAbbr(i) || 'un'}
+                  </span>
                 </div>
 
                 {/* Nível 3 (ADR-036): desconto POR ITEM (R$ da linha). Só em linha avulsa — no par o

@@ -19,7 +19,9 @@ export type Store = {
 // `discount` (ADR-036): desconto POR ITEM da linha (R$ absoluto), opcional. O total impresso da linha
 // é o LÍQUIDO (bruto − desconto) e o subtotal soma os líquidos, então subtotal − desconto do pedido =
 // total, coerente com o carrinho e com o servidor. Ausente/0 = sem desconto por item.
-export type ReceiptItem = { name: string; quantity: number; unitPrice: number; discount?: number };
+// `unit` (ADR-040 §1): sigla impressa ao lado da quantidade nas linhas vendidas por peso/volume
+// ("0,412 kg"). Ausente nas demais, que seguem só com o número.
+export type ReceiptItem = { name: string; quantity: number; unitPrice: number; discount?: number; unit?: string };
 
 /** Total líquido de uma linha do comprovante (ADR-036): bruto − desconto por item, travado ao bruto. */
 const receiptLineNet = (i: ReceiptItem) =>
@@ -88,10 +90,7 @@ const BRL = (v: number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 // Quantidade sem casas inúteis (5 em vez de 5,0000; mantém frações reais como 2,5).
-const QTY = (v: number) => {
-  const n = Number(v);
-  return Number.isInteger(n) ? String(n) : String(Number(n.toFixed(4)));
-};
+const QTY = (v: number) => Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 4 });
 
 /**
  * Documento imprimível (comprovante de venda OU orçamento). Fica oculto na tela
@@ -189,7 +188,10 @@ export function ReceiptPrint({ kind, store, items, total, date, discount, paymen
                   <span className="rc-sub"> (desc. {BRL(i.discount as number)})</span>
                 ) : null}
               </td>
-              <td className="right">{i.quantity}</td>
+              <td className="right">
+                {QTY(i.quantity)}
+                {i.unit ? ` ${i.unit}` : ''}
+              </td>
               <td className="right">{BRL(i.unitPrice)}</td>
               <td className="right">{BRL(receiptLineNet(i))}</td>
             </tr>
