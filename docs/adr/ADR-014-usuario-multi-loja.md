@@ -1,7 +1,10 @@
 # ADR-014 — Usuário multi-loja (membership + loja ativa da sessão)
 
-- **Status:** **Proposto** — aguardando aprovação do Owner. **Nada será codado nem migrado até a aprovação.**
-- **Data:** 2026-07-17
+- **Status:** **Aceito** (2026-09-30) — aprovado como está (papel por loja, loja ativa por header, convite com
+  consentimento, RLS-B). **Executa por último** na fila da implantação multirramo
+  (`docs/plano-implantacao-multirramo.md` §5, item 10); as 3 migrations serão apresentadas de novo, uma a uma,
+  quando chegar a vez (regra 1).
+- **Data:** 2026-07-17 (proposta) · 2026-09-30 (aceite)
 - **Contexto de fase:** Fase 3 (produção). Assenta sobre o RBAC da loja (ADR-008) e a plataforma/multi-loja
   do Super Usuário (ADR-009), **sem** se confundir com eles (ver "Não é isto" abaixo).
 - **Deciders:** Owner do produto (pendente).

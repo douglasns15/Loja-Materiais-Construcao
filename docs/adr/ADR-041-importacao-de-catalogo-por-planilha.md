@@ -1,9 +1,17 @@
 # ADR-041 — Carga inicial do catálogo: planilha, cadastro em sequência e cadastro no caixa
 
-- **Status:** **Proposto** — aguardando aprovação do Owner. **Nada será codado até a aprovação** (regra 4:
-  possível dependência nova de leitura de `.xlsx`).
-- **Data:** 2026-09-29
-- **Deciders:** Owner do produto (pendente).
+- **Status:** **Aceito** (2026-09-30) — dependência `read-excel-file` aprovada; ver "Decisões do Owner" abaixo.
+- **Data:** 2026-09-29 (proposta) · 2026-09-30 (aceite)
+- **Deciders:** Owner do produto.
+
+> **Decisões do Owner (2026-09-30):**
+> 1. **Leitura de `.xlsx` com `read-excel-file`** (opção A). E um **modelo simples de preenchimento**, pronto
+>    para ser **enviado ao cliente** (por WhatsApp/e-mail) antes da implantação — o lojista preenche em casa e
+>    devolve. O modelo é artefato de primeira classe da Fatia 3, não um detalhe da tela.
+> 2. **Cadastro no caixa: operador também pode** ("Cadastrar agora" disponível a qualquer papel com acesso ao
+>    PDV). Em contrapartida, **o admin recebe um alerta com os produtos cadastrados no caixa para conferência**
+>    (custo, categoria, estoque, nome) — o alerta lista **exatamente** os produtos que nasceram no caixa, não uma
+>    heurística "sem custo/sem categoria".
 - **Contexto de fase:** Horizonte 0, bloco C ("Adoção") do [`PRODUCT-ROADMAP.md`](../PRODUCT-ROADMAP.md) —
   "Importador de catálogo" e "Inventário inicial". Resolve a pergunta em aberto "formato livre com De-Para ou
   template fixo?".
@@ -81,7 +89,7 @@ Hoje, bipar um código desconhecido no PDV mostra só "Nenhum produto encontrado
   nascer com `trackStock = false` até a revisão ([ADR-040](./ADR-040-venda-por-peso-balanca-e-producao-propria.md)),
   ou nascer com Entrada automática da quantidade vendida. Recomendação: `trackStock = false` + alerta de revisão
   (não inventa estoque).
-- Permissão: quem pode cadastrar no caixa (só admin ou também operador) — **decisão do Owner**.
+- Permissão: **admin e operador** (decisão do Owner, 2026-09-30), com o alerta de conferência acima para o admin.
 
 ## C. Download automático de NF-e na SEFAZ — **futuro, junto da NFC-e**
 
@@ -134,7 +142,7 @@ mesmo sistema não remapeia. Perfis prontos por sistema de mercado entram confor
 | Estoque mínimo | — | |
 | Controla estoque (S/N) | — | Padrão S ([ADR-040](./ADR-040-venda-por-peso-balanca-e-producao-propria.md)) |
 | Código na balança | — | Só com módulo `SCALE_LABEL` ([ADR-040](./ADR-040-venda-por-peso-balanca-e-producao-propria.md)) |
-| NCM | — | Só se o Owner aprovar o campo (em aberto no ADR-040) |
+| NCM | — | 8 dígitos; campo aprovado no ADR-040 (2026-09-30), vale para qualquer ramo |
 
 ### 3. Casamento idempotente — reimportar não duplica
 

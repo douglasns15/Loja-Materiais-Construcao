@@ -1,9 +1,12 @@
 # ADR-040 — Venda por peso, etiqueta de balança e produto sem controle de estoque
 
-- **Status:** **Proposto** — aguardando aprovação do Owner. **Nada será codado nem migrado até a aprovação**
-  (regras 1 e 4 do `CLAUDE.md`).
-- **Data:** 2026-09-29
-- **Deciders:** Owner do produto (pendente).
+- **Status:** **Aceito** (2026-09-30) — migration aprovada **com `Product.ncm`**; ver "Decisão do Owner" abaixo.
+- **Data:** 2026-09-29 (proposta) · 2026-09-30 (aceite)
+- **Deciders:** Owner do produto.
+
+> **Decisão do Owner (2026-09-30):** aprovada a migration única ADR-039 + ADR-040 **incluindo `Product.ncm`**.
+> O campo NCM fica **visível no cadastro de qualquer loja**, de qualquer ramo — **não** é gated por ramo/módulo
+> (é pré-requisito fiscal geral, não recurso de alimentos).
 - **Contexto de fase:** implantação do Mercadinho + Sorveteria + Rotisseria. Depende do
   [ADR-039](./ADR-039-ramo-da-loja-e-modulos.md) (módulo `SCALE_LABEL`).
 
@@ -100,9 +103,10 @@ Aditiva, pode ir na **mesma migration do [ADR-039](./ADR-039-ramo-da-loja-e-modu
 2. `ALTER TABLE products ADD COLUMN "scaleCode" VARCHAR(6)` + índice único parcial
    `(tenantId, scaleCode) WHERE "scaleCode" IS NOT NULL AND "deletedAt" IS NULL`.
 
-**Em aberto (decisão do Owner):** aproveitar a migration para incluir `Product.ncm VARCHAR(8)?`. Não é usado
-agora, mas a NFC-e vai exigir, e a planilha de importação ([ADR-041](./ADR-041-importacao-de-catalogo-por-planilha.md))
-já poderia coletá-lo. Hoje o NCM só existe no catálogo global (`ProductCatalog.ncm`).
+3. `ALTER TABLE products ADD COLUMN "ncm" VARCHAR(8)` — **aprovado pelo Owner (2026-09-30)**. Não é usado no
+   cálculo agora, mas a NFC-e vai exigir, e a planilha de importação ([ADR-041](./ADR-041-importacao-de-catalogo-por-planilha.md))
+   e o cadastro já o coletam. Pré-preenchido a partir de `ProductCatalog.ncm` quando o EAN casa. **Visível no
+   cadastro de toda loja** (sem gating de ramo).
 
 ---
 
@@ -116,6 +120,13 @@ já poderia coletá-lo. Hoje o NCM só existe no catálogo global (`ProductCatal
 ## Fatias
 
 1. **Fatia 1 — kg fracionado** (sem migration): `quantityRuleFor` + PDV/carrinho/offline. Dá para ir antes de tudo.
+   **IMPLEMENTADA 2026-09-30** (só `packages/core` + `apps/web`; sem API/migration/contrato): core ganhou
+   `quantityRuleFor`/`roundQuantity`/`isValidQuantity`/`stepQuantity` (+`quantidade.test.ts`); no PDV a linha
+   kg/L anda de 0,1 nos botões, aceita até 3 casas digitadas, mostra "kg"/"R$ …/kg"; produto por peso que entra
+   no carrinho sem peso informado recebe o foco no campo da linha (Enter devolve à busca); resumo e cupom imprimem
+   "0,412 kg". Corte de barra/rolo (0,5 m) e pacote aberto (inteiro) preservados byte a byte na regra. Gates:
+   core 409 ✅, web tsc 0 + build ✅. Deploy + E2E do Owner pendentes. Fica para a Fatia 2: a trava de estoque
+   ainda vale (produto por kg precisa de saldo até existir `trackStock`).
 2. **Fatia 2 — `trackStock`** (migration): cadastro ("Controlar estoque deste produto"), venda, devolução, alertas.
 3. **Fatia 3 — etiqueta de balança** (migration + módulo): `scaleCode`, `parseScaleBarcode`, config do layout no
    painel, leitura no PDV. E2E com etiqueta impressa de verdade (ou gerada em tela para teste).

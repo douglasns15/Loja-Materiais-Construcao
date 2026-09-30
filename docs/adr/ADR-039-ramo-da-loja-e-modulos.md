@@ -1,9 +1,8 @@
 # ADR-039 — Ramo da loja: perfis de ramo que ligam módulos (a loja só vê o que é do seu ramo)
 
-- **Status:** **Proposto** — aguardando aprovação do Owner. **Nada será codado nem migrado até a aprovação**
-  (regras 1 e 4 do `CLAUDE.md`).
-- **Data:** 2026-09-29
-- **Deciders:** Owner do produto (pendente).
+- **Status:** **Aceito** (2026-09-30) — migration aditiva aprovada (junto com a do ADR-040).
+- **Data:** 2026-09-29 (proposta) · 2026-09-30 (aceite)
+- **Deciders:** Owner do produto.
 - **Contexto de fase:** implantação da primeira loja **fora de material de construção** — um
   **Mercadinho + Sorveteria + Rotisseria**. Companheiras: [ADR-040](./ADR-040-venda-por-peso-balanca-e-producao-propria.md)
   (peso, balança e produção própria) e [ADR-041](./ADR-041-importacao-de-catalogo-por-planilha.md) (carga inicial

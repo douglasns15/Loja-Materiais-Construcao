@@ -1,6 +1,9 @@
 # Plano — Implantação multirramo (1ª loja de alimentos) + usuário multi-loja
 
-> **Estado em 2026-09-29: PLANEJAMENTO. Nada codado, nada migrado, nada deployado.**
+> **Estado em 2026-09-30: ADRs 014/039/040/041 ACEITAS pelo Owner (decisões no §4). Execução começou pela
+> entrega #1 (venda por kg/L, sem migration).**
+>
+> Estado em 2026-09-29: PLANEJAMENTO. Nada codado, nada migrado, nada deployado.
 > Só documentação: ADRs [039](adr/ADR-039-ramo-da-loja-e-modulos.md), [040](adr/ADR-040-venda-por-peso-balanca-e-producao-propria.md)
 > e [041](adr/ADR-041-importacao-de-catalogo-por-planilha.md) escritas como **Proposto**; [ADR-014](adr/ADR-014-usuario-multi-loja.md)
 > (multi-loja, de 2026-07-17) priorizada pelo Owner, ainda **Proposto**.
@@ -57,24 +60,27 @@ A loja de alimentos **não consegue vender hoje**:
   sendo a loja). Também resolve o acesso do **implantador** à loja do cliente (o suporte do Super Usuário é
   somente leitura).
 
-## 4. O que falta o Owner decidir ⬅️ **retomar por aqui**
+## 4. Decisões do Owner (2026-09-30) ✅
 
-1. **Aprovar a migration única ADR-039 + ADR-040** (aditiva, sem perda): `Tenant.segments` (enum `StoreSegment[]`,
+1. **Migration única ADR-039 + ADR-040 — APROVADA** (aditiva, sem perda): `Tenant.segments` (enum `StoreSegment[]`,
    backfill `CONSTRUCTION` + módulo `CONSTRUCTION_UNITS` nas lojas atuais), `Product.trackStock` (default `true`),
    `Product.scaleCode` (+ índice único parcial por loja).
-2. **Incluir `Product.ncm` já nessa migration?** Recomendação: **sim** (a NFC-e vai exigir; planilha e cadastro
-   já coletam).
-3. **Dependência para ler Excel:** `read-excel-file` (recomendado) × só CSV.
-4. **Aprovar a ADR-014 como está:** papel por loja, loja ativa por header, convite com consentimento, RLS-B.
-5. **Cadastro no caixa (ADR-041 §B):** quem pode — só admin ou também operador de caixa?
-6. **Ordem de execução** (proposta abaixo) — confirmar ou inverter multi-loja.
-7. **Balança:** quando comprar, informar marca/modelo e se a etiqueta embute preço ou peso (não bloqueia o início).
+2. **`Product.ncm` — INCLUÍDO** na mesma migration. **Visível no cadastro de qualquer loja**, não só da loja nova
+   (sem gating de ramo).
+3. **Excel: `read-excel-file`** — e um **modelo simples de preenchimento** para enviar ao cliente antes da
+   implantação.
+4. **ADR-014 aprovada como está.**
+5. **Cadastro no caixa: operador também pode** — e o admin recebe **alerta dos produtos cadastrados no caixa**
+   para conferência (lista exata, não heurística).
+6. **Ordem de execução confirmada** (multi-loja por último).
+7. **Balança:** ainda não comprada — quando comprar, informar marca/modelo e se a etiqueta embute preço ou peso
+   (não bloqueia o início; a Fatia 3 do ADR-040 espera por isso).
 
 ## 5. Ordem de execução proposta
 
 | # | Entrega | Migration? | ADR |
 |---|---|---|---|
-| 1 | Venda por kg/L fracionada (3 casas) | Não | 040 §1 |
+| 1 | Venda por kg/L fracionada (3 casas) — **implementada 2026-09-30** (deploy/E2E pendentes) | Não | 040 §1 |
 | 2 | Migration única (segments, trackStock, scaleCode, ncm?) | **Sim** — item 1/2 acima | 039/040 |
 | 3 | Ramo no painel + módulos + `GET /me` com módulos | (usa a #2) | 039 F1 |
 | 4 | Gating na web (esconder construção) | Não | 039 F2 |
