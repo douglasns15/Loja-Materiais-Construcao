@@ -1,7 +1,9 @@
 import { Hono } from 'hono';
 
+import { modulesForSegments } from '@nexoloja/core';
 import {
   MODULE_OFFLINE_SALES,
+  activeModuleKeys,
   createTenantSchema,
   setTenantActiveSchema,
   setTenantModuleSchema,
@@ -55,12 +57,11 @@ platform.get('/tenants', async (c) => {
         phone: true,
         isActive: true,
         createdAt: true,
+        // Ramos da loja (ADR-039), exibidos como chips na lista.
+        segments: true,
         _count: { select: { users: true } },
-        // Estado do módulo de vendas offline (ADR-011) por loja, para o toggle do painel.
-        modules: {
-          where: { moduleKey: MODULE_OFFLINE_SALES },
-          select: { isActive: true },
-        },
+        // Módulos da loja (ADR-011 offline + ADR-039 módulos de ramo), para os interruptores do painel.
+        modules: { select: { moduleKey: true, isActive: true } },
       },
     });
 
@@ -98,7 +99,9 @@ platform.get('/tenants', async (c) => {
         return {
           ...t,
           userCount: _count.users,
-          offlineSales: modules.some((m) => m.isActive === true),
+          offlineSales: modules.some((m) => m.moduleKey === MODULE_OFFLINE_SALES && m.isActive === true),
+          // Chaves dos módulos ATIVOS (ADR-039) — o painel acende os interruptores por elas.
+          modules: activeModuleKeys(modules),
           lastActivityAt: ms !== undefined ? new Date(ms).toISOString() : null,
         };
       }),
@@ -115,6 +118,9 @@ platform.get('/tenants', async (c) => {
  * é derivado do nome quando não informado. Unicidade de `slug`/`cnpj` → 409. O admin é
  * criado/recuperado no Supabase Auth (convite por e-mail via `service_role`) e vinculado à
  * nova loja como `OWNER`. Registra `AuditEvent CREATE_TENANT` (auditoria de plataforma).
+ *
+ * Ramo (ADR-039): `segments` (default `[CONSTRUCTION]`) grava o ramo e, na MESMA transação, liga os
+ * módulos do preset (`modulesForSegments`) e cria as categorias iniciais `seedCategories`.
  */
 platform.post('/tenants', async (c) => {
   const connectionString = getConnectionString(c.env);
@@ -134,7 +140,14 @@ platform.post('/tenants', async (c) => {
     return c.json({ ok: false, error: 'Dados inválidos.', issues: parsed.error.flatten() }, 400);
   }
 
-  const { name, cnpj, phone, adminEmail, adminName, redirectTo } = parsed.data;
+  const { name, cnpj, phone, adminEmail, adminName, redirectTo, segments } = parsed.data;
+  // Preset do ramo (ADR-039): módulos ligados na criação + categorias iniciais que o implantador
+  // manteve marcadas (sem repetição, comparando sem caixa — "Bebidas" e "bebidas" são a mesma).
+  const presetModules = modulesForSegments(segments);
+  const seedCategories: string[] = [];
+  for (const cat of parsed.data.seedCategories ?? []) {
+    if (!seedCategories.some((c) => c.toLowerCase() === cat.toLowerCase())) seedCategories.push(cat);
+  }
   const slug = parsed.data.slug ?? slugify(name);
   if (!slug) {
     return c.json(
@@ -170,8 +183,18 @@ platform.post('/tenants', async (c) => {
 
     const result = await prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
-        data: { name, slug, cnpj: cnpj ?? null, phone: phone ?? null },
+        data: { name, slug, cnpj: cnpj ?? null, phone: phone ?? null, segments },
       });
+      if (presetModules.length > 0) {
+        await tx.tenantModule.createMany({
+          data: presetModules.map((moduleKey) => ({ tenantId: tenant.id, moduleKey, isActive: true })),
+        });
+      }
+      if (seedCategories.length > 0) {
+        await tx.category.createMany({
+          data: seedCategories.map((catName) => ({ tenantId: tenant.id, name: catName })),
+        });
+      }
       const admin = await tx.user.create({
         data: {
           id: adminId, // = auth.users.id (ADR-005)
@@ -188,7 +211,15 @@ platform.post('/tenants', async (c) => {
           entity: 'Tenant',
           entityId: tenant.id,
           action: 'CREATE_TENANT',
-          meta: { platform: true, slug, adminEmail, adminRole: 'OWNER' },
+          meta: {
+            platform: true,
+            slug,
+            adminEmail,
+            adminRole: 'OWNER',
+            segments,
+            modules: presetModules,
+            seedCategories: seedCategories.length,
+          },
         },
       });
       return { tenant, admin };
@@ -203,6 +234,8 @@ platform.post('/tenants', async (c) => {
           slug: result.tenant.slug,
           cnpj: result.tenant.cnpj,
           isActive: result.tenant.isActive,
+          segments: result.tenant.segments,
+          modules: presetModules,
           admin: { id: result.admin.id, email: result.admin.email, role: result.admin.role },
         },
       },
@@ -272,8 +305,9 @@ platform.patch('/tenants/:id', async (c) => {
 });
 
 /**
- * Liga/desliga um MÓDULO da loja pelo painel de plataforma (ADR-011 §9). Por ora só
- * `OFFLINE_SALES` (fila de sincronização offline de vendas — recurso de plano pago). Faz upsert
+ * Liga/desliga um MÓDULO da loja pelo painel de plataforma (ADR-011 §9 + ADR-039). Chaves
+ * aceitas: `OFFLINE_SALES` (fila offline — plano pago), `CONSTRUCTION_UNITS` e `SCALE_LABEL`
+ * (módulos de ramo; desligar só esconde recurso da tela, nunca apaga dado). Faz upsert
  * na tabela `TenantModule` que já existe (sem migration): a chave é `[tenantId, moduleKey]` e o
  * liga/desliga é `isActive`. Regra do gate: ausência da linha OU `isActive=false` = OFF (o
  * `PATCH` cria a linha na 1ª ativação). Registra `AuditEvent SET_TENANT_MODULE` (evento de

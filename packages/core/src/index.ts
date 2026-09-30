@@ -2380,3 +2380,69 @@ export function planReorder(
     lineCount: lines.length,
   };
 }
+
+// -----------------------------------------------------------------------------
+// RAMO DA LOJA → MÓDULOS (ADR-039)
+// -----------------------------------------------------------------------------
+// Ramo = o que a loja É (multisseleção); módulo = o que ela tem LIGADO (`TenantModule`). O ramo
+// é só um PRESET aplicado na criação da loja: liga a união dos módulos dos ramos escolhidos e
+// sugere categorias iniciais (editáveis antes de criar). Depois disso quem manda é o módulo,
+// ajustável caso a caso no painel. Espelha o enum `StoreSegment` do schema.
+
+export type StoreSegmentKey = 'CONSTRUCTION' | 'GROCERY' | 'ICE_CREAM' | 'ROTISSERIE' | 'GENERAL_RETAIL';
+/** Módulos que um ramo pode ligar. `OFFLINE_SALES` fica fora: é plano pago, não ramo. */
+export type SegmentModuleKey = 'CONSTRUCTION_UNITS' | 'SCALE_LABEL';
+
+interface SegmentPreset {
+  modules: readonly SegmentModuleKey[];
+  categories: readonly string[];
+}
+
+/** Preset de cada ramo (tabela do ADR-039 §2). */
+export const SEGMENT_PRESETS: Record<StoreSegmentKey, SegmentPreset> = {
+  CONSTRUCTION: {
+    modules: ['CONSTRUCTION_UNITS'],
+    categories: ['Hidráulica', 'Elétrica', 'Básico', 'Ferragens', 'Tintas'],
+  },
+  GROCERY: {
+    modules: ['SCALE_LABEL'],
+    categories: ['Mercearia', 'Bebidas', 'Frios e laticínios', 'Hortifruti', 'Limpeza', 'Higiene'],
+  },
+  ICE_CREAM: {
+    modules: ['SCALE_LABEL'],
+    categories: ['Sorvete por kg', 'Picolés', 'Açaí', 'Coberturas e adicionais'],
+  },
+  ROTISSERIE: {
+    modules: ['SCALE_LABEL'],
+    categories: ['Assados', 'Marmitas', 'Porções', 'Salgados'],
+  },
+  GENERAL_RETAIL: { modules: [], categories: [] },
+};
+
+/**
+ * Módulos ligados pelos ramos escolhidos: a UNIÃO dos presets, sem repetição, na ordem em que
+ * aparecem. Ramo desconhecido é ignorado (não derruba a criação da loja).
+ */
+export function modulesForSegments(segments: readonly string[]): SegmentModuleKey[] {
+  const out: SegmentModuleKey[] = [];
+  for (const s of segments) {
+    for (const m of SEGMENT_PRESETS[s as StoreSegmentKey]?.modules ?? []) {
+      if (!out.includes(m)) out.push(m);
+    }
+  }
+  return out;
+}
+
+/**
+ * Categorias sugeridas pelos ramos escolhidos: união sem repetição (comparação sem caixa/acento
+ * não é necessária — os presets são nossos), na ordem dos ramos.
+ */
+export function suggestedCategoriesForSegments(segments: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const s of segments) {
+    for (const c of SEGMENT_PRESETS[s as StoreSegmentKey]?.categories ?? []) {
+      if (!out.includes(c)) out.push(c);
+    }
+  }
+  return out;
+}

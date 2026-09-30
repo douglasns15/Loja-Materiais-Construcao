@@ -516,7 +516,7 @@ Alertas CALCULADOS sob demanda (custo-zero: nada é gravado; a pendência some q
 |---|---|
 | `GET /tenant` · `PATCH /tenant` 🔒 | Dados da loja / edição. Inclui taxas da maquininha (ADR-016) e `blindCashClose` (fechamento cego do caixa, por loja). |
 | `POST /tenant/logo` 🔒 · `DELETE /tenant/logo` 🔒 | Upload (URL assinada R2) / remoção do logo. |
-| `GET /me` · `PATCH /me` | Perfil da sessão (+ memberships) / edição do próprio perfil. |
+| `GET /me` · `PATCH /me` | Perfil da sessão (+ memberships) / edição do próprio perfil. O `GET` traz `tenantActive`, `offlineSales` (ADR-011 §9) e `modules` — chaves dos módulos **ativos** da loja (ADR-039: `CONSTRUCTION_UNITS`, `SCALE_LABEL`, `OFFLINE_SALES`), para a web esconder o que o ramo não usa. |
 | `GET /users` | Lista usuários da loja. |
 | `POST /users/invite` 🔒 · `PATCH /users/:id` 🔒 · `DELETE /users/:id` 🔒 | Convida / edita papel / remove usuário (RBAC, ADR-008). |
 
@@ -525,8 +525,8 @@ Alertas CALCULADOS sob demanda (custo-zero: nada é gravado; a pendência some q
 | Método · Rota | O que faz |
 |---|---|
 | `GET /me` | Dados do PlatformAdmin logado. |
-| `GET /tenants` · `POST /tenants` | Lista lojas / onboarding de nova loja. |
-| `PATCH /tenants/:id` · `PATCH /tenants/:id/modules` | Edita a loja / ativa-desativa módulos. |
+| `GET /tenants` · `POST /tenants` | Lista lojas (com `segments` e `modules` ativos por loja) / onboarding de nova loja. O `POST` aceita `segments` (ramos, ADR-039; default `[CONSTRUCTION]`) e `seedCategories`: na mesma transação grava o ramo, liga os módulos do preset (`modulesForSegments`) e cria as categorias iniciais. |
+| `PATCH /tenants/:id` · `PATCH /tenants/:id/modules` | Edita a loja / liga-desliga módulo (`OFFLINE_SALES`, `CONSTRUCTION_UNITS`, `SCALE_LABEL`; upsert em `TenantModule` + `AuditEvent SET_TENANT_MODULE`). Desligar módulo de ramo só esconde recurso na tela — nunca apaga dado nem quebra venda. |
 | `POST /tenants/:id/support` | Abre uma sessão de suporte (emite token com escopo da loja). |
 
 **`/support` — Painel de suporte (somente-leitura, token com escopo de loja)**

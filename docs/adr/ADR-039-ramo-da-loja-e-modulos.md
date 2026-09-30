@@ -140,6 +140,13 @@ migration (uma aprovação, um deploy).
 
 1. **Fatia 1 — Dados + painel:** migration, `modulesForSegments` (core + testes), `POST /platform/tenants` com
    ramos e categorias sugeridas, painel "Módulos", `GET /me` com módulos.
+   **IMPLEMENTADA 2026-09-30** (migration `0041` já aplicada): core `SEGMENT_PRESETS`/`modulesForSegments`/
+   `suggestedCategoriesForSegments` (+`ramo.test.ts`); shared `storeSegmentSchema`/`STORE_SEGMENT_LABELS`/
+   `TENANT_MODULE_KEYS`/`activeModuleKeys` (+`modules.test.ts`), `createTenantSchema.segments` (default
+   `[CONSTRUCTION]`) + `seedCategories`; API `POST /platform/tenants` grava ramo + módulos + categorias na mesma
+   transação, `GET /platform/tenants` e `GET /me` devolvem `modules`; painel com chips de ramo, resumo "Vai ligar",
+   categorias sugeridas desmarcáveis e interruptores por módulo na lista (o offline migrou para ali). Doc §8.2
+   atualizada. Gates: core 418, shared 62, API tsc 0, web tsc 0 + build. **Deploy API + web e E2E do Owner pendentes.**
 2. **Fatia 2 — Gating na web:** helper `useModule`; esconder unidades/blocos de construção no cadastro, detalhe e
    PDV. E2E: loja Demo (construção) idêntica; loja nova enxuta.
 

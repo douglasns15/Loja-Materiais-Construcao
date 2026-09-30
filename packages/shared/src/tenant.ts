@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { onlyDigits } from './format';
+import { storeSegmentSchema } from './modules';
 
 /**
  * Regras de mídia da loja (logo) — ADR-007.
@@ -109,6 +110,17 @@ export const createTenantSchema = z.object({
   adminEmail: z.string().trim().toLowerCase().email('E-mail do admin inválido.'),
   adminName: z.string().trim().min(1).max(100).optional(),
   redirectTo: z.string().url().optional(),
+  /**
+   * Ramos da loja (ADR-039), multisseleção. Ausente ⇒ `[CONSTRUCTION]` (compatível com quem
+   * criava loja antes do ramo existir). A API liga os módulos do preset (`modulesForSegments`).
+   */
+  segments: z
+    .array(storeSegmentSchema)
+    .min(1, 'Escolha ao menos um ramo.')
+    .max(5)
+    .default(['CONSTRUCTION']),
+  /** Categorias iniciais (as sugeridas pelo ramo que o implantador manteve marcadas). */
+  seedCategories: z.array(z.string().trim().min(1).max(80)).max(40).optional(),
 });
 export type CreateTenantInput = z.infer<typeof createTenantSchema>;
 

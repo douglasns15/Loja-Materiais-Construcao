@@ -20,6 +20,10 @@ export type Me = {
    * para decidir enfileirar venda offline (ON) ou orientar nota manual (OFF). Opcional para
    * tolerar respostas antigas da API (ausente = OFF). */
   offlineSales?: boolean;
+  /** Chaves dos módulos ATIVOS da loja (ADR-039: `CONSTRUCTION_UNITS`, `SCALE_LABEL`, …), para a
+   * web esconder o que o ramo não usa. Vai junto no cache do `/me` (offline). Opcional para tolerar
+   * respostas antigas da API. */
+  modules?: string[];
 };
 
 /**
