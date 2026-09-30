@@ -56,6 +56,10 @@ http://localhost:3000/
 
 <> Inserir CNPJ do comprador em uma nota, como funciona?
 
+<> Em Contas a Receber, precisa ter o comportamento igual ao PDV no sentido de que caso seja selecionado o pagamento a ser recebido na modalidade Dinheiro, precisa liberar o campo para digitar o valor recebido e calcular o troco se houver;
+
+<> Habilitar o uso da seta em todos os campos de busca que ainda não permitem descer pelas opções do resultado da pesquisa. O PDV é um exemplo de tela que não permite.
+
 Três ideias ficaram de fora e anotadas para depois:
 
 Custo zerado dos rolos e pacotes: você já sabia. Dá para acertar junto o custo da entrada manual de estoque de barra e rolo, que ainda deve estar por barra.
