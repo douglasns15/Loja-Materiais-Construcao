@@ -83,8 +83,9 @@ Hoje, bipar um código desconhecido no PDV mostra só "Nenhum produto encontrado
 - Modal mínimo (fila no caixa!): nome já vem do catálogo global; operador digita **só o preço**; o item entra no
   carrinho e a venda segue.
 - O produto nasce marcado para revisão (custo, categoria, estoque). A Central de Alertas (ADR-029) ganha o alerta
-  **"Produtos cadastrados no caixa para revisar"**, calculado sob demanda (produto sem custo e/ou sem categoria
-  criado nos últimos N dias — sem migration se der para derivar dos campos existentes; senão, flag a aprovar).
+  **"Produtos cadastrados no caixa para revisar"**, calculado sob demanda sobre a flag **`Product.pendingReview`**
+  (aprovada pelo Owner e aplicada na migration `0041`, 2026-09-30): o "Cadastrar agora" grava `true`, a
+  conferência do admin volta a `false`. Lista exata, não heurística.
 - Estoque: a venda de produto recém-criado sem estoque **não pode travar**. Opções (decidir na implementação):
   nascer com `trackStock = false` até a revisão ([ADR-040](./ADR-040-venda-por-peso-balanca-e-producao-propria.md)),
   ou nascer com Entrada automática da quantidade vendida. Recomendação: `trackStock = false` + alerta de revisão

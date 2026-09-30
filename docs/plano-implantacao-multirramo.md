@@ -81,7 +81,7 @@ A loja de alimentos **não consegue vender hoje**:
 | # | Entrega | Migration? | ADR |
 |---|---|---|---|
 | 1 | Venda por kg/L fracionada (3 casas) — **implementada 2026-09-30** (deploy/E2E pendentes) | Não | 040 §1 |
-| 2 | Migration única (segments, trackStock, scaleCode, ncm?) | **Sim** — item 1/2 acima | 039/040 |
+| 2 | Migration única (segments, trackStock, scaleCode, ncm, pendingReview) — **`0041` aplicada 2026-09-30** | **Sim** — aprovada | 039/040/041 |
 | 3 | Ramo no painel + módulos + `GET /me` com módulos | (usa a #2) | 039 F1 |
 | 4 | Gating na web (esconder construção) | Não | 039 F2 |
 | 5 | `trackStock` na venda/devolução/alertas | (usa a #2) | 040 F2 |

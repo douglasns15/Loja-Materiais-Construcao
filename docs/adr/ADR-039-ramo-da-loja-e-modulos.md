@@ -109,7 +109,11 @@ ramo construção passa a ver a tela enxuta.
 
 ---
 
-## Impacto no banco (a aprovar — regra 1)
+## Impacto no banco (aprovado — regra 1)
+
+> **APLICADA 2026-09-30 — migration `0041_store_segments_and_product_food_fields`** (junto com os campos do
+> ADR-040 e o `pendingReview` do ADR-041 §B). Backfill conferido: as 3 lojas com `segments = {CONSTRUCTION}` e
+> `CONSTRUCTION_UNITS` ligado.
 
 Uma migration **aditiva**, sem perda de dado:
 

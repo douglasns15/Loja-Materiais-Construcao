@@ -141,6 +141,17 @@ enum UnitType {
   PACK // Pacote — ex: kit/caixa fechada que abre e vende a unidade avulsa (ADR-030, generaliza o ADR-017)
 }
 
+/// Ramo da loja (ADR-039) — o que a loja É. Multisseleção em `Tenant.segments` (a mesma porta pode
+/// ser Mercadinho + Sorveteria + Rotisseria). Serve de PRESET: na criação liga os módulos do ramo
+/// (`TenantModule`); quem liga/desliga recurso na tela é o módulo, não o ramo.
+enum StoreSegment {
+  CONSTRUCTION // Material de construção
+  GROCERY // Mercadinho
+  ICE_CREAM // Sorveteria
+  ROTISSERIE // Rotisseria
+  GENERAL_RETAIL // Varejo geral
+}
+
 /// Papel do usuário dentro de um tenant
 enum UserRole {
   OWNER // Dono da loja (acesso total)
@@ -177,42 +188,45 @@ enum FulfillmentStatus {
 
 /// Representa uma loja/empresa (tenant). Raiz do multi-tenancy.
 model Tenant {
-  id                   String   @id @default(uuid()) @db.Uuid
-  name                 String   @db.VarChar(120)
-  slug                 String   @unique @db.VarChar(60) // Identificador único amigável (ex: "loja-do-ze")
-  cnpj                 String?  @unique @db.VarChar(18)
-  phone                String?  @db.VarChar(20)
-  logoUrl              String?  @db.VarChar(500) // URL no Cloudflare R2 — nunca BLOB
+  id                   String         @id @default(uuid()) @db.Uuid
+  name                 String         @db.VarChar(120)
+  slug                 String         @unique @db.VarChar(60) // Identificador único amigável (ex: "loja-do-ze")
+  cnpj                 String?        @unique @db.VarChar(18)
+  phone                String?        @db.VarChar(20)
+  logoUrl              String?        @db.VarChar(500) // URL no Cloudflare R2 — nunca BLOB
   /// Taxa da maquininha por modalidade, em PERCENTUAL (ADR-016). Ex.: 3.50 = 3,5%.
   /// Serve APENAS para exibir a margem REAL (o que sobra depois da taxa) — nunca altera o preço
   /// cobrado do cliente. Quem altera preço é o acréscimo opt-in de cada produto. Vazio ⇒ margem
   /// exibida como sempre foi (sem desconto de taxa).
-  cardFeeDebitPercent  Decimal? @db.Decimal(5, 2)
-  cardFeeCreditPercent Decimal? @db.Decimal(5, 2)
+  cardFeeDebitPercent  Decimal?       @db.Decimal(5, 2)
+  cardFeeCreditPercent Decimal?       @db.Decimal(5, 2)
   /// Fechamento CEGO (blind close): quando `true`, a tela do Caixa esconde o Esperado e a quebra
   /// de valores ao fechar; o operador conta a gaveta às cegas e só então "revela" a divergência.
   /// Prática anti-viés (evita ajustar a contagem para bater com o esperado). `false` = fechamento
   /// normal, com a conferência à vista. Ajuste por loja, definido pelo dono nas Configurações.
-  blindCashClose       Boolean  @default(false)
+  blindCashClose       Boolean        @default(false)
   // Contador de vendas da loja (ADR-023): o ÚLTIMO número emitido. A venda aloca o próximo com um
   // incremento atômico (UPDATE ... RETURNING) dentro da transação — à prova de corrida, sem furo em
   // rollback. Backfill na migration 0021 acertou cada loja para o maior nº já emitido (0 se sem vendas).
-  lastOrderNumber      Int      @default(0)
+  lastOrderNumber      Int            @default(0)
   // Contador de ORÇAMENTOS da loja (ADR-024): último nº emitido, exibido como "O-000045". Mesma
   // mecânica atômica do `lastOrderNumber`; sequência SEPARADA (o prefixo O-/V- distingue). 0 = sem
   // orçamentos ainda (migration 0022 nasce assim para todas as lojas — sem backfill, tabelas vazias).
-  lastQuoteNumber      Int      @default(0)
+  lastQuoteNumber      Int            @default(0)
   // Contador de DÍVIDAS da loja (ADR-026): último nº emitido, exibido como "D-0001". Mesma mecânica
   // atômica do `lastOrderNumber`; sequência SEPARADA (prefixo D-). Alocado ao ABRIR uma dívida (1ª
   // venda a prazo de um cliente sem dívida aberta). Backfill na migration 0030 acerta cada loja.
-  lastDebtNumber       Int      @default(0)
+  lastDebtNumber       Int            @default(0)
   // Contador de CONTAS DE RETIRADA da loja (ADR-028): último nº emitido, exibido como "E-0001".
   // Mesma mecânica atômica do `lastDebtNumber`; sequência SEPARADA (prefixo E-). Alocado ao ABRIR
   // uma conta (1ª venda SCHEDULED de um cliente sem conta aberta). Backfill na migration 0034.
-  lastDeliveryNumber   Int      @default(0)
-  isActive             Boolean  @default(true)
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  lastDeliveryNumber   Int            @default(0)
+  /// Ramos da loja (ADR-039), multisseleção. Backfill da migration 0041: lojas existentes = [CONSTRUCTION]
+  /// (+ módulo `CONSTRUCTION_UNITS` ligado) ⇒ comportamento idêntico ao de antes. Vazio = ramo não informado.
+  segments             StoreSegment[] @default([])
+  isActive             Boolean        @default(true)
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
 
   // Relações
   users               User[]
@@ -325,31 +339,31 @@ model Category {
 
 /// Produto do catálogo. Suporta unidades especiais do módulo Material de Construção.
 model Product {
-  id               String     @id @default(uuid()) @db.Uuid
-  tenantId         String     @db.Uuid
-  categoryId       String?    @db.Uuid
-  sku              String     @db.VarChar(60) // Código interno ou código de barras
+  id                   String     @id @default(uuid()) @db.Uuid
+  tenantId             String     @db.Uuid
+  categoryId           String?    @db.Uuid
+  sku                  String     @db.VarChar(60) // Código interno ou código de barras
   /// Código de barras GTIN-8/12/13/14 (EAN/UPC), opcional. DISTINTO do `sku` (código interno da
   /// loja): um produto pode ter SKU interno E código de barras oficial. É a chave de enriquecimento
   /// pelo catálogo global (ADR-025) e alimenta a busca por leitura de scanner junto com o `sku`.
   /// Não-único de propósito (não quebra legado nem importação de NF-e); unicidade fica na aplicação.
-  ean              String?    @db.VarChar(14)
-  name             String     @db.VarChar(150)
+  ean                  String?    @db.VarChar(14)
+  name                 String     @db.VarChar(150)
   /// Nome popular/regional do produto — usado para busca no PDV além do nome oficial.
   /// Genérico p/ qualquer ramo. Ex.: "Ferro 8" p/ "Vergalhão CA-50 8mm"; "Dipirona" p/ "Dipirona Sódica 500mg".
-  popularName      String?    @db.VarChar(150)
+  popularName          String?    @db.VarChar(150)
   /// Fabricante/marca do produto (ex.: "Votorantim", "Tigre"). Genérico p/ qualquer ramo.
   /// Também entra na busca (nome, nome popular, SKU e fabricante) — daí o índice abaixo.
-  manufacturer     String?    @db.VarChar(120)
-  description      String?    @db.VarChar(500)
-  imageUrl         String?    @db.VarChar(500) // URL no Cloudflare R2 — nunca BLOB
-  unit             UnitType   @default(UNIT)
+  manufacturer         String?    @db.VarChar(120)
+  description          String?    @db.VarChar(500)
+  imageUrl             String?    @db.VarChar(500) // URL no Cloudflare R2 — nunca BLOB
+  unit                 UnitType   @default(UNIT)
   /// Fator de conversão para módulo Material de Construção (ADR-013 — EF-3).
   /// Ex: 1 milheiro = 1000 unidades → conversionFactor = 1000; 1 rolo = 100 metros → 100.
   /// Reusado como TAMANHO da embalagem alternativa (unidade-base por embalagem fechada).
-  conversionFactor Decimal?   @db.Decimal(10, 4)
-  costPrice        Decimal    @db.Decimal(12, 4)
-  salePrice        Decimal    @db.Decimal(12, 4)
+  conversionFactor     Decimal?   @db.Decimal(10, 4)
+  costPrice            Decimal    @db.Decimal(12, 4)
+  salePrice            Decimal    @db.Decimal(12, 4)
   /// Aviso de revisão de preço (item 5 da esteira de precificação): quando uma Entrada de estoque
   /// sobrescreve o `costPrice` ("último custo", ADR de 2026-08-11), a margem muda em todo o sistema
   /// mas o `salePrice` NÃO — então marcamos aqui o instante do ajuste. O cadastro do produto mostra
@@ -361,57 +375,72 @@ model Product {
   /// informa o fator; nas próximas notas daquele produto o De-Para já pré-preenche esse valor (custo
   /// do pacote ÷ fator). NULL ⇒ sem embalagem lembrada (fator 1). Simplificação: 1 fator por produto
   /// (assume embalagem consistente entre notas). Só afeta a SUGESTÃO na importação; não muda venda.
-  nfePackFactor    Int?
+  nfePackFactor        Int?
   /// Venda em unidade alternativa (ADR-013 — EF-3). Quando `altUnit` + `altSalePrice` +
   /// `conversionFactor` estão preenchidos, o produto pode ser vendido também na embalagem
   /// fechada (ex.: ROLO de 100 m) com PREÇO PRÓPRIO — o fechado costuma sair mais barato por
   /// unidade-base, então NÃO é `salePrice × conversionFactor`. Vazio ⇒ produto de uma unidade só.
-  altUnit          UnitType? // Unidade da embalagem fechada (ex.: ROLL)
-  altSalePrice     Decimal?   @db.Decimal(12, 4) // Preço de 1 embalagem fechada
+  altUnit              UnitType? // Unidade da embalagem fechada (ex.: ROLL)
+  altSalePrice         Decimal?   @db.Decimal(12, 4) // Preço de 1 embalagem fechada
   /// Produto agregado (ADR-015): o par "parafuso + bucha". Os dois seguem sendo produtos
   /// independentes (preço e estoque próprios); juntos, saem por `pairPrice` — o preço TOTAL
   /// do par, NÃO por item. Grava-se só de UM lado; o outro é resolvido por consulta reversa
   /// (`pairedBy`), então é impossível os dois lados divergirem de preço. Vazio ⇒ sem par.
-  pairedProductId  String?    @db.Uuid
-  pairPrice        Decimal?   @db.Decimal(12, 4)
+  pairedProductId      String?    @db.Uuid
+  pairPrice            Decimal?   @db.Decimal(12, 4)
   /// Acréscimo por forma de pagamento (ADR-016). Valor em R$ POR UNIDADE-BASE que é somado ao
   /// preço quando a venda é no débito/crédito — é quanto o preço SOBE, não um custo nem o preço
   /// final. Opt-in por produto: vazio ⇒ o produto não muda de preço naquela forma de pagamento
   /// (nunca é derivado automaticamente da taxa da maquininha do tenant, que é só informativa).
   /// Na embalagem fechada (EF-3) é aplicado proporcionalmente (× `conversionFactor`); no par
   /// (ADR-015), os acréscimos dos dois lados se somam ANTES do rateio. CASH/PIX nunca acrescem.
-  surchargeDebit   Decimal?   @db.Decimal(12, 4)
-  surchargeCredit  Decimal?   @db.Decimal(12, 4)
-  stockQty         Decimal    @default(0) @db.Decimal(12, 4)
+  surchargeDebit       Decimal?   @db.Decimal(12, 4)
+  surchargeCredit      Decimal?   @db.Decimal(12, 4)
+  stockQty             Decimal    @default(0) @db.Decimal(12, 4)
   /// Cache desnormalizado do total RESERVADO em unidade-base (ADR-020), análogo ao `stockQty`
   /// (ADR-001). Soma do que está comprometido com pedidos SCHEDULED ainda não retirados. O PDV
   /// trava pelo DISPONÍVEL = `stockQty − reservedQty` (não vende a mesma peça 2×). Fonte de
   /// verdade = Σ dos itens reservados; existe reconciliação no mesmo espírito do `stockQty`.
-  reservedQty      Decimal    @default(0) @db.Decimal(12, 4)
+  reservedQty          Decimal    @default(0) @db.Decimal(12, 4)
   /// Cache desnormalizado do total DEFEITUOSO em unidade-base (ADR-033), no mesmo espírito do
   /// `stockQty`/`reservedQty` (ADR-001). Soma do que foi devolvido com defeito e ainda aguarda acerto
   /// com o fornecedor (linhas `order_return_items` DEFECTIVE + PENDING). NÃO é vendável: o PDV ignora
   /// este número (disponível = `stockQty − reservedQty`). Fonte de verdade = Σ das linhas defeituosas
   /// pendentes; reconciliável (`reconcileDefectiveQty`). Incrementa na devolução com defeito, decrementa
   /// na resolução (reposição OU baixa).
-  defectiveQty     Decimal    @default(0) @db.Decimal(12, 4)
-  minStockQty      Decimal    @default(0) @db.Decimal(12, 4)
-  isActive         Boolean    @default(true)
-  deletedAt        DateTime? // Soft-delete (ADR-004)
+  defectiveQty         Decimal    @default(0) @db.Decimal(12, 4)
+  minStockQty          Decimal    @default(0) @db.Decimal(12, 4)
+  isActive             Boolean    @default(true)
+  deletedAt            DateTime? // Soft-delete (ADR-004)
   /// Peso em kg — usado para cálculo de frete pesado (módulo Material de Construção)
-  weightKg         Decimal?   @db.Decimal(8, 3)
+  weightKg             Decimal?   @db.Decimal(8, 3)
+  /// Controle de estoque (ADR-040 §2). `false` ⇒ produto SEM estoque (produção do dia, serviço): a venda
+  /// não trava nem gera `StockMovement`, e `stockQty` não se mexe — coerente com o ADR-001 (não há estoque
+  /// para mudar). Religar começa do zero com uma Entrada (contagem). Default `true` = todo produto controlado.
+  trackStock           Boolean    @default(true)
+  /// Código do produto na balança etiquetadora — o PLU (ADR-040 §3, módulo `SCALE_LABEL`), 4 ou 5 dígitos.
+  /// Casa a etiqueta EAN-13 prefixo `2` com o produto. Único por loja (NULLs não colidem); ao excluir o
+  /// produto (soft-delete), a aplicação libera o código para reuso.
+  scaleCode            String?    @db.VarChar(6)
+  /// NCM (8 dígitos) — classificação fiscal exigida pela NFC-e (ADR-040, aprovado 2026-09-30). Visível no
+  /// cadastro de QUALQUER loja (sem gating de ramo). Pré-preenchido de `ProductCatalog.ncm` quando o EAN casa.
+  ncm                  String?    @db.VarChar(8)
+  /// Produto cadastrado no CAIXA aguardando conferência do admin (ADR-041 §B). O "Cadastrar agora" do PDV
+  /// grava `true`; a conferência (admin revisa custo/categoria/estoque) volta a `false`. Alimenta o alerta
+  /// "Produtos cadastrados no caixa" da Central de Alertas (ADR-029) com a lista EXATA, não heurística.
+  pendingReview        Boolean    @default(false)
   // Campos de sincronização offline
-  syncStatus       SyncStatus @default(SYNCED)
-  updatedAt        DateTime   @updatedAt
-  createdAt        DateTime   @default(now())
+  syncStatus           SyncStatus @default(SYNCED)
+  updatedAt            DateTime   @updatedAt
+  createdAt            DateTime   @default(now())
   // Autoria (ADR-010): quem criou/alterou/excluiu. `*Id` é referência SOLTA (sem FK, sobrevive à
   // exclusão do usuário); `*Name` é snapshot congelado do nome no momento (exibido em tela).
-  createdById      String?    @db.Uuid
-  createdByName    String?    @db.VarChar(100)
-  updatedById      String?    @db.Uuid
-  updatedByName    String?    @db.VarChar(100)
-  deletedById      String?    @db.Uuid
-  deletedByName    String?    @db.VarChar(100)
+  createdById          String?    @db.Uuid
+  createdByName        String?    @db.VarChar(100)
+  updatedById          String?    @db.Uuid
+  updatedByName        String?    @db.VarChar(100)
+  deletedById          String?    @db.Uuid
+  deletedByName        String?    @db.VarChar(100)
 
   tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   category       Category?       @relation(fields: [categoryId], references: [id])
@@ -425,6 +454,9 @@ model Product {
   pairedBy       Product[]       @relation("ProductPair")
 
   @@unique([tenantId, sku])
+  // PLU da balança único por loja (ADR-040 §3). Índice comum (não parcial): o Prisma 6 não expressa
+  // `WHERE`, e um índice parcial em SQL cru seria "desfeito" pelo próximo `migrate diff`.
+  @@unique([tenantId, scaleCode])
   @@index([tenantId, name])
   @@index([tenantId, popularName])
   @@index([tenantId, manufacturer])
@@ -505,15 +537,15 @@ model Customer {
   deletedById   String?    @db.Uuid
   deletedByName String?    @db.VarChar(100)
 
-  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  orders      Order[]
-  deliveries  Delivery[]
-  receivables Receivable[]
-  debts       Debt[]
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orders           Order[]
+  deliveries       Delivery[]
+  receivables      Receivable[]
+  debts            Debt[]
   deliveryAccounts DeliveryAccount[]
-  returns     OrderReturn[]
-  credits     CustomerCredit[]
-  quotes      Quote[]
+  returns          OrderReturn[]
+  credits          CustomerCredit[]
+  quotes           Quote[]
 
   @@unique([tenantId, cpfCnpj])
   @@index([tenantId, name])
@@ -612,17 +644,17 @@ model Order {
   // Autoria (ADR-010): `userId` (com FK) é o operador; `registeredByName` é o snapshot do nome.
   registeredByName  String?            @db.VarChar(100)
 
-  tenant         Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  cashSession    CashSession?        @relation(fields: [cashSessionId], references: [id])
-  user           User                @relation(fields: [userId], references: [id])
-  customer       Customer?           @relation(fields: [customerId], references: [id])
-  deliveryAccount DeliveryAccount?   @relation(fields: [deliveryAccountId], references: [id])
-  items          OrderItem[]
-  payments       Payment[]
-  delivery       Delivery?
-  receivable     Receivable?
-  itemDeliveries OrderItemDelivery[]
-  returns        OrderReturn[]
+  tenant              Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  cashSession         CashSession?        @relation(fields: [cashSessionId], references: [id])
+  user                User                @relation(fields: [userId], references: [id])
+  customer            Customer?           @relation(fields: [customerId], references: [id])
+  deliveryAccount     DeliveryAccount?    @relation(fields: [deliveryAccountId], references: [id])
+  items               OrderItem[]
+  payments            Payment[]
+  delivery            Delivery?
+  receivable          Receivable?
+  itemDeliveries      OrderItemDelivery[]
+  returns             OrderReturn[]
   // ADR-024: orçamento(s) que apontam para esta venda como conversão (elo em quotes.convertedOrderId).
   // Modelado como lista (1:N) só para satisfazer o Prisma sem exigir índice único no FK — na prática é
   // 0..1 (uma venda nasce de no máximo um orçamento). Acesso natural é pelo lado do Quote.
@@ -914,22 +946,22 @@ model OrderReturn {
 /// Uma linha de uma devolução (ADR-022): item devolvido + quanto (em unidade-base) voltou ao
 /// estoque + o valor daquele item na devolução.
 model OrderReturnItem {
-  id          String  @id @default(uuid()) @db.Uuid
-  tenantId    String  @db.Uuid // Denormalizado para RLS (ADR-003)
-  returnId    String  @db.Uuid
-  orderItemId String  @db.Uuid
-  baseQty     Decimal @db.Decimal(12, 4) // Quantidade em unidade-base devolvida (estorno de estoque)
-  value       Decimal @db.Decimal(12, 2) // Valor daquele item na devolução
+  id             String              @id @default(uuid()) @db.Uuid
+  tenantId       String              @db.Uuid // Denormalizado para RLS (ADR-003)
+  returnId       String              @db.Uuid
+  orderItemId    String              @db.Uuid
+  baseQty        Decimal             @db.Decimal(12, 4) // Quantidade em unidade-base devolvida (estorno de estoque)
+  value          Decimal             @db.Decimal(12, 2) // Valor daquele item na devolução
   // Condição do item devolvido (ADR-033). GOOD (default) = volta ao estoque vendável, comportamento
   // do ADR-022; DEFECTIVE = não volta, vira defeituoso rastreado por esta própria linha.
-  condition   ReturnItemCondition @default(GOOD)
+  condition      ReturnItemCondition @default(GOOD)
   // Desfecho do defeito (ADR-033). Só nas linhas DEFECTIVE: nasce PENDING e vira RESTOCKED (fornecedor
   // trocou) ou WRITTEN_OFF (baixa). NULL nas linhas GOOD. É o livro-razão do `Product.defectiveQty`.
-  defectStatus DefectResolution?
-  resolvedAt   DateTime? // Quando o defeito foi resolvido (reposto/baixado)
+  defectStatus   DefectResolution?
+  resolvedAt     DateTime? // Quando o defeito foi resolvido (reposto/baixado)
   // Autoria (ADR-010) da resolução: quem repôs/baixou. Referência solta; snapshot do nome.
-  resolvedById   String? @db.Uuid
-  resolvedByName String? @db.VarChar(100)
+  resolvedById   String?             @db.Uuid
+  resolvedByName String?             @db.VarChar(100)
 
   tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   orderReturn OrderReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
@@ -1169,21 +1201,21 @@ model AuditEvent {
 /// não há como deduplicá-las —, e a entrada segue como na 2.A. O GET /imported lê esta tabela em UNIÃO
 /// com o AuditEvent legado (notas da 2.A seguem pré-marcadas, sem backfill).
 model NfeImportItem {
-  id          String   @id @default(uuid()) @db.Uuid
-  tenantId    String   @db.Uuid
-  accessKey   String   @db.VarChar(44)
-  nItem       Int
-  productId   String?  @db.Uuid
-  movementId  String?  @db.Uuid // StockMovement gerado — referência solta (sem FK), como a autoria
-  quantity    Decimal  @db.Decimal(12, 4)
-  notaNumber  String?  @db.VarChar(20)
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @db.Uuid
+  accessKey    String   @db.VarChar(44)
+  nItem        Int
+  productId    String?  @db.Uuid
+  movementId   String?  @db.Uuid // StockMovement gerado — referência solta (sem FK), como a autoria
+  quantity     Decimal  @db.Decimal(12, 4)
+  notaNumber   String?  @db.VarChar(20)
   // Histórico de importação (tela Estoque): nome do arquivo XML importado e snapshot do fornecedor —
   // preenchidos na confirmação. Nullable: linhas anteriores a esta mudança (e notas antigas) ficam
   // sem nome de arquivo e são marcadas como tal na listagem. Snapshot do fornecedor evita join extra.
-  fileName     String? @db.VarChar(200)
-  supplierName String? @db.VarChar(120)
-  createdById String?  @db.Uuid
-  createdAt   DateTime @default(now())
+  fileName     String?  @db.VarChar(200)
+  supplierName String?  @db.VarChar(120)
+  createdById  String?  @db.Uuid
+  createdAt    DateTime @default(now())
 
   tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)

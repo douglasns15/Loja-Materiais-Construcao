@@ -95,13 +95,18 @@ o protocolo serial muda por marca e, numa PWA, só funciona via Web Serial no **
 
 ---
 
-## Impacto no banco (a aprovar — regra 1)
+## Impacto no banco (aprovado — regra 1)
 
-Aditiva, pode ir na **mesma migration do [ADR-039](./ADR-039-ramo-da-loja-e-modulos.md)**:
+> **APLICADA 2026-09-30 — migration `0041`**, a mesma do [ADR-039](./ADR-039-ramo-da-loja-e-modulos.md). Os 721
+> produtos existentes seguem `trackStock = true`, sem PLU/NCM.
+
+Aditiva, na **mesma migration do [ADR-039](./ADR-039-ramo-da-loja-e-modulos.md)**:
 
 1. `ALTER TABLE products ADD COLUMN "trackStock" BOOLEAN NOT NULL DEFAULT true` — todo produto existente segue controlado.
-2. `ALTER TABLE products ADD COLUMN "scaleCode" VARCHAR(6)` + índice único parcial
-   `(tenantId, scaleCode) WHERE "scaleCode" IS NOT NULL AND "deletedAt" IS NULL`.
+2. `ALTER TABLE products ADD COLUMN "scaleCode" VARCHAR(6)` + índice único `(tenantId, scaleCode)`.
+   **Ajuste na implementação:** índice único **comum**, não parcial — o Prisma 6 não expressa `WHERE` e um
+   índice parcial em SQL cru seria revertido pelo próximo `migrate diff`. NULLs não colidem no Postgres; o
+   soft-delete do produto **libera o PLU** (grava `scaleCode = null`) na Fatia 3.
 
 3. `ALTER TABLE products ADD COLUMN "ncm" VARCHAR(8)` — **aprovado pelo Owner (2026-09-30)**. Não é usado no
    cálculo agora, mas a NFC-e vai exigir, e a planilha de importação ([ADR-041](./ADR-041-importacao-de-catalogo-por-planilha.md))
