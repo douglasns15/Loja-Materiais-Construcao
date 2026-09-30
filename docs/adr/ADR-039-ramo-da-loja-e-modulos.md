@@ -146,7 +146,7 @@ migration (uma aprovação, um deploy).
    `[CONSTRUCTION]`) + `seedCategories`; API `POST /platform/tenants` grava ramo + módulos + categorias na mesma
    transação, `GET /platform/tenants` e `GET /me` devolvem `modules`; painel com chips de ramo, resumo "Vai ligar",
    categorias sugeridas desmarcáveis e interruptores por módulo na lista (o offline migrou para ali). Doc §8.2
-   atualizada. Gates: core 418, shared 62, API tsc 0, web tsc 0 + build. **Deploy API + web e E2E do Owner pendentes.**
+   atualizada. Gates: core 418, shared 62, API tsc 0, web tsc 0 + build. **NO AR 2026-09-30 (API `351e86ac`, web `dbc6a24a`)**; E2E do Owner pendente.
 2. **Fatia 2 — Gating na web:** helper `useModule`; esconder unidades/blocos de construção no cadastro, detalhe e
    PDV. E2E: loja Demo (construção) idêntica; loja nova enxuta.
 

@@ -1,7 +1,8 @@
 # Plano — Implantação multirramo (1ª loja de alimentos) + usuário multi-loja
 
-> **Estado em 2026-09-30: ADRs 014/039/040/041 ACEITAS pelo Owner (decisões no §4). Execução começou pela
-> entrega #1 (venda por kg/L, sem migration).**
+> **Estado em 2026-09-30: ADRs 014/039/040/041 ACEITAS pelo Owner (decisões no §4). Entregas #1 (kg/L), #2
+> (migration `0041`) e #3 (ramo no painel + módulos) NO AR — API `351e86ac`, web `dbc6a24a`. E2E do Owner
+> pendente. ⬅️ Retomar pela #4 (gating na web).**
 >
 > Estado em 2026-09-29: PLANEJAMENTO. Nada codado, nada migrado, nada deployado.
 > Só documentação: ADRs [039](adr/ADR-039-ramo-da-loja-e-modulos.md), [040](adr/ADR-040-venda-por-peso-balanca-e-producao-propria.md)
@@ -80,9 +81,9 @@ A loja de alimentos **não consegue vender hoje**:
 
 | # | Entrega | Migration? | ADR |
 |---|---|---|---|
-| 1 | Venda por kg/L fracionada (3 casas) — **implementada 2026-09-30** (deploy/E2E pendentes) | Não | 040 §1 |
+| 1 | Venda por kg/L fracionada (3 casas) — **NO AR 2026-09-30** (web `dbc6a24a`; E2E pendente) | Não | 040 §1 |
 | 2 | Migration única (segments, trackStock, scaleCode, ncm, pendingReview) — **`0041` aplicada 2026-09-30** | **Sim** — aprovada | 039/040/041 |
-| 3 | Ramo no painel + módulos + `GET /me` com módulos — **implementada 2026-09-30** (deploy/E2E pendentes) | (usa a #2) | 039 F1 |
+| 3 | Ramo no painel + módulos + `GET /me` com módulos — **NO AR 2026-09-30** (API `351e86ac`, web `dbc6a24a`; E2E pendente) | (usa a #2) | 039 F1 |
 | 4 | Gating na web (esconder construção) | Não | 039 F2 |
 | 5 | `trackStock` na venda/devolução/alertas | (usa a #2) | 040 F2 |
 | 6 | **Cadastro em sequência** | Não | 041 §A |

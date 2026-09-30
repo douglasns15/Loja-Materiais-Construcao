@@ -130,7 +130,7 @@ Aditiva, na **mesma migration do [ADR-039](./ADR-039-ramo-da-loja-e-modulos.md)*
    kg/L anda de 0,1 nos botões, aceita até 3 casas digitadas, mostra "kg"/"R$ …/kg"; produto por peso que entra
    no carrinho sem peso informado recebe o foco no campo da linha (Enter devolve à busca); resumo e cupom imprimem
    "0,412 kg". Corte de barra/rolo (0,5 m) e pacote aberto (inteiro) preservados byte a byte na regra. Gates:
-   core 409 ✅, web tsc 0 + build ✅. Deploy + E2E do Owner pendentes. Fica para a Fatia 2: a trava de estoque
+   core 409 ✅, web tsc 0 + build ✅. **NO AR 2026-09-30 (web `dbc6a24a`)**; E2E do Owner pendente. Fica para a Fatia 2: a trava de estoque
    ainda vale (produto por kg precisa de saldo até existir `trackStock`).
 2. **Fatia 2 — `trackStock`** (migration): cadastro ("Controlar estoque deste produto"), venda, devolução, alertas.
 3. **Fatia 3 — etiqueta de balança** (migration + módulo): `scaleCode`, `parseScaleBarcode`, config do layout no
