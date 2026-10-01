@@ -5985,3 +5985,13 @@ Ambiente: `nexoloja-web.imortal.workers.dev`, lojas Maria ConstruLar e Demo. **V
 **Verificação:** core 393/393 (+3 `costPerBaseUnit`), shared 54/54, tsc shared/api/web 0, next build OK (`/relatorios` 15,6 kB). Deploy da API com Prisma Client regenerado + schema embutido conferido; smokes `/health` 200 e rotas novas 401 sem auth. E2E do Owner: mais vendidos, seletor, detalhe (lucro do tubo ≈ +R$ 19), sacos em unidade, CSV e venda no PDV após o deploy.
 
 **Limitação conhecida:** `stock_movements.unitCost` da entrada manual de unidade fechada provavelmente segue por barra — só exibido no painel de suporte, não entra em lucro/relatórios (tratar junto do acerto dos custos zerados de rolos/pacotes).
+
+---
+
+## Multirramo.Gating — esconder recursos de obra fora do ramo construção (ADR-039 F2, entrega #4) — E2E do Owner (2026-10-01)
+
+Ambiente: `nexoloja-web.imortal.workers.dev`, web `275b72a9` (commit `143a805`). **VALIDADO ✅** ("tudo validado com sucesso"). Web-only + helper puro em shared; sem API/migration.
+
+- Loja **Demo** (construção): cadastro/detalhe idênticos ao de antes (milheiro, saco, barra, peso, par).
+- Loja de teste de alimentos criada **pelo painel** (ramo Mercadinho, entrega #3) com admin `owner_kg@lojademo.com` — login criado antes SÓ no Supabase Auth (sem loja); o `POST /platform/tenants` reaproveitou o login e vinculou como OWNER, sem e-mail de convite. Seletor de unidade só Unidade/kg/Litro/Pacote; sem peso e sem par.
+- Verificação: shared 68/68 (+`moduleEnabled`/`visibleUnitTypes`), web build OK; smoke do deploy + BUILD_ID local conferido no HTML ao vivo.
