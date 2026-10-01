@@ -287,7 +287,8 @@ products.post('/', async (c) => {
     };
 
     let created;
-    if (initialStock && initialStock > 0) {
+    // ADR-040 §2: produto SEM controle de estoque nasce sem saldo — `initialStock` é ignorado.
+    if (productData.trackStock !== false && initialStock && initialStock > 0) {
       // Estoque inicial (ADR-001): cria o produto E gera a Entrada (StockMovement INCOME) na
       // MESMA transação — o saldo nunca é escrito "solto" no cache. `stockQty` e a soma dos
       // movimentos ficam consistentes (reconciliação bate). A entrada carrega a autoria (ADR-010).
@@ -362,6 +363,24 @@ products.patch('/:id', async (c) => {
     // `priceReviewPendingAt` e não vaza para o Prisma (senão o update quebraria por campo
     // desconhecido). Separado do resto do payload por desestruturação.
     const { dismissPriceReview, ...patchData } = parsed.data;
+    // ADR-040 §2: desligar o controle com mercadoria RESERVADA (retirada futura pendente) deixaria a
+    // reserva órfã — a retirada não baixaria nem liberaria. Recusa até as retiradas acabarem.
+    if (patchData.trackStock === false) {
+      const cur = await prisma.product.findFirst({
+        where: { id, tenantId, deletedAt: null },
+        select: { reservedQty: true },
+      });
+      if (cur && Number(cur.reservedQty) > 0) {
+        return c.json(
+          {
+            ok: false,
+            error:
+              'Este produto tem retiradas pendentes (mercadoria reservada). Conclua ou cancele as retiradas antes de desligar o controle de estoque.',
+          },
+          409,
+        );
+      }
+    }
     // updateMany garante o escopo do tenant (proteção antes do RLS da Fase 2).
     const result = await prisma.product.updateMany({
       where: { id, tenantId, deletedAt: null },

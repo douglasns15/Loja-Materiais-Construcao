@@ -41,6 +41,8 @@ type Product = StockProduct & {
   updatedAt: string;
   ean: string | null;
   nfePackFactor: number | null;
+  /** `false` = sem controle de estoque (ADR-040 §2) — fica fora das tabelas/entrada/ajuste. */
+  trackStock?: boolean;
 };
 
 /** Chaves de ordenação da tabela "Estoque atual". `recent` (padrão) = mais recentemente
@@ -142,6 +144,10 @@ export default function EstoquePage() {
   const { me } = useMe();
   const online = useOnline();
   const [products, setProducts] = useState<Product[]>([]);
+  // ADR-040 §2: produto SEM controle de estoque (produção do dia/serviço) não tem saldo — fica fora
+  // de "Estoque atual", da reposição e dos seletores de Entrada/Ajuste (a API também recusa). A
+  // importação de NF-e segue vendo o catálogo inteiro (atualiza custo/preço; não lança entrada).
+  const stockProducts = useMemo(() => products.filter((p) => p.trackStock !== false), [products]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   // Atalho "+ Novo fornecedor" na Entrada de estoque: cadastra sem sair da tela e já seleciona.
   const [supplierModalOpen, setSupplierModalOpen] = useState(false);
@@ -269,7 +275,7 @@ export default function EstoquePage() {
   // (`replenishmentShortfall`). Ordena zerados primeiro, depois a maior falta no topo.
   const replenish = useMemo(
     () =>
-      products
+      stockProducts
         .map((p) => {
           const level = { stockQty: Number(p.stockQty), minStockQty: Number(p.minStockQty) };
           return {
@@ -281,7 +287,7 @@ export default function EstoquePage() {
         })
         .filter((r) => r.attention)
         .sort((a, b) => Number(b.out) - Number(a.out) || b.shortfall - a.shortfall),
-    [products],
+    [stockProducts],
   );
 
   const filtersActive =
@@ -356,7 +362,7 @@ export default function EstoquePage() {
           return Number((s.income - s.expense).toFixed(4));
       }
     };
-    const list = products.filter((p) => {
+    const list = stockProducts.filter((p) => {
       if (!productMatchesQuery(p, stockSearch)) return false;
       if (
         lowOnly &&
@@ -375,7 +381,7 @@ export default function EstoquePage() {
       return sort.dir === 'asc' ? cmp : -cmp;
     });
     return list;
-  }, [products, summary, stockSearch, lowOnly, sort]);
+  }, [stockProducts, summary, stockSearch, lowOnly, sort]);
 
   // Volta à 1ª página ("Mostrar mais" zera) quando a busca/filtro/ordenação muda — mesmo padrão
   // das outras telas. Movimentações reseta também ao recarregar (nova entrada/ajuste, ou filtro
@@ -610,7 +616,7 @@ export default function EstoquePage() {
           <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
               <ProductPicker
-                products={products}
+                products={stockProducts}
                 value={entry.productId}
                 onChange={(id) => setEntry({ ...entry, productId: id })}
                 formatStock={(p) => `${fmtStock(p)} em estoque`}
@@ -676,7 +682,7 @@ export default function EstoquePage() {
           </h2>
           <div className="grid grid-cols-1 gap-3 p-4">
             <ProductPicker
-              products={products}
+              products={stockProducts}
               value={adjust.productId}
               onChange={(id) => setAdjust({ ...adjust, productId: id })}
               formatStock={(p) => `${fmtStock(p)} em estoque`}

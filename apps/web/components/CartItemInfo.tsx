@@ -162,7 +162,10 @@ export function CartItemInfo({
           <Row label={`Margem${feeNote}`}>{margin}%</Row>
           {product && (
             <Row label="Estoque disponível">
-              {QTY(Number(product.stockQty))} {unitShort(product.unit)}
+              {/* ADR-040 §2: sem controle de estoque o PDV recebe "Infinity" — não há saldo. */}
+              {Number.isFinite(Number(product.stockQty))
+                ? `${QTY(Number(product.stockQty))} ${unitShort(product.unit)}`
+                : 'sem controle de estoque'}
             </Row>
           )}
         </div>

@@ -1,7 +1,10 @@
 # Plano — Implantação multirramo (1ª loja de alimentos) + usuário multi-loja
 
-> **Estado em 2026-10-01: entrega #4 (gating na web) NO AR — web `275b72a9` (só web); E2E do Owner VALIDADO
-> (inclui a criação da loja de alimentos pelo painel, entrega #3). Próxima: #5 (`trackStock`).**
+> **Estado em 2026-10-01: entrega #5 (`trackStock`) + "vendido inteiro também" (ADR-040 §4) IMPLEMENTADAS —
+> deploy (API antes da web) e E2E pendentes. Próxima: #6 (cadastro em sequência).**
+>
+> Entrega #4 (gating na web) NO AR — web `275b72a9`; E2E do Owner VALIDADO (inclui a criação da loja de
+> alimentos pelo painel, entrega #3).
 >
 > Estado em 2026-09-30: ADRs 014/039/040/041 ACEITAS pelo Owner (decisões no §4). Entregas #1 (kg/L), #2
 > (migration `0041`) e #3 (ramo no painel + módulos) NO AR — API `351e86ac`, web `dbc6a24a`. E2E do Owner
@@ -88,7 +91,7 @@ A loja de alimentos **não consegue vender hoje**:
 | 2 | Migration única (segments, trackStock, scaleCode, ncm, pendingReview) — **`0041` aplicada 2026-09-30** | **Sim** — aprovada | 039/040/041 |
 | 3 | Ramo no painel + módulos + `GET /me` com módulos — **NO AR 2026-09-30** (API `351e86ac`, web `dbc6a24a`; E2E pendente) | (usa a #2) | 039 F1 |
 | 4 | Gating na web (esconder construção) — **NO AR 2026-10-01** (web `275b72a9`; E2E do Owner VALIDADO) | Não | 039 F2 |
-| 5 | `trackStock` na venda/devolução/alertas | (usa a #2) | 040 F2 |
+| 5 | `trackStock` na venda/devolução/alertas — **IMPLEMENTADA 2026-10-01** + "vendido inteiro também" (040 §4) | (usa a #2) | 040 F2 |
 | 6 | **Cadastro em sequência** | Não | 041 §A |
 | 7 | **Cadastro no caixa** + alerta de revisão | Não (a confirmar) | 041 §B |
 | 8 | Etiqueta de balança (`scaleCode` + parser + PDV) | (usa a #2) | 040 F3 |

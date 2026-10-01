@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { createPrismaClient, Prisma } from '@nexoloja/db';
-import { applyStockMovement } from '@nexoloja/core';
+import { applyStockMovement, tracksStock } from '@nexoloja/core';
 import {
   type NfeEntryInput,
   nfeEntrySchema,
@@ -118,6 +118,9 @@ nfe.post('/entry', requireActiveTenant, async (c) => {
           const catalogNcm = normalizeNcm(item.ncm);
 
           let pid: string;
+          // ADR-040 §2: produto existente SEM controle de estoque — a nota ainda atualiza custo/preço/
+          // EAN, mas não lança Entrada nem mexe no saldo (o produto não tem estoque).
+          let tracked = true;
           if (item.newProduct) {
             // Produto NOVO cadastrado a partir da nota: custo = "último custo" do item; a Entrada
             // abaixo é a fonte do saldo (nasce com stockQty = quantidade da nota).
@@ -148,10 +151,13 @@ nfe.post('/entry', requireActiveTenant, async (c) => {
             // grava "último custo" + aviso de revisão de preço (a margem mudou, o preço não).
             const existing = await tx.product.findFirst({
               where: { id: item.productId, tenantId, deletedAt: null },
-              select: { id: true, stockQty: true, costPrice: true, ean: true },
+              select: { id: true, stockQty: true, costPrice: true, ean: true, trackStock: true },
             });
             if (!existing) throw new Error('PRODUCT_NOT_FOUND');
-            const newQty = applyStockMovement(Number(existing.stockQty), 'INCOME', item.quantity);
+            tracked = tracksStock(existing);
+            const newQty = tracked
+              ? applyStockMovement(Number(existing.stockQty), 'INCOME', item.quantity)
+              : Number(existing.stockQty);
             const costChanges =
               item.newCostPrice != null &&
               Number(item.newCostPrice) !== Number(existing.costPrice);
@@ -191,21 +197,23 @@ nfe.post('/entry', requireActiveTenant, async (c) => {
           }
 
           // Entrada de estoque (ADR-001) — mesma transação, custo unitário da nota.
-          const movement = await tx.stockMovement.create({
-            data: {
-              tenantId,
-              productId: pid,
-              supplierId,
-              type: 'INCOME',
-              quantity: item.quantity,
-              unitCost: item.newCostPrice ?? null,
-              reason,
-              syncStatus: 'SYNCED',
-              userId,
-              registeredByName: userName,
-            },
-            select: { id: true },
-          });
+          const movement = tracked
+            ? await tx.stockMovement.create({
+                data: {
+                  tenantId,
+                  productId: pid,
+                  supplierId,
+                  type: 'INCOME',
+                  quantity: item.quantity,
+                  unitCost: item.newCostPrice ?? null,
+                  reason,
+                  syncStatus: 'SYNCED',
+                  userId,
+                  registeredByName: userName,
+                },
+                select: { id: true },
+              })
+            : null;
 
           // Idempotência FORTE (ADR-025 §5.B, Eixo 2): grava o item lançado com a constraint dura
           // (tenantId, accessKey, nItem). Só quando há chave de acesso (sem ela não há como
@@ -221,7 +229,7 @@ nfe.post('/entry', requireActiveTenant, async (c) => {
                   accessKey: entry.accessKey,
                   nItem: item.nItem,
                   productId: pid,
-                  movementId: movement.id,
+                  movementId: movement?.id ?? null,
                   quantity: item.quantity,
                   notaNumber: entry.notaNumber ?? null,
                   fileName,

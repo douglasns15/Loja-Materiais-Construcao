@@ -489,26 +489,41 @@ deliveries.post('/:id/deliver', requireActiveTenant, async (c) => {
       })),
     );
 
+    // ADR-040 §2: produto SEM controle de estoque não reservou na venda e não baixa na retirada —
+    // a retirada só registra o que foi levado (log + `deliveredBaseQty`).
+    const untracked = new Set(
+      (
+        await prisma.product.findMany({
+          where: { tenantId, id: { in: planned.map((p) => p.item.productId) }, trackStock: false },
+          select: { id: true },
+        })
+      ).map((p) => p.id),
+    );
+
     const result = await prisma.$transaction(async (tx) => {
       for (const { item, qty } of planned) {
         // ADR-001: a baixa REAL de estoque acontece agora (no evento de retirada).
-        const movement = await tx.stockMovement.create({
-          data: {
-            tenantId,
-            productId: item.productId,
-            type: 'EXPENSE',
-            quantity: qty,
-            reason: `Retirada do pedido ${order.id}`,
-            syncStatus: 'SYNCED',
-            userId, // autoria (ADR-010)
-            registeredByName: c.get('userName'),
-          },
-        });
-        await tx.product.update({
-          where: { id: item.productId },
-          // A reserva vira baixa: sai do estoque E deixa de estar reservada.
-          data: { stockQty: { decrement: qty }, reservedQty: { decrement: qty } },
-        });
+        const movement = untracked.has(item.productId)
+          ? null
+          : await tx.stockMovement.create({
+              data: {
+                tenantId,
+                productId: item.productId,
+                type: 'EXPENSE',
+                quantity: qty,
+                reason: `Retirada do pedido ${order.id}`,
+                syncStatus: 'SYNCED',
+                userId, // autoria (ADR-010)
+                registeredByName: c.get('userName'),
+              },
+            });
+        if (movement) {
+          await tx.product.update({
+            where: { id: item.productId },
+            // A reserva vira baixa: sai do estoque E deixa de estar reservada.
+            data: { stockQty: { decrement: qty }, reservedQty: { decrement: qty } },
+          });
+        }
         await tx.orderItem.update({
           where: { id: item.id },
           data: { deliveredBaseQty: { increment: qty } },
@@ -520,7 +535,7 @@ deliveries.post('/:id/deliver', requireActiveTenant, async (c) => {
             orderId: order.id,
             orderItemId: item.id,
             quantity: qty,
-            stockMovementId: movement.id,
+            stockMovementId: movement?.id ?? null,
             notes: notes ?? null,
             deliveredById: userId, // autoria (ADR-010)
             deliveredByName: c.get('userName'),

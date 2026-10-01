@@ -30,6 +30,8 @@ import {
   isValidMeterStep,
   quantityRuleFor,
   roundQuantity,
+  sellableQty,
+  sellsWholeOfWeighed,
   stepQuantity,
   maxStoreCreditForSale,
   pairAvailableQty,
@@ -98,6 +100,8 @@ type Product = {
   // Acréscimo por forma de pagamento (ADR-016). Nulos ⇒ preço igual em qualquer forma.
   surchargeDebit: string | null;
   surchargeCredit: string | null;
+  /** `false` = sem controle de estoque (ADR-040 §2): `stockQty` vira "Infinity" (nunca trava). */
+  trackStock?: boolean;
 };
 type CartItem = {
   /** Chave única da linha = `productId:saleMode` (o mesmo produto pode ir como metro E como rolo). */
@@ -577,9 +581,17 @@ export default function VendaPage() {
     // retiradas/entregas futuras (pedidos SCHEDULED ainda não retirados) não pode ser vendida de
     // novo. Substituímos `stockQty` pelo disponível num ponto só — toda a trava do carrinho passa
     // a respeitar o reservado sem mais edições. O servidor revalida no `POST /orders` (autoritativo).
+    // ADR-040 §2: produto SEM controle de estoque vira "Infinity" (`sellableQty`) — a mesma trava
+    // passa a nunca barrar, e o espelho offline herda isso.
     const list: Product[] = raw.map((p) => ({
       ...p,
-      stockQty: String(Math.max(0, Number(p.stockQty) - Number(p.reservedQty ?? 0))),
+      stockQty: String(
+        sellableQty({
+          trackStock: p.trackStock,
+          stockQty: Number(p.stockQty),
+          reservedQty: Number(p.reservedQty ?? 0),
+        }),
+      ),
     }));
     setProducts(list);
     // Rede venceu (ADR-012 CS-2): espelha o catálogo p/ o cold-start offline (best-effort).
@@ -2584,7 +2596,9 @@ export default function VendaPage() {
                       <span className={`shrink-0 text-xs ${out ? 'text-red-500' : 'text-gray-500'}`}>
                         {out
                           ? 'sem estoque'
-                          : `est. ${whole} ${unitName.toLowerCase()}${remainderMeters > 0 ? ` + ${remainderMeters} ${fine.fineAbbrev}` : ''}`}
+                          : !Number.isFinite(stock)
+                            ? '' // ADR-040 §2: sem controle de estoque — não há saldo a mostrar
+                            : `est. ${whole} ${unitName.toLowerCase()}${remainderMeters > 0 ? ` + ${remainderMeters} ${fine.fineAbbrev}` : ''}`}
                       </span>
                     </div>
                     <div className="mt-2 flex flex-wrap gap-2">
@@ -2643,7 +2657,7 @@ export default function VendaPage() {
                       <span className="shrink-0 text-right">
                         <span className="block font-medium">{BRL(p.salePrice)}</span>
                         <span className={`block text-xs ${out ? 'text-red-500' : 'text-gray-500'}`}>
-                          {out ? 'sem estoque' : `est. ${stock}`}
+                          {out ? 'sem estoque' : Number.isFinite(stock) ? `est. ${stock}` : ''}
                         </span>
                       </span>
                     </button>
@@ -2653,6 +2667,7 @@ export default function VendaPage() {
               // EF-3 / ADR-015: produto com embalagem alternativa e/ou par → botões de escolha
               // (unidade-base × embalagem fechada × par).
               const factor = Number(p.conversionFactor);
+              const wholeOfWeighed = alt && sellsWholeOfWeighed({ ...altConfig(p), unit: p.unit });
               const pairsLeft = pairInfo
                 ? pairAvailableQty(
                     { salePrice: Number(p.salePrice), stockQty: stock },
@@ -2677,7 +2692,7 @@ export default function VendaPage() {
                       </span>
                     </span>
                     <span className={`shrink-0 text-xs ${out ? 'text-red-500' : 'text-gray-500'}`}>
-                      {out ? 'sem estoque' : `est. ${stock} ${unitShort(p.unit)}`}
+                      {out ? 'sem estoque' : Number.isFinite(stock) ? `est. ${stock} ${unitShort(p.unit)}` : ''}
                     </span>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-2">
@@ -2694,10 +2709,17 @@ export default function VendaPage() {
                         type="button"
                         onClick={() => addToCart(p.id, 'ALT')}
                         disabled={out}
-                        title={`1 ${unitShort(p.altUnit as UnitType)} = ${factor} ${unitShort(p.unit)}`}
+                        title={
+                          wholeOfWeighed
+                            ? `Preço fixo do inteiro (peso médio ${factor} ${unitShort(p.unit)})`
+                            : `1 ${unitShort(p.altUnit as UnitType)} = ${factor} ${unitShort(p.unit)}`
+                        }
                         className="rounded-lg border border-indigo-300 bg-indigo-50 px-2 py-1 text-xs text-indigo-700 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        + {unitShort(p.altUnit as UnitType)} ({factor} {unitShort(p.unit)}) · {BRL(p.altSalePrice as string)}
+                        {/* ADR-040: produto por peso vendido também inteiro (frango assado inteiro). */}
+                        {wholeOfWeighed
+                          ? `+ inteiro · ${BRL(p.altSalePrice as string)}`
+                          : `+ ${unitShort(p.altUnit as UnitType)} (${factor} ${unitShort(p.unit)}) · ${BRL(p.altSalePrice as string)}`}
                       </button>
                     )}
                     {/* Par (ADR-015): exige estoque dos DOIS produtos. */}
@@ -2716,7 +2738,7 @@ export default function VendaPage() {
                         className="rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         + par c/ {pairInfo.partner.name} · {BRL(pairInfo.pairPrice)}
-                        {pairsLeft > 0 && (
+                        {pairsLeft > 0 && Number.isFinite(pairsLeft) && (
                           <span className="ml-1 text-emerald-500">({pairsLeft} disp.)</span>
                         )}
                       </button>

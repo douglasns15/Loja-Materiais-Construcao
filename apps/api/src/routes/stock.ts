@@ -1,12 +1,16 @@
 import { Hono } from 'hono';
 import { Prisma } from '@nexoloja/db';
-import { applyStockMovement, calcInventoryAdjustment } from '@nexoloja/core';
+import { applyStockMovement, calcInventoryAdjustment, tracksStock } from '@nexoloja/core';
 import { createStockMovementSchema, inventoryAdjustmentSchema } from '@nexoloja/shared';
 import { type Env, getConnectionString, getPrisma, getTenantId } from '../lib/request';
 import { requireActiveTenant, requireAuth } from '../middleware/auth';
 
 const stock = new Hono<Env>();
 stock.use('*', requireAuth);
+
+/** Produto sem controle de estoque (ADR-040 §2) não recebe entrada/saída/ajuste manual. */
+const untrackedStockError = (name: string) =>
+  `"${name}" não controla estoque. Para lançar entrada ou ajuste, ligue "Controlar estoque" no cadastro do produto.`;
 
 /**
  * Bordas de período no fuso da loja (Brasil, UTC-3), mesmo critério dos Relatórios:
@@ -150,10 +154,13 @@ stock.post('/movements', requireActiveTenant, async (c) => {
     const prisma = getPrisma(c);
     const product = await prisma.product.findFirst({
       where: { id: mov.productId, tenantId, deletedAt: null },
-      select: { id: true, name: true, stockQty: true, costPrice: true },
+      select: { id: true, name: true, stockQty: true, costPrice: true, trackStock: true },
     });
     if (!product) {
       return c.json({ ok: false, error: 'Produto inexistente.' }, 400);
+    }
+    if (!tracksStock(product)) {
+      return c.json({ ok: false, error: untrackedStockError(product.name) }, 400);
     }
 
     const newQty = applyStockMovement(Number(product.stockQty), mov.type, mov.quantity);
@@ -246,10 +253,13 @@ stock.post('/adjust', async (c) => {
     const prisma = getPrisma(c);
     const product = await prisma.product.findFirst({
       where: { id: adj.productId, tenantId, deletedAt: null },
-      select: { id: true, name: true, stockQty: true },
+      select: { id: true, name: true, stockQty: true, trackStock: true },
     });
     if (!product) {
       return c.json({ ok: false, error: 'Produto inexistente.' }, 400);
+    }
+    if (!tracksStock(product)) {
+      return c.json({ ok: false, error: untrackedStockError(product.name) }, 400);
     }
 
     const previousQty = Number(product.stockQty);

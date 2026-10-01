@@ -957,6 +957,27 @@ export function closedFineUnit(unit: string): 'METER' | 'UNIT' {
 /** Unidades vendidas por peso/volume, com quantidade fracionada até o grama/mililitro. */
 export const FRACTIONAL_UNITS = ['KILOGRAM', 'LITER'] as const;
 
+/** `true` para unidade vendida por peso/volume (kg ou litro) — ADR-040 §1. */
+export function isWeighedUnit(unit: string): boolean {
+  return (FRACTIONAL_UNITS as readonly string[]).includes(unit);
+}
+
+/**
+ * "Vendido inteiro também" (ADR-040): o produto por peso (frango assado por kg) pode ter uma
+ * segunda forma de venda, o INTEIRO a preço fixo. Reusa o motor da unidade alternativa (ADR-013)
+ * com `altUnit = UNIT`: `altSalePrice` = preço do inteiro, `conversionFactor` = peso médio (kg/L
+ * por inteiro, só para baixar estoque). Elegível quando a unidade é kg/L e a embalagem ainda está
+ * vazia ou já é `UNIT` (outra embalagem gravada segue no cadastro genérico — dado legado).
+ */
+export function wholeOfWeighedEligible(unit: string, altUnit: string | null | undefined): boolean {
+  return isWeighedUnit(unit) && (!altUnit || altUnit === 'UNIT');
+}
+
+/** `true` se o produto por peso está configurado para vender também inteiro (os 3 campos). */
+export function sellsWholeOfWeighed(p: AltUnitConfig & { unit: string }): boolean {
+  return isWeighedUnit(p.unit) && p.altUnit === 'UNIT' && hasAltUnit(p);
+}
+
 /** Casas decimais da quantidade no ledger (`Decimal(12,4)`) — teto de qualquer regra. */
 export const LEDGER_QTY_DECIMALS = 4;
 
@@ -1504,6 +1525,30 @@ function toQtyUnits(value: number): number {
  */
 export function availableQty(stockQty: number, reservedQty: number): number {
   return Number(Math.max(0, stockQty - reservedQty).toFixed(4));
+}
+
+/**
+ * `true` se o produto CONTROLA estoque (ADR-040 §2). Produto sem controle (produção do dia,
+ * serviço) não trava a venda e não gera `StockMovement` nem mexe em `stockQty`/`reservedQty`/
+ * `defectiveQty` em NENHUM evento (venda, reserva, retirada, cancelamento, devolução, troca, NF-e).
+ * `undefined/null` = controlado (o default do schema; payloads antigos e o espelho offline antigo).
+ */
+export function tracksStock(p: { trackStock?: boolean | null }): boolean {
+  return p.trackStock !== false;
+}
+
+/**
+ * Quanto pode ser vendido agora (em unidade-base): o disponível do ADR-020 para produto
+ * controlado; `Infinity` para produto sem controle (nunca trava). Fonte única da trava do PDV
+ * (cliente) e do `POST /orders` (servidor).
+ */
+export function sellableQty(p: {
+  trackStock?: boolean | null;
+  stockQty: number;
+  reservedQty?: number | null;
+}): number {
+  if (!tracksStock(p)) return Infinity;
+  return availableQty(p.stockQty, p.reservedQty ?? 0);
 }
 
 /**

@@ -74,11 +74,12 @@ function productAlertPredicate(kind: AlertKind): Prisma.Sql {
       return Prisma.sql`"categoryId" IS NULL`;
     case 'stock-negative':
       // Saldo abaixo de zero ⇒ movimentação inconsistente (danger). É a fonte de verdade EXIBIDA.
-      return Prisma.sql`"stockQty" < 0`;
+      // ADR-040 §2: produto sem controle de estoque não entra em alerta de estoque.
+      return Prisma.sql`"trackStock" AND "stockQty" < 0`;
     case 'stock-below-min':
       // Ruptura/repor: no mínimo ou abaixo, com mínimo definido. Exclui negativos (que já são o
       // alerta `stock-negative`, de gravidade maior) — sem contar o mesmo produto em dois lugares.
-      return Prisma.sql`"minStockQty" > 0 AND "stockQty" >= 0 AND "stockQty" <= "minStockQty"`;
+      return Prisma.sql`"trackStock" AND "minStockQty" > 0 AND "stockQty" >= 0 AND "stockQty" <= "minStockQty"`;
     default:
       throw new Error(`Alerta de produto não implementado: ${kind}`);
   }

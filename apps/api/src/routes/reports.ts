@@ -974,6 +974,7 @@ reports.get('/projections', async (c) => {
         JOIN "stock_movements" sm
           ON sm."productId" = p."id" AND sm."type" = 'EXPENSE' AND sm."createdAt" >= ${velocitySince}
         WHERE p."tenantId" = ${tenantId}::uuid AND p."deletedAt" IS NULL AND p."isActive" = true
+          AND p."trackStock" -- ADR-040 §2: sem controle de estoque não "vai faltar"
         GROUP BY p."id", p."name", p."stockQty", (sm."createdAt" - interval '3 hours')::date
       `),
     ]);

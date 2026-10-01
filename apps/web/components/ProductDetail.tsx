@@ -17,8 +17,10 @@ import {
   closedFineUnit,
   isClosedPrimary,
   netMarginPercent,
+  sellsWholeOfWeighed,
   splitWholeAndRemainder,
   surchargePerBaseUnit,
+  wholeOfWeighedEligible,
 } from '@nexoloja/core';
 import { apiDelete, apiGet, apiPatch } from '@/lib/api';
 import { buildCategoryOptions, categoryLabelMap, type Category } from '@/lib/categories';
@@ -70,6 +72,8 @@ export type ProductFull = {
   surchargeCredit: string | null;
   // Desativar/Reativar: `false` = fora de circulação (some do PDV/Estoque), reversível.
   isActive: boolean;
+  // Controlar estoque (ADR-040 §2): `false` = produção do dia/serviço (vende sem saldo).
+  trackStock?: boolean;
   // Item 5 da esteira: instante em que uma Entrada de estoque ajustou o custo; null ⇒ nada pendente.
   priceReviewPendingAt: string | null;
   marginPercent: number;
@@ -135,6 +139,7 @@ type FormState = {
   costPrice: string;
   salePrice: string;
   minStockQty: string;
+  trackStock: boolean;
   weight: string;
   weightUnit: 'kg' | 'g';
   altUnit: UnitType | '';
@@ -165,6 +170,7 @@ function toForm(p: ProductFull): FormState {
     // no campo ao focar. A esteira já arredonda os cálculos; aqui cobrimos a carga.
     salePrice: String(Number(Number(p.salePrice).toFixed(2))),
     minStockQty: String(Number(p.minStockQty)),
+    trackStock: p.trackStock !== false,
     weight: p.weightKg === null ? '' : String(Number(p.weightKg)),
     weightUnit: 'kg',
     altUnit: p.altUnit ?? '',
@@ -215,15 +221,21 @@ function buildPatch(original: ProductFull, f: FormState): Record<string, unknown
     costPrice: Number(f.costPrice),
     salePrice: Number(f.salePrice),
     minStockQty: Number(f.minStockQty || 0),
+    trackStock: f.trackStock,
     weightKg,
     // ADR-017/ADR-030: unidade fechada fixa o `altUnit` na régua fina (METER p/ barra/rolo, UNIT
     // p/ pacote) — inclusive se o operador trocar a unidade para uma fechada aqui na edição. Fora
     // disso, o `altUnit` é o da embalagem alternativa (EF-3), ou null quando limpo.
+    // ADR-040: kg/L "vendido inteiro" ⇒ `UNIT` quando há preço do inteiro; vazio limpa.
     altUnit: (CLOSED_PRIMARY_UNITS as readonly string[]).includes(f.unit)
       ? closedFineUnit(f.unit)
-      : f.altUnit === ''
-        ? null
-        : f.altUnit,
+      : wholeOfWeighedEligible(f.unit, f.altUnit)
+        ? numOrNull(f.altSalePrice) !== null
+          ? 'UNIT'
+          : null
+        : f.altUnit === ''
+          ? null
+          : f.altUnit,
     conversionFactor: numOrNull(f.conversionFactor),
     altSalePrice: numOrNull(f.altSalePrice),
     // Par (ADR-015): limpar o produto agregado zera também o preço do par (e vice-versa),
@@ -247,6 +259,7 @@ function buildPatch(original: ProductFull, f: FormState): Record<string, unknown
     costPrice: Number(original.costPrice),
     salePrice: Number(original.salePrice),
     minStockQty: Number(original.minStockQty),
+    trackStock: original.trackStock !== false,
     weightKg: original.weightKg === null ? null : Number(original.weightKg),
     altUnit: original.altUnit,
     conversionFactor:
@@ -293,7 +306,8 @@ function initialAdvancedOpen(p: ProductFull): boolean {
     conversionFactor: p.conversionFactor != null ? Number(p.conversionFactor) : null,
   });
   return (
-    (!isClosed && !!p.altUnit) ||
+    // kg/L "vendido inteiro" (ADR-040) tem bloco próprio visível — não conta aqui.
+    (!isClosed && !!p.altUnit && !wholeOfWeighedEligible(p.unit, p.altUnit)) ||
     !!p.pairedProductId ||
     p.surchargeDebit != null ||
     p.surchargeCredit != null
@@ -395,6 +409,21 @@ export function ProductDetail({
   const savedTerms = closedUnitTerms(product.unit);
   const savedUnitArticle = savedTerms.article;
   const barLen = product.conversionFactor != null ? Number(product.conversionFactor) : 0;
+  // ADR-040 §2: produto sem controle de estoque — sem saldo/mínimo na tela.
+  const tracked = product.trackStock !== false;
+  // ADR-040: kg/L — "preço do quilo" + bloco "Vendido inteiro também" (edição usa o form).
+  const formWholeMode = wholeOfWeighedEligible(form.unit, form.altUnit);
+  const formWeighedNoun = form.unit === 'LITER' ? 'litro' : 'quilo';
+  const formWeighedAbbr = form.unit === 'LITER' ? 'L' : 'kg';
+  const savedWeighed = wholeOfWeighedEligible(product.unit, product.altUnit);
+  const savedWeighedNoun = product.unit === 'LITER' ? 'litro' : 'quilo';
+  const savedSellsWhole = sellsWholeOfWeighed({
+    unit: product.unit,
+    salePrice: Number(product.salePrice),
+    altUnit: product.altUnit,
+    altSalePrice: product.altSalePrice != null ? Number(product.altSalePrice) : null,
+    conversionFactor: product.conversionFactor != null ? Number(product.conversionFactor) : null,
+  });
   const stockLabel = (() => {
     if (!closed) return `${QTY(product.stockQty)} ${unitTypeLabels[product.unit]}`;
     const { whole, remainderMeters } = splitWholeAndRemainder(Number(product.stockQty), barLen);
@@ -410,6 +439,14 @@ export function ProductDetail({
     // Par (ADR-015): agregado sem preço salvaria um par que o PDV nunca ofereceria.
     if (form.pairedProductId && !(Number(form.pairPrice) > 0)) {
       setError('Informe o preço do par (ou remova o produto agregado).');
+      return;
+    }
+    // ADR-040: "vendido inteiro" — preço e peso médio andam juntos (o PDV só oferece com os dois).
+    if (
+      formWholeMode &&
+      (numOrNull(form.altSalePrice) === null) !== (numOrNull(form.conversionFactor) === null)
+    ) {
+      setError('Para vender inteiro, informe o preço do inteiro E o peso médio (ou deixe os dois vazios).');
       return;
     }
     const parsed = updateProductSchema.safeParse(patch);
@@ -649,8 +686,21 @@ export function ProductDetail({
                   value={product.weightKg === null ? null : `${QTY(product.weightKg)} kg`}
                 />
               )}
-              <Row label={closed ? `Custo ${savedUnitArticle}` : 'Custo'} value={BRL(product.costPrice)} />
-              <Row label={closed ? `Preço ${savedUnitArticle}` : 'Venda'} value={BRL(product.salePrice)} />
+              <Row
+                label={closed ? `Custo ${savedUnitArticle}` : savedWeighed ? `Custo do ${savedWeighedNoun}` : 'Custo'}
+                value={BRL(product.costPrice)}
+              />
+              <Row
+                label={closed ? `Preço ${savedUnitArticle}` : savedWeighed ? `Preço do ${savedWeighedNoun}` : 'Venda'}
+                value={BRL(product.salePrice)}
+              />
+              {/* ADR-040: produto por peso vendido também inteiro (preço fixo). */}
+              {savedSellsWhole && (
+                <Row
+                  label="Inteiro"
+                  value={`${BRL(product.altSalePrice as string)} · peso médio ${QTY(product.conversionFactor as string)} ${product.unit === 'LITER' ? 'L' : 'kg'}`}
+                />
+              )}
               <Row label="Margem" value={`${product.marginPercent}%`} />
               {closed && (
                 <Row
@@ -697,9 +747,15 @@ export function ProductDetail({
                   />
                 );
               })}
-              <Row label="Estoque atual" value={stockLabel} />
-              <Row label="Estoque mínimo" value={QTY(product.minStockQty)} />
-              {!closed && (
+              {tracked ? (
+                <>
+                  <Row label="Estoque atual" value={stockLabel} />
+                  <Row label="Estoque mínimo" value={QTY(product.minStockQty)} />
+                </>
+              ) : (
+                <Row label="Estoque" value="Sem controle (vende sem saldo)" />
+              )}
+              {!closed && !savedSellsWhole && !(savedWeighed && !product.altUnit) && (
                 <Row
                   label="Embalagem fechada"
                   value={
@@ -1050,14 +1106,39 @@ export function ProductDetail({
                 costPrice={form.costPrice}
                 salePrice={form.salePrice}
                 onChange={(next) => setForm((f) => ({ ...f, ...next }))}
-                costLabel={closed ? `Custo ${unitArticle}` : 'Custo'}
-                priceLabel={closed ? `Preço ${unitArticle}` : 'Venda'}
+                costLabel={
+                  closed ? `Custo ${unitArticle}` : formWholeMode ? `Custo do ${formWeighedNoun}` : 'Custo'
+                }
+                priceLabel={
+                  closed ? `Preço ${unitArticle}` : formWholeMode ? `Preço do ${formWeighedNoun}` : 'Venda'
+                }
               />
             </div>
             {/* 3 · Classificação e estoque */}
             <div className="border-t border-gray-200 pt-4">
               <SectionTitle n={3}>Unidade, categoria e estoque</SectionTitle>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {/* Controlar estoque (ADR-040 §2). Desligar não apaga o histórico; religar começa do
+                saldo que estiver lá — confira com um Ajuste no Estoque. */}
+            <label className="flex items-start gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 sm:col-span-2">
+              <input
+                type="checkbox"
+                checked={form.trackStock}
+                onChange={(e) => setForm({ ...form, trackStock: e.target.checked })}
+                className="mt-0.5 h-4 w-4 accent-indigo-600"
+              />
+              <span className="text-sm">
+                <span className="font-medium text-gray-800">Controlar estoque deste produto</span>
+                <span className="block text-xs text-gray-500">
+                  {form.trackStock
+                    ? tracked
+                      ? 'A venda baixa o estoque e trava quando não há saldo.'
+                      : 'Ao religar, confira o saldo com um Ajuste na tela de Estoque.'
+                    : 'Sem controle: vende sem saldo e não movimenta estoque (produção do dia, serviço).'}
+                </span>
+              </span>
+            </label>
+            {form.trackStock && (
             <label>
               <span className={labelCls}>Estoque mínimo</span>
               <input
@@ -1069,6 +1150,7 @@ export function ProductDetail({
                 className={inputCls}
               />
             </label>
+            )}
             <label>
               <span className={labelCls}>Unidade de venda</span>
               <select
@@ -1176,6 +1258,45 @@ export function ProductDetail({
               </fieldset>
               </div>
             )}
+            {/* ADR-040: produto por peso (kg/L) vendido também INTEIRO a preço fixo (ex.: frango
+                assado inteiro OU por kg) — unidade alternativa (ADR-013) com altUnit UNIT. */}
+            {!closed && formWholeMode && (
+              <div className="border-t border-gray-200 pt-4">
+              <fieldset className="rounded-xl border border-dashed border-indigo-300 bg-indigo-50/40 p-3">
+                <legend className="px-1 text-xs font-medium text-indigo-700">
+                  Vendido inteiro também (opcional) — ex.: frango assado inteiro OU por {formWeighedNoun}
+                </legend>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label>
+                    <span className={labelCls}>Preço do inteiro</span>
+                    <MoneyInput
+                      placeholder="Ex.: 45,00"
+                      value={form.altSalePrice}
+                      onChange={(v) => setForm({ ...form, altSalePrice: v })}
+                      className={inputCls}
+                    />
+                  </label>
+                  <label>
+                    <span className={labelCls}>Peso médio do inteiro ({formWeighedAbbr})</span>
+                    <input
+                      placeholder="Ex.: 1,2"
+                      type="number"
+                      step="any"
+                      min="0"
+                      value={form.conversionFactor}
+                      onChange={(e) => setForm({ ...form, conversionFactor: e.target.value })}
+                      className={inputCls}
+                    />
+                  </label>
+                </div>
+                <p className="mt-2 text-xs text-gray-600">
+                  No PDV o caixa escolhe <strong>por {formWeighedNoun}</strong> (digita o peso) ou{' '}
+                  <strong>inteiro</strong> (preço fixo). O peso médio só baixa o estoque e conta nos
+                  relatórios. Deixe vazio para vender só por {formWeighedNoun}.
+                </p>
+              </fieldset>
+              </div>
+            )}
             {/* Opções avançadas — recolhíveis; nascem abertas se o produto já tiver dados aqui. */}
             <details
               open={advOpen}
@@ -1196,7 +1317,8 @@ export function ProductDetail({
                 </svg>
               </summary>
               <div className="space-y-3 pb-1">
-              {!closed && (
+              {/* kg/L usa o bloco "Vendido inteiro também" (acima) nos mesmos campos. */}
+              {!closed && !formWholeMode && (
               <fieldset className="rounded-xl border border-dashed border-gray-300 p-3">
                 <legend className="px-1 text-xs font-medium text-gray-600">
                   Venda em unidade alternativa (opcional)

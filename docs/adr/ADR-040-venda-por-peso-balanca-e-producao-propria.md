@@ -93,6 +93,21 @@ o protocolo serial muda por marca e, numa PWA, só funciona via Web Serial no **
   - **Valor = peso:** quantidade = gramas ÷ 1000; total = quantidade × preço/kg atual do cadastro.
 - **Recomendação ao comprar a balança:** layout **preço** (sem divergência de centavo entre etiqueta e caixa).
 
+### 4. "Vendido inteiro também" — produto por peso com preço do inteiro (decisão do Owner 2026-10-01)
+
+- Pergunta do Owner: item pesado na hora (frango assado, melancia, queijo) deve ter o **preço do quilo** e,
+  opcionalmente, o **preço do item inteiro**. Padrão de mercado confirmado: item de peso variável é cadastrado
+  pelo **preço do quilo**; o "inteiro a preço fixo" é uma **segunda forma de venda** do mesmo produto (o mercado
+  costuma usar dois códigos; aqui fica num produto só, à escolha do caixa).
+- **Sem migration e sem motor novo:** reusa a venda em unidade alternativa ([ADR-013](./ADR-013-venda-em-unidade-alternativa.md))
+  com `altUnit = UNIT` — `salePrice` = preço do kg/L, `altSalePrice` = preço do inteiro, `conversionFactor` = **peso
+  médio** (só para baixar estoque e contar quantidade nos relatórios). Funções puras no core: `isWeighedUnit`,
+  `wholeOfWeighedEligible`, `sellsWholeOfWeighed`.
+- **Cadastro:** produto em kg/L ganha o bloco visível "Vendido inteiro também" (preço do inteiro + peso médio; os
+  dois juntos ou nenhum) e os rótulos viram "Preço do quilo"/"Custo do quilo". Embalagem diferente de `UNIT` já
+  gravada (dado legado) segue no cadastro genérico.
+- **PDV:** botões "+ kg · R$ 39,90" (digita o peso, ADR-040 §1) e "+ inteiro · R$ 45,00" (preço fixo, passo 1).
+
 ---
 
 ## Impacto no banco (aprovado — regra 1)
@@ -133,6 +148,16 @@ Aditiva, na **mesma migration do [ADR-039](./ADR-039-ramo-da-loja-e-modulos.md)*
    core 409 ✅, web tsc 0 + build ✅. **NO AR 2026-09-30 (web `dbc6a24a`)**; E2E do Owner pendente. Fica para a Fatia 2: a trava de estoque
    ainda vale (produto por kg precisa de saldo até existir `trackStock`).
 2. **Fatia 2 — `trackStock`** (migration): cadastro ("Controlar estoque deste produto"), venda, devolução, alertas.
+   **IMPLEMENTADA 2026-10-01** (coluna já existia pela `0041`; sem migration nova) **+ §4 "vendido inteiro"**. Core
+   `tracksStock`/`sellableQty` (∞ p/ sem controle — fonte única da trava do PDV e do `POST /orders`) + testes
+   (`semControleEstoque.test.ts`). API: `POST /orders` não trava nem baixa/reserva; cancelamento, devolução
+   total/por item e troca não estornam e não geram defeituoso (condição vira `GOOD`); retirada (ADR-020) só
+   registra; `POST /stock/movements` e `/adjust` recusam (400); NF-e atualiza custo/preço sem lançar Entrada;
+   alertas de estoque, "vai faltar" e reposição do suporte ignoram; `POST /products` ignora `initialStock`;
+   `PATCH` recusa desligar com reserva pendente (409). Web: interruptor no cadastro/edição (esconde mínimo/estoque
+   inicial), detalhe mostra "Estoque: sem controle", PDV nunca trava e não mostra saldo (`stockQty` = "Infinity",
+   espelhado no cache offline), Estoque esconde o produto das tabelas e dos seletores de Entrada/Ajuste. Doc §8.2
+   atualizada (regra 7). Gates: core 434, shared 68, API tsc 0, web build.
 3. **Fatia 3 — etiqueta de balança** (migration + módulo): `scaleCode`, `parseScaleBarcode`, config do layout no
    painel, leitura no PDV. E2E com etiqueta impressa de verdade (ou gerada em tela para teste).
 4. **Futuro:** exportar PLUs para a balança; balança de checkout via Web Serial; `RECIPES`.

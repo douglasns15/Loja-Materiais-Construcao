@@ -386,6 +386,12 @@ testável exaustivamente e compartilhada entre as duas apps.
 | `POST /:id/return` 🔒 | Devolução **total**: marca `RETURNED`, estorna estoque, saída no caixa. Exige caixa aberto. |
 | `POST /:id/return-items` 🔒 | Devolução por item (parcial **ou total**); excedente vira crédito na loja, dinheiro, ou **estorno na mesma forma** (`target` = `STORE_CREDIT`/`CASH`/`SAME_AS_PAYMENT` — ADR-033; no estorno só a parcela em dinheiro sai do caixa). Cada item aceita `condition` (`GOOD` padrão × `DEFECTIVE`): defeito **não** volta ao estoque vendável — vira defeituoso (`Product.defectiveQty` + ledger na linha). **Valor devolvido (ADR-036):** é o **valor pago** por item (`itemPaidValue`) — reflete o desconto **por item** (já em `OrderItem.total`) e rateia o desconto **do pedido** (`Order.discountAmount`); frete não é ratateado. `intent = EXCHANGE` é **rejeitado** aqui (ADR-033 revisado): a troca é concluída no PDV via `POST /orders` `exchangeReturn`; esta rota é só devolução/estorno. **`customerId` (ADR-035, pick-no-retorno):** opcional; quando `target = STORE_CREDIT` e a venda **não** tem cliente, o servidor valida que é cliente do tenant, **anexa** à venda (`Order.customerId`) e credita — se a venda já tem cliente, é ignorado. **ADR-036:** se a devolução (REFUND) deixar a venda **totalmente devolvida**, marca `order.status = RETURNED` (sai do faturamento nos relatórios, como as canceladas). Troca (EXCHANGE) não marca. |
 
+> **Produto sem controle de estoque (`trackStock = false`, ADR-040 §2)** — vale para todas as rotas acima:
+> a venda (online e offline/sync) **não trava** por saldo e não grava `StockMovement` nem reserva
+> (`reservedQty`); cancelamento, devolução total/por item e troca **não estornam** estoque nem geram
+> defeituoso (a condição vira `GOOD`). Só a trava por item (`returnedBaseQty`) e o dinheiro seguem
+> normalmente. Vale o flag **atual** do produto.
+
 **`/returns` — Devoluções pós-venda (ADR-033)**
 
 | Método · Rota | O que faz |
@@ -410,8 +416,8 @@ testável exaustivamente e compartilhada entre as duas apps.
 |---|---|
 | `GET /movements` | Histórico de movimentações (livro-razão). |
 | `GET /summary` | Resumo/posição de estoque. |
-| `POST /movements` 🔒 | Entrada/saída manual (`StockMovement` + `stockQty`). |
-| `POST /adjust` 🔒 | Ajuste/inventário (acerta o saldo com auditoria). |
+| `POST /movements` 🔒 | Entrada/saída manual (`StockMovement` + `stockQty`). Recusa (400) produto **sem controle de estoque** (`trackStock = false`, ADR-040 §2). |
+| `POST /adjust` 🔒 | Ajuste/inventário (acerta o saldo com auditoria). Recusa (400) produto sem controle de estoque. |
 
 **`/products` e `/categories` — Catálogo local**
 
@@ -419,7 +425,7 @@ testável exaustivamente e compartilhada entre as duas apps.
 |---|---|
 | `GET /products` · `GET /products/search` | Lista e busca de produtos (nome, SKU, `popularName`, EAN). |
 | `GET /products/:id` | Detalhe do produto. |
-| `POST /products` 🔒 · `PATCH /products/:id` 🔒 · `DELETE /products/:id` 🔒 | Cria / edita / remove (soft-delete). |
+| `POST /products` 🔒 · `PATCH /products/:id` 🔒 · `DELETE /products/:id` 🔒 | Cria / edita / remove (soft-delete). Aceita `trackStock` (ADR-040 §2, default `true`): `false` = produto sem controle de estoque (produção do dia/serviço) — no `POST` o `initialStock` é ignorado; no `PATCH`, desligar com mercadoria **reservada** (retirada futura pendente) é recusado (409). Produto por kg/L "vendido inteiro também" usa a unidade alternativa (ADR-013) com `altUnit = UNIT`, `altSalePrice` = preço do inteiro e `conversionFactor` = peso médio. |
 | `GET /categories` · `GET /categories/:id` | Lista e detalhe de categorias. |
 | `POST /categories` 🔒 · `PATCH /categories/:id` 🔒 · `DELETE /categories/:id` 🔒 | CRUD de categorias. |
 
@@ -433,7 +439,7 @@ testável exaustivamente e compartilhada entre as duas apps.
 
 | Método · Rota | O que faz |
 |---|---|
-| `POST /entry` 🔒 | Confirma o De-Para item-a-item → gera Entrada de estoque; cada linha em sua própria transação. Ao **casar** com um produto de `ean` vazio, faz backfill do GTIN da nota no cadastro (nunca sobrescreve EAN preenchido) para a próxima importação casar sozinha. Aceita `newSalePrice` (opcional) para reajustar o preço de venda do produto casado — quando informado, considera a margem revisada e limpa o aviso `priceReviewPendingAt`. Aceita `fileName` (opcional), guardado no histórico. Aceita `newUnit` (troca a unidade do produto casado) e `packFactor` (lembra o fator de embalagem em `Product.nfePackFactor` para pré-sugerir nas próximas notas). |
+| `POST /entry` 🔒 | Confirma o De-Para item-a-item → gera Entrada de estoque; cada linha em sua própria transação. Ao **casar** com um produto de `ean` vazio, faz backfill do GTIN da nota no cadastro (nunca sobrescreve EAN preenchido) para a próxima importação casar sozinha. Aceita `newSalePrice` (opcional) para reajustar o preço de venda do produto casado — quando informado, considera a margem revisada e limpa o aviso `priceReviewPendingAt`. Aceita `fileName` (opcional), guardado no histórico. Aceita `newUnit` (troca a unidade do produto casado) e `packFactor` (lembra o fator de embalagem em `Product.nfePackFactor` para pré-sugerir nas próximas notas). Produto casado **sem controle de estoque** (ADR-040 §2): atualiza custo/preço/EAN, mas não lança Entrada nem mexe no saldo (`NfeImportItem.movementId` fica nulo). |
 | `GET /imported` | Lista itens já importados de uma nota (por `chNFe`) — idempotência. |
 | `GET /imports` | Histórico de importações agrupado por chave de acesso (data, nota, fornecedor, arquivo, nº de itens); filtro `q` (nota/fornecedor/arquivo) e paginação por cursor `before`. |
 | `GET /imports/:accessKey` | Detalhe de uma importação: itens lançados (nome do produto, quantidade, unidade) + cabeçalho (nota/fornecedor/arquivo/data). |
@@ -469,7 +475,7 @@ testável exaustivamente e compartilhada entre as duas apps.
 | `GET /` | Lista **AGRUPADA por cliente** (ADR-028): devolve `{ cards, nextCursor }`, onde cada card é `{ kind: 'account', account }` — uma conta de retiradas (`E-0001`) com os agregados (`ordersCount`, `total`, `itemsPending`, `nextPickupAt`) e o extrato `orders` (as vendas `V-000XXX`) — ou `{ kind: 'order', order }` para uma venda SCHEDULED **sem cliente** (avulsa, não entra em conta). Paginação keyset num tempo comum (`openedAt` da conta / `createdAt` da avulsa), mesclando os dois fluxos. `?status=pending` (default) / `completed` / `all` filtra por status da conta e por `fulfillmentStatus` das avulsas. **Busca** (varre todas as situações, ignora `status`): `?code=` casa a conta pelo `accountNumber` (`E-000X`) OU uma venda dela pelo `orderNumber` (`V-000XXX`), e as avulsas pelo `orderNumber`; `?customer=` filtra a conta pelo nome do cliente (avulsas não têm cliente ⇒ ficam de fora). `itemsPending`/`itemsCount` (na conta e em cada venda do extrato) são **quantidades em unidade-base** — o que falta sair / o total vendido, **não** contagem de linhas (3 sacos com 1 já retirado ⇒ `itemsPending` = 2; espelha o "Falta sair" do detalhe). |
 | `GET /:id` | Detalhe de UMA venda de retirada: inclui `orderNumber`, `discountAmount`, os itens com `unitPrice`/`total` e `outstandingBalance` (saldo a prazo em aberto, `0` quando 100% pago) — usados para reimprimir o **comprovante de retirada** ("PAGO — FALTA RETIRAR" quando saldo `0`; só "FALTA RETIRAR" quando há saldo a prazo). |
 | `PATCH /:id` 🔒 | Atualiza status/dados da entrega. |
-| `POST /:id/deliver` 🔒 | Confirma entrega/retirada → efetiva a saída de estoque adiada. Ao finalizar a última venda da conta (todas COMPLETED), **fecha a conta** (`DeliveryAccount.status = COMPLETED` + `closedAt`, ADR-028). |
+| `POST /:id/deliver` 🔒 | Confirma entrega/retirada → efetiva a saída de estoque adiada (produto sem controle de estoque só registra a retirada, sem `StockMovement`). Ao finalizar a última venda da conta (todas COMPLETED), **fecha a conta** (`DeliveryAccount.status = COMPLETED` + `closedAt`, ADR-028). |
 
 **`/quotes` — Orçamentos salvos (ADR-024)**
 

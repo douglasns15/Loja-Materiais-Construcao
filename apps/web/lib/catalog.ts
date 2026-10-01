@@ -46,6 +46,8 @@ export interface CachedProduct {
   // mesmo preço de cartão que cobraria online. Nulos ⇒ preço único.
   surchargeDebit: string | null;
   surchargeCredit: string | null;
+  /** `false` = sem controle de estoque (ADR-040 §2) — espelhado p/ a venda offline não travar. */
+  trackStock?: boolean;
 }
 
 /**
@@ -80,6 +82,7 @@ export async function cacheProducts(products: CachedProduct[]): Promise<void> {
         pairPrice: p.pairPrice ?? null,
         surchargeDebit: p.surchargeDebit ?? null,
         surchargeCredit: p.surchargeCredit ?? null,
+        trackStock: p.trackStock !== false,
       });
     }
     await txDone(tx);

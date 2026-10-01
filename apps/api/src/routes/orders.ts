@@ -3,7 +3,6 @@ import { createPrismaClient, Prisma } from '@nexoloja/db';
 import {
   applyItemReturn,
   applyReceivableReturn,
-  availableQty,
   calcSaleItemTotal,
   calcSaleTotals,
   cancelCashRefund,
@@ -22,8 +21,10 @@ import {
   maxStoreCreditForSale,
   receivableBalance,
   returnableBaseQty,
+  sellableQty,
   splitReturnValue,
   toBaseQuantity,
+  tracksStock,
 } from '@nexoloja/core';
 import {
   cancelOrderSchema,
@@ -83,7 +84,27 @@ type ReturnPrepLine = {
   requestedBase: number;
   value: number;
   condition: 'GOOD' | 'DEFECTIVE';
+  /** `false` = produto SEM controle de estoque (ADR-040 §2): a devolução não mexe em estoque. */
+  tracked: boolean;
 };
+
+/**
+ * Produtos SEM controle de estoque (ADR-040 §2) dentre os informados — para a devolução/troca/
+ * cancelamento pularem o estorno de estoque deles. Vale o flag ATUAL do produto (é o que diz se ele
+ * tem estoque hoje). Uma consulta só, por `id IN`.
+ */
+async function untrackedProductIds(
+  db: Prisma.TransactionClient | ReturnType<typeof createPrismaClient>,
+  tenantId: string,
+  productIds: string[],
+): Promise<Set<string>> {
+  if (productIds.length === 0) return new Set();
+  const rows = await db.product.findMany({
+    where: { tenantId, id: { in: [...new Set(productIds)] }, trackStock: false },
+    select: { id: true },
+  });
+  return new Set(rows.map((r) => r.id));
+}
 
 /**
  * Valida cada linha pedida contra o que ainda é devolvível e calcula o VALOR PAGO por ela
@@ -95,6 +116,7 @@ function prepareReturnLines(
   orderItems: OrderItemForReturn[],
   reqItems: { orderItemId: string; quantity: number; condition?: 'GOOD' | 'DEFECTIVE' }[],
   order: { subtotal: number; discountAmount: number },
+  untracked: ReadonlySet<string> = new Set(),
 ): { ok: true; prep: ReturnPrepLine[]; totalValue: number } | { ok: false; error: string } {
   const byId = new Map(orderItems.map((i) => [i.id, i]));
   const seen = new Set<string>();
@@ -124,7 +146,16 @@ function prepareReturnLines(
       orderSubtotal: order.subtotal,
       orderDiscountAmount: order.discountAmount,
     });
-    prep.push({ item, requestedBase, value, condition: req.condition ?? 'GOOD' });
+    // ADR-040 §2: produto sem controle de estoque não tem "defeito a repor/baixar" — a condição
+    // vira GOOD (nada entra na fila de defeituosos) e o estorno de estoque é pulado.
+    const tracked = !untracked.has(item.productId);
+    prep.push({
+      item,
+      requestedBase,
+      value,
+      condition: tracked ? (req.condition ?? 'GOOD') : 'GOOD',
+      tracked,
+    });
   }
   const totalValue = Number(prep.reduce((s, p) => s + p.value, 0).toFixed(2));
   return { ok: true, prep, totalValue };
@@ -151,7 +182,9 @@ async function applyReturnStock(
 ): Promise<Map<string, number>> {
   const newReturned = new Map<string, number>();
   for (const p of prep) {
-    if (p.condition === 'DEFECTIVE') {
+    if (!p.tracked) {
+      // ADR-040 §2: sem controle de estoque — só a trava por item (abaixo) é atualizada.
+    } else if (p.condition === 'DEFECTIVE') {
       await tx.product.update({
         where: { id: p.item.productId },
         data: { defectiveQty: { increment: p.requestedBase } },
@@ -618,7 +651,12 @@ orders.post('/', requireActiveTenant, async (c) => {
       // negativo p/ reconciliação (§6). A venda offline de EF-3 também traz `saleMode` no envelope.
       // ADR-020: a trava é pelo DISPONÍVEL = estoque − reservado (mercadoria já comprometida com
       // retiradas futuras não pode ser vendida de novo) — vale para venda no ato E agendada.
-      const available = availableQty(Number(p.stockQty), Number(p.reservedQty));
+      // ADR-040 §2: produto SEM controle de estoque (produção do dia) nunca trava (`sellableQty` = ∞).
+      const available = sellableQty({
+        trackStock: p.trackStock,
+        stockQty: Number(p.stockQty),
+        reservedQty: Number(p.reservedQty),
+      });
       if (!isOffline && available < baseQty) {
         return c.json(
           {
@@ -722,10 +760,12 @@ orders.post('/', requireActiveTenant, async (c) => {
       // Valida as quantidades devolvíveis e calcula o VALE = valor pago líquido de descontos (fonte
       // única `prepareReturnLines`, a mesma da devolução avulsa). Reflete o desconto por item (já em
       // `total`) e rateia o desconto do pedido.
-      const preparedExchange = prepareReturnLines(src.items, sale.exchangeReturn.items, {
-        subtotal: Number(src.subtotal),
-        discountAmount: Number(src.discountAmount),
-      });
+      const preparedExchange = prepareReturnLines(
+        src.items,
+        sale.exchangeReturn.items,
+        { subtotal: Number(src.subtotal), discountAmount: Number(src.discountAmount) },
+        await untrackedProductIds(prisma, tenantId, src.items.map((i) => i.productId)),
+      );
       if (!preparedExchange.ok) {
         return c.json({ ok: false, error: preparedExchange.error }, 400);
       }
@@ -939,7 +979,9 @@ orders.post('/', requireActiveTenant, async (c) => {
       //    parcial, preservando o ADR-001 — só que disparada no evento de entrega.
       //  - IMMEDIATE (padrão): ADR-001 — cada item gera saída de estoque + decremento atômico do
       //    cache (pode ficar negativo no sync offline, §6). EF-3 (ADR-013): sempre em UNIDADE-BASE.
-      for (const { item, baseQty } of lines) {
+      // ADR-040 §2: produto SEM controle de estoque não reserva nem baixa — não tem estoque.
+      for (const { item, product, baseQty } of lines) {
+        if (!tracksStock(product)) continue;
         if (isScheduled) {
           await tx.product.update({
             where: { id: item.productId },
@@ -1265,6 +1307,9 @@ orders.post('/:id/cancel', async (c) => {
     // Condição por item (ADR-033): mapa orderItemId → GOOD|DEFECTIVE. Só vale p/ venda IMMEDIATE
     // (o defeito é da mercadoria que já saiu); numa SCHEDULED a condição é ignorada.
     const condByItem = new Map((condItems ?? []).map((i) => [i.orderItemId, i.condition]));
+    // ADR-040 §2: produto sem controle de estoque não tem o que estornar (nem reserva — desligar o
+    // controle é recusado enquanto houver reserva, ver PATCH /products/:id).
+    const untracked = await untrackedProductIds(prisma, tenantId, order.items.map((i) => i.productId));
     const cancelled = await prisma.$transaction(async (tx) => {
       // Estorno de estoque. EF-3 (ADR-013): em UNIDADE-BASE (`baseQuantity`); `?? quantity` cobre
       // pedidos antigos (pré-EF-3, base == vendida, fator 1). Dois caminhos (ADR-020):
@@ -1276,6 +1321,7 @@ orders.post('/:id/cancel', async (c) => {
       // `defectiveQty` e vira linha na fila de defeituosos (OrderReturn abaixo).
       const defectiveLines: { item: (typeof order.items)[number]; base: number }[] = [];
       for (const item of order.items) {
+        if (untracked.has(item.productId)) continue;
         const baseQty = Number(item.baseQuantity ?? item.quantity);
         const delivered = Number(item.deliveredBaseQty ?? 0);
         const returnToStock = isScheduled ? delivered : baseQty;
@@ -1518,11 +1564,14 @@ orders.post('/:id/return', async (c) => {
     const cashRefund = Number(Math.max(0, total - creditPaid).toFixed(2));
 
     const isScheduled = order.deliveryMode === 'SCHEDULED';
+    // ADR-040 §2: produto sem controle de estoque não tem o que estornar.
+    const untracked = await untrackedProductIds(prisma, tenantId, order.items.map((i) => i.productId));
     const returned = await prisma.$transaction(async (tx) => {
       // Estorno de estoque — mesma lógica do cancelamento (ADR-020): IMMEDIATE devolve o total;
       // SCHEDULED devolve só a parte já retirada (`deliveredBaseQty`) via INCOME e LIBERA a reserva
       // remanescente (sem StockMovement). EF-3 (ADR-013): sempre em UNIDADE-BASE (`?? quantity`).
       for (const item of order.items) {
+        if (untracked.has(item.productId)) continue;
         const baseQty = Number(item.baseQuantity ?? item.quantity);
         const delivered = Number(item.deliveredBaseQty ?? 0);
         const returnToStock = isScheduled ? delivered : baseQty;
@@ -1706,10 +1755,12 @@ orders.post('/:id/return-items', async (c) => {
 
     // Prepara e valida cada linha devolvida (quantidade na unidade VENDIDA → base + VALOR PAGO
     // líquido de descontos — `prepareReturnLines`, fonte única compartilhada com a troca do PDV).
-    const preparedReturn = prepareReturnLines(order.items, reqItems, {
-      subtotal: Number(order.subtotal),
-      discountAmount: Number(order.discountAmount),
-    });
+    const preparedReturn = prepareReturnLines(
+      order.items,
+      reqItems,
+      { subtotal: Number(order.subtotal), discountAmount: Number(order.discountAmount) },
+      await untrackedProductIds(prisma, tenantId, order.items.map((i) => i.productId)),
+    );
     if (!preparedReturn.ok) {
       return c.json({ ok: false, error: preparedReturn.error }, 400);
     }

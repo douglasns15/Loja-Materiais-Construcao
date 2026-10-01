@@ -125,6 +125,12 @@ export const createProductSchema = z.object({
   surchargeDebit: z.number().positive().optional(),
   surchargeCredit: z.number().positive().optional(),
   /**
+   * Controlar estoque (ADR-040 §2). Ausente = `true` (default do schema). `false` = produto SEM
+   * controle (produção do dia, serviço): a venda não trava e nenhum evento gera `StockMovement` nem
+   * mexe no saldo; `initialStock` é ignorado. Desligar com mercadoria reservada é recusado (409).
+   */
+  trackStock: z.boolean().optional(),
+  /**
    * Estoque inicial (opcional). Quando > 0, o cadastro NÃO grava o saldo direto no produto:
    * a API cria o produto e gera a **Entrada** (`StockMovement` INCOME) na MESMA transação
    * (ADR-001 — `stockQty` é cache; a movimentação é a fonte de verdade), já com a autoria

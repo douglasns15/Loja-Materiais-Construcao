@@ -126,6 +126,7 @@ support.get('/:tenantId/overview', async (c) => {
           where: {
             tenantId,
             deletedAt: null,
+            trackStock: true, // ADR-040 §2: sem controle de estoque não precisa repor
             OR: [{ minStockQty: { gt: 0 } }, { stockQty: { lte: 0 } }],
           },
           select: { id: true, name: true, stockQty: true, minStockQty: true },
