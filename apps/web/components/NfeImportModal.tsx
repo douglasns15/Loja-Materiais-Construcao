@@ -6,6 +6,7 @@ import {
   gtinKey,
   onlyDigits,
   unitTypeLabels,
+  visibleUnitTypes,
   type NFeDoc,
   type NFeItem,
   type UnitType,
@@ -18,6 +19,7 @@ import {
 } from '@nexoloja/core';
 import { apiGet, apiPost } from '@/lib/api';
 import { parseNfeXml } from '@/lib/nfe';
+import { useModule } from '@/lib/useModule';
 import { ProductPicker } from '@/components/ProductPicker';
 import { MoneyInput } from '@/components/MoneyInput';
 
@@ -182,6 +184,9 @@ export function NfeImportModal({
   /** Chamado após a importação para a tela recarregar catálogo/movimentações. */
   onImported: () => Promise<void> | void;
 }) {
+  // Ramo (ADR-039 F2): sem o módulo de obra, os seletores de unidade escondem milheiro/saco/barra…
+  // (preservando a unidade que a nota/produto já trouxe).
+  const construction = useModule('CONSTRUCTION_UNITS');
   const [doc, setDoc] = useState<NFeDoc | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -587,7 +592,7 @@ export function NfeImportModal({
                                     disabled={!chosen}
                                     aria-label="Unidade de venda do produto casado"
                                   >
-                                    {(Object.keys(unitTypeLabels) as UnitType[]).map((u) => (
+                                    {visibleUnitTypes(construction, [unitValue, chosen?.unit]).map((u) => (
                                       <option key={u} value={u}>
                                         {unitTypeLabels[u]}
                                       </option>
@@ -623,7 +628,7 @@ export function NfeImportModal({
                             className={`${inputCls} bg-white`}
                             aria-label="Unidade de venda"
                           >
-                            {(Object.keys(unitTypeLabels) as UnitType[]).map((u) => (
+                            {visibleUnitTypes(construction, [r.npUnit]).map((u) => (
                               <option key={u} value={u}>
                                 {unitTypeLabels[u]}
                               </option>

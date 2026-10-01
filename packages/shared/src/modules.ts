@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { unitTypeLabels, type UnitType } from './product';
 
 /**
  * Módulos ativáveis por loja (`TenantModule`) — ADR-011.
@@ -49,6 +50,47 @@ export const STORE_SEGMENT_LABELS: Record<StoreSegment, string> = {
   ROTISSERIE: 'Rotisseria',
   GENERAL_RETAIL: 'Varejo geral',
 };
+
+/**
+ * Unidades de venda que pertencem ao módulo `CONSTRUCTION_UNITS` (ADR-039 §2): milheiro, saco,
+ * barra, rolo e m/m²/m³. Ficam no core (sempre visíveis): unidade, kg, litro e pacote (ADR-030 —
+ * o fardo do mercadinho).
+ */
+export const CONSTRUCTION_UNIT_TYPES: readonly UnitType[] = [
+  'METER',
+  'SQUARE_METER',
+  'CUBIC_METER',
+  'THOUSAND',
+  'BAG',
+  'ROLL',
+  'BARRA',
+];
+
+/**
+ * Gate de UI de um módulo (ADR-039 §3 — gating é de APRESENTAÇÃO, não de dado). `modules` é a
+ * lista do `GET /me`; `null/undefined` = resposta antiga da API ou sem cache ainda ⇒ cai no
+ * comportamento de sempre: as lojas antigas são todas de construção, então `CONSTRUCTION_UNITS`
+ * fica LIGADO e os demais desligados (nunca some recurso por engano numa loja existente).
+ */
+export function moduleEnabled(modules: readonly string[] | null | undefined, key: TenantModuleKey): boolean {
+  if (!modules) return key === MODULE_CONSTRUCTION_UNITS;
+  return modules.includes(key);
+}
+
+/**
+ * Opções do seletor de unidade (cadastro, detalhe, importação de NF-e). Sem o módulo de obra, só
+ * as unidades do core. `keep` preserva a unidade JÁ gravada no produto mesmo com o módulo
+ * desligado — desligar módulo nunca impede de ver/editar o que existe (ADR-039 §3). A ordem
+ * segue a do enum.
+ */
+export function visibleUnitTypes(
+  constructionOn: boolean,
+  keep: ReadonlyArray<string | null | undefined> = [],
+): UnitType[] {
+  const all = Object.keys(unitTypeLabels) as UnitType[];
+  if (constructionOn) return all;
+  return all.filter((u) => !CONSTRUCTION_UNIT_TYPES.includes(u) || keep.includes(u));
+}
 
 /** Chaves dos módulos ATIVOS da loja — o que o `GET /me` devolve para a web gatear telas. */
 export function activeModuleKeys(modules: readonly TenantModuleFlag[] | null | undefined): string[] {

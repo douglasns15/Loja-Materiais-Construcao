@@ -7,6 +7,7 @@ import {
   onlyDigits,
   updateProductSchema,
   unitTypeLabels,
+  visibleUnitTypes,
   type EanLookupResult,
   type UnitType,
 } from '@nexoloja/shared';
@@ -21,6 +22,7 @@ import {
 } from '@nexoloja/core';
 import { apiDelete, apiGet, apiPatch } from '@/lib/api';
 import { buildCategoryOptions, categoryLabelMap, type Category } from '@/lib/categories';
+import { useModule } from '@/lib/useModule';
 import { MoneyInput } from '@/components/MoneyInput';
 import { PricingEsteira } from '@/components/PricingEsteira';
 import { BarcodeScanButton } from '@/components/BarcodeScanButton';
@@ -317,6 +319,9 @@ export function ProductDetail({
   /** Chamado após um PATCH bem-sucedido, para a lista recarregar. */
   onSaved: () => Promise<void> | void;
 }) {
+  // Ramo da loja (ADR-039 F2): sem o módulo de obra somem as unidades de obra, o peso p/ frete e o
+  // par — MAS o que o produto já tem gravado continua visível/editável (desligar não esconde dado).
+  const construction = useModule('CONSTRUCTION_UNITS');
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<FormState>(() => toForm(product));
   // "Opções avançadas" da edição: nasce aberta se o produto já tem algo configurado lá.
@@ -372,6 +377,8 @@ export function ProductDetail({
   // Cadastrar o par pelo outro lado criaria dois preços para o mesmo par (a API recusa),
   // então aqui o campo fica bloqueado, explicando onde editar.
   const pairLockedByOther = !pairedHere && !!pairedFromOther;
+  // Bloco do par na edição: módulo de obra ligado OU produto que já tem par (ADR-039 §3).
+  const showPair = construction || !!pairPartner;
 
   // ADR-017: unidade fechada (barra/rolo) como principal. O estoque é em metros; aqui é exibido
   // como barras + sobra, e a apresentação (custo/preço = da barra; venda por metro opcional) inverte.
@@ -636,10 +643,12 @@ export function ProductDetail({
               <Row label="Código de barras (EAN)" value={product.ean} />
               <Row label="Categoria" value={categoryLabel} />
               <Row label="Unidade de venda" value={unitTypeLabels[product.unit]} />
-              <Row
-                label="Peso"
-                value={product.weightKg === null ? null : `${QTY(product.weightKg)} kg`}
-              />
+              {(construction || product.weightKg !== null) && (
+                <Row
+                  label="Peso"
+                  value={product.weightKg === null ? null : `${QTY(product.weightKg)} kg`}
+                />
+              )}
               <Row label={closed ? `Custo ${savedUnitArticle}` : 'Custo'} value={BRL(product.costPrice)} />
               <Row label={closed ? `Preço ${savedUnitArticle}` : 'Venda'} value={BRL(product.salePrice)} />
               <Row label="Margem" value={`${product.marginPercent}%`} />
@@ -701,21 +710,23 @@ export function ProductDetail({
                 />
               )}
               {/* Par (ADR-015) — mostrado dos dois lados, e a economia calculada. */}
-              <Row
-                label="Vendido em par com"
-                value={
-                  pairPartner && pairPriceShown ? (
-                    <>
-                      {pairPartner.name} — par por{' '}
-                      <span className="font-medium">{BRL(pairPriceShown)}</span>
-                      <span className="block text-xs text-gray-500">
-                        avulsos: {BRL(Number(product.salePrice) + Number(pairPartner.salePrice))}
-                        {pairLockedByOther && ' · cadastrado no outro produto'}
-                      </span>
-                    </>
-                  ) : null
-                }
-              />
+              {showPair && (
+                <Row
+                  label="Vendido em par com"
+                  value={
+                    pairPartner && pairPriceShown ? (
+                      <>
+                        {pairPartner.name} — par por{' '}
+                        <span className="font-medium">{BRL(pairPriceShown)}</span>
+                        <span className="block text-xs text-gray-500">
+                          avulsos: {BRL(Number(product.salePrice) + Number(pairPartner.salePrice))}
+                          {pairLockedByOther && ' · cadastrado no outro produto'}
+                        </span>
+                      </>
+                    ) : null
+                  }
+                />
+              )}
               <div className="col-span-2 sm:col-span-3">
                 <dt className={labelCls}>Descrição / observação</dt>
                 <dd className="whitespace-pre-wrap text-sm text-gray-900">
@@ -1065,7 +1076,7 @@ export function ProductDetail({
                 onChange={(e) => setForm({ ...form, unit: e.target.value as UnitType })}
                 className={`${inputCls} bg-white`}
               >
-                {(Object.keys(unitTypeLabels) as UnitType[]).map((u) => (
+                {visibleUnitTypes(construction, [form.unit, product.unit]).map((u) => (
                   <option key={u} value={u}>
                     {unitTypeLabels[u]}
                   </option>
@@ -1088,6 +1099,8 @@ export function ProductDetail({
                 ))}
               </select>
             </label>
+            {/* Peso p/ frete pesado — módulo de obra (ADR-039), ou se o produto já tem peso gravado. */}
+            {(construction || product.weightKg !== null) && (
             <div>
               <span className={labelCls}>Peso (vazio = sem peso)</span>
               <div className="flex gap-2">
@@ -1112,6 +1125,7 @@ export function ProductDetail({
                 </select>
               </div>
             </div>
+            )}
               </div>
             </div>
             {/* 4 · Descrição */}
@@ -1174,7 +1188,9 @@ export function ProductDetail({
                   <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V22a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 6 20.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 3 15" strokeLinecap="round" />
                 </svg>
                 Opções avançadas
-                <span className="font-normal text-gray-400">— unidade alternativa, par, acréscimo</span>
+                <span className="font-normal text-gray-400">
+                  {showPair ? '— unidade alternativa, par, acréscimo' : '— unidade alternativa, acréscimo'}
+                </span>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="ml-auto h-[18px] w-[18px] text-gray-400 transition group-open:rotate-180" aria-hidden="true">
                   <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
@@ -1195,7 +1211,7 @@ export function ProductDetail({
                     aria-label="Unidade da embalagem alternativa"
                   >
                     <option value="">— sem embalagem alternativa —</option>
-                    {(Object.keys(unitTypeLabels) as UnitType[]).map((u) => (
+                    {visibleUnitTypes(construction, [form.altUnit, product.altUnit]).map((u) => (
                       <option key={u} value={u}>
                         {unitTypeLabels[u]}
                       </option>
@@ -1220,7 +1236,9 @@ export function ProductDetail({
               </fieldset>
             )}
 
-            {/* Produto agregado — venda em par (ADR-015). */}
+            {/* Produto agregado — venda em par (ADR-015). Módulo de obra (ADR-039); fora dele só
+                aparece se o produto já tem par (para poder ver/desfazer). */}
+            {showPair && (
             <fieldset className="rounded-xl border border-dashed border-gray-300 p-3">
               <legend className="px-1 text-xs font-medium text-gray-600">
                 Vendido em par (opcional) — ex.: parafuso + bucha
@@ -1278,6 +1296,7 @@ export function ProductDetail({
                 </>
               )}
             </fieldset>
+            )}
 
             {/* Acréscimo por forma de pagamento (ADR-016) — opt-in por produto. */}
             <fieldset className="rounded-xl border border-dashed border-gray-300 p-3">

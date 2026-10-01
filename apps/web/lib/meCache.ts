@@ -15,6 +15,9 @@ import type { Me } from './useMe';
 
 const KEY = 'nexoloja.me';
 
+/** Evento de `window` disparado a cada `/me` gravado — o `useModule` relê os módulos sem novo fetch. */
+export const ME_UPDATED_EVENT = 'nexoloja:me-updated';
+
 /** Grava o último perfil conhecido (chamado a cada `/me` bem-sucedido). */
 export function cacheMe(me: Me): void {
   try {
@@ -22,6 +25,7 @@ export function cacheMe(me: Me): void {
   } catch {
     // localStorage indisponível (modo privado/SSR) — o fallback simplesmente não persiste.
   }
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(ME_UPDATED_EVENT));
 }
 
 /** Último perfil conhecido (ou `null` quando não há cache). */

@@ -149,6 +149,15 @@ migration (uma aprovação, um deploy).
    atualizada. Gates: core 418, shared 62, API tsc 0, web tsc 0 + build. **NO AR 2026-09-30 (API `351e86ac`, web `dbc6a24a`)**; E2E do Owner pendente.
 2. **Fatia 2 — Gating na web:** helper `useModule`; esconder unidades/blocos de construção no cadastro, detalhe e
    PDV. E2E: loja Demo (construção) idêntica; loja nova enxuta.
+   **IMPLEMENTADA 2026-10-01** (só web + helper puro em shared; sem API/migration): shared
+   `CONSTRUCTION_UNIT_TYPES`/`moduleEnabled`/`visibleUnitTypes` (+testes em `modules.test.ts`); web
+   `lib/useModule.ts` (lê os módulos do cache do `/me` — sem requisição extra — e reage ao evento
+   `nexoloja:me-updated` disparado pelo `cacheMe`). Sem o módulo de obra: seletor de unidade (cadastro, detalhe,
+   unidade alternativa, importação de NF-e) mostra só Unidade/kg/Litro/Pacote; somem o **peso p/ frete**
+   (cadastro, detalhe, detalhe de estoque) e o **par** (cadastro, detalhe). Regra §3 aplicada à risca: o que o
+   produto **já tem gravado** (unidade de obra, peso, par) continua visível/editável. Sem `modules` no `/me`
+   (API antiga/sem cache) ⇒ obra **ligada** (loja existente nunca perde recurso). **PDV não precisou de gate**:
+   par/corte por metro só aparecem quando o produto os tem (é dirigido pelo dado). Gates: shared 68, web build.
 
 ## Relacionadas
 

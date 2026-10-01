@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { closedUnitTerms, unitTypeLabels, type UnitType } from '@nexoloja/shared';
 import { isClosedPrimary, splitWholeAndRemainder } from '@nexoloja/core';
 import { apiGet } from '@/lib/api';
+import { useModule } from '@/lib/useModule';
 
 /**
  * Painel de **detalhe de estoque** de um produto (melhoria da tela de Estoque).
@@ -89,6 +90,7 @@ export function StockDetail({
   summary: { income: number; expense: number };
   onClose: () => void;
 }) {
+  const construction = useModule('CONSTRUCTION_UNITS');
   const [movements, setMovements] = useState<Movement[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -199,10 +201,13 @@ export function StockDetail({
         <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
           <Row label="Nome popular" value={product.popularName} />
           <Row label="Unidade de venda" value={unitTypeLabels[product.unit as UnitType]} />
-          <Row
-            label="Peso"
-            value={product.weightKg === null ? null : `${QTY(product.weightKg)} kg`}
-          />
+          {/* Peso p/ frete — módulo de obra (ADR-039); fora dele só se o produto tem peso gravado. */}
+          {(construction || product.weightKg !== null) && (
+            <Row
+              label="Peso"
+              value={product.weightKg === null ? null : `${QTY(product.weightKg)} kg`}
+            />
+          )}
           <Row label={closed ? `Custo ${savedUnitArticle}` : 'Custo'} value={BRL(product.costPrice)} />
           <Row label={closed ? `Preço ${savedUnitArticle}` : 'Venda'} value={BRL(product.salePrice)} />
           <Row label="Margem" value={`${product.marginPercent}%`} />

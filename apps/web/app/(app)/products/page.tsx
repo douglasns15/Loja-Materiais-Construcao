@@ -1,10 +1,18 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { closedUnitTerms, createProductSchema, onlyDigits, unitTypeLabels, type UnitType } from '@nexoloja/shared';
+import {
+  closedUnitTerms,
+  createProductSchema,
+  onlyDigits,
+  unitTypeLabels,
+  visibleUnitTypes,
+  type UnitType,
+} from '@nexoloja/shared';
 import { CLOSED_PRIMARY_UNITS, closedFineUnit, productMatchesQuery } from '@nexoloja/core';
 import { apiGet, apiPatch, apiPost } from '@/lib/api';
 import { useReloadOnReconnect } from '@/lib/useReloadOnReconnect';
+import { useModule } from '@/lib/useModule';
 import { useOnline } from '@/lib/useOnline';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { BarcodeScanButton } from '@/components/BarcodeScanButton';
@@ -91,6 +99,9 @@ function SectionTitle({ n, children }: { n: number; children: React.ReactNode })
 
 export default function ProductsPage() {
   const online = useOnline();
+  // Ramo da loja (ADR-039 F2): sem o módulo de obra, o cadastro esconde milheiro/saco/barra/rolo/m,
+  // o peso p/ frete e o par (parafuso + bucha). Só apresentação — a API aceita tudo igual.
+  const construction = useModule('CONSTRUCTION_UNITS');
   const [products, setProducts] = useState<Product[]>([]);
   const [error, setError] = useState<string | null>(null);
   // Falha na CARGA da listagem (≠ erro de validação/ação): liga a auto-recuperação (ADR-005).
@@ -653,11 +664,15 @@ export default function ProductsPage() {
           <select
             value={form.unit}
             onChange={(e) => setForm({ ...form, unit: e.target.value as UnitType })}
-            title="Unidade de venda do produto (ex.: saco de cimento, milheiro de tijolo, metro de fio)."
+            title={
+              construction
+                ? 'Unidade de venda do produto (ex.: saco de cimento, milheiro de tijolo, metro de fio).'
+                : 'Unidade de venda do produto (ex.: unidade, quilo, litro, pacote/fardo).'
+            }
             className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
             aria-label="Unidade de venda"
           >
-            {(Object.keys(unitTypeLabels) as UnitType[]).map((u) => (
+            {visibleUnitTypes(construction, [form.unit]).map((u) => (
               <option key={u} value={u}>
                 {unitTypeLabels[u]}
               </option>
@@ -681,7 +696,9 @@ export default function ProductsPage() {
             ))}
           </select>
         </Field>
-        {/* Peso: digita em kg ou g; guardamos canônico em kg (banco). Opcional. */}
+        {/* Peso: digita em kg ou g; guardamos canônico em kg (banco). Opcional. É o peso p/ frete
+            pesado — só com o módulo de obra (ADR-039), ou se já veio preenchido (ex.: "Copiar"). */}
+        {(construction || form.weight !== '') && (
         <div className="flex flex-col gap-1">
           <span className="text-xs font-medium text-gray-600">Peso (opcional)</span>
           <div className="flex gap-2">
@@ -705,6 +722,7 @@ export default function ProductsPage() {
             </select>
           </div>
         </div>
+        )}
         <Field label="Estoque mínimo">
           <input
             type="number"
@@ -794,7 +812,11 @@ export default function ProductsPage() {
               <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V22a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 6 20.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 3 15" strokeLinecap="round" />
             </svg>
             Opções avançadas
-            <span className="font-normal text-gray-400">— unidade alternativa, par, acréscimo no cartão</span>
+            <span className="font-normal text-gray-400">
+              {construction
+                ? '— unidade alternativa, par, acréscimo no cartão'
+                : '— unidade alternativa, acréscimo no cartão'}
+            </span>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="ml-auto h-[18px] w-[18px] text-gray-400 transition group-open:rotate-180" aria-hidden="true">
               <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
@@ -804,18 +826,19 @@ export default function ProductsPage() {
         {!isClosedUnit && (
         <fieldset className="rounded-xl border border-dashed border-gray-300 p-3">
           <legend className="px-1 text-xs font-medium text-gray-600">
-            Venda em unidade alternativa (opcional) — ex.: fio por metro OU rolo fechado
+            Venda em unidade alternativa (opcional) —{' '}
+            {construction ? 'ex.: fio por metro OU rolo fechado' : 'ex.: lata avulsa OU fardo fechado'}
           </legend>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <select
               value={form.altUnit}
               onChange={(e) => setForm({ ...form, altUnit: e.target.value as UnitType | '' })}
-              title="Unidade da embalagem fechada (ex.: Rolo). Deixe em branco para vender só na unidade principal."
+              title={`Unidade da embalagem fechada (ex.: ${construction ? 'Rolo' : 'Pacote'}). Deixe em branco para vender só na unidade principal.`}
               className="rounded-lg border border-gray-300 bg-white px-3 py-2"
               aria-label="Unidade da embalagem alternativa"
             >
               <option value="">— sem embalagem alternativa —</option>
-              {(Object.keys(unitTypeLabels) as UnitType[]).map((u) => (
+              {visibleUnitTypes(construction, [form.altUnit]).map((u) => (
                 <option key={u} value={u}>
                   {unitTypeLabels[u]}
                 </option>
@@ -844,7 +867,9 @@ export default function ProductsPage() {
           </p>
         </fieldset>
         )}
-        {/* Produto agregado — venda em par (ADR-015). Ex.: parafuso nº10 + bucha nº10. */}
+        {/* Produto agregado — venda em par (ADR-015). Ex.: parafuso nº10 + bucha nº10.
+            Recurso do módulo de obra (ADR-039); fora dele some do cadastro. */}
+        {construction && (
         <fieldset className="rounded-xl border border-dashed border-gray-300 p-3">
           <legend className="px-1 text-xs font-medium text-gray-600">
             Vendido em par (opcional) — ex.: parafuso + bucha, com preço do par
@@ -884,6 +909,7 @@ export default function ProductsPage() {
             precisa cadastrar de novo no outro produto.
           </p>
         </fieldset>
+        )}
         {/* Acréscimo por forma de pagamento (ADR-016). Opt-in: só sobe o preço de quem for
             preenchido aqui — nunca é derivado da taxa da maquininha da loja. */}
         <fieldset className="rounded-xl border border-dashed border-gray-300 p-3">
