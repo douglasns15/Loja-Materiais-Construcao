@@ -61,15 +61,53 @@ Contrato: `POST /orders` aceita os campos novos; `GET /deliveries` ganha uma vis
 ordenada por horário) e devolve tipo/faixa/endereço; `POST /deliveries/:id/dispatch` (fatia 3). Atualizar
 `DOCUMENTACAO-TECNICA.md` §8.2 na mesma mudança (regra 7).
 
-## Fatias sugeridas
+## Fatias (ordem aprovada pelo Owner)
 
-1. Endereço no cadastro (rápido + Clientes) + etapa de agendamento no PDV + migration.
-2. Agenda do dia (linha do tempo, chips, "Próximas", cores) + versão celular.
-3. "Saiu para entrega" + limite de pedidos por faixa (opcional).
+1. Migration `0042` + endereço no cadastro (rápido + Clientes) + **cadastro de Funcionários** + etapa de
+   agendamento no PDV (retirada × entrega, faixa, endereço, taxa, observações, entregador opcional).
+2. Agenda do dia (linha do tempo, chips, "Próximas", cores) + versão celular + **painel "Período de entregas"**.
+3. "Saiu para entrega" + limite de pedidos por faixa no PDV.
 
-## Perguntas ao Owner
+## Perguntas ao Owner — RESPONDIDAS (2026-10-01)
 
-1. Faixa de horário (recomendado, padrão 30 min) ou horário exato?
-2. "Saiu para entrega" já na 1ª fatia ou depois?
-3. Sugerir só faixas dentro do horário de funcionamento e limitar pedidos por faixa?
-4. Ordem das fatias acima está boa? Encaixe no plano multirramo (antes ou depois da #6)?
+1. **Faixa de horário, padrão 30 min.**
+2. **"Saiu para entrega": sim** (entra na fatia 3, pela ordem sugerida).
+3. **Período de entregas configurável na própria tela de Entregas** (dias/horários de atendimento, tamanho da
+   faixa, limite de pedidos por faixa).
+4. **Ordem das fatias como sugerida.**
+5. **Novo pedido do Owner: cadastro de FUNCIONÁRIOS** (para cadastrar os entregadores) e campo **opcional
+   "Entregador"** em cada entrega.
+
+## Desenho revisado após as respostas
+
+- **Funcionários** — entidade nova `Employee` (o entregador normalmente **não tem login**; por isso não é `User`,
+  que exige identidade no Supabase Auth — ADR-005). Campos: nome, telefone, **função** (`EmployeeRole`:
+  `COURIER` entregador · `OTHER` outro — enum extensível), ativo, soft-delete e autoria (ADR-010). Tela
+  "Funcionários" em Cadastros (admin). O pedido ganha `courierId` opcional (FK, `SetNull` ao excluir).
+- **Período de entregas** — `Tenant.deliverySettings Json?` validado por Zod no shared:
+  `{ slotMinutes: 30, maxPerSlot: number | null, hours: { [diaDaSemana]: [{ start: "08:00", end: "18:00" }] } }`.
+  JSON pequeno por loja (uma linha), sem tabela nova; editado num painel da tela Entregas. O PDV sugere só faixas
+  dentro do horário e marca as cheias (`maxPerSlot`). Função pura no core gera as faixas (`deliverySlots`) e a
+  lotação, com testes.
+- **Tabela antiga `deliveries` (ADR-002)** — rascunho da Fase 1, **sem uso no código**. Não é reaproveitada (exigiria
+  cliente e endereço obrigatórios, o que não serve para retirada sem cliente, e espalharia o agendamento entre duas
+  tabelas). Fica como está; remoção, se desejada, em migration separada com aprovação própria.
+
+## Migration `0042` proposta (a aprovar — regra 1)
+
+Aditiva, sem perda de dado:
+
+1. `CREATE TYPE "FulfillmentType" AS ENUM ('PICKUP','DELIVERY')` e `CREATE TYPE "EmployeeRole" AS ENUM ('COURIER','OTHER')`.
+2. `orders` + `fulfillmentType "FulfillmentType"` · `scheduledUntil TIMESTAMP` · `deliveryAddress VARCHAR(300)` ·
+   `dispatchedAt TIMESTAMP` · `courierId UUID` (FK `employees.id` ON DELETE SET NULL) + índice
+   `(tenantId, scheduledPickupAt)` para a agenda do dia.
+3. **Backfill:** `UPDATE orders SET "fulfillmentType" = 'PICKUP' WHERE "deliveryMode" = 'SCHEDULED'` (todo
+   agendamento antigo era retirada).
+4. `CREATE TABLE employees` (id, tenantId FK cascade, name VARCHAR(120), phone VARCHAR(20), role, isActive,
+   deletedAt, autoria, createdAt/updatedAt) + índice `(tenantId, isActive)` + RLS por `tenant_id` no padrão das
+   demais tabelas.
+5. `tenants` + `deliverySettings JSONB` (nulo = padrão: faixa 30 min, sem limite, sem restrição de horário).
+
+Contrato novo (regra 7, §8.2): `POST /orders` aceita `fulfillmentType`/`scheduledUntil`/`deliveryAddress`/
+`courierId`; CRUD `/employees`; `GET /deliveries?day=`; `PATCH /deliveries/:id` (entregador, faixa, endereço);
+`POST /deliveries/:id/dispatch` (fatia 3); `GET`/`PUT` das configurações de entrega.
