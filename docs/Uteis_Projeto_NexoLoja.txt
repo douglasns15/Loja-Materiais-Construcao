@@ -12,6 +12,9 @@ Login: owner@lojademo.com / NexoLoja#2026
 
        super_owner@nexoloja.local
 
+       owner_kg@lojademo.com / NexoLoja#2026   (loja de teste de alimentos — ADR-039; login criado
+       SEM loja em 2026-10-01: criar a loja no painel com este e-mail de admin, que ele vincula como OWNER)
+
 http://localhost:3000/
 
 ## Leia docs/ROADMAP.md e docs/testes/registro-de-testes.md e vamos continuar
