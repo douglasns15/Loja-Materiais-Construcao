@@ -9,6 +9,7 @@ import {
   formatOrderNumber,
   closedUnitTerms,
   formatQuoteNumber,
+  formatWeight,
   paymentMethodLabel,
   unitTypeLabels,
   type CreateQuoteResult,
@@ -290,7 +291,8 @@ function Summary({ items, total, discount }: { items: CartItem[]; total: number;
         {items.map((i) => (
           <li key={i.key} className="flex justify-between py-1">
             <span>
-              {QTY(i.quantity)}
+              {/* kg/L sempre com 3 casas ("0,850 kg"), como a balança (ADR-040 §1). */}
+              {weightAbbr(i) ? formatWeight(i.quantity) : QTY(i.quantity)}
               {i.pair ? ` par${i.quantity > 1 ? 'es' : ''} ` : ''}
               {!i.pair &&
                 (i.saleMode === 'ALT' ? ` ${unitShort(i.unitType)} ` : weightAbbr(i) ? ` ${weightAbbr(i)} ` : '× ')}
@@ -391,8 +393,11 @@ function QtyInput({
   className,
   autoFocusSelect,
   onEnter,
+  decimals,
 }: {
   value: number;
+  /** Casas fixas na exibição (fora da digitação) — kg/L mostra "0,850" como a balança (ADR-040 §1). */
+  decimals?: number;
   step: string;
   min: string;
   onCommit: (n: number) => void;
@@ -424,7 +429,7 @@ function QtyInput({
           onEnter();
         }
       }}
-      value={draft ?? String(value)}
+      value={draft ?? (decimals != null ? value.toFixed(decimals) : String(value))}
       onChange={(e) => {
         const raw = e.target.value;
         setDraft(raw); // deixa o campo vazio/parcial existir enquanto o operador digita
@@ -2898,6 +2903,7 @@ export default function VendaPage() {
                     </button>
                     <QtyInput
                       value={i.quantity}
+                      decimals={weightAbbr(i) ? 3 : undefined}
                       min="0"
                       // kg/L: digitação livre até 3 casas ('any'); as demais seguem o passo da regra.
                       step={weightAbbr(i) ? 'any' : String(lineRule(i).step)}

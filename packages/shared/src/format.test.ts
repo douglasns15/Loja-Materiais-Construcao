@@ -9,7 +9,9 @@ import {
   formatOrderNumber,
   formatPhoneBr,
   formatQuoteNumber,
+  formatWeight,
   isDatePast,
+  isWeightUnitLabel,
   parseDebtNumberQuery,
   parseDeliveryNumberQuery,
   parseMoneyQuery,
@@ -222,5 +224,26 @@ describe('parseMoneyQuery', () => {
     expect(parseMoneyQuery('abc')).toBeNull();
     expect(parseMoneyQuery(null)).toBeNull();
     expect(parseMoneyQuery(undefined)).toBeNull();
+  });
+});
+
+describe('formatWeight (ADR-040 §1 — peso sempre com 3 casas)', () => {
+  it('mantém o zero final como na balança', () => {
+    expect(formatWeight(0.85)).toBe('0,850');
+    expect(formatWeight(1.2)).toBe('1,200');
+    expect(formatWeight(2)).toBe('2,000');
+  });
+  it('3 casas exatas e milhar pt-BR', () => {
+    expect(formatWeight(0.412)).toBe('0,412');
+    expect(formatWeight(1234.5)).toBe('1.234,500');
+  });
+});
+
+describe('isWeightUnitLabel', () => {
+  it('kg e litro (enum ou abreviação) usam 3 casas', () => {
+    for (const u of ['KILOGRAM', 'LITER', 'kg', 'L']) expect(isWeightUnitLabel(u)).toBe(true);
+  });
+  it('demais unidades não', () => {
+    for (const u of ['UNIT', 'un', 'm', 'BAG', null, undefined]) expect(isWeightUnitLabel(u)).toBe(false);
   });
 });

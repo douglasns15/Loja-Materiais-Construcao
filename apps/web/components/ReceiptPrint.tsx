@@ -5,6 +5,8 @@ import {
   formatOrderNumber,
   formatPhoneBr,
   formatQuoteNumber,
+  formatWeight,
+  isWeightUnitLabel,
   paymentMethodLabel,
   type PaymentMethod,
 } from '@nexoloja/shared';
@@ -189,7 +191,8 @@ export function ReceiptPrint({ kind, store, items, total, date, discount, paymen
                 ) : null}
               </td>
               <td className="right">
-                {QTY(i.quantity)}
+                {/* kg/L com 3 casas ("0,850 kg"), como o cupom de mercado (ADR-040 §1). */}
+                {isWeightUnitLabel(i.unit) ? formatWeight(Number(i.quantity)) : QTY(i.quantity)}
                 {i.unit ? ` ${i.unit}` : ''}
               </td>
               <td className="right">{BRL(i.unitPrice)}</td>

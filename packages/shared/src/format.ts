@@ -202,6 +202,19 @@ export function isDatePast(iso: string | null | undefined): boolean {
 }
 
 /**
+ * Peso/volume vendido por kg ou litro (ADR-040 §1) SEMPRE com 3 casas, como na balança e no cupom
+ * de mercado: 0,85 → "0,850"; 1,2 → "1,200"; 2 → "2,000". Função PURA.
+ */
+export function formatWeight(qty: number): string {
+  return qty.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+}
+
+/** `true` para a unidade (enum `KILOGRAM`/`LITER` ou abreviação `kg`/`L`) que se exibe com 3 casas. */
+export function isWeightUnitLabel(unit: string | null | undefined): boolean {
+  return unit === 'KILOGRAM' || unit === 'LITER' || unit === 'kg' || unit === 'L';
+}
+
+/**
  * Gera um identificador amigável (slug) a partir de um texto: remove acentos, baixa
  * a caixa e troca tudo que não é alfanumérico por hífen. Usado no onboarding para
  * derivar o `Tenant.slug` do nome da loja quando não informado (ADR-009). Função PURA.

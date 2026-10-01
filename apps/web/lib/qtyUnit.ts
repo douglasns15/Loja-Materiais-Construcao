@@ -1,5 +1,5 @@
 import { splitWholeAndRemainder } from '@nexoloja/core';
-import { closedUnitTerms, type UnitType } from '@nexoloja/shared';
+import { closedUnitTerms, formatWeight, isWeightUnitLabel, type UnitType } from '@nexoloja/shared';
 
 /**
  * Rótulo curto da unidade para exibir junto de uma quantidade ("340 sacos", "800 m"). Siglas para as
@@ -42,5 +42,7 @@ export function formatQtyUnit(
     const head = `${NUM(whole)} ${word(unit, whole)}`;
     return remainderMeters > 0 ? `${head} + ${fine}` : head;
   }
-  return `${NUM(qty)} ${word(unit ?? 'UNIT', qty)}`;
+  // kg/L com 3 casas fixas ("0,850 kg"), como a balança (ADR-040 §1).
+  const n = unit && isWeightUnitLabel(unit) ? formatWeight(qty) : NUM(qty);
+  return `${n} ${word(unit ?? 'UNIT', qty)}`;
 }
