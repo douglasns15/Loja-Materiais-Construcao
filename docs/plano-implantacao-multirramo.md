@@ -2,8 +2,8 @@
 
 > **Estado em 2026-10-01 (noite):** encaixados antes da #6, a pedido do Owner — **Estoque de pesados por
 > peças** (ADR-040 §4.1, commit `a0cb22d`) e **Agenda de entregas** (ADR-042: migration `0042` aplicada +
-> 3 fatias, commits `74d0568`/`9dbb6ae`/`106ba9f`). Ambos IMPLEMENTADOS, **deploy (API→web) e E2E
-> pendentes** (Owner pediu deploy no final). Próxima: #6 (cadastro em sequência).
+> 3 fatias, commits `74d0568`/`9dbb6ae`/`106ba9f`). Ambos **NO AR** (API `952ae59c`, web `ea2b5931`);
+> **E2E do Owner pendente**. Próxima: #6 (cadastro em sequência).
 >
 > Entrega #5 (`trackStock`) + "vendido inteiro também" (ADR-040 §4) NO AR — API `22042b01`, web `8cfe172e`;
 > E2E do Owner VALIDADO.
@@ -96,7 +96,9 @@ A loja de alimentos **não consegue vender hoje**:
 | 2 | Migration única (segments, trackStock, scaleCode, ncm, pendingReview) — **`0041` aplicada 2026-09-30** | **Sim** — aprovada | 039/040/041 |
 | 3 | Ramo no painel + módulos + `GET /me` com módulos — **NO AR 2026-09-30** (API `351e86ac`, web `dbc6a24a`; E2E pendente) | (usa a #2) | 039 F1 |
 | 4 | Gating na web (esconder construção) — **NO AR 2026-10-01** (web `275b72a9`; E2E do Owner VALIDADO) | Não | 039 F2 |
-| 5 | `trackStock` na venda/devolução/alertas — **NO AR 2026-10-01** (API `22042b01`, web `8cfe172e`; E2E pendente) + "vendido inteiro também" (040 §4) | (usa a #2) | 040 F2 |
+| 5 | `trackStock` na venda/devolução/alertas — **NO AR 2026-10-01** (API `22042b01`, web `8cfe172e`; E2E do Owner VALIDADO) + "vendido inteiro também" (040 §4) | (usa a #2) | 040 F2 |
+| 5a | **Estoque de pesados por peças** (Entrada peça a peça, "≈ N peças", última peça) + peso com 3 casas — pedido do Owner, encaixado antes da #6 (commits `3d57bc7`, `a0cb22d`) | Não | 040 §4.1 |
+| 5b | **Agenda de entregas** (Funcionários, agendamento no PDV, Agenda do dia, Período de entregas, Saiu p/ entrega) — pedido do Owner, encaixado antes da #6 (commits `74d0568`, `9dbb6ae`, `106ba9f`) | **Sim** — `0042` aprovada e aplicada | 042 |
 | 6 | **Cadastro em sequência** | Não | 041 §A |
 | 7 | **Cadastro no caixa** + alerta de revisão | Não (a confirmar) | 041 §B |
 | 8 | Etiqueta de balança (`scaleCode` + parser + PDV) | (usa a #2) | 040 F3 |
@@ -107,7 +109,14 @@ A loja de alimentos **não consegue vender hoje**:
 Racional: #1–#8 são o que a loja nova precisa para abrir; a planilha fica para os poucos itens sem código e
 para clientes futuros; o multi-loja é grande e não bloqueia a abertura (se o Owner precisar dele antes, sobe).
 
-## 6. Pendências de repositório a lembrar
+## 6. Onde paramos (2026-10-01)
+
+- #1–#5 no ar e validadas pelo Owner. **5a e 5b NO AR 2026-10-01 (API `952ae59c`, web `ea2b5931`)**; E2E pelo roteiro
+  [testes/e2e-pecas-e-agenda-de-entregas.md](testes/e2e-pecas-e-agenda-de-entregas.md).
+- **Próxima entrega de código: #6 cadastro em sequência** (ADR-041 §A).
+- Push dos commits em `main`: Owner.
+
+## 7. Pendências de repositório a lembrar
 
 - Branch `feat/nfe-emissao` usa **ADR-037** (NFC-e) e **ADR-038** (Empresa acima da loja); na `main` a ADR-037 já
   é o "Recebido líquido". No merge: **renumerar a de NFC-e**; 038 está reservada no índice.

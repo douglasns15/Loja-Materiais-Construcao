@@ -108,7 +108,7 @@ o protocolo serial muda por marca e, numa PWA, só funciona via Web Serial no **
   gravada (dado legado) segue no cadastro genérico.
 - **PDV:** botões "+ kg · R$ 39,90" (digita o peso, ADR-040 §1) e "+ inteiro · R$ 45,00" (preço fixo, passo 1).
 
-#### 4.1 Estoque de pesados por peças (aprovado pelo Owner 2026-10-01, achado do E2E da #5)
+#### 4.1 Estoque de pesados por peças (aprovado pelo Owner 2026-10-01, achado do E2E da #5) — NO AR 2026-10-01 (API `952ae59c`, web `ea2b5931`; E2E pendente)
 
 O Owner precisa saber **quanto tem** de frango/carne: a mercadoria chega em **peças**, mas a régua é **kg**.
 - **Saldo sempre em kg/L** (o ledger não muda). Telas de saldo (Estoque, detalhe de estoque, detalhe do produto,

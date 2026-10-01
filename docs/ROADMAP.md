@@ -3,7 +3,42 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-09-25 — **Relatórios: "Mais vendidos" por quantidade + unidade fechada
+> **Última atualização:** 2026-10-01 — **Multirramo (1ª loja de alimentos: Mercadinho + Sorveteria +
+> Rotisseria) + Agenda de entregas.** Roteiro: [plano-implantacao-multirramo.md](plano-implantacao-multirramo.md).
+>
+> **NO AR + E2E do Owner VALIDADO:**
+> - **#1 venda por kg/L** com 3 casas (ADR-040 §1) e **#3 ramo da loja no painel + módulos** (ADR-039 F1) —
+>   API `351e86ac`, web `dbc6a24a`; **#2 migration `0041`** aplicada (ramo, `trackStock`, `scaleCode`, `ncm`,
+>   `pendingReview`).
+> - **#4 gating na web** (ADR-039 F2): loja sem o módulo de obra não vê milheiro/saco/barra/rolo/m, peso p/
+>   frete nem par — web `275b72a9`. Loja de teste `owner_kg@lojademo.com` criada pelo painel (ver Uteis).
+> - **#5 produto sem controle de estoque** (`trackStock`, ADR-040 §2) + **"vendido inteiro também"** (kg/L com
+>   preço do inteiro e peso médio, ADR-040 §4) — API `22042b01`, web `8cfe172e`; `POST /orders` validado no
+>   `wrangler tail`.
+>
+> **NO AR 2026-10-01 (API `952ae59c`, web `ea2b5931`) — E2E do Owner PENDENTE:**
+> - Peso sempre com **3 casas** ("0,850 kg") no carrinho/resumo/cupom/relatórios (`formatWeight`) — `3d57bc7`.
+> - **Estoque de pesados por peças** (ADR-040 §4.1): Entrada "Peça a peça" (soma em kg), saldo com "≈ N
+>   peças", regra da **última peça** — `a0cb22d`.
+> - **Agenda de entregas** ([ADR-042](adr/ADR-042-agenda-de-entregas.md), aceita): **migration `0042` JÁ
+>   APLICADA** no Supabase (orders: tipo/fim da faixa/endereço/saiu p/ entrega/entregador; tabela `employees`;
+>   `tenants.deliverySettings`). Fatia 1 (`9dbb6ae`): tela **Funcionários**, endereço no cadastro de cliente,
+>   PDV com Retirada × Entrega + taxa e etapa de agendamento na revisão. Fatias 2+3 (`106ba9f`): tela Entregas
+>   com **Agenda do dia** (linha do tempo, cores por urgência, chips, "Próximas"), **Período de entregas**,
+>   **"Saiu p/ entrega"**, faixas lotadas (409 no servidor).
+> - **Gates:** core 463, shared 82, API tsc 0, web build OK. Doc §8.2 atualizada (regra 7).
+>
+> **ONDE PARAMOS / PRÓXIMOS PASSOS:**
+> 1. ~~Deploy~~ **feito 2026-10-01**: Prisma Client regenerado e schema embutido conferido; API `952ae59c` → web
+>    `ea2b5931`; smokes OK (rotas novas 401 sem login; BUILD_ID ao vivo). A validação de escrita (`POST /orders`
+>    com venda agendada) acontece no E2E do Owner.
+> 2. **E2E do Owner**: roteiro [testes/e2e-pecas-e-agenda-de-entregas.md](testes/e2e-pecas-e-agenda-de-entregas.md).
+> 3. Seguir o plano multirramo: **#6 cadastro em sequência** (ADR-041 §A), #7 cadastro no caixa + alerta de
+>    revisão, #8 etiqueta de balança (ADR-040 F3), #9 importação por planilha, #10 usuário multi-loja (ADR-014).
+> 4. Push dos commits locais em `main` (Owner).
+> 5. NFC-e segue na branch `feat/nfe-emissao` (Owner avisa quando retomar).
+>
+> **Antes:** 2026-09-25 — **Relatórios: "Mais vendidos" por quantidade + unidade fechada
 > nos rankings + custo carimbado por unidade-base — NO AR + E2E do Owner VALIDADO; sem migration;
 > commits feitos, PUSH do Owner pendente.** (1) Card da direita de "Produtos e clientes" alterna pelo
 > título ("Mais vendidos ▾ / Melhores clientes", padrão Mais vendidos); `GET /reports/top-products`

@@ -1,8 +1,8 @@
 # ADR-042 — Agenda de entregas: retirada × entrega, faixa de horário e linha do tempo do dia
 
 - **Status:** **Aceito** (2026-10-01) — decisões do Owner abaixo; migration `0042` aprovada e aplicada.
-  **Fatias 1, 2 e 3 IMPLEMENTADAS em 2026-10-01** (deploy e E2E pendentes — deploy de tudo no final, a
-  pedido do Owner).
+  **Fatias 1, 2 e 3 IMPLEMENTADAS e NO AR em 2026-10-01** (API `952ae59c`, web `ea2b5931`); E2E do
+  Owner pendente — roteiro `docs/testes/e2e-pecas-e-agenda-de-entregas.md`.
 - **Data:** 2026-10-01
 - **Deciders:** Owner do produto.
 - **Mockups:** Artifact "Agenda de Entregas NexoLoja" (https://claude.ai/artifact/QWj7tYctZs13QNcuYEd2xv).
