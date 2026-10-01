@@ -18,6 +18,9 @@ import { useReloadOnReconnect } from '@/lib/useReloadOnReconnect';
 import { printArea } from '@/lib/print';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { DeliveryDetailModal } from '@/components/DeliveryDetailModal';
+import { DeliveryAgenda } from '@/components/DeliveryAgenda';
+import { DeliverySettingsModal } from '@/components/DeliverySettingsModal';
+import { useMe } from '@/lib/useMe';
 import { ReceiptPrint, type Store } from '@/components/ReceiptPrint';
 
 /** Comprovante CONSOLIDADO de uma conta (ADR-028): dados já montados para o ReceiptPrint. */
@@ -278,6 +281,28 @@ export default function EntregasPage() {
   const [printModel, setPrintModel] = useState<'80mm' | 'A4'>('80mm');
   const [printJob, setPrintJob] = useState<AccountPrintJob | null>(null);
   const [printingId, setPrintingId] = useState<string | null>(null);
+  // Agenda de entregas (ADR-042): aba "Agenda do dia" (padrão) × "Contas e retiradas" (a lista
+  // agrupada de sempre). A aba escolhida é lembrada no aparelho.
+  const { isAdmin } = useMe();
+  const [tab, setTab] = useState<'agenda' | 'contas'>('agenda');
+  const [agendaReload, setAgendaReload] = useState(0);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('nexoloja:entregas-tab');
+      if (saved === 'agenda' || saved === 'contas') setTab(saved);
+    } catch {
+      // sem localStorage — fica na agenda
+    }
+  }, []);
+  function chooseTab(t: 'agenda' | 'contas') {
+    setTab(t);
+    try {
+      localStorage.setItem('nexoloja:entregas-tab', t);
+    } catch {
+      // preferência só deste aparelho; sem storage, segue sem lembrar
+    }
+  }
 
   // Cabeçalho da loja para o comprovante (uma vez).
   useEffect(() => {
@@ -410,11 +435,50 @@ export default function EntregasPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className={`mx-auto ${tab === 'agenda' ? 'max-w-6xl' : 'max-w-3xl'}`}>
       <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
         <h1 className="w-fit bg-gradient-to-r from-indigo-700 to-indigo-500 bg-clip-text text-2xl font-bold text-transparent">
           Entregas / Retiradas
         </h1>
+        <div className="inline-flex gap-0.5 rounded-xl bg-gray-100 p-1" role="tablist" aria-label="Visão">
+          {(
+            [
+              ['agenda', 'Agenda do dia'],
+              ['contas', 'Contas e retiradas'],
+            ] as const
+          ).map(([k, label]) => (
+            <button
+              key={k}
+              type="button"
+              role="tab"
+              aria-selected={tab === k}
+              onClick={() => chooseTab(k)}
+              className={`rounded-lg px-4 py-1.5 text-sm font-semibold ${
+                tab === k ? 'bg-indigo-600 text-white' : 'text-gray-700 hover:bg-white/60'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {tab === 'agenda' ? (
+        <>
+          <p className="mb-5 text-sm text-gray-500">
+            A fila do dia pelo horário combinado. As cores mostram o que está <strong>atrasado</strong>, o que é
+            para <strong>agora</strong> e o que vem <strong>em breve</strong>. Toque num pedido para abrir.
+          </p>
+          <OfflineNotice />
+          <DeliveryAgenda
+            onOpen={setDetailId}
+            reloadKey={agendaReload}
+            onOpenSettings={isAdmin ? () => setSettingsOpen(true) : undefined}
+          />
+        </>
+      ) : (
+      <>
+      <div className="mb-1 flex flex-wrap items-center justify-end gap-3">
         <div className="flex items-center gap-2">
           <span className="text-sm text-gray-500">Modelo de impressão:</span>
           <select
@@ -553,8 +617,22 @@ export default function EntregasPage() {
         </>
       )}
 
+      </>
+      )}
+
       {detailId && (
-        <DeliveryDetailModal orderId={detailId} onClose={() => setDetailId(null)} onDelivered={load} />
+        <DeliveryDetailModal
+          orderId={detailId}
+          onClose={() => setDetailId(null)}
+          onDelivered={() => {
+            setAgendaReload((n) => n + 1);
+            return load();
+          }}
+        />
+      )}
+
+      {settingsOpen && (
+        <DeliverySettingsModal onClose={() => setSettingsOpen(false)} onSaved={() => setAgendaReload((n) => n + 1)} />
       )}
 
       {/* Comprovante CONSOLIDADO da conta (ADR-028): oculto na tela, aparece só na impressão. Junta os

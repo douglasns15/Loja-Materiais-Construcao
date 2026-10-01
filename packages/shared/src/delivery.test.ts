@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_DELIVERY_SETTINGS, deliverySettingsSchema, parseDeliverySettings } from './delivery';
+import { DEFAULT_DELIVERY_SETTINGS, deliverySettingsSchema, dispatchOrderSchema, parseDeliverySettings } from './delivery';
 import { createEmployeeSchema, updateEmployeeSchema } from './employee';
 import { createSaleSchema } from './sale';
 
@@ -69,5 +69,16 @@ describe('createSaleSchema — agenda de entregas', () => {
   it('recusa tipo desconhecido e entregador que não é uuid', () => {
     expect(createSaleSchema.safeParse({ ...base, fulfillmentType: 'DRONE' }).success).toBe(false);
     expect(createSaleSchema.safeParse({ ...base, courierId: 'zé' }).success).toBe(false);
+  });
+});
+
+describe('dispatchOrderSchema (saiu para entrega)', () => {
+  it('aceita marcar/desfazer a saída e trocar/tirar o entregador', () => {
+    expect(dispatchOrderSchema.safeParse({ dispatched: true }).success).toBe(true);
+    expect(dispatchOrderSchema.safeParse({ courierId: null }).success).toBe(true);
+    expect(dispatchOrderSchema.safeParse({ dispatched: false, courierId: '00000000-0000-4000-8000-000000000003' }).success).toBe(true);
+  });
+  it('recusa corpo vazio', () => {
+    expect(dispatchOrderSchema.safeParse({}).success).toBe(false);
   });
 });

@@ -39,6 +39,21 @@ export type DeliverySettings = z.infer<typeof deliverySettingsSchema>;
 /** Padrão quando a loja não configurou (coluna nula): faixa de 30 min, sem limite, sem restrição. */
 export const DEFAULT_DELIVERY_SETTINGS: DeliverySettings = { slotMinutes: 30, maxPerSlot: null, hours: {} };
 
+/**
+ * "Saiu para entrega" e entregador de um pedido de ENTREGA (`POST /deliveries/:id/dispatch`, ADR-042).
+ * `dispatched: true` marca a saída (agora); `false` desfaz. `courierId` (opcional) troca o entregador;
+ * `null` tira. Ao menos um dos dois campos.
+ */
+export const dispatchOrderSchema = z
+  .object({
+    dispatched: z.boolean().optional(),
+    courierId: z.string().uuid().nullable().optional(),
+  })
+  .refine((v) => v.dispatched !== undefined || v.courierId !== undefined, {
+    message: 'Informe a saída ou o entregador.',
+  });
+export type DispatchOrderInput = z.infer<typeof dispatchOrderSchema>;
+
 /** Lê o JSON gravado tolerando nulo/legado: o que não validar cai no padrão. */
 export function parseDeliverySettings(raw: unknown): DeliverySettings {
   const r = deliverySettingsSchema.safeParse(raw ?? {});
@@ -72,6 +87,30 @@ export type DeliveryOrderRow = {
   scheduledUntil?: string | null;
   deliveryAddress?: string | null;
   courierName?: string | null;
+};
+
+/**
+ * Um pedido na Agenda do dia (`GET /deliveries/agenda?day=`, ADR-042). `start`/`end` são instantes
+ * ISO; `timed = false` quando o pedido só tem DIA (agendamento antigo/sem faixa) — vai para a lista
+ * "Sem horário", fora da linha do tempo. `itemsSummary` = "2× Frango assado, 1× Maionese…".
+ */
+export type DeliveryAgendaRow = {
+  id: string;
+  orderNumber: number;
+  fulfillmentType: FulfillmentType;
+  fulfillmentStatus: FulfillmentStatus;
+  start: string;
+  end: string | null;
+  timed: boolean;
+  customerName: string | null;
+  customerPhone: string | null;
+  deliveryAddress: string | null;
+  courierName: string | null;
+  dispatchedAt: string | null;
+  itemsSummary: string;
+  itemsPending: number;
+  total: string;
+  notes: string | null;
 };
 
 /** Situação de uma conta de retiradas (ADR-028). Espelha o enum `DeliveryAccountStatus` do Prisma. */

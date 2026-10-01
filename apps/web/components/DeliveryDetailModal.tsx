@@ -9,6 +9,7 @@ import {
   FULFILLMENT_TYPE_LABELS,
   unitTypeLabels,
   type DeliveryDetail,
+  type EmployeeRow,
   type UnitType,
 } from '@nexoloja/shared';
 import { isValidDelivery } from '@nexoloja/core';
@@ -138,6 +139,32 @@ export function DeliveryDetailModal({
       setError((e as Error).message);
     } finally {
       setBusy(false);
+    }
+  }
+
+  // Entrega pela loja (ADR-042): entregadores ativos (para trocar/escolher) e "Saiu para entrega".
+  const [couriers, setCouriers] = useState<EmployeeRow[]>([]);
+  const [dispatching, setDispatching] = useState(false);
+  const isDelivery = detail?.fulfillmentType === 'DELIVERY';
+  useEffect(() => {
+    if (!isDelivery) return;
+    apiGet<EmployeeRow[]>('/employees?activeOnly=true')
+      .then((rows) => setCouriers(rows.filter((r) => r.role === 'COURIER')))
+      .catch(() => {});
+  }, [isDelivery]);
+
+  /** Marca/desfaz "Saiu para entrega" e/ou troca o entregador. Não mexe em estoque (ADR-020). */
+  async function dispatch(body: { dispatched?: boolean; courierId?: string | null }) {
+    setDispatching(true);
+    setError(null);
+    try {
+      await apiPost(`/deliveries/${orderId}/dispatch`, body);
+      await load();
+      onDelivered();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setDispatching(false);
     }
   }
 
@@ -301,15 +328,66 @@ export function DeliveryDetailModal({
 
             {/* Entrega pela loja (ADR-042): endereço (snapshot da venda), telefone do cliente e entregador. */}
             {detail.fulfillmentType === 'DELIVERY' && (
-              <div className="mb-4 grid gap-1 rounded-lg border border-indigo-100 bg-indigo-50/60 px-3 py-2 text-sm">
-                <span className="font-semibold text-indigo-900">Entrega</span>
+              <div className="mb-4 grid gap-2 rounded-lg border border-indigo-100 bg-indigo-50/60 px-3 py-2 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-semibold text-indigo-900">Entrega</span>
+                  {detail.dispatchedAt ? (
+                    <span className="rounded-full bg-teal-100 px-2 py-0.5 text-xs font-semibold text-teal-800">
+                      A caminho desde{' '}
+                      {new Date(detail.dispatchedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  ) : null}
+                </div>
                 <span className="text-gray-700">{detail.deliveryAddress ?? '—'}</span>
                 {detail.customer?.phone && (
                   <span className="text-gray-600">Telefone: {formatPhoneBr(detail.customer.phone)}</span>
                 )}
-                <span className="text-gray-600">
-                  Entregador: {detail.courier ? detail.courier.name : 'a definir'}
-                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <label htmlFor="dd-courier" className="text-gray-600">
+                    Entregador:
+                  </label>
+                  <select
+                    id="dd-courier"
+                    value={detail.courier?.id ?? ''}
+                    onChange={(e) => dispatch({ courierId: e.target.value || null })}
+                    disabled={dispatching}
+                    className="rounded-lg border border-gray-300 bg-white px-2 py-1 text-sm"
+                  >
+                    <option value="">— a definir —</option>
+                    {/* Mantém visível o entregador atual mesmo se foi desativado depois. */}
+                    {detail.courier && !couriers.some((c) => c.id === detail.courier!.id) && (
+                      <option value={detail.courier.id}>{detail.courier.name}</option>
+                    )}
+                    {couriers.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                  {detail.fulfillmentStatus !== 'COMPLETED' &&
+                    (detail.dispatchedAt ? (
+                      <button
+                        type="button"
+                        onClick={() => dispatch({ dispatched: false })}
+                        disabled={dispatching}
+                        className="rounded-lg border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                      >
+                        Desfazer saída
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => dispatch({ dispatched: true })}
+                        disabled={dispatching}
+                        className="rounded-lg bg-emerald-600 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                      >
+                        {dispatching ? 'Registrando…' : 'Saiu para entrega'}
+                      </button>
+                    ))}
+                </div>
+                <p className="text-xs text-gray-500">
+                  Ao entregar, registre a retirada abaixo (é ela que baixa o estoque e conclui o pedido).
+                </p>
               </div>
             )}
 

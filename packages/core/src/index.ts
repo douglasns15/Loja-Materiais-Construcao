@@ -2609,3 +2609,33 @@ export function slotEnd(start: string, slotMinutes: number): string {
 export function slotLabel(start: string, end?: string | null): string {
   return end && end !== start ? `${start}–${end}` : start;
 }
+
+/** Urgência de um agendamento na Agenda do dia (ADR-042) — a cor do bloco/cartão. */
+export type DeliveryUrgency = 'done' | 'route' | 'late' | 'now' | 'soon' | 'plan';
+
+/** Antecedência (min) para "Agora" (laranja) e "Em breve" (âmbar). */
+export const URGENCY_NOW_MIN = 15;
+export const URGENCY_SOON_MIN = 60;
+
+/**
+ * Cor da agenda: **Concluído** (já saiu tudo) · **Atrasado** (passou do FIM da faixa — ou do início,
+ * se não há fim — e não concluiu) · **Agora** (começa em ≤ 15 min ou já começou) · **Em breve**
+ * (≤ 60 min) · **Agendado** (mais tarde). **A caminho** (saiu para entrega e ainda não concluiu)
+ * vence o atraso — o pedido já está com o entregador. Instantes em milissegundos (`Date.getTime()`).
+ */
+export function deliveryUrgency(
+  startMs: number,
+  endMs: number | null,
+  nowMs: number,
+  done: boolean,
+  dispatched = false,
+): DeliveryUrgency {
+  if (done) return 'done';
+  if (dispatched) return 'route';
+  const limit = endMs ?? startMs;
+  if (nowMs > limit) return 'late';
+  const minutesToStart = (startMs - nowMs) / 60000;
+  if (minutesToStart <= URGENCY_NOW_MIN) return 'now';
+  if (minutesToStart <= URGENCY_SOON_MIN) return 'soon';
+  return 'plan';
+}

@@ -33,6 +33,7 @@ import {
   createReturnSchema,
   createSaleSchema,
   formatOrderNumber,
+  parseDeliverySettings,
   parseMoneyQuery,
   parseOrderNumberQuery,
   returnOrderSchema,
@@ -595,6 +596,31 @@ orders.post('/', requireActiveTenant, async (c) => {
       });
       if (!courier) {
         return c.json({ ok: false, error: 'Entregador não encontrado (ou inativo).' }, 400);
+      }
+    }
+
+    // ADR-042: limite de pedidos por faixa (Período de entregas). Conta os agendamentos confirmados
+    // que começam no MESMO instante (mesma faixa). Checagem antes da transação: o PDV já esconde as
+    // lotadas; aqui é a trava final contra dois caixas pegando a última vaga ao mesmo tempo.
+    if (isScheduled && scheduledUntil && sale.scheduledPickupAt && !sale.perItemSchedule) {
+      const t = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { deliverySettings: true } });
+      const max = parseDeliverySettings(t?.deliverySettings).maxPerSlot;
+      if (max) {
+        const taken = await prisma.order.count({
+          where: {
+            tenantId,
+            deliveryMode: 'SCHEDULED',
+            status: 'CONFIRMED',
+            scheduledUntil: { not: null },
+            scheduledPickupAt: new Date(sale.scheduledPickupAt),
+          },
+        });
+        if (taken >= max) {
+          return c.json(
+            { ok: false, error: `Esta faixa de horário já está lotada (${max} pedidos). Escolha outra faixa.` },
+            409,
+          );
+        }
       }
     }
 

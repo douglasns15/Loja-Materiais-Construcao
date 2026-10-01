@@ -102,6 +102,32 @@ export function ScheduleStep({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDelivery, customerId]);
 
+  // Lotação (ADR-042, fatia 3): com limite por faixa, busca os inícios já agendados no dia e conta por
+  // faixa no fuso do aparelho. O servidor revalida no `POST /orders` (409 se lotou nesse meio-tempo).
+  const [taken, setTaken] = useState<Record<string, number>>({});
+  useEffect(() => {
+    if (!settings.maxPerSlot || !value.date || perItemSchedule) {
+      setTaken({});
+      return;
+    }
+    let alive = true;
+    apiGet<{ starts: string[] }>(`/deliveries/slots?day=${value.date}`)
+      .then(({ starts }) => {
+        if (!alive) return;
+        const counts: Record<string, number> = {};
+        for (const iso of starts) {
+          const hhmm = new Date(iso).toTimeString().slice(0, 5);
+          counts[hhmm] = (counts[hhmm] ?? 0) + 1;
+        }
+        setTaken(counts);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [settings.maxPerSlot, value.date, perItemSchedule]);
+  const isFull = (start: string) => !!settings.maxPerSlot && (taken[start] ?? 0) >= settings.maxPerSlot;
+
   const weekday = value.date ? new Date(`${value.date}T12:00:00`).getDay() : new Date().getDay();
   const slots = useMemo(() => deliverySlots(settings, weekday), [settings, weekday]);
   // Hoje: faixas que já terminaram ficam de fora.
@@ -150,10 +176,13 @@ export function ScheduleStep({
               <div className="mt-1 flex flex-wrap gap-1.5">
                 {visibleSlots.map((s) => {
                   const on = value.start === s.start && !customStart;
+                  const full = isFull(s.start) && !on;
                   return (
                     <button
                       key={s.start}
                       type="button"
+                      disabled={full}
+                      title={full ? 'Faixa lotada' : undefined}
                       onClick={() => {
                         setCustomStart(false);
                         set(on ? { start: '', end: '' } : { start: s.start, end: s.end });
@@ -161,10 +190,17 @@ export function ScheduleStep({
                       className={`rounded-lg border px-2.5 py-1 text-xs tabular-nums ${
                         on
                           ? 'border-indigo-600 bg-indigo-600 font-semibold text-white'
-                          : 'border-indigo-200 bg-white text-gray-700 hover:border-indigo-400'
+                          : full
+                            ? 'cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400 line-through'
+                            : 'border-indigo-200 bg-white text-gray-700 hover:border-indigo-400'
                       }`}
                     >
                       {slotLabel(s.start, s.end)}
+                      {settings.maxPerSlot && !on ? (
+                        <span className="ml-1 text-[10px] font-normal no-underline opacity-70">
+                          {full ? 'lotada' : `${taken[s.start] ?? 0}/${settings.maxPerSlot}`}
+                        </span>
+                      ) : null}
                     </button>
                   );
                 })}

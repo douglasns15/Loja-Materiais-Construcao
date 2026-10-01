@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deliverySlots, slotEnd, slotLabel } from './index';
+import { deliverySlots, deliveryUrgency, slotEnd, slotLabel } from './index';
 
 // =============================================================================
 // AGENDA DE ENTREGAS — faixas de horário (ADR-042)
@@ -58,5 +58,36 @@ describe('slotEnd / slotLabel', () => {
     expect(slotLabel('13:30', '14:00')).toBe('13:30–14:00');
     expect(slotLabel('13:30', null)).toBe('13:30');
     expect(slotLabel('13:30', '13:30')).toBe('13:30');
+  });
+});
+describe('deliveryUrgency (cor da agenda)', () => {
+  const at = (hhmm: string) => new Date(`2026-10-01T${hhmm}:00-03:00`).getTime();
+  const now = at('14:20');
+  it('concluído vence tudo', () => {
+    expect(deliveryUrgency(at('13:30'), at('14:00'), now, true)).toBe('done');
+  });
+  it('passou do fim da faixa: atrasado', () => {
+    expect(deliveryUrgency(at('13:30'), at('14:00'), now, false)).toBe('late');
+  });
+  it('dentro da faixa ou começando em até 15 min: agora', () => {
+    expect(deliveryUrgency(at('14:00'), at('14:30'), now, false)).toBe('now');
+    expect(deliveryUrgency(at('14:30'), at('15:00'), now, false)).toBe('now');
+  });
+  it('começa em até 60 min: em breve', () => {
+    expect(deliveryUrgency(at('15:00'), at('15:30'), now, false)).toBe('soon');
+    expect(deliveryUrgency(at('15:20'), at('15:50'), now, false)).toBe('soon');
+  });
+  it('mais tarde: agendado', () => {
+    expect(deliveryUrgency(at('16:30'), at('17:00'), now, false)).toBe('plan');
+  });
+  it('sem fim de faixa: atrasa depois do início', () => {
+    expect(deliveryUrgency(at('14:10'), null, now, false)).toBe('late');
+  });
+});
+describe('deliveryUrgency — saiu para entrega', () => {
+  const at = (hhmm: string) => new Date(`2026-10-01T${hhmm}:00-03:00`).getTime();
+  it('a caminho vence o atraso; concluído vence o a caminho', () => {
+    expect(deliveryUrgency(at('13:30'), at('14:00'), at('14:20'), false, true)).toBe('route');
+    expect(deliveryUrgency(at('13:30'), at('14:00'), at('14:20'), true, true)).toBe('done');
   });
 });

@@ -1,7 +1,8 @@
 # ADR-042 — Agenda de entregas: retirada × entrega, faixa de horário e linha do tempo do dia
 
-- **Status:** **Proposta** (2026-10-01) — aguardando decisão do Owner (perguntas no fim) e aprovação da
-  migration (regra 1).
+- **Status:** **Aceito** (2026-10-01) — decisões do Owner abaixo; migration `0042` aprovada e aplicada.
+  **Fatias 1, 2 e 3 IMPLEMENTADAS em 2026-10-01** (deploy e E2E pendentes — deploy de tudo no final, a
+  pedido do Owner).
 - **Data:** 2026-10-01
 - **Deciders:** Owner do produto.
 - **Mockups:** Artifact "Agenda de Entregas NexoLoja" (https://claude.ai/artifact/QWj7tYctZs13QNcuYEd2xv).
@@ -67,6 +68,26 @@ ordenada por horário) e devolve tipo/faixa/endereço; `POST /deliveries/:id/dis
    agendamento no PDV (retirada × entrega, faixa, endereço, taxa, observações, entregador opcional).
 2. Agenda do dia (linha do tempo, chips, "Próximas", cores) + versão celular + **painel "Período de entregas"**.
 3. "Saiu para entrega" + limite de pedidos por faixa no PDV.
+
+### Implementação (2026-10-01)
+
+- **Fatia 1** (commits `74d0568` migration + `9dbb6ae`): `0042` aplicada (10 SCHEDULED antigas → `PICKUP`; RLS em
+  `employees`); shared `employee.ts`, `deliverySettingsSchema`/`parseDeliverySettings`, campos novos no
+  `createSaleSchema`; core `deliverySlots`/`slotEnd`/`slotLabel`; API `/employees` (escrita Admin),
+  `GET`/`PUT /tenant/delivery-settings`, `POST /orders` grava tipo/faixa/endereço/entregador/taxa; web: tela
+  **Funcionários** (Cadastros), endereço no cadastro rápido e em Clientes, PDV com **Retirada × Entrega + taxa** no
+  checkout (muda o total antes do pagamento) e a etapa **`ScheduleStep`** na revisão (dia, faixas do período,
+  "outro horário", endereço vindo do cliente com "salvar no cadastro", entregador, observações). Entrega exige
+  cliente + endereço + dia + faixa.
+- **Fatia 2**: core `deliveryUrgency` (atrasado/agora/em breve/agendado/concluído); API `GET /deliveries/agenda`;
+  tela Entregas com abas **Agenda do dia** (padrão, lembrada no aparelho) × **Contas e retiradas** — linha do tempo
+  horizontal com linha do "agora" (desktop), lista por horário (celular), chips com contagem, "Próximas" com
+  contagem regressiva, "Sem horário" para agendamentos só com dia; painel **Período de entregas** (Admin: faixa,
+  limite, até 2 intervalos por dia, "copiar segunda p/ ter–sex").
+- **Fatia 3**: estado **A caminho** (`route`, vence o atraso); `POST /deliveries/:id/dispatch` (marca/desfaz a saída,
+  troca o entregador); botão "Saiu p/ entrega" no cartão da agenda e no detalhe; `GET /deliveries/slots` + faixas
+  **lotadas** no PDV; `POST /orders` recusa faixa lotada (409).
+- Gates: core 463, shared 82, API tsc 0, web build. Doc §8.2 atualizada (regra 7).
 
 ## Perguntas ao Owner — RESPONDIDAS (2026-10-01)
 

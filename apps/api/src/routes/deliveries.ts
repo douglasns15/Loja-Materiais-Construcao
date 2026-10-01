@@ -5,7 +5,13 @@ import {
   orderFulfillmentStatus,
   remainingToDeliver,
 } from '@nexoloja/core';
-import { deliverOrderSchema, updateOrderNotesSchema, parseSeqNumberQuery } from '@nexoloja/shared';
+import {
+  deliverOrderSchema,
+  dispatchOrderSchema,
+  formatWeight,
+  updateOrderNotesSchema,
+  parseSeqNumberQuery,
+} from '@nexoloja/shared';
 import { type Env, getConnectionString, getPrisma, getTenantId } from '../lib/request';
 import { requireActiveTenant, requireAuth } from '../middleware/auth';
 
@@ -317,6 +323,190 @@ deliveries.get('/', async (c) => {
  * com o que foi vendido, o que já saiu e o que falta, e o histórico de cada retirada parcial
  * (quando, quanto, por quem). Base do painel de detalhe da tela de Entregas.
  */
+/**
+ * Agenda do dia (ADR-042): pedidos SCHEDULED confirmados marcados para `?day=AAAA-MM-DD` (fuso da
+ * loja, UTC−3), em ordem de horário. Dois tipos de previsão convivem:
+ *  - **com faixa** (`scheduledUntil` preenchido): o início é um instante real ⇒ entra se cair no dia local;
+ *  - **só dia** (agendamento antigo/sem faixa): gravado como meia-noite UTC do dia ⇒ `timed = false`,
+ *    vai para a lista "Sem horário" da tela.
+ * ⚠️ Registrada ANTES de `/:id` para o Hono não tratar "agenda" como id.
+ */
+deliveries.get('/agenda', async (c) => {
+  const tenantId = getTenantId(c);
+  if (!tenantId || !getConnectionString(c.env)) {
+    return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
+  }
+  const day = c.req.query('day') ?? '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+    return c.json({ ok: false, error: 'Informe o dia (AAAA-MM-DD).' }, 400);
+  }
+  const dayStartLocal = new Date(`${day}T00:00:00.000-03:00`);
+  const dayEndLocal = new Date(`${day}T23:59:59.999-03:00`);
+  const dateOnly = new Date(`${day}T00:00:00.000Z`);
+  try {
+    const prisma = getPrisma(c);
+    const rows = await prisma.order.findMany({
+      where: {
+        tenantId,
+        deliveryMode: 'SCHEDULED',
+        status: 'CONFIRMED',
+        perItemSchedule: false,
+        OR: [
+          { scheduledUntil: { not: null }, scheduledPickupAt: { gte: dayStartLocal, lte: dayEndLocal } },
+          { scheduledUntil: null, scheduledPickupAt: dateOnly },
+        ],
+      },
+      orderBy: { scheduledPickupAt: 'asc' },
+      select: {
+        id: true,
+        orderNumber: true,
+        fulfillmentType: true,
+        fulfillmentStatus: true,
+        scheduledPickupAt: true,
+        scheduledUntil: true,
+        deliveryAddress: true,
+        dispatchedAt: true,
+        total: true,
+        notes: true,
+        customer: { select: { name: true, phone: true } },
+        courier: { select: { name: true } },
+        items: {
+          select: { productName: true, unit: true, quantity: true, baseQuantity: true, deliveredBaseQty: true },
+        },
+      },
+    });
+    const data = rows.map((o) => {
+      const summary = o.items
+        .map((it) => {
+          const q = Number(it.quantity);
+          const qty =
+            it.unit === 'KILOGRAM' || it.unit === 'LITER'
+              ? `${formatWeight(q)} ${it.unit === 'LITER' ? 'L' : 'kg'}`
+              : `${q.toLocaleString('pt-BR', { maximumFractionDigits: 3 })}×`;
+          return `${qty} ${it.productName}`;
+        })
+        .join(', ');
+      const pending = o.items.reduce(
+        (acc, it) => acc + remainingToDeliver(Number(it.baseQuantity ?? it.quantity), Number(it.deliveredBaseQty)),
+        0,
+      );
+      return {
+        id: o.id,
+        orderNumber: o.orderNumber,
+        fulfillmentType: o.fulfillmentType ?? 'PICKUP',
+        fulfillmentStatus: o.fulfillmentStatus ?? 'PENDING',
+        start: o.scheduledPickupAt,
+        end: o.scheduledUntil,
+        timed: o.scheduledUntil != null,
+        customerName: o.customer?.name ?? null,
+        customerPhone: o.customer?.phone ?? null,
+        deliveryAddress: o.deliveryAddress,
+        courierName: o.courier?.name ?? null,
+        dispatchedAt: o.dispatchedAt,
+        itemsSummary: summary.length > 140 ? `${summary.slice(0, 137)}…` : summary,
+        itemsPending: Number(pending.toFixed(4)),
+        total: o.total,
+        notes: o.notes,
+      };
+    });
+    return c.json({ ok: true, data });
+  } catch (err) {
+    console.error('GET /deliveries/agenda falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao carregar a agenda do dia.' }, 500);
+  }
+});
+
+/**
+ * Lotação das faixas de um dia (ADR-042): os INÍCIOS (ISO) dos pedidos com faixa de horário marcados
+ * para `?day=` — o PDV conta por faixa (no fuso do aparelho) e marca as lotadas quando a loja tem
+ * `maxPerSlot`. ⚠️ Antes de `/:id`.
+ */
+deliveries.get('/slots', async (c) => {
+  const tenantId = getTenantId(c);
+  if (!tenantId || !getConnectionString(c.env)) {
+    return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
+  }
+  const day = c.req.query('day') ?? '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+    return c.json({ ok: false, error: 'Informe o dia (AAAA-MM-DD).' }, 400);
+  }
+  try {
+    const prisma = getPrisma(c);
+    const rows = await prisma.order.findMany({
+      where: {
+        tenantId,
+        deliveryMode: 'SCHEDULED',
+        status: 'CONFIRMED',
+        scheduledUntil: { not: null },
+        scheduledPickupAt: {
+          gte: new Date(`${day}T00:00:00.000-03:00`),
+          lte: new Date(`${day}T23:59:59.999-03:00`),
+        },
+      },
+      select: { scheduledPickupAt: true },
+    });
+    return c.json({ ok: true, data: { starts: rows.map((r) => r.scheduledPickupAt) } });
+  } catch (err) {
+    console.error('GET /deliveries/slots falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao consultar as faixas do dia.' }, 500);
+  }
+});
+
+/**
+ * "Saiu para entrega" (ADR-042): marca/desfaz a saída de um pedido de ENTREGA e/ou troca o
+ * entregador (funcionário ATIVO da loja; `null` tira). Só pedidos SCHEDULED confirmados do tipo
+ * DELIVERY. Não mexe em estoque — a baixa continua na retirada/entrega registrada (ADR-020).
+ */
+deliveries.post('/:id/dispatch', requireActiveTenant, async (c) => {
+  const tenantId = getTenantId(c);
+  if (!tenantId || !getConnectionString(c.env)) {
+    return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
+  }
+  const id = c.req.param('id');
+  if (!UUID_RE.test(id)) {
+    return c.json({ ok: false, error: 'Pedido não encontrado.' }, 404);
+  }
+  const parsed = dispatchOrderSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) {
+    return c.json({ ok: false, error: 'Informe a saída ou o entregador.', issues: parsed.error.flatten() }, 400);
+  }
+  try {
+    const prisma = getPrisma(c);
+    const order = await prisma.order.findFirst({
+      where: { id, tenantId, deliveryMode: 'SCHEDULED' },
+      select: { status: true, fulfillmentType: true },
+    });
+    if (!order) {
+      return c.json({ ok: false, error: 'Pedido não encontrado.' }, 404);
+    }
+    if (order.status !== 'CONFIRMED' || order.fulfillmentType !== 'DELIVERY') {
+      return c.json({ ok: false, error: 'Só pedidos de entrega confirmados podem sair para entrega.' }, 400);
+    }
+    const { dispatched, courierId } = parsed.data;
+    if (courierId) {
+      const courier = await prisma.employee.findFirst({
+        where: { id: courierId, tenantId, deletedAt: null, isActive: true },
+        select: { id: true },
+      });
+      if (!courier) {
+        return c.json({ ok: false, error: 'Entregador não encontrado (ou inativo).' }, 400);
+      }
+    }
+    const updated = await prisma.order.update({
+      where: { id },
+      data: {
+        ...(dispatched !== undefined ? { dispatchedAt: dispatched ? new Date() : null } : {}),
+        ...(courierId !== undefined ? { courierId } : {}),
+      },
+      select: { id: true, dispatchedAt: true, courier: { select: { id: true, name: true, phone: true } } },
+    });
+    return c.json({ ok: true, data: updated });
+  } catch (err) {
+    console.error('POST /deliveries/:id/dispatch falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao registrar a saída para entrega.' }, 500);
+  }
+});
+
 deliveries.get('/:id', async (c) => {
   const tenantId = getTenantId(c);
   const connectionString = getConnectionString(c.env);
