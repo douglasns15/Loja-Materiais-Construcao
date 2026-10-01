@@ -5995,3 +5995,14 @@ Ambiente: `nexoloja-web.imortal.workers.dev`, web `275b72a9` (commit `143a805`).
 - Loja **Demo** (construção): cadastro/detalhe idênticos ao de antes (milheiro, saco, barra, peso, par).
 - Loja de teste de alimentos criada **pelo painel** (ramo Mercadinho, entrega #3) com admin `owner_kg@lojademo.com` — login criado antes SÓ no Supabase Auth (sem loja); o `POST /platform/tenants` reaproveitou o login e vinculou como OWNER, sem e-mail de convite. Seletor de unidade só Unidade/kg/Litro/Pacote; sem peso e sem par.
 - Verificação: shared 68/68 (+`moduleEnabled`/`visibleUnitTypes`), web build OK; smoke do deploy + BUILD_ID local conferido no HTML ao vivo.
+
+---
+
+## Multirramo.TrackStock — produto sem controle de estoque + "vendido inteiro também" (ADR-040 F2 §4, entrega #5) — E2E do Owner (2026-10-01)
+
+Ambiente: `nexoloja-web.imortal.workers.dev`, API `22042b01` + web `8cfe172e` (commit `ef29549`). **VALIDADO ✅** ("todos os passos do E2E passaram com sucesso"). Sem migration (coluna da `0041`).
+
+- Loja `owner_kg`: "Frango Assado" em kg (R$ 39,90/kg), **sem controle de estoque**, inteiro R$ 45,00 (peso médio 1,2). Venda 0,850 kg e 1 inteiro sem trava; produto fora da tela Estoque; cancelamento sem movimentação.
+- Loja Demo: venda comum seguiu baixando estoque.
+- Validação de escrita no `wrangler tail`: `POST /orders` (várias), `POST /products`, `POST /stock/adjust` e `return-items` — todos `Ok`, nenhum erro.
+- **Achados do Owner:** (1) peso exibido "0,85" em vez de "0,850" → corrigido (`formatWeight`, commit `3d57bc7`; deploy pendente). (2) Pedido de evolução: estoque de itens pesados alimentado **por peças** (unidades com peso) para saber quantos kg restam — proposta em discussão. (3) Backlog: evoluções na tela **Entregas** (agendar retirada / entrega pela loja).
