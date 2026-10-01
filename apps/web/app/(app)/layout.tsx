@@ -37,6 +37,7 @@ type IconName =
   | 'cadastros'
   | 'clientes'
   | 'fornecedores'
+  | 'funcionarios'
   | 'categorias'
   | 'relatorios'
   | 'configuracoes';
@@ -145,6 +146,16 @@ const ICON_PATHS: Record<IconName, ReactNode> = {
       <path d="M10 18h4" />
     </>
   ),
+  // Crachá — Funcionários (entregadores, ADR-042).
+  funcionarios: (
+    <>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <circle cx="9" cy="11" r="2.5" />
+      <path d="M5.5 17a3.5 3.5 0 0 1 7 0" />
+      <path d="M15 9h3" />
+      <path d="M15 13h3" />
+    </>
+  ),
   // Etiqueta — Categorias.
   categorias: (
     <>
@@ -211,6 +222,7 @@ const NAV: NavEntry[] = [
     children: [
       { href: '/customers', label: 'Clientes', icon: 'clientes' },
       { href: '/fornecedores', label: 'Fornecedores', icon: 'fornecedores' },
+      { href: '/funcionarios', label: 'Funcionários', icon: 'funcionarios' },
       { href: '/categorias', label: 'Categorias', icon: 'categorias' },
     ],
   },
@@ -244,6 +256,7 @@ const WARM_ROUTES = [
   '/estoque',
   '/customers',
   '/fornecedores',
+  '/funcionarios',
   '/categorias',
   '/relatorios',
   '/configuracoes',

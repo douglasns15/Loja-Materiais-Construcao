@@ -115,7 +115,7 @@ async function fetchWithTimeout(url: string, init: RequestInit): Promise<Respons
  * é uma resposta válida do servidor, então o `handle` propaga — trade-off aceito (evento raríssimo).
  */
 async function sendIdempotent<T>(
-  method: 'GET' | 'PATCH' | 'DELETE',
+  method: 'GET' | 'PATCH' | 'PUT' | 'DELETE',
   path: string,
   body?: unknown,
 ): Promise<T> {
@@ -209,6 +209,11 @@ export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
 
 export async function apiDelete<T>(path: string): Promise<T> {
   return sendIdempotent<T>('DELETE', path);
+}
+
+/** PUT substitui o recurso inteiro — idempotente por natureza (ex.: período de entregas, ADR-042). */
+export async function apiPut<T>(path: string, body: unknown): Promise<T> {
+  return sendIdempotent<T>('PUT', path, body);
 }
 
 /**

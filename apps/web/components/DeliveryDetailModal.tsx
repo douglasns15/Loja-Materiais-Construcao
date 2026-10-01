@@ -4,7 +4,9 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   formatOrderNumber,
   formatDateBr,
+  formatPhoneBr,
   FULFILLMENT_STATUS_LABELS,
+  FULFILLMENT_TYPE_LABELS,
   unitTypeLabels,
   type DeliveryDetail,
   type UnitType,
@@ -22,6 +24,19 @@ const dateTime = (iso: string) => new Date(iso).toLocaleString('pt-BR');
 // Previsão de retirada é data-only (meia-noite UTC, ADR-020): formata em UTC (`formatDateBr`) para
 // não voltar um dia no fuso do navegador — mesma correção do vencimento (dueDate).
 const dateOnly = (iso: string) => formatDateBr(iso);
+
+/**
+ * Previsão do pedido. Agendamento com faixa (ADR-042, tem `scheduledUntil`) guarda o instante real →
+ * dia e horas no fuso do aparelho ("01/10 · 13:30–14:00"). Sem faixa é a data pura de sempre
+ * (meia-noite UTC → `formatDateBr`, sem deslocar o dia).
+ */
+function scheduleLabel(start: string, until?: string | null): string {
+  if (!until) return dateOnly(start);
+  const s = new Date(start);
+  const e = new Date(until);
+  const hm = (d: Date) => d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  return `${s.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} · ${hm(s)}–${hm(e)}`;
+}
 
 const unitLabel = (u: string) => unitTypeLabels[u as UnitType] ?? u;
 
@@ -243,7 +258,8 @@ export function DeliveryDetailModal({
                   </span>
                   {!detail.perItemSchedule && detail.scheduledPickupAt && (
                     <span className="ml-2 text-xs text-indigo-100">
-                      Previsão: {dateOnly(detail.scheduledPickupAt)}
+                      {detail.fulfillmentType ? FULFILLMENT_TYPE_LABELS[detail.fulfillmentType] : 'Previsão'}:{' '}
+                      {scheduleLabel(detail.scheduledPickupAt, detail.scheduledUntil)}
                     </span>
                   )}
                 </p>
@@ -282,6 +298,20 @@ export function DeliveryDetailModal({
                 Imprimir comprovante
               </button>
             </div>
+
+            {/* Entrega pela loja (ADR-042): endereço (snapshot da venda), telefone do cliente e entregador. */}
+            {detail.fulfillmentType === 'DELIVERY' && (
+              <div className="mb-4 grid gap-1 rounded-lg border border-indigo-100 bg-indigo-50/60 px-3 py-2 text-sm">
+                <span className="font-semibold text-indigo-900">Entrega</span>
+                <span className="text-gray-700">{detail.deliveryAddress ?? '—'}</span>
+                {detail.customer?.phone && (
+                  <span className="text-gray-600">Telefone: {formatPhoneBr(detail.customer.phone)}</span>
+                )}
+                <span className="text-gray-600">
+                  Entregador: {detail.courier ? detail.courier.name : 'a definir'}
+                </span>
+              </div>
+            )}
 
             {/* Observação livre do pedido (editável) — informações gerais p/ quem separa/entrega
                 (ex.: "quem retira não é quem comprou"). Distinta da observação por retirada (log). */}

@@ -144,6 +144,15 @@ export const createSaleSchema = z.object({
   /** Flag "Data por item" (ADR-020): quando `true`, a previsão vem de cada item (`saleItem.scheduledPickupAt`). */
   perItemSchedule: z.boolean().optional(),
   /**
+   * Agenda de entregas (ADR-042), só com `deliveryMode = SCHEDULED`: retirada × entrega, FIM da faixa
+   * de horário (o início vai em `scheduledPickupAt`, agora data+hora ISO), endereço da entrega
+   * (snapshot; obrigatório em `DELIVERY`) e entregador opcional (`Employee`).
+   */
+  fulfillmentType: z.enum(['PICKUP', 'DELIVERY']).optional(),
+  scheduledUntil: z.string().optional(),
+  deliveryAddress: z.string().trim().max(300).optional(),
+  courierId: z.string().uuid().optional(),
+  /**
    * Conversão de orçamento em venda (ADR-024, 2.B): quando presente, esta venda foi gerada a partir do
    * orçamento `quoteId`. Na MESMA transação da venda, o servidor marca o orçamento `CONVERTED` e grava
    * `convertedOrderId` (guarda: recusa se já convertido). Ausente = venda comum. Online-only (a conversão

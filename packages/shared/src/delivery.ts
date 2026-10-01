@@ -1,9 +1,49 @@
+import { z } from 'zod';
+
 /**
  * Retirada / entrega futura (ADR-020). Tipos compartilhados entre apps/web e apps/api para a tela
  * "Entregas". Eixo ortogonal ao fiado: aqui a mercadoria de um pedido SCHEDULED é RESERVADA na
  * venda e sai, parcial, nas retiradas. Os schemas de entrada (`deliverOrderSchema`, `deliveryMode`)
  * e os rótulos (`FULFILLMENT_STATUS_LABELS`) ficam em `./sale` junto do `createSaleSchema`.
  */
+
+/** Retirada na loja × entrega pela loja (ADR-042). Espelha o enum `FulfillmentType` do Prisma. */
+export const fulfillmentTypeSchema = z.enum(['PICKUP', 'DELIVERY']);
+export type FulfillmentType = z.infer<typeof fulfillmentTypeSchema>;
+
+export const FULFILLMENT_TYPE_LABELS: Record<FulfillmentType, string> = {
+  PICKUP: 'Retirada',
+  DELIVERY: 'Entrega',
+};
+
+/** "HH:MM" 00:00–23:59. */
+const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Horário no formato HH:MM.');
+
+/** Um intervalo de atendimento num dia ("08:00"–"12:00"). `end` > `start`. */
+export const deliveryHoursRangeSchema = z
+  .object({ start: hhmm, end: hhmm })
+  .refine((r) => r.end > r.start, { message: 'O fim precisa ser depois do início.' });
+
+/**
+ * Período de entregas da loja (ADR-042) — `Tenant.deliverySettings`. `hours` por dia da semana
+ * ("0" = domingo … "6" = sábado); dia ausente/vazio = sem entregas/retiradas naquele dia. `hours`
+ * vazio (nenhum dia configurado) = sem restrição de horário. `maxPerSlot` nulo = sem limite.
+ */
+export const deliverySettingsSchema = z.object({
+  slotMinutes: z.number().int().min(10).max(240).default(30),
+  maxPerSlot: z.number().int().min(1).max(999).nullable().default(null),
+  hours: z.record(z.enum(['0', '1', '2', '3', '4', '5', '6']), z.array(deliveryHoursRangeSchema).max(4)).default({}),
+});
+export type DeliverySettings = z.infer<typeof deliverySettingsSchema>;
+
+/** Padrão quando a loja não configurou (coluna nula): faixa de 30 min, sem limite, sem restrição. */
+export const DEFAULT_DELIVERY_SETTINGS: DeliverySettings = { slotMinutes: 30, maxPerSlot: null, hours: {} };
+
+/** Lê o JSON gravado tolerando nulo/legado: o que não validar cai no padrão. */
+export function parseDeliverySettings(raw: unknown): DeliverySettings {
+  const r = deliverySettingsSchema.safeParse(raw ?? {});
+  return r.success ? r.data : DEFAULT_DELIVERY_SETTINGS;
+}
 
 /** Situação de retirada de um pedido. Espelha o enum `FulfillmentStatus` do Prisma. */
 export type FulfillmentStatus = 'PENDING' | 'PARTIAL' | 'COMPLETED';
@@ -27,6 +67,11 @@ export type DeliveryOrderRow = {
   customerName: string | null;
   itemsCount: number;
   itemsPending: number;
+  /** Agenda de entregas (ADR-042). `null` em pedidos sem o dado. */
+  fulfillmentType?: FulfillmentType | null;
+  scheduledUntil?: string | null;
+  deliveryAddress?: string | null;
+  courierName?: string | null;
 };
 
 /** Situação de uma conta de retiradas (ADR-028). Espelha o enum `DeliveryAccountStatus` do Prisma. */
@@ -121,6 +166,12 @@ export type DeliveryDetail = {
   registeredByName: string | null;
   notes: string | null;
   customer: { id: string; name: string; phone: string | null } | null;
+  /** Agenda de entregas (ADR-042). */
+  fulfillmentType?: FulfillmentType | null;
+  scheduledUntil?: string | null;
+  deliveryAddress?: string | null;
+  dispatchedAt?: string | null;
+  courier?: { id: string; name: string; phone: string | null } | null;
   items: DeliveryItem[];
   itemDeliveries: DeliveryLogRow[];
 };

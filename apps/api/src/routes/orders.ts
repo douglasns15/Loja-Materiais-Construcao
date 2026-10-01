@@ -541,6 +541,26 @@ orders.post('/', requireActiveTenant, async (c) => {
       400,
     );
   }
+  // Agenda de entregas (ADR-042): retirada × entrega, faixa de horário, endereço e entregador. Só
+  // valem em SCHEDULED (em venda comum são ignorados). Entrega exige endereço; a faixa termina depois
+  // de começar. O entregador é validado contra a loja logo abaixo (já com o banco).
+  const fulfillmentType = isScheduled ? (sale.fulfillmentType ?? 'PICKUP') : null;
+  const deliveryAddress = fulfillmentType === 'DELIVERY' ? sale.deliveryAddress?.trim() || null : null;
+  if (fulfillmentType === 'DELIVERY' && !deliveryAddress) {
+    return c.json({ ok: false, error: 'Informe o endereço da entrega.' }, 400);
+  }
+  const scheduledUntil = isScheduled && sale.scheduledUntil ? new Date(sale.scheduledUntil) : null;
+  if (scheduledUntil && Number.isNaN(scheduledUntil.getTime())) {
+    return c.json({ ok: false, error: 'Horário final da faixa inválido.' }, 400);
+  }
+  if (
+    scheduledUntil &&
+    sale.scheduledPickupAt &&
+    scheduledUntil.getTime() <= new Date(sale.scheduledPickupAt).getTime()
+  ) {
+    return c.json({ ok: false, error: 'O fim da faixa de horário precisa ser depois do início.' }, 400);
+  }
+  const courierId = fulfillmentType === 'DELIVERY' ? (sale.courierId ?? null) : null;
 
   try {
     const prisma = getPrisma(c);
@@ -564,6 +584,17 @@ orders.post('/', requireActiveTenant, async (c) => {
           },
           200,
         );
+      }
+    }
+
+    // ADR-042: o entregador precisa ser funcionário ATIVO desta loja.
+    if (courierId) {
+      const courier = await prisma.employee.findFirst({
+        where: { id: courierId, tenantId, deletedAt: null, isActive: true },
+        select: { id: true },
+      });
+      if (!courier) {
+        return c.json({ ok: false, error: 'Entregador não encontrado (ou inativo).' }, 400);
       }
     }
 
@@ -937,6 +968,11 @@ orders.post('/', requireActiveTenant, async (c) => {
                     : null,
                 // Conta de retiradas (ADR-028): liga a venda à conta do cliente (nula se sem cliente).
                 ...(deliveryAccountId ? { deliveryAccountId } : {}),
+                // Agenda de entregas (ADR-042): tipo, fim da faixa, endereço (snapshot) e entregador.
+                fulfillmentType,
+                scheduledUntil: !sale.perItemSchedule ? scheduledUntil : null,
+                deliveryAddress,
+                courierId,
               }
             : {}),
           items: {

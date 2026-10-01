@@ -10,6 +10,8 @@ import {
   closedUnitTerms,
   formatQuoteNumber,
   formatWeight,
+  FULFILLMENT_TYPE_LABELS,
+  type FulfillmentType,
   paymentMethodLabel,
   unitTypeLabels,
   type CreateQuoteResult,
@@ -74,6 +76,13 @@ import { OfflineSalesNotice } from '@/components/OfflineSalesNotice';
 import { BarcodeScanButton } from '@/components/BarcodeScanButton';
 import { MoneyInput } from '@/components/MoneyInput';
 import { CustomerQuickAddModal } from '@/components/CustomerQuickAddModal';
+import {
+  EMPTY_SCHEDULE,
+  localDateTimeIso,
+  ScheduleStep,
+  todayLocal,
+  type ScheduleValue,
+} from '@/components/ScheduleStep';
 
 /** Taxas da maquininha que vêm junto no `GET /tenant` (ADR-016). */
 type StoreCardFees = {
@@ -284,7 +293,18 @@ const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 /** Lista de itens + subtotal/desconto/total (reusado em revisão, venda e orçamento). */
-function Summary({ items, total, discount }: { items: CartItem[]; total: number; discount: number }) {
+function Summary({
+  items,
+  total,
+  discount,
+  freight = 0,
+}: {
+  items: CartItem[];
+  total: number;
+  discount: number;
+  /** Taxa de entrega (ADR-042) — já somada ao `total`; mostrada em linha própria. */
+  freight?: number;
+}) {
   // Subtotal já LÍQUIDO do desconto por item (ADR-036): cada linha entra pelo seu total líquido, e o
   // "Desconto" abaixo é só o do PEDIDO. subtotal − desconto do pedido = total (mesma conta do core).
   const subtotal = items.reduce((acc, i) => acc + lineNet(i), 0);
@@ -314,16 +334,24 @@ function Summary({ items, total, discount }: { items: CartItem[]; total: number;
           </li>
         ))}
       </ul>
-      {discount > 0 && (
+      {(discount > 0 || freight > 0) && (
         <div className="space-y-1 border-t border-gray-200 pt-2 text-sm text-gray-600">
           <div className="flex justify-between">
             <span>Subtotal</span>
             <span>{BRL(subtotal)}</span>
           </div>
-          <div className="flex justify-between">
-            <span>Desconto</span>
-            <span>− {BRL(discount)}</span>
-          </div>
+          {discount > 0 && (
+            <div className="flex justify-between">
+              <span>Desconto</span>
+              <span>− {BRL(discount)}</span>
+            </div>
+          )}
+          {freight > 0 && (
+            <div className="flex justify-between">
+              <span>Taxa de entrega</span>
+              <span>+ {BRL(freight)}</span>
+            </div>
+          )}
         </div>
       )}
       <div className={`flex justify-between font-medium ${discount > 0 ? '' : 'border-t border-gray-200 pt-2'}`}>
@@ -572,16 +600,17 @@ export default function VendaPage() {
   const [dueDate, setDueDate] = useState('');
   // Retirada/entrega futura (ADR-020) — opt-in, escondida por padrão (PDV limpo), como o fiado.
   // Quando ligada, a venda RESERVA a mercadoria (não baixa o estoque); a retirada é registrada
-  // depois, parcial, na tela de Entregas. `pickupDate` é a previsão ÚNICA do pedido; se
-  // `perItemSchedule` estiver ligado, a previsão vem de cada item (`itemPickupDates` por linha).
-  // Online-only nesta fatia (como o fiado).
+  // depois, parcial, na tela de Entregas. Se `perItemSchedule` estiver ligado, a previsão vem de
+  // cada item (`itemPickupDates` por linha). Online-only nesta fatia (como o fiado).
   const [showSchedule, setShowSchedule] = useState(false);
-  const [pickupDate, setPickupDate] = useState('');
   const [perItemSchedule, setPerItemSchedule] = useState(false);
   const [itemPickupDates, setItemPickupDates] = useState<Record<string, string>>({});
-  // Observação livre do PEDIDO (ADR-020): informações gerais que quem abrir a Entrega precisa ver
-  // (ex.: "quem retira não é quem comprou"). Vai em `Order.notes` e aparece no detalhe da Entrega.
-  const [orderNote, setOrderNote] = useState('');
+  // Agenda de entregas (ADR-042): RETIRADA × ENTREGA e a taxa de entrega ficam no checkout (mudam o
+  // total antes do pagamento); dia, faixa de horário, endereço, entregador e a observação do pedido
+  // (`Order.notes`, que quem abrir a Entrega precisa ver) ficam na etapa da REVISÃO (`ScheduleStep`).
+  const [fulfillmentType, setFulfillmentType] = useState<FulfillmentType>('PICKUP');
+  const [deliveryFee, setDeliveryFee] = useState('');
+  const [schedule, setSchedule] = useState<ScheduleValue>(EMPTY_SCHEDULE);
 
   async function loadProducts() {
     const raw = await apiGet<(Product & { reservedQty?: string })[]>('/products');
@@ -1012,6 +1041,10 @@ export default function VendaPage() {
    * podia divergir do servidor por centavos ("Pagamento insuficiente: total 3.51, pago 3.50",
    * achado no E2E de 2026-07-20). Somando o que se envia, front e servidor não têm como discordar.
    */
+  // Taxa de entrega (ADR-042): só na ENTREGA agendada; vai como `freightAmount` e soma ao total
+  // (mesma conta do servidor em `calcSaleTotals`), por isso é escolhida ANTES do pagamento.
+  const deliveryFeeValue =
+    showSchedule && fulfillmentType === 'DELIVERY' ? Math.max(0, Number(deliveryFee) || 0) : 0;
   const totals = useMemo(
     () =>
       calcSaleTotals(
@@ -1022,12 +1055,12 @@ export default function VendaPage() {
           unitPrice: i.unitPrice,
           discount: (i as { discount?: number }).discount,
         })),
-        { discountAmount: discountValue },
+        { discountAmount: discountValue, freightAmount: deliveryFeeValue },
       ),
     // `primaryMethod` entra nas deps porque o acréscimo por forma de pagamento (ADR-016) reprecifica
     // o carrinho — sem isso, trocar Dinheiro → Crédito mostraria o total antigo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [cart, discountValue, primaryMethod],
+    [cart, discountValue, primaryMethod, deliveryFeeValue],
   );
   const discountTooHigh = discountValue > totals.subtotal;
 
@@ -1643,6 +1676,10 @@ export default function VendaPage() {
       setError(`Pagamento insuficiente: falta ${BRL(payStatus.remaining)}.`);
       return;
     }
+    // ADR-042: a etapa de agendamento abre com HOJE no dia (o operador troca se for outro).
+    if (isScheduled && !perItemSchedule && !schedule.date) {
+      setSchedule((s) => ({ ...s, date: todayLocal() }));
+    }
     setView({ kind: 'review' });
   }
 
@@ -1693,6 +1730,21 @@ export default function VendaPage() {
     if (isScheduled && !online) {
       setError('A venda com retirada/entrega futura exige conexão.');
       return;
+    }
+    // Entrega (ADR-042): precisa de cliente (nome/telefone para o entregador), endereço, dia e faixa.
+    if (isScheduled && fulfillmentType === 'DELIVERY') {
+      if (!customerId) {
+        setError('Identifique o cliente para a entrega (nome, telefone e endereço).');
+        return;
+      }
+      if (!schedule.address.trim()) {
+        setError('Informe o endereço da entrega.');
+        return;
+      }
+      if (!perItemSchedule && (!schedule.date || !schedule.start)) {
+        setError('Escolha o dia e a faixa de horário da entrega.');
+        return;
+      }
     }
     // Troca (ADR-033, Fatia 3): online-only e o total deve cobrir o vale (v1 sem troco na troca).
     if (exchange && !online) {
@@ -1806,12 +1858,29 @@ export default function VendaPage() {
       ...(storeCreditUsed > 0 ? { creditApplied: storeCreditUsed } : {}),
       // Retirada/entrega futura (ADR-020): modo SCHEDULED + previsão (única ou por item) + a
       // observação livre do pedido. A data por item já vai anexada em cada item por `cartToSaleItems`.
+      // ADR-042: retirada × entrega, faixa de horário (início = data+hora ISO, fim em `scheduledUntil`),
+      // endereço (snapshot), entregador e taxa de entrega (`freightAmount`, já somada ao total).
       ...(isScheduled
         ? {
             deliveryMode: 'SCHEDULED' as const,
             perItemSchedule,
-            ...(!perItemSchedule && pickupDate ? { scheduledPickupAt: pickupDate } : {}),
-            ...(orderNote.trim() ? { notes: orderNote.trim() } : {}),
+            fulfillmentType,
+            ...(!perItemSchedule && schedule.date
+              ? schedule.start
+                ? {
+                    scheduledPickupAt: localDateTimeIso(schedule.date, schedule.start),
+                    ...(schedule.end ? { scheduledUntil: localDateTimeIso(schedule.date, schedule.end) } : {}),
+                  }
+                : { scheduledPickupAt: schedule.date }
+              : {}),
+            ...(schedule.notes.trim() ? { notes: schedule.notes.trim() } : {}),
+            ...(fulfillmentType === 'DELIVERY'
+              ? {
+                  deliveryAddress: schedule.address.trim(),
+                  ...(schedule.courierId ? { courierId: schedule.courierId } : {}),
+                  ...(deliveryFeeValue > 0 ? { freightAmount: deliveryFeeValue } : {}),
+                }
+              : {}),
           }
         : {}),
       // Conversão de orçamento (ADR-024, 2.B): quando o PDV foi aberto a partir de um orçamento, a
@@ -1836,6 +1905,10 @@ export default function VendaPage() {
       // é o `change` local, do dinheiro recebido a mais. `orderNumber` (ADR-023) vem no online; no
       // offline a resposta é um stub sem número → comprovante imprime "código pendente".
       const res = await apiPost<{ change: number; orderNumber?: number | null }>('/orders', parsed.data);
+      // ADR-042: "Salvar este endereço no cadastro do cliente" — best-effort, a venda já foi gravada.
+      if (isScheduled && fulfillmentType === 'DELIVERY' && schedule.saveAddress && customerId) {
+        void apiPatch(`/customers/${customerId}`, { address: schedule.address.trim() }).catch(() => {});
+      }
       setView({ ...doneBase, change, orderNumber: res?.orderNumber ?? null });
       // ADR-024 (2.B): a venda converteu o orçamento (agora CONVERTED). Esquece a origem para uma
       // eventual "Voltar e editar → concluir" não reenviar o `quoteId` (que daria 409 já convertido).
@@ -2103,10 +2176,11 @@ export default function VendaPage() {
   /** Limpa/esconde a retirada futura (ADR-020) — usado ao remover a opção e ao iniciar nova venda. */
   function resetSchedule() {
     setShowSchedule(false);
-    setPickupDate('');
     setPerItemSchedule(false);
     setItemPickupDates({});
-    setOrderNote('');
+    setFulfillmentType('PICKUP');
+    setDeliveryFee('');
+    setSchedule(EMPTY_SCHEDULE);
   }
 
   /** Seletor de cliente (busca no servidor por nome) reusado no fiado (obrigatório) e na retirada
@@ -2215,13 +2289,24 @@ export default function VendaPage() {
           <p className="inline-flex items-center gap-2 rounded-full bg-blue-100 px-3 py-1 text-sm font-medium text-blue-700">
             Confira antes de confirmar
           </p>
-          <Summary items={pricedCart} total={totals.total} discount={discountValue} />
+          <Summary items={pricedCart} total={totals.total} discount={discountValue} freight={deliveryFeeValue} />
           <PaymentsLines
             payments={buildPersistedPayments()}
             change={change}
             storeCredit={storeCreditUsed}
             exchangeCredit={exchangeCredit}
           />
+          {/* Agenda de entregas (ADR-042): dia, faixa, endereço, entregador e observações. */}
+          {isScheduled && (
+            <ScheduleStep
+              type={fulfillmentType}
+              value={schedule}
+              onChange={setSchedule}
+              customerId={customerId}
+              customerName={customerName}
+              perItemSchedule={perItemSchedule}
+            />
+          )}
           {isCredit && (
             <div className="flex items-center justify-between rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 ring-1 ring-amber-200">
               <span>A prazo{customerName ? ` — ${customerName}` : ''}</span>
@@ -3325,21 +3410,45 @@ export default function VendaPage() {
                 e dê baixa (parcial ou total) na tela <strong>Entregas</strong>.
               </p>
 
-              {/* Previsão única do pedido (quando não é por item). */}
-              {!perItemSchedule && (
-                <div className="flex items-center justify-between">
-                  <label htmlFor="pickup" className="text-sm text-gray-600">
-                    Previsão de retirada (opcional)
+              {/* ADR-042: Retirada × Entrega. A taxa de entrega entra AQUI (antes do pagamento) porque
+                  muda o total; dia, faixa, endereço e entregador vêm na revisão, após "Concluir". */}
+              <div className="grid grid-cols-2 gap-2" role="group" aria-label="Retirada ou entrega">
+                {(['PICKUP', 'DELIVERY'] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setFulfillmentType(t)}
+                    className={`rounded-lg border px-3 py-2 text-left text-sm font-semibold ${
+                      fulfillmentType === t
+                        ? 'border-indigo-600 bg-white text-indigo-700 ring-1 ring-indigo-600'
+                        : 'border-indigo-200 bg-white/60 text-gray-700 hover:border-indigo-400'
+                    }`}
+                  >
+                    {FULFILLMENT_TYPE_LABELS[t]}
+                    <span className="block text-xs font-normal text-gray-500">
+                      {t === 'PICKUP' ? 'cliente busca na loja' : 'a loja leva até o cliente'}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {fulfillmentType === 'DELIVERY' && (
+                <div className="flex items-center justify-between gap-2">
+                  <label htmlFor="delivery-fee" className="text-sm text-gray-600">
+                    Taxa de entrega (opcional)
                   </label>
-                  <input
-                    id="pickup"
-                    type="date"
-                    value={pickupDate}
-                    onChange={(e) => setPickupDate(e.target.value)}
-                    className="rounded-lg border border-indigo-300 bg-white px-2 py-1 text-sm"
+                  <MoneyInput
+                    id="delivery-fee"
+                    value={deliveryFee}
+                    onChange={setDeliveryFee}
+                    placeholder="R$ 0,00"
+                    className="w-32 rounded-lg border border-indigo-300 bg-white px-2 py-1 text-right text-sm"
                   />
                 </div>
               )}
+              <p className="text-xs text-indigo-800">
+                Dia, horário{fulfillmentType === 'DELIVERY' ? ', endereço e entregador' : ''} e observações você
+                informa na revisão, depois de <strong>Concluir</strong>.
+              </p>
 
               {/* Flag "Data por item": libera um campo de data por linha do carrinho. */}
               <label className="flex items-center gap-2 text-sm text-gray-700">
@@ -3379,28 +3488,18 @@ export default function VendaPage() {
                   anexar cliente, sem um segundo seletor aqui. Só um lembrete quando ainda não há
                   cliente selecionado (e o fiado/crédito não estão coletando). */}
               {!showCredit && !showStoreCredit && !customerId && (
-                <p className="rounded-lg bg-indigo-50 px-3 py-2 text-xs text-indigo-700">
-                  Para a entrega sair com nome, identifique o cliente em “Identificar cliente
-                  (opcional)”, acima.
+                <p
+                  className={`rounded-lg px-3 py-2 text-xs ${
+                    fulfillmentType === 'DELIVERY'
+                      ? 'bg-amber-50 text-amber-800 ring-1 ring-amber-200'
+                      : 'bg-indigo-50 text-indigo-700'
+                  }`}
+                >
+                  {fulfillmentType === 'DELIVERY'
+                    ? 'A entrega precisa do cliente (nome, telefone e endereço): identifique-o em “Identificar cliente”, acima — dá para cadastrar na hora.'
+                    : 'Para a retirada sair com nome, identifique o cliente em “Identificar cliente (opcional)”, acima.'}
                 </p>
               )}
-
-              {/* Observação livre do pedido — informações gerais que quem abrir a Entrega precisa ver
-                  (ex.: "quem retira não é quem comprou"). Editável também no detalhe da Entrega. */}
-              <div>
-                <label htmlFor="ordernote" className="mb-1 block text-sm text-gray-600">
-                  Observação do pedido (opcional)
-                </label>
-                <textarea
-                  id="ordernote"
-                  value={orderNote}
-                  onChange={(e) => setOrderNote(e.target.value)}
-                  rows={2}
-                  maxLength={500}
-                  placeholder="Ex.: quem vai retirar é o pedreiro João; ligar antes de separar…"
-                  className="w-full rounded-lg border border-indigo-300 bg-white px-3 py-2 text-sm"
-                />
-              </div>
 
               {!online && (
                 <p className="text-xs text-red-600">

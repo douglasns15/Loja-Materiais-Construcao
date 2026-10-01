@@ -91,6 +91,11 @@ const ORDER_ROW_SELECT = {
   registeredByName: true,
   customer: { select: { id: true, name: true } },
   items: { select: { quantity: true, baseQuantity: true, deliveredBaseQty: true } },
+  // Agenda de entregas (ADR-042).
+  fulfillmentType: true,
+  scheduledUntil: true,
+  deliveryAddress: true,
+  courier: { select: { name: true } },
 } as const;
 
 type OrderRowRaw = {
@@ -104,6 +109,10 @@ type OrderRowRaw = {
   registeredByName: string | null;
   customer: { id: string; name: string } | null;
   items: { quantity: Prisma.Decimal; baseQuantity: Prisma.Decimal | null; deliveredBaseQty: Prisma.Decimal }[];
+  fulfillmentType: 'PICKUP' | 'DELIVERY' | null;
+  scheduledUntil: Date | null;
+  deliveryAddress: string | null;
+  courier: { name: string } | null;
 };
 
 /** QUANTIDADE (unidade-base) ainda a sair de uma venda: soma o que falta de cada linha. É o número
@@ -138,6 +147,10 @@ function toOrderRow(o: OrderRowRaw) {
     customerName: o.customer?.name ?? null,
     itemsCount: itemsCountOf(o),
     itemsPending: itemsPendingOf(o),
+    fulfillmentType: o.fulfillmentType,
+    scheduledUntil: o.scheduledUntil,
+    deliveryAddress: o.deliveryAddress,
+    courierName: o.courier?.name ?? null,
   };
 }
 
@@ -321,6 +334,9 @@ deliveries.get('/:id', async (c) => {
       where: { id, tenantId, deliveryMode: 'SCHEDULED' },
       include: {
         customer: { select: { id: true, name: true, phone: true } },
+        // Entregador (ADR-042) — `fulfillmentType`/`scheduledUntil`/`deliveryAddress`/`dispatchedAt`
+        // já vêm como colunas do pedido.
+        courier: { select: { id: true, name: true, phone: true } },
         items: { orderBy: { productName: 'asc' } },
         itemDeliveries: { orderBy: { deliveredAt: 'desc' } },
         // Saldo a prazo (ADR-019) — 0 quando a venda foi 100% paga. O comprovante de retirada usa

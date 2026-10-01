@@ -386,6 +386,12 @@ testável exaustivamente e compartilhada entre as duas apps.
 | `POST /:id/return` 🔒 | Devolução **total**: marca `RETURNED`, estorna estoque, saída no caixa. Exige caixa aberto. |
 | `POST /:id/return-items` 🔒 | Devolução por item (parcial **ou total**); excedente vira crédito na loja, dinheiro, ou **estorno na mesma forma** (`target` = `STORE_CREDIT`/`CASH`/`SAME_AS_PAYMENT` — ADR-033; no estorno só a parcela em dinheiro sai do caixa). Cada item aceita `condition` (`GOOD` padrão × `DEFECTIVE`): defeito **não** volta ao estoque vendável — vira defeituoso (`Product.defectiveQty` + ledger na linha). **Valor devolvido (ADR-036):** é o **valor pago** por item (`itemPaidValue`) — reflete o desconto **por item** (já em `OrderItem.total`) e rateia o desconto **do pedido** (`Order.discountAmount`); frete não é ratateado. `intent = EXCHANGE` é **rejeitado** aqui (ADR-033 revisado): a troca é concluída no PDV via `POST /orders` `exchangeReturn`; esta rota é só devolução/estorno. **`customerId` (ADR-035, pick-no-retorno):** opcional; quando `target = STORE_CREDIT` e a venda **não** tem cliente, o servidor valida que é cliente do tenant, **anexa** à venda (`Order.customerId`) e credita — se a venda já tem cliente, é ignorado. **ADR-036:** se a devolução (REFUND) deixar a venda **totalmente devolvida**, marca `order.status = RETURNED` (sai do faturamento nos relatórios, como as canceladas). Troca (EXCHANGE) não marca. |
 
+> **Agenda de entregas (ADR-042)** — `POST /orders` com `deliveryMode = SCHEDULED` aceita `fulfillmentType`
+> (`PICKUP` padrão · `DELIVERY`), `scheduledPickupAt` agora como data **ou** data+hora ISO (início da faixa),
+> `scheduledUntil` (fim da faixa; precisa ser depois do início), `deliveryAddress` (obrigatório em `DELIVERY`;
+> gravado como snapshot), `courierId` (funcionário ATIVO da loja, só em `DELIVERY`) e `freightAmount` (taxa de
+> entrega, soma ao total). Em venda `IMMEDIATE` esses campos são ignorados.
+
 > **Produto sem controle de estoque (`trackStock = false`, ADR-040 §2)** — vale para todas as rotas acima:
 > a venda (online e offline/sync) **não trava** por saldo e não grava `StockMovement` nem reserva
 > (`reservedQty`); cancelamento, devolução total/por item e troca **não estornam** estoque nem geram
@@ -453,6 +459,8 @@ testável exaustivamente e compartilhada entre as duas apps.
 | `POST /customers` 🔒 · `PATCH /customers/:id` 🔒 · `DELETE /customers/:id` 🔒 | CRUD de clientes. |
 | `GET /suppliers` · `GET /suppliers/:id` | Lista e detalhe de fornecedores. |
 | `POST /suppliers` 🔒 · `PATCH /suppliers/:id` 🔒 · `DELETE /suppliers/:id` 🔒 | CRUD de fornecedores. |
+| `GET /employees` | Funcionários da loja (ADR-042; cadastro sem login — entregadores). `?activeOnly=true` traz só os ativos (seletor de entregador do PDV). Qualquer usuário autenticado. |
+| `POST /employees` 🔒 · `PATCH /employees/:id` 🔒 · `DELETE /employees/:id` 🔒 | Cria (`name`, `phone?`, `role` `COURIER`·`OTHER`) / edita (inclui `isActive`, `phone: null` limpa) / exclui (soft-delete). **Admin.** |
 
 **`/receivables` — Fiado / contas a receber (ADR-019, ADR-022, ADR-026)**
 
@@ -473,7 +481,7 @@ testável exaustivamente e compartilhada entre as duas apps.
 | Método · Rota | O que faz |
 |---|---|
 | `GET /` | Lista **AGRUPADA por cliente** (ADR-028): devolve `{ cards, nextCursor }`, onde cada card é `{ kind: 'account', account }` — uma conta de retiradas (`E-0001`) com os agregados (`ordersCount`, `total`, `itemsPending`, `nextPickupAt`) e o extrato `orders` (as vendas `V-000XXX`) — ou `{ kind: 'order', order }` para uma venda SCHEDULED **sem cliente** (avulsa, não entra em conta). Paginação keyset num tempo comum (`openedAt` da conta / `createdAt` da avulsa), mesclando os dois fluxos. `?status=pending` (default) / `completed` / `all` filtra por status da conta e por `fulfillmentStatus` das avulsas. **Busca** (varre todas as situações, ignora `status`): `?code=` casa a conta pelo `accountNumber` (`E-000X`) OU uma venda dela pelo `orderNumber` (`V-000XXX`), e as avulsas pelo `orderNumber`; `?customer=` filtra a conta pelo nome do cliente (avulsas não têm cliente ⇒ ficam de fora). `itemsPending`/`itemsCount` (na conta e em cada venda do extrato) são **quantidades em unidade-base** — o que falta sair / o total vendido, **não** contagem de linhas (3 sacos com 1 já retirado ⇒ `itemsPending` = 2; espelha o "Falta sair" do detalhe). |
-| `GET /:id` | Detalhe de UMA venda de retirada: inclui `orderNumber`, `discountAmount`, os itens com `unitPrice`/`total` e `outstandingBalance` (saldo a prazo em aberto, `0` quando 100% pago) — usados para reimprimir o **comprovante de retirada** ("PAGO — FALTA RETIRAR" quando saldo `0`; só "FALTA RETIRAR" quando há saldo a prazo). |
+| `GET /:id` | Detalhe de UMA venda de retirada: inclui `orderNumber`, `discountAmount`, os itens com `unitPrice`/`total` e `outstandingBalance` (saldo a prazo em aberto, `0` quando 100% pago) — usados para reimprimir o **comprovante de retirada** ("PAGO — FALTA RETIRAR" quando saldo `0`; só "FALTA RETIRAR" quando há saldo a prazo). Agenda de entregas (ADR-042): traz `fulfillmentType`, `scheduledUntil`, `deliveryAddress`, `dispatchedAt` e `courier` (`{ id, name, phone }`). As linhas do `GET /` (extrato) trazem `fulfillmentType`, `scheduledUntil`, `deliveryAddress` e `courierName`. |
 | `PATCH /:id` 🔒 | Atualiza status/dados da entrega. |
 | `POST /:id/deliver` 🔒 | Confirma entrega/retirada → efetiva a saída de estoque adiada (produto sem controle de estoque só registra a retirada, sem `StockMovement`). Ao finalizar a última venda da conta (todas COMPLETED), **fecha a conta** (`DeliveryAccount.status = COMPLETED` + `closedAt`, ADR-028). |
 
@@ -522,6 +530,7 @@ Alertas CALCULADOS sob demanda (custo-zero: nada é gravado; a pendência some q
 |---|---|
 | `GET /tenant` · `PATCH /tenant` 🔒 | Dados da loja / edição. Inclui taxas da maquininha (ADR-016) e `blindCashClose` (fechamento cego do caixa, por loja). |
 | `POST /tenant/logo` 🔒 · `DELETE /tenant/logo` 🔒 | Upload (URL assinada R2) / remoção do logo. |
+| `GET /tenant/delivery-settings` · `PUT /tenant/delivery-settings` 🔒 | Período de entregas (ADR-042): `{ slotMinutes, maxPerSlot, hours: { "0".."6": [{ start, end }] } }`. `GET` para qualquer usuário (coluna nula ⇒ padrão: 30 min, sem limite, sem restrição); `PUT` substitui o objeto inteiro — **Admin**. |
 | `GET /me` · `PATCH /me` | Perfil da sessão (+ memberships) / edição do próprio perfil. O `GET` traz `tenantActive`, `offlineSales` (ADR-011 §9) e `modules` — chaves dos módulos **ativos** da loja (ADR-039: `CONSTRUCTION_UNITS`, `SCALE_LABEL`, `OFFLINE_SALES`), para a web esconder o que o ramo não usa. |
 | `GET /users` | Lista usuários da loja. |
 | `POST /users/invite` 🔒 · `PATCH /users/:id` 🔒 · `DELETE /users/:id` 🔒 | Convida / edita papel / remove usuário (RBAC, ADR-008). |

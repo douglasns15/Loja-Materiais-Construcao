@@ -1,6 +1,11 @@
 import { Hono } from 'hono';
 import { Prisma } from '@nexoloja/db';
-import { updateTenantSchema, validateLogo } from '@nexoloja/shared';
+import {
+  deliverySettingsSchema,
+  parseDeliverySettings,
+  updateTenantSchema,
+  validateLogo,
+} from '@nexoloja/shared';
 import { type Env, getConnectionString, getPrisma, getTenantId } from '../lib/request';
 import { requireAdmin, requireAuth } from '../middleware/auth';
 
@@ -86,6 +91,48 @@ tenant.patch('/', requireAdmin, async (c) => {
     }
     console.error('PATCH /tenant falhou:', err);
     return c.json({ ok: false, error: 'Falha ao salvar os dados da loja.' }, 500);
+  }
+});
+
+/**
+ * Período de entregas da loja (ADR-042): faixa (min), limite por faixa e horários por dia da semana.
+ * Leitura para qualquer usuário (o PDV monta as faixas ao agendar); coluna nula ⇒ padrão.
+ */
+tenant.get('/delivery-settings', async (c) => {
+  const tenantId = getTenantId(c);
+  if (!tenantId || !getConnectionString(c.env)) {
+    return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
+  }
+  try {
+    const prisma = getPrisma(c);
+    const row = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { deliverySettings: true } });
+    return c.json({ ok: true, data: parseDeliverySettings(row?.deliverySettings) });
+  } catch (err) {
+    console.error('GET /tenant/delivery-settings falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao buscar o período de entregas.' }, 500);
+  }
+});
+
+/** Salva o período de entregas (substitui o objeto inteiro). Admin — editado na tela de Entregas. */
+tenant.put('/delivery-settings', requireAdmin, async (c) => {
+  const tenantId = getTenantId(c);
+  if (!tenantId || !getConnectionString(c.env)) {
+    return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
+  }
+  const parsed = deliverySettingsSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) {
+    return c.json(
+      { ok: false, error: 'Período de entregas inválido. Confira os horários (início antes do fim).', issues: parsed.error.flatten() },
+      400,
+    );
+  }
+  try {
+    const prisma = getPrisma(c);
+    await prisma.tenant.update({ where: { id: tenantId }, data: { deliverySettings: parsed.data } });
+    return c.json({ ok: true, data: parsed.data });
+  } catch (err) {
+    console.error('PUT /tenant/delivery-settings falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao salvar o período de entregas.' }, 500);
   }
 });
 

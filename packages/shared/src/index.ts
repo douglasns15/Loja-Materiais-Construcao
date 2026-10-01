@@ -14,6 +14,7 @@ export * from './nfe';
 export * from './customer';
 export * from './category';
 export * from './supplier';
+export * from './employee';
 export * from './cashSession';
 export * from './sale';
 export * from './quote';

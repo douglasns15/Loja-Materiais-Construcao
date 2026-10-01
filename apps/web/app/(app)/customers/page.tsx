@@ -45,7 +45,7 @@ export default function CustomersPage() {
   const [error, setError] = useState<string | null>(null);
   // Falha na CARGA da listagem (≠ erro de validação/ação): liga a auto-recuperação (ADR-005).
   const [loadFailed, setLoadFailed] = useState(false);
-  const [form, setForm] = useState({ name: '', cpfCnpj: '', phone: '', email: '', notes: '' });
+  const [form, setForm] = useState({ name: '', cpfCnpj: '', phone: '', address: '', email: '', notes: '' });
   const [saving, setSaving] = useState(false);
   // Busca no servidor: `search` é o que está no campo; a query dispara com debounce.
   const [search, setSearch] = useState('');
@@ -107,6 +107,7 @@ export default function CustomersPage() {
     const payload: Record<string, string> = { name: form.name };
     if (form.cpfCnpj) payload.cpfCnpj = form.cpfCnpj;
     if (form.phone) payload.phone = form.phone;
+    if (form.address.trim()) payload.address = form.address.trim();
     if (form.email) payload.email = form.email;
     if (form.notes) payload.notes = form.notes;
 
@@ -119,7 +120,7 @@ export default function CustomersPage() {
     setSaving(true);
     try {
       await apiPost<Customer>('/customers', parsed.data);
-      setForm({ name: '', cpfCnpj: '', phone: '', email: '', notes: '' });
+      setForm({ name: '', cpfCnpj: '', phone: '', address: '', email: '', notes: '' });
       await load();
     } catch (e) {
       setError((e as Error).message);
@@ -167,6 +168,14 @@ export default function CustomersPage() {
           maxDigits={11}
           inputMode="tel"
           className="rounded-lg border border-gray-300 px-3 py-2 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+        />
+        {/* Endereço (ADR-042) — vai para a entrega agendada no PDV. */}
+        <input
+          placeholder="Endereço (rua, número, complemento · bairro)"
+          value={form.address}
+          onChange={(e) => setForm({ ...form, address: e.target.value })}
+          maxLength={300}
+          className="rounded-lg border border-gray-300 px-3 py-2 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 sm:col-span-2"
         />
         <input
           placeholder="E-mail"

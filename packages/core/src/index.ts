@@ -2553,3 +2553,59 @@ export function suggestedCategoriesForSegments(segments: readonly string[]): str
   }
   return out;
 }
+
+// -----------------------------------------------------------------------------
+// AGENDA DE ENTREGAS — faixas de horário (ADR-042)
+// -----------------------------------------------------------------------------
+
+/** Intervalo de atendimento num dia ("08:00"–"12:00"). */
+export interface DeliveryHoursRange {
+  start: string;
+  end: string;
+}
+
+/** O que a geração de faixas precisa do período de entregas (subconjunto do `deliverySettings`). */
+export interface DeliverySlotConfig {
+  slotMinutes: number;
+  /** Por dia da semana ("0" = domingo … "6" = sábado). Vazio (nenhum dia) = sem restrição. */
+  hours: Partial<Record<string, readonly DeliveryHoursRange[]>>;
+}
+
+/** Faixa padrão quando a loja não restringiu horários (nenhum dia configurado). */
+export const DEFAULT_DELIVERY_RANGE: DeliveryHoursRange = { start: '08:00', end: '20:00' };
+
+const toMin = (hhmm: string) => {
+  const [h = 0, m = 0] = hhmm.split(':').map(Number);
+  return h * 60 + m;
+};
+const toHHMM = (min: number) =>
+  `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+
+/**
+ * Faixas de horário oferecidas no PDV para um dia da semana (ADR-042): cada intervalo de atendimento
+ * é fatiado em faixas de `slotMinutes`, e só entram faixas que terminam dentro do intervalo
+ * (08:00–09:45 com 30 min ⇒ 08:00, 08:30, 09:00). Dia sem intervalo = fechado (lista vazia), a não
+ * ser que a loja não tenha configurado NENHUM dia — aí vale o padrão 08:00–20:00.
+ */
+export function deliverySlots(cfg: DeliverySlotConfig, weekday: number): DeliveryHoursRange[] {
+  const step = cfg.slotMinutes > 0 ? cfg.slotMinutes : 30;
+  const configured = Object.values(cfg.hours).some((r) => (r?.length ?? 0) > 0);
+  const ranges = configured ? (cfg.hours[String(weekday)] ?? []) : [DEFAULT_DELIVERY_RANGE];
+  const out: DeliveryHoursRange[] = [];
+  for (const r of [...ranges].sort((a, b) => toMin(a.start) - toMin(b.start))) {
+    for (let t = toMin(r.start); t + step <= toMin(r.end); t += step) {
+      out.push({ start: toHHMM(t), end: toHHMM(t + step) });
+    }
+  }
+  return out;
+}
+
+/** Fim da faixa a partir do início ("13:30" + 30 min ⇒ "14:00"); passa da meia-noite ⇒ "23:59". */
+export function slotEnd(start: string, slotMinutes: number): string {
+  return toHHMM(Math.min(toMin(start) + slotMinutes, 23 * 60 + 59));
+}
+
+/** Rótulo da faixa: "13:30–14:00" (início igual ao fim ⇒ só "13:30"). */
+export function slotLabel(start: string, end?: string | null): string {
+  return end && end !== start ? `${start}–${end}` : start;
+}

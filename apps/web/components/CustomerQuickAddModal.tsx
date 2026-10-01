@@ -5,8 +5,9 @@ import { createCustomerSchema, formatCpfCnpj, formatPhoneBr } from '@nexoloja/sh
 import { apiPost } from '@/lib/api';
 import { MaskedInput } from '@/components/MaskedInput';
 
-/** Cliente recém-criado devolvido ao chamador (o PDV já o seleciona). */
-export type CreatedCustomer = { id: string; name: string };
+/** Cliente recém-criado devolvido ao chamador (o PDV já o seleciona). `address`/`phone` voltam para a
+ *  etapa de agendamento já preencher o endereço da entrega (ADR-042). */
+export type CreatedCustomer = { id: string; name: string; phone?: string | null; address?: string | null };
 
 const inputClass =
   'mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900';
@@ -29,6 +30,7 @@ export function CustomerQuickAddModal({
     name: initialName,
     cpfCnpj: '',
     phone: '',
+    address: '',
     email: '',
     notes: '',
   });
@@ -43,6 +45,7 @@ export function CustomerQuickAddModal({
     const payload: Record<string, string> = { name: form.name.trim() };
     if (form.cpfCnpj.trim()) payload.cpfCnpj = form.cpfCnpj.trim();
     if (form.phone.trim()) payload.phone = form.phone.trim();
+    if (form.address.trim()) payload.address = form.address.trim();
     if (form.email.trim()) payload.email = form.email.trim();
     if (form.notes.trim()) payload.notes = form.notes.trim();
 
@@ -97,19 +100,8 @@ export function CustomerQuickAddModal({
               className={inputClass}
             />
           </div>
-          <div>
-            <label htmlFor="qc-cpf" className="block text-sm font-medium text-gray-700">
-              CPF/CNPJ
-            </label>
-            <MaskedInput
-              id="qc-cpf"
-              value={form.cpfCnpj}
-              onChange={(v) => setForm({ ...form, cpfCnpj: v })}
-              format={formatCpfCnpj}
-              maxDigits={14}
-              className={inputClass}
-            />
-          </div>
+          {/* Cadastro mínimo (ADR-042): nome, telefone e endereço vêm primeiro — é o que a entrega
+              precisa. CPF/e-mail/observações seguem opcionais abaixo. */}
           <div>
             <label htmlFor="qc-phone" className="block text-sm font-medium text-gray-700">
               Telefone
@@ -121,6 +113,33 @@ export function CustomerQuickAddModal({
               format={formatPhoneBr}
               maxDigits={11}
               inputMode="tel"
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label htmlFor="qc-address" className="block text-sm font-medium text-gray-700">
+              Endereço
+            </label>
+            <input
+              id="qc-address"
+              type="text"
+              value={form.address}
+              onChange={(e) => setForm({ ...form, address: e.target.value })}
+              maxLength={300}
+              placeholder="Rua, número, complemento · bairro"
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label htmlFor="qc-cpf" className="block text-sm font-medium text-gray-700">
+              CPF/CNPJ
+            </label>
+            <MaskedInput
+              id="qc-cpf"
+              value={form.cpfCnpj}
+              onChange={(v) => setForm({ ...form, cpfCnpj: v })}
+              format={formatCpfCnpj}
+              maxDigits={14}
               className={inputClass}
             />
           </div>
