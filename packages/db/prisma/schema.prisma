@@ -174,6 +174,18 @@ enum DeliveryMode {
   SCHEDULED // Retirada/entrega posterior: reserva na venda, baixa real só na retirada (parcial, conforme sai)
 }
 
+/// Tipo de saída de um pedido SCHEDULED (ADR-042): o cliente RETIRA na loja ou a loja ENTREGA.
+enum FulfillmentType {
+  PICKUP // Retirada na loja
+  DELIVERY // Entrega pela loja (endereço no pedido)
+}
+
+/// Função do funcionário (ADR-042). Enum extensível — novas funções entram como novos valores.
+enum EmployeeRole {
+  COURIER // Entregador
+  OTHER // Outra função
+}
+
 /// Situação de retirada de um pedido SCHEDULED (ADR-020). Cache derivado dos itens,
 /// no espírito do ADR-001 (cache desnormalizado + itens/eventos como fonte de verdade).
 enum FulfillmentStatus {
@@ -224,6 +236,10 @@ model Tenant {
   /// Ramos da loja (ADR-039), multisseleção. Backfill da migration 0041: lojas existentes = [CONSTRUCTION]
   /// (+ módulo `CONSTRUCTION_UNITS` ligado) ⇒ comportamento idêntico ao de antes. Vazio = ramo não informado.
   segments             StoreSegment[] @default([])
+  /// Período de entregas (ADR-042): `{ slotMinutes, maxPerSlot, hours: { "0".."6": [{ start, end }] } }`,
+  /// validado por Zod no shared (`deliverySettingsSchema`). NULL = padrão (faixa 30 min, sem limite, sem
+  /// restrição de horário). Editado na tela de Entregas.
+  deliverySettings     Json?
   isActive             Boolean        @default(true)
   createdAt            DateTime       @default(now())
   updatedAt            DateTime       @updatedAt
@@ -254,6 +270,7 @@ model Tenant {
   quotes              Quote[]
   quoteItems          QuoteItem[]
   nfeImportItems      NfeImportItem[]
+  employees           Employee[]
 
   @@map("tenants")
 }
@@ -574,6 +591,32 @@ model Supplier {
   @@map("suppliers")
 }
 
+/// Funcionário da loja (ADR-042) — cadastro simples, SEM login (o entregador normalmente não usa o
+/// sistema; quem usa é `User`, que exige identidade no Supabase Auth — ADR-005). Hoje serve para
+/// indicar o ENTREGADOR de cada entrega (`Order.courierId`); a função é extensível pelo enum.
+model Employee {
+  id            String       @id @default(uuid()) @db.Uuid
+  tenantId      String       @db.Uuid
+  name          String       @db.VarChar(120)
+  phone         String?      @db.VarChar(20)
+  role          EmployeeRole @default(COURIER)
+  isActive      Boolean      @default(true)
+  deletedAt     DateTime? // Soft-delete (ADR-004)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  // Autoria (ADR-010): `*Id` referência solta (sem FK); `*Name` snapshot.
+  createdById   String?      @db.Uuid
+  createdByName String?      @db.VarChar(100)
+  updatedById   String?      @db.Uuid
+  updatedByName String?      @db.VarChar(100)
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orders Order[]
+
+  @@index([tenantId, isActive])
+  @@map("employees")
+}
+
 // =============================================================================
 // MÓDULO CORE — Vendas (PDV / Caixa)
 // =============================================================================
@@ -637,6 +680,15 @@ model Order {
   // dele (agrupa as retiradas na tela, como a dívida agrupa o fiado). NULL em vendas IMMEDIATE e em
   // SCHEDULED sem cliente (balcão "pego depois") — que seguem como card avulso.
   deliveryAccountId String?            @db.Uuid
+  // Agenda de entregas (ADR-042). Só em SCHEDULED; nulos em IMMEDIATE. A faixa de horário começa em
+  // `scheduledPickupAt` (já DateTime) e termina em `scheduledUntil`. `deliveryAddress` é o SNAPSHOT do
+  // endereço no momento da venda (mudar o cadastro depois não altera o pedido). Backfill da 0042:
+  // SCHEDULED antigas = PICKUP (todo agendamento era retirada).
+  fulfillmentType   FulfillmentType?
+  scheduledUntil    DateTime?
+  deliveryAddress   String?            @db.VarChar(300)
+  dispatchedAt      DateTime? // "Saiu para entrega" (ADR-042 fatia 3)
+  courierId         String?            @db.Uuid // Entregador (Employee), opcional
   // Campos de sincronização offline
   syncStatus        SyncStatus         @default(PENDING) // Vendas nascem como PENDING no caixa offline
   createdAt         DateTime           @default(now())
@@ -649,6 +701,7 @@ model Order {
   user                User                @relation(fields: [userId], references: [id])
   customer            Customer?           @relation(fields: [customerId], references: [id])
   deliveryAccount     DeliveryAccount?    @relation(fields: [deliveryAccountId], references: [id])
+  courier             Employee?           @relation(fields: [courierId], references: [id], onDelete: SetNull)
   items               OrderItem[]
   payments            Payment[]
   delivery            Delivery?
@@ -665,6 +718,7 @@ model Order {
   @@index([tenantId, status])
   @@index([tenantId, fulfillmentStatus])
   @@index([deliveryAccountId]) // Buscar as vendas de uma conta de retiradas (ADR-028)
+  @@index([tenantId, scheduledPickupAt]) // Agenda do dia (ADR-042)
   @@map("orders")
 }
 
