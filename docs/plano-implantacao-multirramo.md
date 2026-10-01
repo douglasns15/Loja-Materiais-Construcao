@@ -1,7 +1,12 @@
 # Plano — Implantação multirramo (1ª loja de alimentos) + usuário multi-loja
 
-> **Estado em 2026-10-01: entrega #5 (`trackStock`) + "vendido inteiro também" (ADR-040 §4) NO AR — API
-> `22042b01`, web `8cfe172e`; E2E do Owner pendente. Próxima: #6 (cadastro em sequência).**
+> **Estado em 2026-10-01 (noite):** encaixados antes da #6, a pedido do Owner — **Estoque de pesados por
+> peças** (ADR-040 §4.1, commit `a0cb22d`) e **Agenda de entregas** (ADR-042: migration `0042` aplicada +
+> 3 fatias, commits `74d0568`/`9dbb6ae`/`106ba9f`). Ambos IMPLEMENTADOS, **deploy (API→web) e E2E
+> pendentes** (Owner pediu deploy no final). Próxima: #6 (cadastro em sequência).
+>
+> Entrega #5 (`trackStock`) + "vendido inteiro também" (ADR-040 §4) NO AR — API `22042b01`, web `8cfe172e`;
+> E2E do Owner VALIDADO.
 >
 > Entrega #4 (gating na web) NO AR — web `275b72a9`; E2E do Owner VALIDADO (inclui a criação da loja de
 > alimentos pelo painel, entrega #3).
