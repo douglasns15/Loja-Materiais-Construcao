@@ -108,6 +108,20 @@ o protocolo serial muda por marca e, numa PWA, só funciona via Web Serial no **
   gravada (dado legado) segue no cadastro genérico.
 - **PDV:** botões "+ kg · R$ 39,90" (digita o peso, ADR-040 §1) e "+ inteiro · R$ 45,00" (preço fixo, passo 1).
 
+#### 4.1 Estoque de pesados por peças (aprovado pelo Owner 2026-10-01, achado do E2E da #5)
+
+O Owner precisa saber **quanto tem** de frango/carne: a mercadoria chega em **peças**, mas a régua é **kg**.
+- **Saldo sempre em kg/L** (o ledger não muda). Telas de saldo (Estoque, detalhe de estoque, detalhe do produto,
+  busca do PDV) mostram **3 casas** e, se o produto vende inteiro, **"≈ N peças"** = saldo ÷ peso médio
+  (`approxPieces`).
+- **Entrada por peças** (tela Estoque, produto kg/L): alterna "Peso total" × "Peça a peça" — digita o peso de cada
+  peça (Enter adiciona), o sistema soma (`sumPieceWeights`) e grava UMA Entrada em kg; o detalhe vai no motivo
+  ("3 peças: 4,200 + 3,900 + 4,400 kg", `pieceEntryLabel`, ≤ 150). **Sem mudança de API/contrato.**
+- **Última peça** (`wholeOfWeighedSale`): o inteiro baixa o peso MÉDIO, mas a peça real pode pesar menos (1,1 kg
+  no estoque, média 1,2). Libera se `inteiros ≤ ceil(disponível ÷ média)` e a baixa **para no disponível** (zera,
+  não fica negativo). Mesma regra no PDV (cliente) e no `POST /orders` (servidor, online).
+- Peso também com 3 casas no carrinho/resumo/cupom/relatórios (`formatWeight`, shared).
+
 ---
 
 ## Impacto no banco (aprovado — regra 1)

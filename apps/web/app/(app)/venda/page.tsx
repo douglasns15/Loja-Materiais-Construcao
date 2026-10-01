@@ -33,6 +33,9 @@ import {
   roundQuantity,
   sellableQty,
   sellsWholeOfWeighed,
+  isWeighedUnit,
+  wholeOfWeighedSale,
+  approxPieces,
   stepQuantity,
   maxStoreCreditForSale,
   pairAvailableQty,
@@ -1163,6 +1166,19 @@ export default function VendaPage() {
    * (com o fator da embalagem), lado principal de um par e lado agregado de um par — cada par
    * consome 1 de cada lado. Sem isso, misturar avulso e par estouraria o estoque real.
    */
+  /**
+   * Trava de estoque de UMA linha (unidade-base): `qty` da linha + o que as outras linhas do mesmo
+   * produto já usam cabem no disponível? Inteiro de produto por peso (ADR-040 §4) usa a regra da
+   * "última peça" (`wholeOfWeighedSale`) — a peça real pode pesar menos que a média. O servidor
+   * revalida no `POST /orders`.
+   */
+  function fitsStock(line: CartItem, qty: number, otherBase: number): boolean {
+    if (line.saleMode === 'ALT' && line.unitType === 'UNIT' && isWeighedUnit(line.baseUnitType)) {
+      return wholeOfWeighedSale(qty, line.conversionFactor, line.stockQty - otherBase).fits;
+    }
+    return otherBase + qty * line.conversionFactor <= line.stockQty;
+  }
+
   function baseUsedByProduct(productId: string, exceptKey?: string): number {
     return cart
       .filter((c) => c.key !== exceptKey)
@@ -1383,7 +1399,7 @@ export default function VendaPage() {
     // produto — inclusive as linhas de PAR, que também consomem este produto (ADR-015) — mais
     // a base desta linha (EF-3).
     const otherBase = baseUsedByProduct(p.id, key);
-    if (otherBase + newQty * factorToBase > line.stockQty) {
+    if (!fitsStock(line, newQty, otherBase)) {
       setError(`Estoque insuficiente para "${p.name}" (disponível: ${line.stockQty}).`);
       return;
     }
@@ -1587,7 +1603,7 @@ export default function VendaPage() {
     } else {
       const stock = Number(products.find((p) => p.id === item.productId)?.stockQty ?? item.stockQty);
       const otherBase = baseUsedByProduct(item.productId, key);
-      if (otherBase + nextQty * item.conversionFactor > stock) {
+      if (!fitsStock({ ...item, stockQty: stock }, nextQty, otherBase)) {
         setError(`Estoque insuficiente para "${item.name}" (disponível: ${stock}).`);
         return;
       }
@@ -2662,7 +2678,11 @@ export default function VendaPage() {
                       <span className="shrink-0 text-right">
                         <span className="block font-medium">{BRL(p.salePrice)}</span>
                         <span className={`block text-xs ${out ? 'text-red-500' : 'text-gray-500'}`}>
-                          {out ? 'sem estoque' : Number.isFinite(stock) ? `est. ${stock}` : ''}
+                          {out
+                            ? 'sem estoque'
+                            : Number.isFinite(stock)
+                              ? `est. ${isWeighedUnit(p.unit) ? `${formatWeight(stock)} ${unitShort(p.unit)}` : stock}`
+                              : ''}
                         </span>
                       </span>
                     </button>
@@ -2697,7 +2717,14 @@ export default function VendaPage() {
                       </span>
                     </span>
                     <span className={`shrink-0 text-xs ${out ? 'text-red-500' : 'text-gray-500'}`}>
-                      {out ? 'sem estoque' : Number.isFinite(stock) ? `est. ${stock} ${unitShort(p.unit)}` : ''}
+                      {out
+                        ? 'sem estoque'
+                        : !Number.isFinite(stock)
+                          ? ''
+                          : wholeOfWeighed
+                            ? // ADR-040 §4: saldo em kg + "≈ N peças" pelo peso médio.
+                              `est. ${formatWeight(stock)} ${unitShort(p.unit)} (≈ ${approxPieces(stock, factor) ?? 0} pç)`
+                            : `est. ${stock} ${unitShort(p.unit)}`}
                     </span>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-2">

@@ -978,6 +978,68 @@ export function sellsWholeOfWeighed(p: AltUnitConfig & { unit: string }): boolea
   return isWeighedUnit(p.unit) && p.altUnit === 'UNIT' && hasAltUnit(p);
 }
 
+/**
+ * Venda do INTEIRO de produto por peso com controle de estoque — regra da "última peça" (ADR-040 §4).
+ * O inteiro baixa o PESO MÉDIO, mas a peça real pode pesar menos: com 1,1 kg no estoque e média
+ * 1,2 kg, o último frango não pode ficar travado. Cabe se o pedido (qtd × média) cabe no disponível
+ * OU se a quantidade de inteiros não passa das peças que ainda existem (`ceil(disponível ÷ média)`,
+ * com disponível > 0). A baixa nunca passa do disponível (o estoque zera, não fica negativo).
+ */
+export function wholeOfWeighedSale(
+  wholes: number,
+  avgWeight: number,
+  available: number,
+): { fits: boolean; baseQty: number } {
+  const requested = Number((wholes * avgWeight).toFixed(4));
+  if (requested <= available + 1e-9) return { fits: true, baseQty: requested };
+  if (available > 0 && avgWeight > 0 && wholes <= Math.ceil(available / avgWeight - 1e-9)) {
+    return { fits: true, baseQty: Number(available.toFixed(4)) };
+  }
+  return { fits: false, baseQty: requested };
+}
+
+/**
+ * "≈ N peças" do saldo em kg/L (ADR-040 §4): saldo ÷ peso médio, arredondado. `null` sem peso
+ * médio ou sem saldo — a tela mostra só os kg.
+ */
+export function approxPieces(stockQty: number, avgWeight: number | null | undefined): number | null {
+  if (!avgWeight || avgWeight <= 0 || !(stockQty > 0)) return null;
+  return Math.round(stockQty / avgWeight);
+}
+
+/** Resultado da "Entrada por peças" (ADR-040 §4): nº de peças, total e peso médio (3 casas). */
+export interface PieceEntry {
+  pieces: number;
+  total: number;
+  average: number;
+}
+
+/**
+ * Soma a "Entrada por peças": a mercadoria chega em peças (3 peças de picanha: 4,2 + 3,9 + 4,4 kg)
+ * e o estoque é em kg. `null` se a lista está vazia ou tem peso ≤ 0 / inválido.
+ */
+export function sumPieceWeights(weights: readonly number[]): PieceEntry | null {
+  if (weights.length === 0 || weights.some((w) => !Number.isFinite(w) || w <= 0)) return null;
+  const total = Number(weights.reduce((s, w) => s + w, 0).toFixed(3));
+  return { pieces: weights.length, total, average: Number((total / weights.length).toFixed(3)) };
+}
+
+/** 0,85 → "0,850" sem depender de locale (o core é puro). */
+const fmt3 = (v: number) => v.toFixed(3).replace('.', ',');
+
+/**
+ * Texto da entrada por peças para o motivo da movimentação (cabe em `maxLen`):
+ * "3 peças: 4,200 + 3,900 + 4,400 kg"; se não couber, "12 peças · 12,600 kg (média 1,050 kg)".
+ */
+export function pieceEntryLabel(weights: readonly number[], unitAbbr: string, maxLen = 80): string {
+  const sum = sumPieceWeights(weights);
+  if (!sum) return '';
+  const noun = sum.pieces === 1 ? 'peça' : 'peças';
+  const full = `${sum.pieces} ${noun}: ${weights.map(fmt3).join(' + ')} ${unitAbbr}`;
+  if (full.length <= maxLen) return full;
+  return `${sum.pieces} ${noun} · ${fmt3(sum.total)} ${unitAbbr} (média ${fmt3(sum.average)} ${unitAbbr})`;
+}
+
 /** Casas decimais da quantidade no ledger (`Decimal(12,4)`) — teto de qualquer regra. */
 export const LEDGER_QTY_DECIMALS = 4;
 

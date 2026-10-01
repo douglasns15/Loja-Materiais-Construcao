@@ -22,9 +22,11 @@ import {
   receivableBalance,
   returnableBaseQty,
   sellableQty,
+  sellsWholeOfWeighed,
   splitReturnValue,
   toBaseQuantity,
   tracksStock,
+  wholeOfWeighedSale,
 } from '@nexoloja/core';
 import {
   cancelOrderSchema,
@@ -657,6 +659,25 @@ orders.post('/', requireActiveTenant, async (c) => {
         stockQty: Number(p.stockQty),
         reservedQty: Number(p.reservedQty),
       });
+      // ADR-040 §4 — "última peça": o INTEIRO de produto por peso baixa o peso MÉDIO, mas a peça real
+      // pode ser mais leve (1,1 kg no estoque, média 1,2). Cabe se ainda há peças, e a baixa para no
+      // disponível (zera, não fica negativo). Desconta o que linhas anteriores da venda já usaram.
+      if (
+        !isOffline &&
+        Number.isFinite(available) &&
+        item.saleMode === 'ALT' &&
+        sellsWholeOfWeighed({ ...altCfg, unit: p.unit })
+      ) {
+        const usedBefore = lines
+          .filter((l) => l.product.id === p.id)
+          .reduce((s, l) => s + l.baseQty, 0);
+        const whole = wholeOfWeighedSale(
+          item.quantity,
+          Number(p.conversionFactor),
+          Number((available - usedBefore).toFixed(4)),
+        );
+        if (whole.fits) baseQty = whole.baseQty;
+      }
       if (!isOffline && available < baseQty) {
         return c.json(
           {

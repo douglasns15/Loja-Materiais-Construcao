@@ -5,6 +5,7 @@ import {
   closedUnitTerms,
   isValidGtin,
   onlyDigits,
+  formatWeight,
   updateProductSchema,
   unitTypeLabels,
   visibleUnitTypes,
@@ -17,6 +18,8 @@ import {
   closedFineUnit,
   isClosedPrimary,
   netMarginPercent,
+  approxPieces,
+  isWeighedUnit,
   sellsWholeOfWeighed,
   splitWholeAndRemainder,
   surchargePerBaseUnit,
@@ -425,6 +428,11 @@ export function ProductDetail({
     conversionFactor: product.conversionFactor != null ? Number(product.conversionFactor) : null,
   });
   const stockLabel = (() => {
+    // ADR-040 §4: peso/volume com 3 casas + "≈ N peças" pelo peso médio do inteiro.
+    if (!closed && isWeighedUnit(product.unit)) {
+      const pieces = savedSellsWhole ? approxPieces(Number(product.stockQty), barLen) : null;
+      return `${formatWeight(Number(product.stockQty))} ${product.unit === 'LITER' ? 'L' : 'kg'}${pieces != null ? ` (≈ ${pieces} ${pieces === 1 ? 'peça' : 'peças'})` : ''}`;
+    }
     if (!closed) return `${QTY(product.stockQty)} ${unitTypeLabels[product.unit]}`;
     const { whole, remainderMeters } = splitWholeAndRemainder(Number(product.stockQty), barLen);
     return `${whole} ${unitTypeLabels[product.unit].toLowerCase()}${remainderMeters > 0 ? ` + ${QTY(remainderMeters)} ${savedTerms.fineAbbrev}` : ''}`;

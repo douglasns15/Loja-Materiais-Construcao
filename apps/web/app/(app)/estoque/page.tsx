@@ -4,18 +4,23 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   closedUnitTerms,
   createStockMovementSchema,
+  formatWeight,
   inventoryAdjustmentSchema,
   unitTypeLabels,
   type UnitType,
 } from '@nexoloja/shared';
 import {
+  approxPieces,
   isClosedPrimary,
   isLowStock,
+  isWeighedUnit,
   needsReplenishment,
   normalizeSearchText,
+  pieceEntryLabel,
   productMatchesQuery,
   replenishmentShortfall,
   splitWholeAndRemainder,
+  sumPieceWeights,
 } from '@nexoloja/core';
 import { apiGet, apiPost } from '@/lib/api';
 import { useReloadOnReconnect } from '@/lib/useReloadOnReconnect';
@@ -88,7 +93,12 @@ function Chevron({ open, className = 'text-gray-500' }: { open: boolean; classNa
  * "X barras + Y m" (barra/rolo) ou "X pacotes + Y un" (pacote). Para os demais, o número na
  * unidade de venda, como sempre.
  */
-function fmtStock(p: { unit: string; stockQty: string; conversionFactor: string | null }): string {
+function fmtStock(p: {
+  unit: string;
+  stockQty: string;
+  conversionFactor: string | null;
+  altUnit?: string | null;
+}): string {
   const qty = Number(p.stockQty);
   if (isClosedPrimary({ unit: p.unit, conversionFactor: p.conversionFactor != null ? Number(p.conversionFactor) : null })) {
     const barLen = Number(p.conversionFactor);
@@ -96,6 +106,14 @@ function fmtStock(p: { unit: string; stockQty: string; conversionFactor: string 
     const unitName = unitTypeLabels[p.unit as UnitType].toLowerCase();
     const fineAbbrev = closedUnitTerms(p.unit).fineAbbrev;
     return `${whole} ${unitName}${remainderMeters > 0 ? ` + ${QTY(remainderMeters)} ${fineAbbrev}` : ''}`;
+  }
+  // ADR-040 §4: peso/volume com 3 casas e, se o produto vende inteiro (peso médio), "≈ N peças".
+  if (isWeighedUnit(p.unit)) {
+    const pieces =
+      p.altUnit === 'UNIT' && p.conversionFactor != null
+        ? approxPieces(qty, Number(p.conversionFactor))
+        : null;
+    return `${formatWeight(qty)} ${p.unit === 'LITER' ? 'L' : 'kg'}${pieces != null ? ` (≈ ${pieces} ${pieces === 1 ? 'peça' : 'peças'})` : ''}`;
   }
   return QTY(qty);
 }
@@ -205,6 +223,11 @@ export default function EstoquePage() {
     reason: '',
   });
   const [savingEntry, setSavingEntry] = useState(false);
+  // "Entrada por peças" (ADR-040 §4): produto em kg/L chega em peças (3 peças de picanha) — o operador
+  // digita o peso de cada uma e o sistema soma em kg. `pieceMode` alterna com o "Peso total" de sempre.
+  const [pieceMode, setPieceMode] = useState(false);
+  const [pieces, setPieces] = useState<number[]>([]);
+  const [pieceDraft, setPieceDraft] = useState('');
 
   // Formulário de ajuste de inventário (ADR-004).
   const [adjust, setAdjust] = useState({ productId: '', countedQty: '', reason: '' });
@@ -400,16 +423,43 @@ export default function EstoquePage() {
       conversionFactor: entryProduct.conversionFactor != null ? Number(entryProduct.conversionFactor) : null,
     });
 
+  // ADR-040 §4: entrada por peças só faz sentido para produto vendido por kg/L.
+  const entryWeighed = !!entryProduct && isWeighedUnit(entryProduct.unit);
+  const entryWeighedAbbr = entryProduct?.unit === 'LITER' ? 'L' : 'kg';
+  const piecesOn = entryWeighed && pieceMode;
+  const pieceSum = sumPieceWeights(pieces);
+
+  /** Adiciona a peça digitada (aceita vírgula). Enter no campo chama isto. */
+  function addPiece() {
+    const w = Number(pieceDraft.replace(',', '.'));
+    if (!(w > 0)) return;
+    setPieces((ps) => [...ps, Number(w.toFixed(3))]);
+    setPieceDraft('');
+  }
+
   async function onEntry(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setNotice(null);
 
+    if (piecesOn && !pieceSum) {
+      setError('Adicione o peso de pelo menos uma peça.');
+      return;
+    }
+
     // ADR-017/ADR-030: para unidade fechada a entrada é em unidades FECHADAS → converte para a
     // régua fina (ledger em metros p/ barra/rolo, unidades p/ pacote); o custo, se informado, é
-    // por unidade fechada → por unidade fina.
+    // por unidade fechada → por unidade fina. ADR-040 §4: por peças, a quantidade é a SOMA (kg).
     const barLen = entryClosed ? Number(entryProduct!.conversionFactor) : 1;
-    const qtyMeters = entryClosed ? Number(entry.quantity) * barLen : Number(entry.quantity);
+    const qtyMeters = piecesOn
+      ? pieceSum!.total
+      : entryClosed
+        ? Number(entry.quantity) * barLen
+        : Number(entry.quantity);
+    // Motivo: o que o operador digitou + o detalhe das peças ("3 peças: 4,200 + 3,900 + 4,400 kg"),
+    // dentro do limite de 150 do `StockMovement.reason`.
+    const pieceLabel = piecesOn ? pieceEntryLabel(pieces, entryWeighedAbbr) : '';
+    const reason = [entry.reason.trim(), pieceLabel].filter(Boolean).join(' — ').slice(0, 150);
     const unitCostMeters = entry.unitCost
       ? entryClosed && barLen > 0
         ? Number(entry.unitCost) / barLen
@@ -441,7 +491,7 @@ export default function EstoquePage() {
       unitCost: unitCostMeters,
       newCostPrice,
       supplierId: entry.supplierId || undefined,
-      reason: entry.reason || undefined,
+      reason: reason || undefined,
     });
     if (!parsed.success) {
       setError('Selecione o produto e informe uma quantidade maior que zero.');
@@ -452,6 +502,8 @@ export default function EstoquePage() {
     try {
       await apiPost('/stock/movements', parsed.data);
       setEntry({ productId: '', quantity: '', unitCost: '', supplierId: '', reason: '' });
+      setPieces([]);
+      setPieceDraft('');
       setNotice(
         newCostPrice != null
           ? 'Entrada de estoque registrada. Custo do produto atualizado.'
@@ -623,8 +675,94 @@ export default function EstoquePage() {
                 placeholder="Buscar produto ou SKU…"
               />
             </div>
+            {/* ADR-040 §4: produto em kg/L escolhe "Peso total" (como sempre) ou "Peça a peça". */}
+            {entryWeighed && (
+              <div className="flex gap-1 rounded-lg bg-gray-100 p-1 text-sm sm:col-span-2" role="group" aria-label="Forma da entrada">
+                {[
+                  { on: false, label: `Peso total (${entryWeighedAbbr})` },
+                  { on: true, label: 'Peça a peça' },
+                ].map((o) => (
+                  <button
+                    key={o.label}
+                    type="button"
+                    onClick={() => setPieceMode(o.on)}
+                    className={`flex-1 rounded-md px-3 py-1.5 font-medium ${
+                      pieceMode === o.on ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-600 hover:text-gray-800'
+                    }`}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            {piecesOn ? (
+              <div className="sm:col-span-2">
+                <div className="flex gap-2">
+                  <input
+                    placeholder={`Peso da peça (${entryWeighedAbbr}) — Enter adiciona`}
+                    inputMode="decimal"
+                    value={pieceDraft}
+                    onChange={(e) => setPieceDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addPiece();
+                      }
+                    }}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                    aria-label="Peso da peça"
+                  />
+                  <button
+                    type="button"
+                    onClick={addPiece}
+                    className="shrink-0 rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100"
+                  >
+                    + peça
+                  </button>
+                </div>
+                {pieces.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {pieces.map((w, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-700"
+                      >
+                        {formatWeight(w)} {entryWeighedAbbr}
+                        <button
+                          type="button"
+                          onClick={() => setPieces((ps) => ps.filter((_, i) => i !== idx))}
+                          className="text-gray-400 hover:text-red-600"
+                          aria-label={`Remover peça de ${formatWeight(w)} ${entryWeighedAbbr}`}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <p className="mt-2 text-xs text-gray-600">
+                  {pieceSum ? (
+                    <>
+                      <strong>
+                        {pieceSum.pieces} {pieceSum.pieces === 1 ? 'peça' : 'peças'} · {formatWeight(pieceSum.total)}{' '}
+                        {entryWeighedAbbr}
+                      </strong>{' '}
+                      (média {formatWeight(pieceSum.average)} {entryWeighedAbbr}) — entra no estoque em {entryWeighedAbbr}.
+                    </>
+                  ) : (
+                    `Digite o peso de cada peça (ex.: 4,2) e tecle Enter. O total entra no estoque em ${entryWeighedAbbr}.`
+                  )}
+                </p>
+              </div>
+            ) : (
             <input
-              placeholder={entryClosed ? `Quantidade (${unitWord(entryProduct)}s)` : 'Quantidade'}
+              placeholder={
+                entryClosed
+                  ? `Quantidade (${unitWord(entryProduct)}s)`
+                  : entryWeighed
+                    ? `Peso total (${entryWeighedAbbr})`
+                    : 'Quantidade'
+              }
               type="number"
               step={entryClosed ? '1' : 'any'}
               min="0"
@@ -637,8 +775,15 @@ export default function EstoquePage() {
               }
               className="rounded-lg border border-gray-300 px-3 py-2"
             />
+            )}
             <MoneyInput
-              placeholder={entryClosed ? `Custo por ${unitWord(entryProduct)} (opcional)` : 'Custo unitário (opcional)'}
+              placeholder={
+                entryClosed
+                  ? `Custo por ${unitWord(entryProduct)} (opcional)`
+                  : entryWeighed
+                    ? `Custo por ${entryWeighedAbbr} (opcional)`
+                    : 'Custo unitário (opcional)'
+              }
               value={entry.unitCost}
               onChange={(v) => setEntry({ ...entry, unitCost: v })}
               className="rounded-lg border border-gray-300 px-3 py-2"

@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { closedUnitTerms, unitTypeLabels, type UnitType } from '@nexoloja/shared';
-import { isClosedPrimary, splitWholeAndRemainder } from '@nexoloja/core';
+import { closedUnitTerms, formatWeight, unitTypeLabels, type UnitType } from '@nexoloja/shared';
+import { approxPieces, isClosedPrimary, isWeighedUnit, splitWholeAndRemainder } from '@nexoloja/core';
 import { apiGet } from '@/lib/api';
 import { useModule } from '@/lib/useModule';
 
@@ -36,6 +36,8 @@ export type StockProduct = {
   costPrice: string;
   salePrice: string;
   altSalePrice: string | null;
+  /** Embalagem alternativa; `UNIT` em produto kg/L = "vendido inteiro" (ADR-040 §4). */
+  altUnit?: string | null;
   weightKg: string | null;
   marginPercent: number;
 };
@@ -72,6 +74,14 @@ function stockLabel(p: StockProduct): string {
     unit: p.unit,
     conversionFactor: p.conversionFactor != null ? Number(p.conversionFactor) : null,
   });
+  // ADR-040 §4: peso/volume com 3 casas + "≈ N peças" quando o produto vende inteiro (peso médio).
+  if (!closed && isWeighedUnit(p.unit)) {
+    const pieces =
+      p.altUnit === 'UNIT' && p.conversionFactor != null
+        ? approxPieces(qty, Number(p.conversionFactor))
+        : null;
+    return `${formatWeight(qty)} ${p.unit === 'LITER' ? 'L' : 'kg'}${pieces != null ? ` (≈ ${pieces} ${pieces === 1 ? 'peça' : 'peças'})` : ''}`;
+  }
   if (!closed) return `${QTY(qty)} ${unitTypeLabels[p.unit as UnitType]}`;
   const barLen = Number(p.conversionFactor);
   const { whole, remainderMeters } = splitWholeAndRemainder(qty, barLen);
