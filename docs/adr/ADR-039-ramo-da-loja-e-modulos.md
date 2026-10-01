@@ -157,7 +157,7 @@ migration (uma aprovação, um deploy).
    (cadastro, detalhe, detalhe de estoque) e o **par** (cadastro, detalhe). Regra §3 aplicada à risca: o que o
    produto **já tem gravado** (unidade de obra, peso, par) continua visível/editável. Sem `modules` no `/me`
    (API antiga/sem cache) ⇒ obra **ligada** (loja existente nunca perde recurso). **PDV não precisou de gate**:
-   par/corte por metro só aparecem quando o produto os tem (é dirigido pelo dado). Gates: shared 68, web build.
+   par/corte por metro só aparecem quando o produto os tem (é dirigido pelo dado). Gates: shared 68, web build. **NO AR 2026-10-01 (web `275b72a9`)**; E2E do Owner pendente.
 
 ## Relacionadas
 
