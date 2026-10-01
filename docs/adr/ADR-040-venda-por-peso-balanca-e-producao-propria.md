@@ -158,6 +158,7 @@ Aditiva, na **mesma migration do [ADR-039](./ADR-039-ramo-da-loja-e-modulos.md)*
    inicial), detalhe mostra "Estoque: sem controle", PDV nunca trava e não mostra saldo (`stockQty` = "Infinity",
    espelhado no cache offline), Estoque esconde o produto das tabelas e dos seletores de Entrada/Ajuste. Doc §8.2
    atualizada (regra 7). Gates: core 434, shared 68, API tsc 0, web build.
+   **NO AR 2026-10-01 (API `22042b01`, web `8cfe172e`)**; E2E do Owner pendente.
 3. **Fatia 3 — etiqueta de balança** (migration + módulo): `scaleCode`, `parseScaleBarcode`, config do layout no
    painel, leitura no PDV. E2E com etiqueta impressa de verdade (ou gerada em tela para teste).
 4. **Futuro:** exportar PLUs para a balança; balança de checkout via Web Serial; `RECIPES`.
