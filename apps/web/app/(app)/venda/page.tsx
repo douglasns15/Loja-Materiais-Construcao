@@ -3446,20 +3446,27 @@ export default function VendaPage() {
                 </div>
               )}
               <p className="text-xs text-indigo-800">
-                Dia, horário{fulfillmentType === 'DELIVERY' ? ', endereço e entregador' : ''} e observações você
-                informa na revisão, depois de <strong>Concluir</strong>.
+                Ao clicar em <strong>Concluir venda</strong>, você escolhe o dia e o horário
+                {fulfillmentType === 'DELIVERY' ? ', confere o endereço, escolhe o entregador' : ''} e pode
+                deixar uma observação.
               </p>
 
               {/* Flag "Data por item": libera um campo de data por linha do carrinho. */}
-              <label className="flex items-center gap-2 text-sm text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={perItemSchedule}
-                  onChange={(e) => setPerItemSchedule(e.target.checked)}
-                  className="h-4 w-4 rounded border-indigo-300"
-                />
-                Data por item
-              </label>
+              <div>
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={perItemSchedule}
+                    onChange={(e) => setPerItemSchedule(e.target.checked)}
+                    className="h-4 w-4 rounded border-indigo-300"
+                  />
+                  Data por item
+                </label>
+                <p className="ml-6 text-xs text-gray-500">
+                  Use quando os itens saem em dias diferentes (ex.: cimento hoje, telhas na semana que vem).
+                  Cada item ganha a sua data, sem horário — por isso o pedido não entra na Agenda do dia.
+                </p>
+              </div>
 
               {perItemSchedule && (
                 <div className="space-y-2">

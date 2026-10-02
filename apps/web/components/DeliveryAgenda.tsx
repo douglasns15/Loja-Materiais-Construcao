@@ -76,6 +76,8 @@ export function DeliveryAgenda({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [chip, setChip] = useState<Chip>('all');
+  // Concluídos saem do painel por padrão (liberam espaço); o filtro "Concluídos" os traz de volta.
+  const [showDone, setShowDone] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
   const load = useCallback(async () => {
@@ -129,15 +131,17 @@ export function DeliveryAgenda({
       setDispatchingId(null);
     }
   }
-  const timed = withUrgency.filter((x) => x.r.timed);
-  const untimed = withUrgency.filter((x) => !x.r.timed);
+  const doneCount = withUrgency.filter((x) => x.u === 'done').length;
+  const visible = showDone ? withUrgency : withUrgency.filter((x) => x.u !== 'done');
+  const timed = visible.filter((x) => x.r.timed);
+  const untimed = visible.filter((x) => !x.r.timed);
 
   const counts = {
     all: timed.length + untimed.length,
     late: timed.filter((x) => x.u === 'late').length,
     next: timed.filter((x) => x.u === 'now' || x.u === 'soon').length,
-    DELIVERY: withUrgency.filter((x) => x.r.fulfillmentType === 'DELIVERY').length,
-    PICKUP: withUrgency.filter((x) => x.r.fulfillmentType === 'PICKUP').length,
+    DELIVERY: visible.filter((x) => x.r.fulfillmentType === 'DELIVERY').length,
+    PICKUP: visible.filter((x) => x.r.fulfillmentType === 'PICKUP').length,
   };
   const pass = (x: { r: DeliveryAgendaRow; u: DeliveryUrgency }) =>
     chip === 'all'
@@ -295,12 +299,29 @@ export function DeliveryAgenda({
               {c.label} <span className="tabular-nums">{counts[c.k]}</span>
             </button>
           ))}
+          {/* Liga/desliga (independe dos chips acima): mostra os concluídos junto do filtro escolhido. */}
+          <button
+            type="button"
+            onClick={() => setShowDone((v) => !v)}
+            aria-pressed={showDone}
+            className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs ${
+              showDone
+                ? 'border-gray-500 bg-gray-100 font-semibold text-gray-800'
+                : 'border-dashed border-gray-300 text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            {showDone ? '✓ ' : ''}Concluídos <span className="tabular-nums">{doneCount}</span>
+          </button>
           {onOpenSettings && (
             <button
               type="button"
               onClick={onOpenSettings}
-              className="ml-1 rounded-lg border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+              className="ml-2 inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-md shadow-indigo-600/30 transition hover:bg-indigo-700 hover:shadow-lg active:translate-y-px"
             >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-3.5 w-3.5" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7v5l3 2" strokeLinecap="round" />
+              </svg>
               Período de entregas
             </button>
           )}
@@ -313,7 +334,16 @@ export function DeliveryAgenda({
         <p className="px-4 py-8 text-center text-sm text-gray-500">Carregando a agenda…</p>
       ) : counts.all === 0 ? (
         <p className="px-4 py-8 text-center text-sm text-gray-500">
-          Nada agendado para este dia. As vendas com retirada/entrega posterior aparecem aqui no horário combinado.
+          {doneCount > 0 ? (
+            <>
+              Tudo concluído neste dia ({doneCount}).{' '}
+              <button type="button" onClick={() => setShowDone(true)} className="font-medium text-indigo-700 hover:underline">
+                Ver concluídos
+              </button>
+            </>
+          ) : (
+            'Nada agendado para este dia. As vendas com retirada/entrega posterior aparecem aqui no horário combinado.'
+          )}
         </p>
       ) : (
         <>
