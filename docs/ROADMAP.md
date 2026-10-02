@@ -3,8 +3,40 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-10-01 — **Multirramo (1ª loja de alimentos: Mercadinho + Sorveteria +
-> Rotisseria) + Agenda de entregas.** Roteiro: [plano-implantacao-multirramo.md](plano-implantacao-multirramo.md).
+> **Última atualização:** 2026-10-02 — **Revisão da Agenda de entregas + Funcionários + Produção com ficha
+> técnica (ADR-043).** Roteiro: [plano-implantacao-multirramo.md](plano-implantacao-multirramo.md).
+>
+> **NO AR 2026-10-02 (API `490fab8d`, web `8840ab5f`) — E2E VALIDADO no navegador** (conduzido pelo Claude no
+> navegador embutido, com o login do Owner na loja `owner_kg`; evidência em
+> [testes/registro-de-testes.md](testes/registro-de-testes.md)):
+> - **Fix CORS** (`672da74`): `PUT` liberado — salvar "Período de entregas" dava "Não foi possível conectar".
+> - **Agenda de entregas — revisão da ADR-042** (`f69ad3a`, `d5c37cd`): concluídos ocultos + chip "Concluídos";
+>   botão "Período de entregas" destacado; **"Saiu p/ entrega" baixa o estoque e conclui**; **"Voltou / não
+>   entregue"** (`POST /deliveries/:id/return-from-route`) reagenda (mercadoria volta reservada) ou leva ao
+>   cancelamento no Histórico (`/vendas?codigo=`); **"Data por item" entra na agenda** (uma linha por dia, saída
+>   por dia, detalhe agrupado por data). Core `planDispatch`/`statusAfterRouteReturn`.
+> - **Funcionários** — migration **`0043` aplicada** (e-mail de contato + funções Operador, Caixa, Açougueiro,
+>   Cozinheiro, Churrasqueiro, Limpeza, Segurança).
+> - **Produção com ficha técnica** ([ADR-043](adr/ADR-043-producao-e-ficha-tecnica.md), aceita) — migration
+>   **`0044` aplicada**; **Fatia 1** (`947522e`): ficha técnica no detalhe do produto (custo/margem; Admin edita),
+>   tela **Produção** (peças × peso, usado de fato, saldo, bloqueio sem saldo, custo), registro atômico **P-0001**
+>   (EXPENSE insumos controlados + INCOME pronto + último custo), módulo `RECIPES` (preset Rotisseria). Core
+>   `scaleRecipe`/`productionCost`/`productionShortages`/`costPriceFromBaseCost`.
+> - **Ajustes do E2E** (`dbc0e5a`): histórico de saídas na unidade vendida, selo "A entregar / Entrega parcial /
+>   Entregue", textos.
+> - **Gates:** core 482, shared 94, API e web tsc 0. Doc §8.2 atualizada (regra 7).
+>
+> **ONDE PARAMOS / PRÓXIMOS PASSOS (2026-10-02):**
+> 1. **Produção — Fatia 2**: registrar perda (sobra do dia) + resumo do dia (produzido × vendido × perda × em
+>    estoque). Depois a **Fatia 3 — desmembramento** (peça → cortes, rateio pelo valor de venda), já desenhada na ADR-043.
+> 2. Teste com usuário **Operador** (ficha só leitura; registra produção) — não coberto no E2E.
+> 3. Seguir o plano multirramo: **#6 cadastro em sequência** (ADR-041 §A), #7 cadastro no caixa, #8 etiqueta de
+>    balança, #9 planilha, #10 multi-loja.
+> 4. Push dos commits locais em `main` (Owner).
+> 5. NFC-e segue na branch `feat/nfe-emissao` (Owner avisa quando retomar).
+>
+> **Antes:** 2026-10-01 — **Multirramo (1ª loja de alimentos: Mercadinho + Sorveteria + Rotisseria) + Agenda de
+> entregas.** (E2E da agenda e das peças feito pelo Owner em 2026-10-02 — os achados viraram a revisão acima.)
 >
 > **NO AR + E2E do Owner VALIDADO:**
 > - **#1 venda por kg/L** com 3 casas (ADR-040 §1) e **#3 ramo da loja no painel + módulos** (ADR-039 F1) —
@@ -16,7 +48,7 @@
 >   preço do inteiro e peso médio, ADR-040 §4) — API `22042b01`, web `8cfe172e`; `POST /orders` validado no
 >   `wrangler tail`.
 >
-> **NO AR 2026-10-01 (API `952ae59c`, web `ea2b5931`) — E2E do Owner PENDENTE:**
+> **NO AR 2026-10-01 (API `952ae59c`, web `ea2b5931`) — E2E do Owner feito em 2026-10-02 (achados → revisão acima):**
 > - Peso sempre com **3 casas** ("0,850 kg") no carrinho/resumo/cupom/relatórios (`formatWeight`) — `3d57bc7`.
 > - **Estoque de pesados por peças** (ADR-040 §4.1): Entrada "Peça a peça" (soma em kg), saldo com "≈ N
 >   peças", regra da **última peça** — `a0cb22d`.
@@ -28,7 +60,7 @@
 >   **"Saiu p/ entrega"**, faixas lotadas (409 no servidor).
 > - **Gates:** core 463, shared 82, API tsc 0, web build OK. Doc §8.2 atualizada (regra 7).
 >
-> **ONDE PARAMOS / PRÓXIMOS PASSOS:**
+> **Onde paramos em 2026-10-01 (histórico):**
 > 1. ~~Deploy~~ **feito 2026-10-01**: Prisma Client regenerado e schema embutido conferido; API `952ae59c` → web
 >    `ea2b5931`; smokes OK (rotas novas 401 sem login; BUILD_ID ao vivo). A validação de escrita (`POST /orders`
 >    com venda agendada) acontece no E2E do Owner.

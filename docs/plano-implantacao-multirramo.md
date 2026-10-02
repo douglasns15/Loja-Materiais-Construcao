@@ -1,5 +1,11 @@
 # Plano — Implantação multirramo (1ª loja de alimentos) + usuário multi-loja
 
+> **Estado em 2026-10-02:** E2E do Owner da agenda/peças feito; os achados viraram a **revisão da ADR-042**
+> (Saiu p/ entrega conclui, Voltou/reagendar, Data por item na agenda, concluídos ocultos) + **Funcionários
+> `0043`** + **Produção com ficha técnica (ADR-043 Fatia 1, `0044`)** — tudo **NO AR** (API `490fab8d`, web
+> `8840ab5f`) e **E2E validado no navegador**. Próxima: **Produção Fatia 2** (perda + resumo do dia), depois a
+> Fatia 3 (desmembramento) e então a #6.
+>
 > **Estado em 2026-10-01 (noite):** encaixados antes da #6, a pedido do Owner — **Estoque de pesados por
 > peças** (ADR-040 §4.1, commit `a0cb22d`) e **Agenda de entregas** (ADR-042: migration `0042` aplicada +
 > 3 fatias, commits `74d0568`/`9dbb6ae`/`106ba9f`). Ambos **NO AR** (API `952ae59c`, web `ea2b5931`);
@@ -98,7 +104,10 @@ A loja de alimentos **não consegue vender hoje**:
 | 4 | Gating na web (esconder construção) — **NO AR 2026-10-01** (web `275b72a9`; E2E do Owner VALIDADO) | Não | 039 F2 |
 | 5 | `trackStock` na venda/devolução/alertas — **NO AR 2026-10-01** (API `22042b01`, web `8cfe172e`; E2E do Owner VALIDADO) + "vendido inteiro também" (040 §4) | (usa a #2) | 040 F2 |
 | 5a | **Estoque de pesados por peças** (Entrada peça a peça, "≈ N peças", última peça) + peso com 3 casas — pedido do Owner, encaixado antes da #6 (commits `3d57bc7`, `a0cb22d`) | Não | 040 §4.1 |
-| 5b | **Agenda de entregas** (Funcionários, agendamento no PDV, Agenda do dia, Período de entregas, Saiu p/ entrega) — pedido do Owner, encaixado antes da #6 (commits `74d0568`, `9dbb6ae`, `106ba9f`) | **Sim** — `0042` aprovada e aplicada | 042 |
+| 5b | **Agenda de entregas** (Funcionários, agendamento no PDV, Agenda do dia, Período de entregas, Saiu p/ entrega) — pedido do Owner, encaixado antes da #6 (commits `74d0568`, `9dbb6ae`, `106ba9f`) — E2E do Owner feito 2026-10-02 | **Sim** — `0042` aprovada e aplicada | 042 |
+| 5c | **Revisão da agenda** (Saiu p/ entrega conclui, Voltou/reagendar, Data por item na agenda, concluídos ocultos) + **Funcionários** (e-mail + 7 funções) — **NO AR + E2E validado 2026-10-02** (commits `672da74`, `f69ad3a`, `d5c37cd`, `dbc0e5a`) | **Sim** — `0043` aprovada e aplicada | 042 (revisão) |
+| 5d | **Produção com ficha técnica — Fatia 1** (ficha, tela Produção, P-0001, último custo, módulo `RECIPES`) — **NO AR + E2E validado 2026-10-02** (commits `0164bb9`, `947522e`, `dbc0e5a`) | **Sim** — `0044` aprovada e aplicada | 043 |
+| 5e | **Produção — Fatia 2** (perda/sobra + resumo do dia) e **Fatia 3** (desmembramento, rateio pelo valor de venda) | A definir na vez | 043 |
 | 6 | **Cadastro em sequência** | Não | 041 §A |
 | 7 | **Cadastro no caixa** + alerta de revisão | Não (a confirmar) | 041 §B |
 | 8 | Etiqueta de balança (`scaleCode` + parser + PDV) | (usa a #2) | 040 F3 |
@@ -109,11 +118,17 @@ A loja de alimentos **não consegue vender hoje**:
 Racional: #1–#8 são o que a loja nova precisa para abrir; a planilha fica para os poucos itens sem código e
 para clientes futuros; o multi-loja é grande e não bloqueia a abertura (se o Owner precisar dele antes, sobe).
 
-## 6. Onde paramos (2026-10-01)
+## 6. Onde paramos (2026-10-02)
 
-- #1–#5 no ar e validadas pelo Owner. **5a e 5b NO AR 2026-10-01 (API `952ae59c`, web `ea2b5931`)**; E2E pelo roteiro
-  [testes/e2e-pecas-e-agenda-de-entregas.md](testes/e2e-pecas-e-agenda-de-entregas.md).
-- **Próxima entrega de código: #6 cadastro em sequência** (ADR-041 §A).
+- #1–#5, 5a, 5b no ar e validadas. **5c e 5d NO AR 2026-10-02 (API `490fab8d`, web `8840ab5f`)**, E2E validado no
+  navegador (roteiros [testes/e2e-pecas-e-agenda-de-entregas.md](testes/e2e-pecas-e-agenda-de-entregas.md) §F/§G e
+  [testes/e2e-producao-ficha-tecnica.md](testes/e2e-producao-ficha-tecnica.md); evidência em
+  [testes/registro-de-testes.md](testes/registro-de-testes.md)).
+- **Próxima entrega de código: Produção Fatia 2** (perda + resumo do dia — ADR-043 §3), depois Fatia 3
+  (desmembramento) e a **#6 cadastro em sequência** (ADR-041 §A).
+- Faltou testar com usuário **Operador** (ficha só leitura; registra produção).
+- Dados de teste na loja `owner_kg`: insumos Frango inteiro congelado / Tempero baiano, ficha do Frango Assado,
+  produção P-0001, venda V-000006 (Data por item), funcionário "Carlos Teste E2E".
 - Push dos commits em `main`: Owner.
 
 ## 7. Pendências de repositório a lembrar
