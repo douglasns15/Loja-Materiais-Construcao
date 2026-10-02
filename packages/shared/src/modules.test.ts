@@ -78,7 +78,8 @@ describe('setTenantModuleSchema', () => {
   });
 
   it('recusa chave desconhecida', () => {
-    expect(setTenantModuleSchema.safeParse({ moduleKey: 'RECIPES', isActive: true }).success).toBe(false);
+    // (Antes o exemplo era RECIPES, que passou a existir com a ADR-043.)
+    expect(setTenantModuleSchema.safeParse({ moduleKey: 'PHARMACY_CONTROL', isActive: true }).success).toBe(false);
   });
 });
 

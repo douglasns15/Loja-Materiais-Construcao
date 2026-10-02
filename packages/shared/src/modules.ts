@@ -19,9 +19,16 @@ export const MODULE_OFFLINE_SALES = 'OFFLINE_SALES' as const;
 export const MODULE_CONSTRUCTION_UNITS = 'CONSTRUCTION_UNITS' as const;
 /** Etiqueta de balança: código na balança + leitura no PDV (ADR-039/040) — ramos de alimentos. */
 export const MODULE_SCALE_LABEL = 'SCALE_LABEL' as const;
+/** Produção com ficha técnica: do cru ao pronto (ADR-043) — ligado pelo ramo Rotisseria. */
+export const MODULE_RECIPES = 'RECIPES' as const;
 
 /** Módulos que o Super Usuário liga/desliga no painel (ordem de exibição). */
-export const TENANT_MODULE_KEYS = [MODULE_CONSTRUCTION_UNITS, MODULE_SCALE_LABEL, MODULE_OFFLINE_SALES] as const;
+export const TENANT_MODULE_KEYS = [
+  MODULE_CONSTRUCTION_UNITS,
+  MODULE_SCALE_LABEL,
+  MODULE_RECIPES,
+  MODULE_OFFLINE_SALES,
+] as const;
 export type TenantModuleKey = (typeof TENANT_MODULE_KEYS)[number];
 
 /** Rótulos PT-BR dos módulos para o painel de plataforma. */
@@ -31,6 +38,7 @@ export const TENANT_MODULE_LABELS: Record<TenantModuleKey, { label: string; hint
     hint: 'Milheiro, saco, barra, rolo, m/m²/m³, corte por metro, par e peso p/ frete',
   },
   SCALE_LABEL: { label: 'Etiqueta de balança', hint: 'Código na balança e leitura da etiqueta no PDV' },
+  RECIPES: { label: 'Produção (ficha técnica)', hint: 'Do cru ao pronto: ficha técnica, produção e custo real' },
   OFFLINE_SALES: { label: 'Venda offline (pago)', hint: 'Fila de vendas sem internet (ADR-011)' },
 };
 

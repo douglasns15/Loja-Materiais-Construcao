@@ -22,6 +22,7 @@ export * from './cart';
 export * from './receivable';
 export * from './return';
 export * from './delivery';
+export * from './production';
 export * from './stock';
 export * from './report';
 export * from './alerts';

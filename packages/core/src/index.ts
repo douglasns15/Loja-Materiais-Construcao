@@ -2547,7 +2547,7 @@ export function planReorder(
 
 export type StoreSegmentKey = 'CONSTRUCTION' | 'GROCERY' | 'ICE_CREAM' | 'ROTISSERIE' | 'GENERAL_RETAIL';
 /** Módulos que um ramo pode ligar. `OFFLINE_SALES` fica fora: é plano pago, não ramo. */
-export type SegmentModuleKey = 'CONSTRUCTION_UNITS' | 'SCALE_LABEL';
+export type SegmentModuleKey = 'CONSTRUCTION_UNITS' | 'SCALE_LABEL' | 'RECIPES';
 
 interface SegmentPreset {
   modules: readonly SegmentModuleKey[];
@@ -2569,7 +2569,8 @@ export const SEGMENT_PRESETS: Record<StoreSegmentKey, SegmentPreset> = {
     categories: ['Sorvete por kg', 'Picolés', 'Açaí', 'Coberturas e adicionais'],
   },
   ROTISSERIE: {
-    modules: ['SCALE_LABEL'],
+    // Produção com ficha técnica (ADR-043): a rotisseria compra o cru e vende o pronto.
+    modules: ['SCALE_LABEL', 'RECIPES'],
     categories: ['Assados', 'Marmitas', 'Porções', 'Salgados'],
   },
   GENERAL_RETAIL: { modules: [], categories: [] },
@@ -2601,6 +2602,80 @@ export function suggestedCategoriesForSegments(segments: readonly string[]): str
     }
   }
   return out;
+}
+
+// -----------------------------------------------------------------------------
+// PRODUÇÃO COM FICHA TÉCNICA (ADR-043)
+// -----------------------------------------------------------------------------
+// A ficha diz "para produzir `yieldQty` do pronto, uso estes insumos". Produzir N = escalar a ficha
+// por N ÷ yieldQty. Tudo em UNIDADE-BASE (mesma do estoque) e arredondado à precisão do ledger.
+
+/** Arredonda à precisão do estoque (4 casas), sem ruído de ponto flutuante. */
+const toLedger = (n: number) => Number((Math.round(n * 10000 + Math.sign(n) * 1e-6) / 10000).toFixed(4));
+
+/**
+ * Insumos necessários para produzir `outputQty` pela ficha (`yieldQty` + linhas). Linha de ficha
+ * com quantidade 0 fica de fora. `yieldQty` ≤ 0 ⇒ lista vazia (ficha inválida).
+ */
+export function scaleRecipe(
+  recipe: { yieldQty: number; items: readonly { productId: string; quantity: number }[] },
+  outputQty: number,
+): { productId: string; quantity: number }[] {
+  if (!(recipe.yieldQty > 0) || !(outputQty > 0)) return [];
+  const factor = outputQty / recipe.yieldQty;
+  return recipe.items
+    .filter((it) => it.quantity > 0)
+    .map((it) => ({ productId: it.productId, quantity: toLedger(it.quantity * factor) }));
+}
+
+/**
+ * Custo de uma produção: Σ (quantidade usada × custo por unidade-base do insumo) e o custo por
+ * unidade-base do pronto (÷ quantidade produzida). Insumo sem controle de estoque também conta —
+ * ele não mexe em estoque, mas custa (ADR-043 §1). `outputQty` ≤ 0 ⇒ custo unitário 0.
+ */
+export function productionCost(
+  inputs: readonly { quantity: number; unitCost: number }[],
+  outputQty: number,
+): { totalCost: number; unitCost: number } {
+  const total = inputs.reduce((acc, i) => acc + i.quantity * i.unitCost, 0);
+  return {
+    totalCost: Number(total.toFixed(2)),
+    unitCost: outputQty > 0 ? Number((total / outputQty).toFixed(4)) : 0,
+  };
+}
+
+/**
+ * Insumos CONTROLADOS sem saldo para a produção (decisão do Owner: bloqueia, como a venda). Compara
+ * o usado com o disponível (`stockQty − reservedQty`); um mesmo insumo em duas linhas é somado.
+ * Lista vazia ⇒ pode produzir.
+ */
+export function productionShortages(
+  inputs: readonly { productId: string; quantity: number; tracked: boolean; available: number }[],
+): { productId: string; needed: number; available: number }[] {
+  const need = new Map<string, { needed: number; available: number }>();
+  for (const i of inputs) {
+    if (!i.tracked || !(i.quantity > 0)) continue;
+    const cur = need.get(i.productId) ?? { needed: 0, available: i.available };
+    cur.needed = toLedger(cur.needed + i.quantity);
+    need.set(i.productId, cur);
+  }
+  return [...need.entries()]
+    .filter(([, v]) => toQtyUnits(v.needed) > toQtyUnits(v.available))
+    .map(([productId, v]) => ({ productId, needed: v.needed, available: v.available }));
+}
+
+/**
+ * Custo do CADASTRO do pronto a partir do custo por unidade-base da produção ("último custo",
+ * ADR-043). Inverso de `costPerBaseUnit`: produto de unidade fechada (barra/rolo/pacote) guarda o
+ * custo da peça inteira (× tamanho); os demais, o custo por unidade-base.
+ */
+export function costPriceFromBaseCost(
+  p: { unit: string; conversionFactor?: number | null },
+  baseCost: number,
+): number {
+  return isClosedPrimary(p)
+    ? Number((baseCost * Number(p.conversionFactor)).toFixed(4))
+    : Number(baseCost.toFixed(4));
 }
 
 // -----------------------------------------------------------------------------

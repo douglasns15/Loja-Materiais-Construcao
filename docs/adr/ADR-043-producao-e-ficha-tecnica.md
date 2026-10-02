@@ -1,6 +1,15 @@
 # ADR-043 — Produção com ficha técnica (do cru ao pronto)
 
-- **Status:** **Proposto** (2026-10-02) — aguardando decisão do Owner nas perguntas do fim e aprovação da migration `0044` (regra 1).
+- **Status:** **Aceito** (2026-10-02) — migration `0044` aprovada e aplicada; Fatia 1 implementada.
+
+> **Decisão do Owner (2026-10-02):** (1) insumo sem saldo **bloqueia** a produção; (2) **qualquer usuário**
+> registra produção, a ficha é só do Admin; (3) custo do pronto = **último custo** da produção; (4) o
+> **desmembramento entra no planejamento agora, como Fatia 3** (ver "Fatia 3 — desmembramento" abaixo).
+> Migration `0044` aprovada.
+>
+> **Ajustes de implementação:** as rotas ficaram todas sob `/productions` (`/productions/recipes/:productId`
+> em vez de `/products/:id/recipe`), e a ficha **não tem soft-delete** — é configuração; excluir apaga de vez
+> (as produções guardam o que entrou e saiu nas próprias linhas).
 - **Deciders:** Owner do produto.
 - **Relacionados:** ADR-001 (estoque = `StockMovement` + cache), ADR-027 (custo congelado na venda), ADR-039 (ramo → módulos),
   ADR-040 (venda por peso, `trackStock`, "vendido inteiro também" — §2 já previa: *"quando o módulo `RECIPES` existir
@@ -101,7 +110,7 @@ Aditiva, sem alterar dado existente:
 1. `tenants` + `lastProductionNumber INT NOT NULL DEFAULT 0`.
 2. `CREATE TYPE "ProductionLineDirection" AS ENUM ('INPUT','OUTPUT')`.
 3. `CREATE TABLE recipes` — `id`, `tenantId` (FK cascade), `productId` (o pronto, **único**), `yieldQty DECIMAL(12,4)`,
-   `notes VARCHAR(300)`, autoria (ADR-010), `createdAt/updatedAt`, `deletedAt`.
+   `notes VARCHAR(300)`, autoria (ADR-010), `createdAt/updatedAt` (sem `deletedAt` na versão aplicada — ver ajustes).
 4. `CREATE TABLE recipe_items` — `id`, `tenantId`, `recipeId` (FK cascade), `productId` (o insumo, FK),
    `quantity DECIMAL(12,4)`; índice `(recipeId)`.
 5. `CREATE TABLE productions` — `id`, `tenantId`, `productionNumber INT` (único por loja), `totalCost DECIMAL(12,2)`,
@@ -116,16 +125,33 @@ fica abaixo de 2 MB/ano por loja — dentro do free tier (regra 6).
 
 ## Contrato novo (regra 7, §8.2 — na implementação)
 
-- `GET /products/:id/recipe` · `PUT /products/:id/recipe` 🔒 (Admin) · `DELETE /products/:id/recipe` 🔒.
-- `GET /productions?day=` (lista + resumo do dia) · `POST /productions` (registrar) · `GET /productions/:id`.
-- `POST /productions/loss` (perda do pronto, com motivo).
+- Fatia 1 (implementada): `GET /productions/recipes` · `GET`/`PUT` 🔒/`DELETE` 🔒 `/productions/recipes/:productId`
+  (escrita Admin) · `GET /productions?day=` · `POST /productions`.
+- Fatia 2: resumo do dia e `POST /productions/loss` (perda do pronto, com motivo).
 
 ## Fatias
 
-1. **Ficha + registrar produção** (migration `0044`, módulo `RECIPES`, core puro com testes: escalar a ficha,
-   custo do pronto, checar saldo dos insumos). É o que resolve a dúvida do Owner.
-2. **Sobra/perda + resumo do dia** (produzido × vendido × perda × em estoque) e histórico `P-0001…`.
-3. *(opcional, ADR própria)* Desmembramento com rateio de custo.
+1. **Ficha + registrar produção** (migration `0044`, módulo `RECIPES`, core puro com testes: `scaleRecipe`,
+   `productionCost`, `productionShortages`, `costPriceFromBaseCost`). **Implementada 2026-10-02.**
+2. **Sobra/perda + resumo do dia** (produzido × vendido × perda × em estoque) e histórico `P-0001…` por período.
+3. **Desmembramento** (aprovado para o planejamento pelo Owner) — desenho abaixo.
+
+### Fatia 3 — desmembramento (peça → cortes)
+
+- **Quando:** a loja recebe uma peça inteira (quarto traseiro, costela inteira, frango para cortar) e a divide em
+  cortes vendáveis (picanha, alcatra, maminha, aparas / coxa, sobrecoxa, peito, asa).
+- **Tela:** na Produção, aba "Desmembrar": escolhe a **peça** (insumo) e quanto usou (peso), depois digita o
+  **peso de cada corte** que saiu. A diferença entre o peso da peça e a soma dos cortes aparece como **quebra**
+  (osso, sebo, perda) — informativa, não vira produto.
+- **Modelo:** o mesmo evento `Production`, com 1 linha `INPUT` e N linhas `OUTPUT` (o schema da `0044` já
+  comporta). Opcional: um "modelo de desmembramento" por peça (lista dos cortes esperados, sem quantidades) só
+  para pré-montar a tela — se precisar, tabela própria com aprovação de migration na vez.
+- **Rateio do custo (regra a confirmar na vez):** o custo da peça é dividido entre os cortes **pelo valor de
+  venda** (peso × preço de venda de cada corte), como se faz no açougue — a picanha absorve mais custo que a
+  aparas, e a margem de cada corte fica coerente. Alternativa mais simples: rateio por peso (todo corte com o
+  mesmo custo/kg). Cada corte recebe o **último custo** (mesma regra da Fatia 1).
+- **Core:** `splitCost(inputCost, cuts[{ weight, salePrice }])` puro, com testes (soma dos rateios = custo da peça,
+  sem perder centavos no arredondamento).
 
 ## Perguntas ao Owner
 

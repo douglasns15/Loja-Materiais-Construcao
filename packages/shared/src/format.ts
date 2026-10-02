@@ -59,6 +59,8 @@ export const ORDER_CODE_PREFIX = 'V-';
 export const QUOTE_CODE_PREFIX = 'O-';
 export const DEBT_CODE_PREFIX = 'D-';
 export const DELIVERY_CODE_PREFIX = 'E-';
+/** Produção registrada (ADR-043): "P-0001". */
+export const PRODUCTION_CODE_PREFIX = 'P-';
 
 /** Formata um número sequencial como `<prefixo>000128`: prefixo + inteiro com zeros à esquerda até
  *  `pad` dígitos (acima disso só cresce, nunca trunca). Nula/≤0 volta string vazia. Base de
@@ -126,6 +128,11 @@ export function parseDebtNumberQuery(query: string | null | undefined): number |
  */
 export function formatDeliveryNumber(n: number | null | undefined): string {
   return formatSeqCode(DELIVERY_CODE_PREFIX, n, 4);
+}
+
+/** Código de uma produção (ADR-043): 8 → "P-0008". */
+export function formatProductionNumber(n: number | null | undefined): string {
+  return formatSeqCode(PRODUCTION_CODE_PREFIX, n, 4);
 }
 
 /** Busca por código de conta de retiradas (ADR-028): `E-0001`/`0001`/`1` → 1. Alias de `parseSeqNumberQuery`. */

@@ -28,7 +28,9 @@ import {
 import { apiDelete, apiGet, apiPatch } from '@/lib/api';
 import { buildCategoryOptions, categoryLabelMap, type Category } from '@/lib/categories';
 import { useModule } from '@/lib/useModule';
+import { useMe } from '@/lib/useMe';
 import { MoneyInput } from '@/components/MoneyInput';
+import { RecipeSection } from '@/components/RecipeSection';
 import { PricingEsteira } from '@/components/PricingEsteira';
 import { BarcodeScanButton } from '@/components/BarcodeScanButton';
 
@@ -339,6 +341,9 @@ export function ProductDetail({
   // Ramo da loja (ADR-039 F2): sem o módulo de obra somem as unidades de obra, o peso p/ frete e o
   // par — MAS o que o produto já tem gravado continua visível/editável (desligar não esconde dado).
   const construction = useModule('CONSTRUCTION_UNITS');
+  // Produção com ficha técnica (ADR-043): o bloco "Ficha técnica" só aparece com o módulo ligado.
+  const recipesOn = useModule('RECIPES');
+  const { isAdmin } = useMe();
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<FormState>(() => toForm(product));
   // "Opções avançadas" da edição: nasce aberta se o produto já tem algo configurado lá.
@@ -804,6 +809,16 @@ export function ProductDetail({
               <div>Cadastrado por {byLine(product.createdByName, product.createdAt)}</div>
               <div>Última alteração {byLine(product.updatedByName, product.updatedAt)}</div>
             </div>
+
+            {/* Ficha técnica (ADR-043): só com o módulo de produção ligado. */}
+            {recipesOn && (
+              <RecipeSection
+                product={product}
+                allProducts={allProducts}
+                isAdmin={isAdmin}
+                onProductChanged={onSaved}
+              />
+            )}
 
             <p className="mt-3 text-xs text-gray-500">
               O estoque não se edita pelo cadastro — o saldo só muda por movimentação, na tela

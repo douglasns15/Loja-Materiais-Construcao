@@ -10,8 +10,13 @@ describe('modulesForSegments', () => {
     expect(modulesForSegments(['CONSTRUCTION'])).toEqual(['CONSTRUCTION_UNITS']);
   });
 
-  it('mercadinho + sorveteria + rotisseria: união sem repetição (só etiqueta de balança)', () => {
-    expect(modulesForSegments(['GROCERY', 'ICE_CREAM', 'ROTISSERIE'])).toEqual(['SCALE_LABEL']);
+  it('mercadinho + sorveteria + rotisseria: união sem repetição (balança + produção da rotisseria)', () => {
+    expect(modulesForSegments(['GROCERY', 'ICE_CREAM', 'ROTISSERIE'])).toEqual(['SCALE_LABEL', 'RECIPES']);
+  });
+
+  it('só a rotisseria liga a produção com ficha técnica (ADR-043)', () => {
+    expect(modulesForSegments(['GROCERY', 'ICE_CREAM'])).not.toContain('RECIPES');
+    expect(modulesForSegments(['ROTISSERIE'])).toContain('RECIPES');
   });
 
   it('ramos misturados ligam os módulos de todos', () => {

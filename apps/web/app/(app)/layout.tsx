@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { STORE_ROLE_LABELS } from '@nexoloja/shared';
+import { STORE_ROLE_LABELS, type TenantModuleKey } from '@nexoloja/shared';
 import { supabase } from '@/lib/supabase';
+import { useModule } from '@/lib/useModule';
 import { isPlatformAdmin } from '@/lib/session';
 import { useMe } from '@/lib/useMe';
 import { clearCachedMe } from '@/lib/meCache';
@@ -33,6 +34,7 @@ type IconName =
   | 'entregas'
   | 'produtos'
   | 'estoque'
+  | 'producao'
   | 'defeitos'
   | 'cadastros'
   | 'clientes'
@@ -111,6 +113,17 @@ const ICON_PATHS: Record<IconName, ReactNode> = {
       <path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z" />
       <path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65" />
       <path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65" />
+    </>
+  ),
+  // Panela com vapor — Produção (ficha técnica, ADR-043).
+  producao: (
+    <>
+      <path d="M3 11h18" />
+      <path d="M5 11v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7" />
+      <path d="M1 11h2" />
+      <path d="M21 11h2" />
+      <path d="M9 7c0-1 1-1.5 1-2.5S9 3 9 3" />
+      <path d="M14 7c0-1 1-1.5 1-2.5S14 3 14 3" />
     </>
   ),
   // Triângulo de atenção — Devolvidos com defeito.
@@ -201,7 +214,14 @@ function NavIcon({ name, className = 'h-5 w-5 shrink-0' }: { name: IconName; cla
 // O menu suporta itens simples (`href`) e GRUPOS recolhíveis (`group` + `children`) — o grupo
 // "Cadastros" junta os cadastros menos frequentes (Clientes, Fornecedores) para não alongar a barra.
 // Todo item tem um `icon`: no modo retraído (trilho) só o ícone aparece.
-type NavLink = { href: string; label: string; icon: IconName; adminOnly?: boolean };
+type NavLink = {
+  href: string;
+  label: string;
+  icon: IconName;
+  adminOnly?: boolean;
+  /** Só aparece com o módulo da loja ligado (ADR-039 — gating de apresentação). */
+  module?: TenantModuleKey;
+};
 type NavGroup = { group: string; icon: IconName; children: NavLink[] };
 type NavEntry = NavLink | NavGroup;
 const isGroup = (e: NavEntry): e is NavGroup => 'group' in e;
@@ -215,6 +235,8 @@ const NAV: NavEntry[] = [
   { href: '/entregas', label: 'Entregas', icon: 'entregas' },
   { href: '/products', label: 'Produtos', icon: 'produtos' },
   { href: '/estoque', label: 'Estoque', icon: 'estoque' },
+  // Produção com ficha técnica (ADR-043): só com o módulo RECIPES (ramo Rotisseria).
+  { href: '/producao', label: 'Produção', icon: 'producao', module: 'RECIPES' },
   { href: '/devolvidos-com-defeito', label: 'Devolvidos com defeito', icon: 'defeitos' },
   {
     group: 'Cadastros',
@@ -254,6 +276,7 @@ const WARM_ROUTES = [
   '/entregas',
   '/products',
   '/estoque',
+  '/producao',
   '/customers',
   '/fornecedores',
   '/funcionarios',
@@ -268,6 +291,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [ready, setReady] = useState(false);
   const { me, setMe, isAdmin } = useMe();
+  // Itens do menu que dependem de módulo da loja (ADR-039): lidos do cache do `/me`, sem fetch.
+  const modulesOn: Record<TenantModuleKey, boolean> = {
+    CONSTRUCTION_UNITS: useModule('CONSTRUCTION_UNITS'),
+    SCALE_LABEL: useModule('SCALE_LABEL'),
+    RECIPES: useModule('RECIPES'),
+    OFFLINE_SALES: useModule('OFFLINE_SALES'),
+  };
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   // Gaveta no celular/tablet (overlay). No desktop a barra é fixa ou vira trilho retrátil.
@@ -454,6 +484,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             // Item simples (link direto).
             if (!isGroup(entry)) {
               if (entry.adminOnly && !isAdmin) return null;
+              if (entry.module && !modulesOn[entry.module]) return null;
               const active = pathname === entry.href;
               return (
                 <Link

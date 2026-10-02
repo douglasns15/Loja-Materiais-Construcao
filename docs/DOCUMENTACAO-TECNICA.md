@@ -426,6 +426,17 @@ testável exaustivamente e compartilhada entre as duas apps.
 | `POST /movements` 🔒 | Entrada/saída manual (`StockMovement` + `stockQty`). Recusa (400) produto **sem controle de estoque** (`trackStock = false`, ADR-040 §2). |
 | `POST /adjust` 🔒 | Ajuste/inventário (acerta o saldo com auditoria). Recusa (400) produto sem controle de estoque. |
 
+**`/productions` — Produção com ficha técnica (ADR-043, módulo `RECIPES`)**
+
+| Método · Rota | O que faz |
+|---|---|
+| `GET /recipes` | Fichas técnicas da loja (produtos prontos não excluídos), por nome — `RecipeRow[]`: pronto (`unit`, `pieceWeight` = peso médio quando vende inteiro, `salePrice`, `stockQty`, `trackStock`), `yieldQty`, `notes` e os insumos com `quantity`, `unitCost` (por unidade-base), `trackStock` e `available` (`stockQty − reservedQty`; `null` sem controle). Qualquer usuário. |
+| `GET /recipes/:productId` | Ficha de um produto (`null` quando não tem). Qualquer usuário. |
+| `PUT /recipes/:productId` 🔒 | Cria/substitui a ficha: `{ yieldQty, notes?, items: [{ productId, quantity }] }` (1–30 insumos, sem repetir, sem o próprio pronto; quantidades em unidade-base). O pronto precisa controlar estoque (400 com a orientação). **Admin.** |
+| `DELETE /recipes/:productId` 🔒 | Exclui a ficha (apaga de vez — configuração; as produções registradas mantêm suas linhas). **Admin.** |
+| `GET /` | Produções do dia (`?day=AAAA-MM-DD`, fuso da loja; padrão hoje), mais recentes primeiro — `ProductionRow` (`productionNumber` → `P-0001`, autor, `totalCost`, `outputs`/`inputs` com quantidade e custo unitário). |
+| `POST /` 🔒 | **Registra uma produção**: `{ productId, quantity, inputs: [{ productId, quantity }], notes? }` — só os insumos da ficha (quantidades usadas DE FATO; 0 = não usou). Insumo controlado sem saldo ⇒ 400 "Falta saldo de … Dê entrada antes de produzir". Numa transação (ADR-001): contador `Tenant.lastProductionNumber`, `StockMovement` EXPENSE + `stockQty` dos insumos controlados (insumo sem controle só soma custo), INCOME + `stockQty` do pronto, `costPrice` do pronto = **último custo** (Σ usado × custo ÷ produzido; com `priceReviewPendingAt` quando muda) e a produção com as linhas (`ProductionLine` INPUT/OUTPUT, custo congelado, elo com o movimento). Qualquer usuário (loja ativa). |
+
 **`/products` e `/categories` — Catálogo local**
 
 | Método · Rota | O que faz |

@@ -193,6 +193,13 @@ enum EmployeeRole {
   OTHER // Outra função
 }
 
+/// Sentido de uma linha de produção (ADR-043): insumo que SAIU do estoque × pronto que ENTROU.
+/// Um mesmo evento pode ter várias saídas (desmembramento — fatia 3).
+enum ProductionLineDirection {
+  INPUT // Insumo consumido (StockMovement EXPENSE)
+  OUTPUT // Produto pronto gerado (StockMovement INCOME)
+}
+
 /// Situação de retirada de um pedido SCHEDULED (ADR-020). Cache derivado dos itens,
 /// no espírito do ADR-001 (cache desnormalizado + itens/eventos como fonte de verdade).
 enum FulfillmentStatus {
@@ -240,6 +247,9 @@ model Tenant {
   // Mesma mecânica atômica do `lastDebtNumber`; sequência SEPARADA (prefixo E-). Alocado ao ABRIR
   // uma conta (1ª venda SCHEDULED de um cliente sem conta aberta). Backfill na migration 0034.
   lastDeliveryNumber   Int            @default(0)
+  // Contador de PRODUÇÕES da loja (ADR-043): último nº emitido, exibido como "P-0001". Mesma mecânica
+  // atômica dos demais contadores; sequência SEPARADA. Alocado ao registrar uma produção.
+  lastProductionNumber Int            @default(0)
   /// Ramos da loja (ADR-039), multisseleção. Backfill da migration 0041: lojas existentes = [CONSTRUCTION]
   /// (+ módulo `CONSTRUCTION_UNITS` ligado) ⇒ comportamento idêntico ao de antes. Vazio = ramo não informado.
   segments             StoreSegment[] @default([])
@@ -278,6 +288,10 @@ model Tenant {
   quoteItems          QuoteItem[]
   nfeImportItems      NfeImportItem[]
   employees           Employee[]
+  recipes             Recipe[]
+  recipeItems         RecipeItem[]
+  productions         Production[]
+  productionLines     ProductionLine[]
 
   @@map("tenants")
 }
@@ -472,6 +486,11 @@ model Product {
   quoteItems     QuoteItem[]
   stockMovements StockMovement[]
   nfeImportItems NfeImportItem[]
+  // Produção (ADR-043): a ficha técnica deste produto (quando é um PRONTO), as fichas em que ele
+  // entra como INSUMO e as linhas de produção que o movimentaram.
+  recipe          Recipe?          @relation("RecipeOutput")
+  recipeInputs    RecipeItem[]     @relation("RecipeInput")
+  productionLines ProductionLine[]
   // Auto-relação do par (ADR-015). `SetNull`: se o agregado for apagado de vez, o par
   // simplesmente deixa de existir e o produto principal segue vendendo avulso.
   pairedProduct  Product?        @relation("ProductPair", fields: [pairedProductId], references: [id], onDelete: SetNull)
@@ -1229,6 +1248,96 @@ model StockMovement {
 
   @@index([tenantId, productId, createdAt])
   @@map("stock_movements")
+}
+
+// =============================================================================
+// MÓDULO PRODUÇÃO — Ficha técnica e produção do cru ao pronto (ADR-043)
+// =============================================================================
+
+/// Ficha técnica de um produto PRONTO (ADR-043): "para produzir `yieldQty` (unidade-base do pronto),
+/// uso estes insumos". O rendimento absorve a quebra de cocção (1 kg de picanha crua → 0,650 kg).
+/// Uma ficha por produto. É configuração (não histórico): excluir apaga de vez — as produções já
+/// registradas guardam o que de fato entrou e saiu nas suas próprias linhas.
+model Recipe {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @db.Uuid
+  productId     String   @unique @db.Uuid // O produto pronto
+  yieldQty      Decimal  @db.Decimal(12, 4) // Quanto a ficha rende, na unidade-base do pronto
+  notes         String?  @db.VarChar(300) // Modo de preparo / observação curta
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  // Autoria (ADR-010): `*Id` referência solta (sem FK); `*Name` snapshot.
+  createdById   String?  @db.Uuid
+  createdByName String?  @db.VarChar(100)
+  updatedById   String?  @db.Uuid
+  updatedByName String?  @db.VarChar(100)
+
+  tenant  Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product Product      @relation("RecipeOutput", fields: [productId], references: [id])
+  items   RecipeItem[]
+
+  @@index([tenantId])
+  @@map("recipes")
+}
+
+/// Insumo de uma ficha técnica (ADR-043): quanto (unidade-base do insumo) entra no rendimento da ficha.
+/// Insumo sem controle de estoque (ADR-040 §2) entra só no custo.
+model RecipeItem {
+  id        String  @id @default(uuid()) @db.Uuid
+  tenantId  String  @db.Uuid // Denormalizado para RLS (ADR-003)
+  recipeId  String  @db.Uuid
+  productId String  @db.Uuid // O insumo
+  quantity  Decimal @db.Decimal(12, 4)
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  recipe  Recipe  @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  product Product @relation("RecipeInput", fields: [productId], references: [id])
+
+  @@index([recipeId])
+  @@index([tenantId, productId])
+  @@map("recipe_items")
+}
+
+/// Uma PRODUÇÃO registrada (ADR-043), exibida como "P-0001": o evento atômico em que os insumos
+/// saíram do estoque e o pronto entrou. O que entrou/saiu fica nas linhas (`ProductionLine`).
+model Production {
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String   @db.Uuid
+  productionNumber Int // Sequencial por loja (`Tenant.lastProductionNumber`)
+  totalCost        Decimal  @db.Decimal(12, 2) // Σ insumo usado × custo do insumo
+  notes            String?  @db.VarChar(300)
+  createdAt        DateTime @default(now())
+  // Autoria (ADR-010): quem registrou. Referência solta + snapshot do nome.
+  userId           String?  @db.Uuid
+  registeredByName String?  @db.VarChar(100)
+
+  tenant Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lines  ProductionLine[]
+
+  @@unique([tenantId, productionNumber])
+  @@index([tenantId, createdAt])
+  @@map("productions")
+}
+
+/// Linha de uma produção (ADR-043): um insumo consumido (INPUT) ou um pronto gerado (OUTPUT), em
+/// unidade-base, com o custo unitário (base) congelado no evento e o elo com o StockMovement gerado.
+model ProductionLine {
+  id              String                  @id @default(uuid()) @db.Uuid
+  tenantId        String                  @db.Uuid // Denormalizado para RLS (ADR-003)
+  productionId    String                  @db.Uuid
+  productId       String                  @db.Uuid
+  direction       ProductionLineDirection
+  quantity        Decimal                 @db.Decimal(12, 4)
+  unitCost        Decimal?                @db.Decimal(12, 4) // Custo por unidade-base no evento
+  stockMovementId String?                 @db.Uuid // Referência solta (insumo sem controle não gera)
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  production Production @relation(fields: [productionId], references: [id], onDelete: Cascade)
+  product    Product    @relation(fields: [productId], references: [id])
+
+  @@index([productionId])
+  @@index([tenantId, productId])
+  @@map("production_lines")
 }
 
 // =============================================================================
