@@ -38,7 +38,8 @@ app.use(
       'https://nexoloja-web.imortal.workers.dev',
     ],
     allowHeaders: ['Authorization', 'Content-Type'],
-    allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    // PUT entrou com `PUT /tenant/delivery-settings` (ADR-042); sem ele o preflight barra a rota.
+    allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   }),
 );
 
