@@ -63,6 +63,7 @@ export function ScheduleStep({
   customerId,
   customerName,
   perItemSchedule,
+  slotOnly = false,
 }: {
   type: FulfillmentType;
   value: ScheduleValue;
@@ -71,6 +72,8 @@ export function ScheduleStep({
   customerName: string;
   /** "Data por item" ligada no checkout: as datas vêm de cada item, sem faixa única. */
   perItemSchedule: boolean;
+  /** Só dia + faixa (reagendar no "Voltou / não entregue"): sem cabeçalho, endereço, entregador e obs. */
+  slotOnly?: boolean;
 }) {
   const [settings, setSettings] = useState<DeliverySettings>(DEFAULT_DELIVERY_SETTINGS);
   const [couriers, setCouriers] = useState<EmployeeRow[]>([]);
@@ -137,14 +140,16 @@ export function ScheduleStep({
 
   return (
     <div className="space-y-3 rounded-xl border border-indigo-200 bg-indigo-50/50 p-4">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-semibold text-indigo-900">
-          {FULFILLMENT_TYPE_LABELS[type]} agendada
-        </span>
-        <span className="text-xs text-indigo-700">
-          {isDelivery ? 'a loja leva até o cliente' : 'o cliente busca na loja'}
-        </span>
-      </div>
+      {!slotOnly && (
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm font-semibold text-indigo-900">
+            {FULFILLMENT_TYPE_LABELS[type]} agendada
+          </span>
+          <span className="text-xs text-indigo-700">
+            {isDelivery ? 'a loja leva até o cliente' : 'o cliente busca na loja'}
+          </span>
+        </div>
+      )}
 
       {perItemSchedule ? (
         <p className="text-xs text-indigo-800">
@@ -240,7 +245,7 @@ export function ScheduleStep({
         </>
       )}
 
-      {isDelivery && (
+      {isDelivery && !slotOnly && (
         <>
           <label className="block text-xs font-medium text-gray-600">
             Endereço da entrega{customerName ? ` — ${customerName}` : ''}
@@ -288,18 +293,20 @@ export function ScheduleStep({
         </>
       )}
 
-      <label className="block text-xs font-medium text-gray-600">
-        Observações {isDelivery ? 'da entrega' : 'da retirada'} (opcional)
-        <textarea
-          id="sched-notes"
-          value={value.notes}
-          onChange={(e) => set({ notes: e.target.value })}
-          rows={2}
-          maxLength={500}
-          placeholder={isDelivery ? 'Ex.: portão azul; troco para R$ 100' : 'Ex.: quem retira é o João'}
-          className={`mt-1 ${inputCls}`}
-        />
-      </label>
+      {!slotOnly && (
+        <label className="block text-xs font-medium text-gray-600">
+          Observações {isDelivery ? 'da entrega' : 'da retirada'} (opcional)
+          <textarea
+            id="sched-notes"
+            value={value.notes}
+            onChange={(e) => set({ notes: e.target.value })}
+            rows={2}
+            maxLength={500}
+            placeholder={isDelivery ? 'Ex.: portão azul; troco para R$ 100' : 'Ex.: quem retira é o João'}
+            className={`mt-1 ${inputCls}`}
+          />
+        </label>
+      )}
     </div>
   );
 }

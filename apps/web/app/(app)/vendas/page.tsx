@@ -367,8 +367,21 @@ export default function VendasPage() {
       apiGet<Store>('/tenant').then(setStore).catch(() => {});
       const session = await apiGet<{ id: string } | null>('/cash-sessions/current');
       setOpenSessionId(session?.id ?? null);
-      await loadOrders();
-      void loadReport();
+      // `?codigo=V-000123` (vindo do "Voltou / não entregue" das Entregas): abre já buscando a venda,
+      // para o operador cancelar. Lido da URL sem useSearchParams (evita o Suspense obrigatório).
+      const codigo =
+        typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('codigo')?.trim() : '';
+      if (codigo && !search) {
+        const s: Search = { type: 'code', term: codigo };
+        setSearchType('code');
+        setSearchInput(codigo);
+        setSearch(s);
+        await loadOrders(range, sort, s);
+        setReport(null);
+      } else {
+        await loadOrders();
+        void loadReport();
+      }
       setError(null);
       setLoadFailed(false);
     } catch (e) {

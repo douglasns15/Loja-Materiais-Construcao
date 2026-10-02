@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_DELIVERY_SETTINGS, deliverySettingsSchema, dispatchOrderSchema, parseDeliverySettings } from './delivery';
+import {
+  DEFAULT_DELIVERY_SETTINGS,
+  deliverySettingsSchema,
+  dispatchOrderSchema,
+  parseDeliverySettings,
+  returnFromRouteSchema,
+} from './delivery';
 import { createEmployeeSchema, updateEmployeeSchema } from './employee';
 import { createSaleSchema } from './sale';
 
@@ -47,6 +53,16 @@ describe('funcionários', () => {
   it('edição aceita limpar o telefone e desativar', () => {
     expect(updateEmployeeSchema.parse({ phone: null, isActive: false })).toEqual({ phone: null, isActive: false });
   });
+  it('e-mail opcional e validado; edição limpa com null (0043)', () => {
+    expect(createEmployeeSchema.parse({ name: 'Ana', email: ' ana@loja.com ' }).email).toBe('ana@loja.com');
+    expect(createEmployeeSchema.safeParse({ name: 'Ana', email: 'ana@' }).success).toBe(false);
+    expect(updateEmployeeSchema.parse({ email: null })).toEqual({ email: null });
+  });
+  it('aceita as novas funções', () => {
+    for (const role of ['OPERATOR', 'CASHIER', 'BUTCHER', 'COOK', 'GRILLER', 'CLEANING', 'SECURITY']) {
+      expect(createEmployeeSchema.safeParse({ name: 'X', role }).success).toBe(true);
+    }
+  });
 });
 
 describe('createSaleSchema — agenda de entregas', () => {
@@ -73,12 +89,38 @@ describe('createSaleSchema — agenda de entregas', () => {
 });
 
 describe('dispatchOrderSchema (saiu para entrega)', () => {
-  it('aceita marcar/desfazer a saída e trocar/tirar o entregador', () => {
+  it('aceita marcar a saída (com dia, p/ "Data por item") e trocar/tirar o entregador', () => {
     expect(dispatchOrderSchema.safeParse({ dispatched: true }).success).toBe(true);
+    expect(dispatchOrderSchema.safeParse({ dispatched: true, day: '2026-10-02' }).success).toBe(true);
     expect(dispatchOrderSchema.safeParse({ courierId: null }).success).toBe(true);
-    expect(dispatchOrderSchema.safeParse({ dispatched: false, courierId: '00000000-0000-4000-8000-000000000003' }).success).toBe(true);
+    expect(dispatchOrderSchema.safeParse({ courierId: '00000000-0000-4000-8000-000000000003' }).success).toBe(true);
   });
-  it('recusa corpo vazio', () => {
+  it('recusa corpo vazio, "desfazer" (agora é "Voltou") e dia mal formatado', () => {
     expect(dispatchOrderSchema.safeParse({}).success).toBe(false);
+    expect(dispatchOrderSchema.safeParse({ dispatched: false }).success).toBe(false);
+    expect(dispatchOrderSchema.safeParse({ dispatched: true, day: '02/10/2026' }).success).toBe(false);
+  });
+});
+
+describe('returnFromRouteSchema (voltou / não entregue)', () => {
+  it('reagenda só com o dia ou com a faixa', () => {
+    expect(returnFromRouteSchema.safeParse({ date: '2026-10-03' }).success).toBe(true);
+    expect(
+      returnFromRouteSchema.safeParse({
+        date: '2026-10-03',
+        start: '2026-10-03T17:00:00.000Z',
+        end: '2026-10-03T17:30:00.000Z',
+      }).success,
+    ).toBe(true);
+  });
+  it('recusa faixa pela metade ou invertida', () => {
+    expect(returnFromRouteSchema.safeParse({ date: '2026-10-03', start: '2026-10-03T17:00:00.000Z' }).success).toBe(false);
+    expect(
+      returnFromRouteSchema.safeParse({
+        date: '2026-10-03',
+        start: '2026-10-03T17:30:00.000Z',
+        end: '2026-10-03T17:00:00.000Z',
+      }).success,
+    ).toBe(false);
   });
 });

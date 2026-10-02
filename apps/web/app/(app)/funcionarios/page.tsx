@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   createEmployeeSchema,
+  updateEmployeeSchema,
   EMPLOYEE_ROLE_LABELS,
   formatPhoneBr,
   type EmployeeRole,
@@ -21,7 +22,7 @@ import { MaskedInput } from '@/components/MaskedInput';
  * agendada no PDV. Admin cadastra/edita/desativa/exclui; os demais só consultam (a API também barra).
  */
 
-const EMPTY_FORM = { name: '', phone: '', role: 'COURIER' as EmployeeRole };
+const EMPTY_FORM = { name: '', phone: '', email: '', role: 'COURIER' as EmployeeRole };
 
 const inputCls =
   'rounded-lg border border-gray-300 px-3 py-2 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100';
@@ -66,7 +67,7 @@ export default function EmployeesPage() {
   const filtered = useMemo(() => {
     const q = normalizeSearchText(search);
     if (!q) return rows;
-    return rows.filter((r) => normalizeSearchText(`${r.name} ${r.phone ?? ''}`).includes(q));
+    return rows.filter((r) => normalizeSearchText(`${r.name} ${r.phone ?? ''} ${r.email ?? ''}`).includes(q));
   }, [rows, search]);
 
   async function onCreate(e: React.FormEvent) {
@@ -75,10 +76,12 @@ export default function EmployeesPage() {
     const parsed = createEmployeeSchema.safeParse({
       name: form.name,
       ...(form.phone ? { phone: form.phone } : {}),
+      ...(form.email.trim() ? { email: form.email } : {}),
       role: form.role,
     });
     if (!parsed.success) {
-      setError('Informe o nome do funcionário.');
+      const emailBad = parsed.error.issues.some((i) => i.path[0] === 'email');
+      setError(emailBad ? 'E-mail inválido.' : 'Informe o nome do funcionário.');
       return;
     }
     setSaving(true);
@@ -96,7 +99,7 @@ export default function EmployeesPage() {
   function startEdit(r: EmployeeRow) {
     setConfirmDeleteId(null);
     setEditId(r.id);
-    setEdit({ name: r.name, phone: r.phone ?? '', role: r.role });
+    setEdit({ name: r.name, phone: r.phone ?? '', email: r.email ?? '', role: r.role });
   }
 
   async function saveEdit(id: string) {
@@ -105,8 +108,18 @@ export default function EmployeesPage() {
       setError('Informe o nome do funcionário.');
       return;
     }
+    const parsed = updateEmployeeSchema.safeParse({
+      name: edit.name,
+      phone: edit.phone || null,
+      email: edit.email.trim() || null,
+      role: edit.role,
+    });
+    if (!parsed.success) {
+      setError('E-mail inválido.');
+      return;
+    }
     try {
-      await apiPatch(`/employees/${id}`, { name: edit.name.trim(), phone: edit.phone || null, role: edit.role });
+      await apiPatch(`/employees/${id}`, parsed.data);
       setEditId(null);
       await load();
     } catch (err) {
@@ -141,8 +154,8 @@ export default function EmployeesPage() {
         Funcionários
       </h1>
       <p className="mb-5 text-sm text-gray-500">
-        Cadastre os <strong>entregadores</strong> para indicar quem leva cada entrega agendada no PDV.
-        Funcionário não precisa de login no sistema.
+        Cadastre a equipe da loja. Os <strong>entregadores</strong> aparecem para escolha nas entregas
+        agendadas no PDV. Funcionário não precisa de login no sistema.
       </p>
 
       <OfflineNotice />
@@ -150,7 +163,7 @@ export default function EmployeesPage() {
       {isAdmin && (
         <form
           onSubmit={onCreate}
-          className="mb-6 grid grid-cols-1 gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-md sm:grid-cols-4"
+          className="mb-6 grid grid-cols-1 gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-md sm:grid-cols-6"
         >
           <input
             id="emp-name"
@@ -170,6 +183,16 @@ export default function EmployeesPage() {
             inputMode="tel"
             className={inputCls}
           />
+          <input
+            id="emp-email"
+            type="email"
+            placeholder="E-mail (opcional)"
+            value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+            maxLength={160}
+            autoComplete="off"
+            className={`${inputCls} sm:col-span-2`}
+          />
           <select
             id="emp-role"
             value={form.role}
@@ -186,7 +209,7 @@ export default function EmployeesPage() {
           <button
             type="submit"
             disabled={saving}
-            className="rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-500 py-2 font-medium text-white shadow-sm hover:from-indigo-700 hover:to-indigo-600 disabled:opacity-60 sm:col-span-4"
+            className="rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-500 py-2 font-medium text-white shadow-sm hover:from-indigo-700 hover:to-indigo-600 disabled:opacity-60 sm:col-span-6"
           >
             {saving ? 'Salvando…' : 'Adicionar funcionário'}
           </button>
@@ -196,7 +219,7 @@ export default function EmployeesPage() {
       <div className="mb-3 sm:max-w-md">
         <input
           type="search"
-          placeholder="Buscar funcionário (nome ou telefone)…"
+          placeholder="Buscar funcionário (nome, telefone ou e-mail)…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className={`w-full ${inputCls}`}
@@ -212,6 +235,7 @@ export default function EmployeesPage() {
             <tr>
               <th className="px-4 py-2">Nome</th>
               <th className="px-4 py-2">Telefone</th>
+              <th className="px-4 py-2">E-mail</th>
               <th className="px-4 py-2">Função</th>
               <th className="px-4 py-2">Situação</th>
               {isAdmin && <th className="px-4 py-2 text-right">Ações</th>}
@@ -220,7 +244,7 @@ export default function EmployeesPage() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={isAdmin ? 5 : 4} className="px-4 py-6 text-center text-gray-500">
+                <td colSpan={isAdmin ? 6 : 5} className="px-4 py-6 text-center text-gray-500">
                   {search.trim() ? 'Nenhum funcionário encontrado para a busca.' : 'Nenhum funcionário cadastrado.'}
                 </td>
               </tr>
@@ -247,6 +271,17 @@ export default function EmployeesPage() {
                         maxDigits={11}
                         inputMode="tel"
                         className={`w-full ${inputCls} py-1`}
+                      />
+                    </td>
+                    <td className="px-4 py-2">
+                      <input
+                        id={`emp-edit-email-${r.id}`}
+                        type="email"
+                        value={edit.email}
+                        onChange={(e) => setEdit({ ...edit, email: e.target.value })}
+                        maxLength={160}
+                        className={`w-full ${inputCls} py-1`}
+                        aria-label="E-mail"
                       />
                     </td>
                     <td className="px-4 py-2">
@@ -286,6 +321,9 @@ export default function EmployeesPage() {
                   <tr key={r.id} className={`border-t border-gray-100 ${r.isActive ? '' : 'text-gray-400'}`}>
                     <td className="px-4 py-2 font-medium">{r.name}</td>
                     <td className="px-4 py-2">{r.phone ? formatPhoneBr(r.phone) : '—'}</td>
+                    <td className="max-w-[14rem] truncate px-4 py-2" title={r.email ?? undefined}>
+                      {r.email ?? '—'}
+                    </td>
                     <td className="px-4 py-2">{EMPLOYEE_ROLE_LABELS[r.role]}</td>
                     <td className="px-4 py-2">
                       <span

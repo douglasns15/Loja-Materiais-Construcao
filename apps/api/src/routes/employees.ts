@@ -10,7 +10,7 @@ import { requireAdmin, requireAuth } from '../middleware/auth';
 const employees = new Hono<Env>();
 employees.use('*', requireAuth);
 
-const SELECT = { id: true, name: true, phone: true, role: true, isActive: true } as const;
+const SELECT = { id: true, name: true, phone: true, email: true, role: true, isActive: true } as const;
 
 /** Lista os funcionários (não excluídos). `?activeOnly=true` traz só os ativos (seletor do PDV). */
 employees.get('/', async (c) => {
@@ -41,7 +41,11 @@ employees.post('/', requireAdmin, async (c) => {
   }
   const parsed = createEmployeeSchema.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) {
-    return c.json({ ok: false, error: 'Informe o nome do funcionário.', issues: parsed.error.flatten() }, 400);
+    const emailBad = parsed.error.issues.some((i) => i.path[0] === 'email');
+    return c.json(
+      { ok: false, error: emailBad ? 'E-mail inválido.' : 'Informe o nome do funcionário.', issues: parsed.error.flatten() },
+      400,
+    );
   }
   try {
     const prisma = getPrisma(c);
@@ -50,6 +54,7 @@ employees.post('/', requireAdmin, async (c) => {
         tenantId,
         name: parsed.data.name,
         phone: parsed.data.phone || null,
+        email: parsed.data.email || null,
         role: parsed.data.role,
         // Autoria (ADR-010): na criação, criado = alterado.
         createdById: c.get('userId'),
@@ -66,7 +71,7 @@ employees.post('/', requireAdmin, async (c) => {
   }
 });
 
-/** Edita (parcial) — nome, telefone, função, ativo. Admin. */
+/** Edita (parcial) — nome, telefone, e-mail, função, ativo. Admin. */
 employees.patch('/:id', requireAdmin, async (c) => {
   const tenantId = getTenantId(c);
   if (!tenantId || !getConnectionString(c.env)) {
@@ -74,17 +79,19 @@ employees.patch('/:id', requireAdmin, async (c) => {
   }
   const parsed = updateEmployeeSchema.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) {
-    return c.json({ ok: false, error: 'Dados inválidos.', issues: parsed.error.flatten() }, 400);
+    const emailBad = parsed.error.issues.some((i) => i.path[0] === 'email');
+    return c.json({ ok: false, error: emailBad ? 'E-mail inválido.' : 'Dados inválidos.', issues: parsed.error.flatten() }, 400);
   }
   try {
     const prisma = getPrisma(c);
     const id = c.req.param('id');
-    const { phone, ...rest } = parsed.data;
+    const { phone, email, ...rest } = parsed.data;
     const result = await prisma.employee.updateMany({
       where: { id, tenantId, deletedAt: null },
       data: {
         ...rest,
         ...(phone !== undefined ? { phone: phone || null } : {}),
+        ...(email !== undefined ? { email: email || null } : {}),
         updatedById: c.get('userId'),
         updatedByName: c.get('userName'),
       },

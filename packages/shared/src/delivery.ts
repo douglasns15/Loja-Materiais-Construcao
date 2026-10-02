@@ -39,20 +39,55 @@ export type DeliverySettings = z.infer<typeof deliverySettingsSchema>;
 /** Padrão quando a loja não configurou (coluna nula): faixa de 30 min, sem limite, sem restrição. */
 export const DEFAULT_DELIVERY_SETTINGS: DeliverySettings = { slotMinutes: 30, maxPerSlot: null, hours: {} };
 
+/** "AAAA-MM-DD". */
+const isoDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Dia no formato AAAA-MM-DD.');
+
 /**
  * "Saiu para entrega" e entregador de um pedido de ENTREGA (`POST /deliveries/:id/dispatch`, ADR-042).
- * `dispatched: true` marca a saída (agora); `false` desfaz. `courierId` (opcional) troca o entregador;
- * `null` tira. Ao menos um dos dois campos.
+ * `dispatched: true` registra a saída: dá baixa de TUDO o que falta (estoque) e conclui o pedido — a
+ * loja não tem confirmação do entregador em tempo real (ADR-042 §Revisão 2026-10-02). Em pedido com
+ * "Data por item", `day` limita a saída aos itens daquele dia. Não há "desfazer": se a entrega não
+ * acontecer, usa-se `POST /deliveries/:id/return-from-route`. `courierId` (opcional) troca o
+ * entregador; `null` tira. Ao menos um dos dois campos.
  */
 export const dispatchOrderSchema = z
   .object({
-    dispatched: z.boolean().optional(),
+    dispatched: z.literal(true).optional(),
+    day: isoDay.optional(),
     courierId: z.string().uuid().nullable().optional(),
   })
   .refine((v) => v.dispatched !== undefined || v.courierId !== undefined, {
     message: 'Informe a saída ou o entregador.',
   });
 export type DispatchOrderInput = z.infer<typeof dispatchOrderSchema>;
+
+/**
+ * "Voltou / não entregue" (`POST /deliveries/:id/return-from-route`, ADR-042 §Revisão 2026-10-02):
+ * desfaz a ÚLTIMA saída para entrega — a mercadoria volta ao estoque como RESERVADA e o pedido volta a
+ * "Agendado" na nova data. `start`/`end` (ISO) = nova faixa de horário (opcional; sem faixa = só o
+ * dia). Em pedido com "Data por item" vale só o `date` para os itens que voltaram.
+ * (Cancelar em vez de reagendar = o cancelamento de sempre no Histórico, que já devolve ao estoque.)
+ */
+export const returnFromRouteSchema = z
+  .object({
+    date: isoDay,
+    start: z.string().datetime({ offset: true }).optional(),
+    end: z.string().datetime({ offset: true }).optional(),
+    notes: z.string().trim().max(200).optional(),
+  })
+  .refine((v) => (v.start == null) === (v.end == null), { message: 'Informe o início e o fim da faixa.' })
+  .refine((v) => !v.start || !v.end || new Date(v.end).getTime() > new Date(v.start).getTime(), {
+    message: 'O fim da faixa precisa ser depois do início.',
+  });
+export type ReturnFromRouteInput = z.infer<typeof returnFromRouteSchema>;
+
+/** Marcas do log de retiradas (`OrderItemDelivery.reference`) usadas pela entrega (ADR-042). */
+export const DELIVERY_LOG_REF = {
+  /** Saída registrada pelo "Saiu para entrega". */
+  DISPATCH: 'SAIU_ENTREGA',
+  /** Linha NEGATIVA: a mercadoria voltou ("Voltou / não entregue"). */
+  RETURNED: 'VOLTOU_ENTREGA',
+} as const;
 
 /** Lê o JSON gravado tolerando nulo/legado: o que não validar cai no padrão. */
 export function parseDeliverySettings(raw: unknown): DeliverySettings {
@@ -111,6 +146,10 @@ export type DeliveryAgendaRow = {
   itemsPending: number;
   total: string;
   notes: string | null;
+  /** Pedido com "Data por item": a linha mostra SÓ os itens deste dia (sem horário). */
+  perItem: boolean;
+  /** "Data por item": quantos itens do pedido estão marcados para OUTROS dias. */
+  otherDaysItems: number;
 };
 
 /** Situação de uma conta de retiradas (ADR-028). Espelha o enum `DeliveryAccountStatus` do Prisma. */
@@ -182,6 +221,8 @@ export type DeliveryLogRow = {
   deliveredAt: string;
   deliveredByName: string | null;
   notes: string | null;
+  /** `DELIVERY_LOG_REF` quando a linha veio da entrega (saída / volta). `quantity` < 0 na volta. */
+  reference?: string | null;
 };
 
 /**

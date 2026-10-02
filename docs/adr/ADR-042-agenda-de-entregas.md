@@ -132,3 +132,22 @@ Aditiva, sem perda de dado:
 Contrato novo (regra 7, §8.2): `POST /orders` aceita `fulfillmentType`/`scheduledUntil`/`deliveryAddress`/
 `courierId`; CRUD `/employees`; `GET /deliveries?day=`; `PATCH /deliveries/:id` (entregador, faixa, endereço);
 `POST /deliveries/:id/dispatch` (fatia 3); `GET`/`PUT` das configurações de entrega.
+
+## Revisão 2026-10-02 — achados do E2E do Owner (aprovada)
+
+1. **"Saiu para entrega" conclui a entrega.** Antes, a saída só marcava `dispatchedAt` e o operador ainda tinha de
+   "Retirar" os itens para baixar o estoque — passo redundante, já que a loja não tem rastreio nem confirmação do
+   entregador em tempo real. Agora o `POST /deliveries/:id/dispatch` dá baixa de tudo o que falta (mesmo miolo da
+   retirada, ADR-001/ADR-020) e conclui o pedido; os botões "Retirar" somem em pedidos de **entrega** (retirada na
+   loja segue igual). O log marca as linhas com `reference = SAIU_ENTREGA` e o mesmo instante de `dispatchedAt`.
+2. **"Voltou / não entregue"** (`POST /deliveries/:id/return-from-route`): se o entregador volta com a mercadoria,
+   o operador **reagenda** — a última saída é desfeita (StockMovement INCOME; estoque e reserva de volta; linha
+   negativa no log com `VOLTOU_ENTREGA`), o pedido volta para a agenda na nova data/faixa e a conta de retiradas
+   reabre — ou **cancela a venda** pelo cancelamento de sempre (Histórico), que já devolve ao estoque o que tinha
+   saído. "Desfazer saída" deixa de existir. Cálculo puro no core (`planDispatch`, `statusAfterRouteReturn`).
+3. **"Data por item" entra na agenda.** O pedido aparece em cada dia que tiver item marcado (só os itens daquele
+   dia, em "Sem horário"); o detalhe agrupa os itens por data e, na entrega, oferece um "Saiu para entrega" por dia.
+4. **Funcionários:** e-mail de contato e funções Operador, Caixa, Açougueiro, Cozinheiro, Churrasqueiro, Limpeza e
+   Segurança (migration `0043`, aditiva). Só `COURIER` aparece como entregador.
+5. Agenda: concluídos ocultos por padrão (chip "Concluídos" os traz de volta); "Período de entregas" vira botão
+   primário.

@@ -111,19 +111,22 @@ export function DeliveryAgenda({
           r.end ? new Date(r.end).getTime() : null,
           now,
           r.fulfillmentStatus === 'COMPLETED',
-          !!r.dispatchedAt,
+          // "Data por item": a saída de outro dia não deixa a linha deste dia "a caminho".
+          !!r.dispatchedAt && !r.perItem,
         ),
       })),
     [rows, now],
   );
 
-  // "Saiu para entrega" direto do cartão (ADR-042, fatia 3) — o detalhe também tem o botão.
+  // "Saiu para entrega" direto do cartão (ADR-042, fatia 3) — o detalhe também tem o botão. Dá baixa
+  // no estoque e conclui (revisão 2026-10-02); em "Data por item", só os itens do dia da agenda.
   const [dispatchingId, setDispatchingId] = useState<string | null>(null);
-  async function dispatch(id: string) {
+  async function dispatch(r: DeliveryAgendaRow) {
+    const id = r.id;
     setDispatchingId(id);
     setError(null);
     try {
-      await apiPost(`/deliveries/${id}/dispatch`, { dispatched: true });
+      await apiPost(`/deliveries/${id}/dispatch`, r.perItem ? { dispatched: true, day } : { dispatched: true });
       await load();
     } catch (e) {
       setError((e as Error).message);
@@ -183,7 +186,7 @@ export function DeliveryAgenda({
   /** Cartão (lista lateral, celular e "sem horário"). */
   const card = (x: { r: DeliveryAgendaRow; u: DeliveryUrgency }, showEta = true) => {
     const st = URGENCY_STYLE[x.u];
-    const canDispatch = x.r.fulfillmentType === 'DELIVERY' && !x.r.dispatchedAt && x.u !== 'done';
+    const canDispatch = x.r.fulfillmentType === 'DELIVERY' && x.r.itemsPending > 0 && x.u !== 'done';
     return (
       <div
         key={x.r.id}
@@ -217,10 +220,18 @@ export function DeliveryAgenda({
           <span className="truncate text-xs text-gray-500">{x.r.deliveryAddress}</span>
         )}
         <span className="truncate text-xs text-gray-500">{x.r.itemsSummary}</span>
+        {x.r.perItem && (
+          <span className="text-xs font-medium text-indigo-700">
+            Data por item
+            {x.r.otherDaysItems > 0
+              ? ` · +${x.r.otherDaysItems} ${x.r.otherDaysItems === 1 ? 'item' : 'itens'} em outro dia`
+              : ''}
+          </span>
+        )}
         {x.r.fulfillmentType === 'DELIVERY' && (
           <span className="text-xs text-gray-500">
             Entregador: {x.r.courierName ?? 'a definir'}
-            {x.r.dispatchedAt && (
+            {x.r.dispatchedAt && x.u === 'done' && (
               <span className="ml-1 font-semibold text-teal-700">· saiu às {hm(x.r.dispatchedAt)}</span>
             )}
           </span>
@@ -231,7 +242,7 @@ export function DeliveryAgenda({
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                void dispatch(x.r.id);
+                void dispatch(x.r);
               }}
               disabled={dispatchingId === x.r.id}
               className="rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"

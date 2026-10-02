@@ -59,9 +59,21 @@
    - ✅ Chips com contagem filtram; ‹ › e o calendário trocam o dia.
    - ✅ "Próximas" mostra contagem ("em 10 min", "há 20 min").
    - ✅ Agendamentos antigos (só com dia) aparecem em "Sem horário definido".
-2. No cartão da entrega: **Saiu p/ entrega**.
-   - ✅ Fica **A caminho** (verde-azulado) com "saiu às HH:MM"; não mexe no estoque.
-3. Abra o pedido: troque o entregador, "Desfazer saída" e "Saiu para entrega" de novo; registre a **retirada** de
-   tudo.
-   - ✅ O pedido fica **Concluído** na agenda e o estoque baixa (produto com controle).
-4. Celular (ou janela estreita): a agenda vira **lista por horário** com as mesmas cores.
+2. No cartão da entrega: **Saiu p/ entrega** (revisão 2026-10-02).
+   - ✅ O pedido **conclui na hora** e some do painel; o estoque baixa (produto com controle).
+   - ✅ Chip **Concluídos** (tracejado) traz de volta os concluídos; "Período de entregas" é botão roxo.
+3. Ligue "Concluídos", abra o pedido entregue.
+   - ✅ Sem botões "Retirar" (pedido de entrega); "Histórico de saídas" mostra a saída "Saiu para entrega".
+   - ✅ **Voltou / não entregue** › escolha outro dia/faixa › **Reagendar entrega**: o pedido volta para a agenda
+     no novo horário, o estoque volta (reservado) e o histórico mostra "↩ … voltou ao estoque".
+   - ✅ No mesmo painel, "Cancelar a venda" abre o Histórico já com a venda buscada; cancelar devolve ao estoque.
+4. **Data por item:** venda de entrega com 2 itens em dias diferentes.
+   - ✅ O pedido aparece em cada um dos dias (em "Sem horário"), só com os itens daquele dia e "+1 item em outro dia".
+   - ✅ No detalhe, os itens vêm agrupados por data, com um "Saiu para entrega — itens de dd/mm" por dia.
+5. Celular (ou janela estreita): a agenda vira **lista por horário** com as mesmas cores.
+
+## G. Funcionários (revisão 2026-10-02)
+
+1. Cadastre um funcionário com **e-mail** e cargo **Churrasqueiro** (há também Operador, Caixa, Açougueiro,
+   Cozinheiro, Limpeza, Segurança).
+   - ✅ E-mail inválido é recusado; a busca acha pelo e-mail; só Entregador aparece no seletor de entregador.

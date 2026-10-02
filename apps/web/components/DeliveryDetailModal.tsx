@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   formatOrderNumber,
   formatDateBr,
@@ -17,6 +18,13 @@ import { apiGet, apiPatch, apiPost } from '@/lib/api';
 import { printArea } from '@/lib/print';
 import { ReceiptPrint, type Store } from '@/components/ReceiptPrint';
 import { OrderSummaryModal } from '@/components/OrderSummaryModal';
+import {
+  EMPTY_SCHEDULE,
+  localDateTimeIso,
+  ScheduleStep,
+  todayLocal,
+  type ScheduleValue,
+} from '@/components/ScheduleStep';
 
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -153,8 +161,9 @@ export function DeliveryDetailModal({
       .catch(() => {});
   }, [isDelivery]);
 
-  /** Marca/desfaz "Saiu para entrega" e/ou troca o entregador. Não mexe em estoque (ADR-020). */
-  async function dispatch(body: { dispatched?: boolean; courierId?: string | null }) {
+  /** "Saiu para entrega" (baixa o estoque e conclui — ADR-042 rev. 2026-10-02) e/ou troca o entregador.
+   *  Em "Data por item", `day` limita a saída aos itens daquele dia. */
+  async function dispatch(body: { dispatched?: true; day?: string; courierId?: string | null }) {
     setDispatching(true);
     setError(null);
     try {
@@ -166,6 +175,53 @@ export function DeliveryDetailModal({
     } finally {
       setDispatching(false);
     }
+  }
+
+  // "Voltou / não entregue": painel com Reagendar (mercadoria volta reservada, nova data/faixa) ou
+  // Cancelar a venda (cancelamento de sempre no Histórico — devolve ao estoque o que tinha saído).
+  const router = useRouter();
+  const [returning, setReturning] = useState(false);
+  const [resched, setResched] = useState<ScheduleValue>(EMPTY_SCHEDULE);
+  const [returnNote, setReturnNote] = useState('');
+  const [returnBusy, setReturnBusy] = useState(false);
+
+  async function confirmReturn() {
+    if (!detail) return;
+    if (!resched.date) {
+      setError('Escolha o novo dia da entrega.');
+      return;
+    }
+    setReturnBusy(true);
+    setError(null);
+    try {
+      const withSlot = !detail.perItemSchedule && resched.start && resched.end;
+      await apiPost(`/deliveries/${orderId}/return-from-route`, {
+        date: resched.date,
+        ...(withSlot
+          ? {
+              start: localDateTimeIso(resched.date, resched.start),
+              end: localDateTimeIso(resched.date, resched.end),
+            }
+          : {}),
+        ...(returnNote.trim() ? { notes: returnNote.trim() } : {}),
+      });
+      setReturning(false);
+      setResched(EMPTY_SCHEDULE);
+      setReturnNote('');
+      await load();
+      onDelivered();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setReturnBusy(false);
+    }
+  }
+
+  /** Leva ao Histórico já com a venda buscada, onde fica o cancelamento (motivo, estorno, defeito). */
+  function goCancel() {
+    if (!detail) return;
+    onClose();
+    router.push(`/vendas?codigo=${encodeURIComponent(formatOrderNumber(detail.orderNumber))}`);
   }
 
   /** Salva a observação livre do pedido (Order.notes). */
@@ -224,6 +280,17 @@ export function DeliveryDetailModal({
   const anyDraft = pendingItems.some((it) => Number(draft[it.id]) > 0);
   // Sem edição para baixo, o lote equivale ao antigo "tudo o que falta" (rótulo adaptativo do botão).
   const isFullWithdrawal = pendingItems.every((it) => sameQty(Number(draft[it.id]), it.remainingBaseQty));
+  // Entrega: um "Saiu p/ entrega" por dia com mercadoria pendente em "Data por item" ('' = sem data /
+  // pedido com data única — sai tudo o que falta).
+  const dayOf = (it: { scheduledPickupAt?: string | null }) =>
+    detail?.perItemSchedule ? (it.scheduledPickupAt?.slice(0, 10) ?? '') : '';
+  const pendingDays = Array.from(new Set(pendingItems.map(dayOf))).sort();
+  // "Data por item": itens ordenados e agrupados por data no quadro (discriminação pedida pelo Owner).
+  const shownItems = detail
+    ? detail.perItemSchedule
+      ? [...detail.items].sort((a, b) => (a.scheduledPickupAt ?? '9').localeCompare(b.scheduledPickupAt ?? '9'))
+      : detail.items
+    : [];
 
   return (
     <>
@@ -333,8 +400,9 @@ export function DeliveryDetailModal({
                   <span className="font-semibold text-indigo-900">Entrega</span>
                   {detail.dispatchedAt ? (
                     <span className="rounded-full bg-teal-100 px-2 py-0.5 text-xs font-semibold text-teal-800">
-                      A caminho desde{' '}
+                      Saiu às{' '}
                       {new Date(detail.dispatchedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                      {detail.fulfillmentStatus === 'COMPLETED' ? ' · concluída' : ''}
                     </span>
                   ) : null}
                 </div>
@@ -364,30 +432,108 @@ export function DeliveryDetailModal({
                       </option>
                     ))}
                   </select>
-                  {detail.fulfillmentStatus !== 'COMPLETED' &&
-                    (detail.dispatchedAt ? (
-                      <button
-                        type="button"
-                        onClick={() => dispatch({ dispatched: false })}
-                        disabled={dispatching}
-                        className="rounded-lg border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
-                      >
-                        Desfazer saída
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => dispatch({ dispatched: true })}
-                        disabled={dispatching}
-                        className="rounded-lg bg-emerald-600 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
-                      >
-                        {dispatching ? 'Registrando…' : 'Saiu para entrega'}
-                      </button>
-                    ))}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {pendingDays.map((d) => (
+                    <button
+                      key={d || 'all'}
+                      type="button"
+                      onClick={() => dispatch(d ? { dispatched: true, day: d } : { dispatched: true })}
+                      disabled={dispatching || returnBusy}
+                      className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60"
+                    >
+                      {dispatching
+                        ? 'Registrando…'
+                        : d
+                          ? `Saiu para entrega — itens de ${dateOnly(`${d}T00:00:00.000Z`)}`
+                          : 'Saiu para entrega'}
+                    </button>
+                  ))}
+                  {detail.dispatchedAt && !returning && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReturning(true);
+                        setResched({ ...EMPTY_SCHEDULE, date: todayLocal() });
+                      }}
+                      disabled={dispatching}
+                      className="rounded-lg border border-amber-400 bg-white px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-50 disabled:opacity-60"
+                    >
+                      Voltou / não entregue
+                    </button>
+                  )}
                 </div>
                 <p className="text-xs text-gray-500">
-                  Ao entregar, registre a retirada abaixo (é ela que baixa o estoque e conclui o pedido).
+                  “Saiu para entrega” dá baixa no estoque e conclui a entrega. Se o entregador voltar com a
+                  mercadoria, use “Voltou / não entregue” para reagendar ou cancelar.
                 </p>
+
+                {/* Voltou / não entregue: reagendar (mercadoria volta reservada) ou cancelar a venda. */}
+                {returning && (
+                  <div className="mt-1 space-y-3 rounded-lg border border-amber-300 bg-amber-50/70 p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-semibold text-amber-900">A entrega não aconteceu</p>
+                      <button
+                        type="button"
+                        onClick={() => setReturning(false)}
+                        className="text-xs text-gray-500 hover:text-gray-800"
+                      >
+                        Fechar
+                      </button>
+                    </div>
+                    <p className="text-xs text-amber-900">
+                      <strong>Reagendar:</strong> a mercadoria volta ao estoque reservada para este pedido e ele
+                      volta para a agenda na nova data.
+                    </p>
+                    {detail.perItemSchedule ? (
+                      <label className="block text-xs font-medium text-gray-600">
+                        Nova data dos itens que voltaram
+                        <input
+                          id="dd-resched-date"
+                          type="date"
+                          value={resched.date}
+                          min={todayLocal()}
+                          onChange={(e) => setResched({ ...resched, date: e.target.value })}
+                          className="mt-1 block w-full rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm"
+                        />
+                      </label>
+                    ) : (
+                      <ScheduleStep
+                        type="DELIVERY"
+                        value={resched}
+                        onChange={setResched}
+                        customerId=""
+                        customerName=""
+                        perItemSchedule={false}
+                        slotOnly
+                      />
+                    )}
+                    <input
+                      value={returnNote}
+                      onChange={(e) => setReturnNote(e.target.value)}
+                      maxLength={200}
+                      placeholder="Motivo (opcional) — ex.: cliente não estava em casa"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+                    />
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        onClick={goCancel}
+                        className="text-xs font-medium text-red-700 hover:underline"
+                      >
+                        Cancelar a venda (abre no Histórico)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={confirmReturn}
+                        disabled={returnBusy || !resched.date}
+                        className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
+                      >
+                        {returnBusy ? 'Reagendando…' : 'Reagendar entrega'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -429,31 +575,42 @@ export function DeliveryDetailModal({
                   <tr className="border-b border-gray-100 bg-gray-50 text-left text-gray-600">
                     <th className="px-3 py-2">Item</th>
                     <th className="px-3 py-2 text-right">Falta sair</th>
-                    <th className="px-3 py-2 text-right">Retirar agora</th>
+                    {/* Entrega: a saída é pelo "Saiu para entrega" (acima), não item a item. */}
+                    {!isDelivery && <th className="px-3 py-2 text-right">Retirar agora</th>}
                   </tr>
                 </thead>
                 <tbody>
-                  {detail.items.map((it) => {
+                  {shownItems.map((it, idx) => {
                     const remaining = it.remainingBaseQty;
                     const done = remaining <= 0;
+                    const groupDay = dayOf(it);
+                    const newGroup = detail.perItemSchedule && (idx === 0 || dayOf(shownItems[idx - 1]!) !== groupDay);
                     return (
-                      <tr key={it.id} className="border-b border-gray-50 align-middle">
+                      <Fragment key={it.id}>
+                      {newGroup && (
+                        <tr className="bg-indigo-50/60">
+                          <td colSpan={isDelivery ? 2 : 3} className="px-3 py-1.5 text-xs font-semibold text-indigo-800">
+                            {groupDay
+                              ? `${isDelivery ? 'Entrega' : 'Retirada'} em ${dateOnly(`${groupDay}T00:00:00.000Z`)}`
+                              : 'Sem data definida'}
+                          </td>
+                        </tr>
+                      )}
+                      <tr className="border-b border-gray-50 align-middle">
                         <td className="px-3 py-2">
                           <div className="font-medium text-gray-800">{it.productName}</div>
                           <div className="text-xs text-gray-500">
                             Vendido: {qty(it.quantity)} {unitLabel(it.unit)}
-                            {detail.perItemSchedule && it.scheduledPickupAt
-                              ? ` · previsão ${dateOnly(it.scheduledPickupAt)}`
-                              : ''}
                           </div>
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">
                           {done ? (
-                            <span className="text-xs font-medium text-green-700">retirado</span>
+                            <span className="text-xs font-medium text-green-700">{isDelivery ? 'saiu' : 'retirado'}</span>
                           ) : (
                             qty(remaining)
                           )}
                         </td>
+                        {!isDelivery && (
                         <td className="px-3 py-2 text-right">
                           {done ? (
                             <span className="text-gray-300">—</span>
@@ -481,14 +638,16 @@ export function DeliveryDetailModal({
                             </div>
                           )}
                         </td>
+                        )}
                       </tr>
+                      </Fragment>
                     );
                   })}
                 </tbody>
               </table>
             </div>
 
-            {anyPending && (
+            {anyPending && !isDelivery && (
               <div className="mt-3 space-y-2">
                 {/* Dica: quando há mais de um item pendente, o operador pode ajustar a quantidade de
                     cada linha acima e retirar TODOS de uma vez neste botão (não precisa item a item). */}
@@ -521,22 +680,30 @@ export function DeliveryDetailModal({
 
             {/* Log de retiradas (o "lastro"): cada saída com data, quantidade e autor. */}
             <div className="mt-5">
-              <h3 className="mb-2 text-sm font-semibold text-gray-700">Histórico de retiradas</h3>
+              <h3 className="mb-2 text-sm font-semibold text-gray-700">
+                {isDelivery ? 'Histórico de saídas' : 'Histórico de retiradas'}
+              </h3>
               {detail.itemDeliveries.length === 0 ? (
-                <p className="text-sm text-gray-500">Nada retirado ainda.</p>
+                <p className="text-sm text-gray-500">{isDelivery ? 'Nada saiu ainda.' : 'Nada retirado ainda.'}</p>
               ) : (
                 <ul className="space-y-1">
                   {detail.itemDeliveries.map((log) => {
                     const item = detail.items.find((it) => it.id === log.orderItemId);
+                    // Linha negativa = a mercadoria voltou ("Voltou / não entregue").
+                    const back = Number(log.quantity) < 0;
                     return (
                       <li
                         key={log.id}
-                        className="flex items-start justify-between gap-2 rounded-lg bg-gray-50 px-3 py-2 text-sm"
+                        className={`flex items-start justify-between gap-2 rounded-lg px-3 py-2 text-sm ${
+                          back ? 'bg-amber-50' : 'bg-gray-50'
+                        }`}
                       >
                         <div className="min-w-0">
-                          <div className="truncate font-medium text-gray-800">
-                            {item?.productName ?? 'Item'} · {qty(log.quantity)}
+                          <div className={`truncate font-medium ${back ? 'text-amber-900' : 'text-gray-800'}`}>
+                            {back ? '↩ ' : ''}
+                            {item?.productName ?? 'Item'} · {qty(Math.abs(Number(log.quantity)))}
                             {item ? ` ${unitLabel(item.unit)}` : ''}
+                            {back ? ' voltou ao estoque' : ''}
                           </div>
                           <div className="text-xs text-gray-500">
                             {dateTime(log.deliveredAt)}

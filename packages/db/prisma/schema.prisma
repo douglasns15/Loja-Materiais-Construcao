@@ -183,6 +183,13 @@ enum FulfillmentType {
 /// Função do funcionário (ADR-042). Enum extensível — novas funções entram como novos valores.
 enum EmployeeRole {
   COURIER // Entregador
+  OPERATOR // Operador
+  CASHIER // Caixa
+  BUTCHER // Açougueiro
+  COOK // Cozinheiro
+  GRILLER // Churrasqueiro
+  CLEANING // Limpeza
+  SECURITY // Segurança
   OTHER // Outra função
 }
 
@@ -599,6 +606,7 @@ model Employee {
   tenantId      String       @db.Uuid
   name          String       @db.VarChar(120)
   phone         String?      @db.VarChar(20)
+  email         String?      @db.VarChar(160) // Contato (não é login — funcionário não acessa o sistema)
   role          EmployeeRole @default(COURIER)
   isActive      Boolean      @default(true)
   deletedAt     DateTime? // Soft-delete (ADR-004)

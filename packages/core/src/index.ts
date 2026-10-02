@@ -1686,6 +1686,55 @@ export function reconcileReserved(lines: DeliverableLine[]): number {
   return Number(total.toFixed(4));
 }
 
+/** Linha de pedido para a saída para entrega (ADR-042): id + quantidades em unidade-base + data por item. */
+export type DispatchableLine = DeliverableLine & {
+  id: string;
+  /** "Data por item" (ADR-020): instante (ms) da data do item, gravada como meia-noite UTC. */
+  dayMs?: number | null;
+};
+
+/**
+ * "Saiu para entrega" (ADR-042, revisão 2026-10-02): o que sai agora e o status resultante. Sai TUDO
+ * o que falta de cada linha — ou, em "Data por item" com `dayMs`, só das linhas daquele dia. Função
+ * pura; o servidor aplica as linhas na transação (StockMovement + caches, ADR-001).
+ */
+export function planDispatch(
+  lines: DispatchableLine[],
+  opts: { perItemSchedule: boolean; dayMs?: number | null },
+): { lines: { id: string; qty: number }[]; nextStatus: 'PENDING' | 'PARTIAL' | 'COMPLETED' } {
+  const out: { id: string; qty: number }[] = [];
+  const delivered = new Map(lines.map((l) => [l.id, l.deliveredBaseQty]));
+  for (const l of lines) {
+    const remaining = remainingToDeliver(l.baseQuantity, l.deliveredBaseQty);
+    if (toQtyUnits(remaining) <= 0) continue;
+    if (opts.perItemSchedule && opts.dayMs != null && l.dayMs !== opts.dayMs) continue;
+    out.push({ id: l.id, qty: remaining });
+    delivered.set(l.id, applyItemDelivery(l.baseQuantity, l.deliveredBaseQty, remaining).deliveredBaseQty);
+  }
+  const nextStatus = orderFulfillmentStatus(
+    lines.map((l) => ({ baseQuantity: l.baseQuantity, deliveredBaseQty: delivered.get(l.id)! })),
+  );
+  return { lines: out, nextStatus };
+}
+
+/**
+ * "Voltou / não entregue" (ADR-042, revisão 2026-10-02): status do pedido depois de devolver ao
+ * estoque o que a última saída baixou (`sent`, por linha). O retirado nunca fica negativo.
+ */
+export function statusAfterRouteReturn(
+  lines: (DeliverableLine & { id: string })[],
+  sent: { id: string; qty: number }[],
+): 'PENDING' | 'PARTIAL' | 'COMPLETED' {
+  const back = new Map<string, number>();
+  for (const s of sent) back.set(s.id, (back.get(s.id) ?? 0) + s.qty);
+  return orderFulfillmentStatus(
+    lines.map((l) => ({
+      baseQuantity: l.baseQuantity,
+      deliveredBaseQty: Math.max(0, Number((l.deliveredBaseQty - (back.get(l.id) ?? 0)).toFixed(4))),
+    })),
+  );
+}
+
 // =============================================================================
 // RELATÓRIOS (Reports) — vendas por período e formas de pagamento
 // =============================================================================
