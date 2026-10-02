@@ -948,7 +948,7 @@ export function ProductDetail({
             {priceReviewPending && (
               <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
                 <p className="text-xs text-amber-800">
-                  ⚠️ O <strong>custo</strong> deste produto foi ajustado por uma Entrada de estoque
+                  ⚠️ O <strong>custo</strong> deste produto foi ajustado por uma Entrada de estoque ou Produção
                   {product.priceReviewPendingAt
                     ? ` em ${new Date(product.priceReviewPendingAt).toLocaleDateString('pt-BR')}`
                     : ''}

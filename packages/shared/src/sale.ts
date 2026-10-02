@@ -55,6 +55,13 @@ export const FULFILLMENT_STATUS_LABELS = {
 } as const;
 export type FulfillmentStatusCode = keyof typeof FULFILLMENT_STATUS_LABELS;
 
+/** Mesma situação, nos termos de um pedido de ENTREGA pela loja (ADR-042) — "A entregar", não "A retirar". */
+export const DELIVERY_FULFILLMENT_STATUS_LABELS: Record<FulfillmentStatusCode, string> = {
+  PENDING: 'A entregar',
+  PARTIAL: 'Entrega parcial',
+  COMPLETED: 'Entregue',
+};
+
 export const saleItemSchema = z.object({
   productId: z.string().uuid(),
   quantity: z.number().positive(),

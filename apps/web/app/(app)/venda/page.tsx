@@ -3463,8 +3463,9 @@ export default function VendaPage() {
                   Data por item
                 </label>
                 <p className="ml-6 text-xs text-gray-500">
-                  Use quando os itens saem em dias diferentes (ex.: cimento hoje, telhas na semana que vem).
-                  Cada item ganha a sua data, sem horário — por isso o pedido não entra na Agenda do dia.
+                  Use quando os itens saem em dias diferentes (ex.: um item hoje, outro na semana que vem).
+                  Cada item ganha a sua data, sem horário: na Agenda, o pedido aparece em cada dia só com os
+                  itens daquele dia.
                 </p>
               </div>
 

@@ -65,7 +65,8 @@ const pieceWeightOf = (p: ProductCols) =>
 
 const RECIPE_INCLUDE = {
   product: { select: PRODUCT_COLS },
-  items: { include: { product: { select: PRODUCT_COLS } }, orderBy: { id: 'asc' } },
+  // Insumos em ordem alfabética (o id é aleatório e embaralhava a ficha a cada carga).
+  items: { include: { product: { select: PRODUCT_COLS } }, orderBy: { product: { name: 'asc' } } },
 } as const;
 type RecipeWithAll = Prisma.RecipeGetPayload<{ include: typeof RECIPE_INCLUDE }>;
 

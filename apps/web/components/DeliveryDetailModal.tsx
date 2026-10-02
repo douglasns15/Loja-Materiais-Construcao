@@ -6,6 +6,7 @@ import {
   formatOrderNumber,
   formatDateBr,
   formatPhoneBr,
+  DELIVERY_FULFILLMENT_STATUS_LABELS,
   FULFILLMENT_STATUS_LABELS,
   FULFILLMENT_TYPE_LABELS,
   unitTypeLabels,
@@ -54,6 +55,18 @@ const qty = (v: string | number) => {
   const n = Number(v);
   return Number.isInteger(n) ? String(n) : String(Number(n.toFixed(4)));
 };
+
+/**
+ * O log grava em UNIDADE-BASE (1,2 kg), mas o item mostra a unidade VENDIDA (1 Unidade do "vendido
+ * inteiro", ADR-040 §4; 2 rolos = 200 m, ADR-013). Converte para a unidade vendida pela proporção da
+ * linha — sem isso o histórico dizia "1.2 Unidade (un)".
+ */
+function soldQtyOf(item: { quantity: string; baseQuantity: string | null } | undefined, baseQty: number): number {
+  if (!item?.baseQuantity) return baseQty;
+  const base = Number(item.baseQuantity);
+  const sold = Number(item.quantity);
+  return base > 0 && sold > 0 ? Number(((baseQty * sold) / base).toFixed(4)) : baseQty;
+}
 
 /** Compara duas quantidades na precisão do estoque (4 casas), sem ruído de ponto flutuante. */
 const sameQty = (a: number, b: number) => Math.round(a * 10000) === Math.round(b * 10000);
@@ -348,7 +361,9 @@ export function DeliveryDetailModal({
                           : 'bg-white/20 text-white'
                     }`}
                   >
-                    {FULFILLMENT_STATUS_LABELS[detail.fulfillmentStatus]}
+                    {(detail.fulfillmentType === 'DELIVERY'
+                      ? DELIVERY_FULFILLMENT_STATUS_LABELS
+                      : FULFILLMENT_STATUS_LABELS)[detail.fulfillmentStatus]}
                   </span>
                   {!detail.perItemSchedule && detail.scheduledPickupAt && (
                     <span className="ml-2 text-xs text-indigo-100">
@@ -701,7 +716,7 @@ export function DeliveryDetailModal({
                         <div className="min-w-0">
                           <div className={`truncate font-medium ${back ? 'text-amber-900' : 'text-gray-800'}`}>
                             {back ? '↩ ' : ''}
-                            {item?.productName ?? 'Item'} · {qty(Math.abs(Number(log.quantity)))}
+                            {item?.productName ?? 'Item'} · {qty(soldQtyOf(item, Math.abs(Number(log.quantity))))}
                             {item ? ` ${unitLabel(item.unit)}` : ''}
                             {back ? ' voltou ao estoque' : ''}
                           </div>

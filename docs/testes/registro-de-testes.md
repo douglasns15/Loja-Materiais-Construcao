@@ -6006,3 +6006,31 @@ Ambiente: `nexoloja-web.imortal.workers.dev`, API `22042b01` + web `8cfe172e` (c
 - Loja Demo: venda comum seguiu baixando estoque.
 - Validação de escrita no `wrangler tail`: `POST /orders` (várias), `POST /products`, `POST /stock/adjust` e `return-items` — todos `Ok`, nenhum erro.
 - **Achados do Owner:** (1) peso exibido "0,85" em vez de "0,850" → corrigido (`formatWeight`, commit `3d57bc7`; deploy pendente). (2) Pedido de evolução: estoque de itens pesados alimentado **por peças** (unidades com peso) para saber quantos kg restam — proposta em discussão. (3) Backlog: evoluções na tela **Entregas** (agendar retirada / entrega pela loja).
+
+---
+
+## Entregas (revisão ADR-042) + Funcionários (0043) + Produção com ficha técnica (ADR-043 F1) — E2E no navegador com o Owner logado (2026-10-02)
+
+Ambiente: `nexoloja-web.imortal.workers.dev`, loja `owner_kg` (Admin), API `965f7310` + web `4252ebf6` (commits `d5c37cd`, `947522e`). Testes conduzidos pelo Claude no navegador embutido, com o login feito pelo Owner. Módulo "Produção (ficha técnica)" ligado pelo Owner no painel.
+
+**Produção (ADR-043 F1) — ✅**
+- Menu mostra **Produção** só com o módulo ligado.
+- Insumos cadastrados: Frango inteiro congelado (un, R$ 16,20, controla estoque) e Tempero baiano (kg, R$ 25,00, **sem** controle).
+- Ficha do Frango Assado: o próprio pronto não aparece como insumo; custo previsto R$ 13,50 → R$ 13,92/kg com o tempero; salva com margem 65% e "sem controle · só custo".
+- Entrada de 18 frangos crus. Produção: 15 peças ⇒ 18,000 kg, 15 un + 0,300 kg, R$ 250,50 (R$ 13,92/kg).
+- **Bloqueio**: 20 peças ⇒ "Falta saldo de Frango inteiro congelado (tem 18, precisa 20)…" e botão desabilitado.
+- Usado de fato 16 frangos ⇒ R$ 266,70 (R$ 14,82/kg) ⇒ **P-0001** registrada; Frango Assado 5,900 → 23,900 kg (≈ 20 peças); frango cru 18 − 16 = 2; movimentos "Produção P-0001 — Frango Assado" (saída) e "Produção P-0001" (entrada); tempero sem movimento.
+- Custo do Frango Assado R$ 0,00 → **R$ 14,82** (último custo) + aviso "confira o preço".
+
+**Funcionários (0043) — ✅** campo E-mail e 9 funções; e-mail inválido barrado; "Carlos Teste E2E · Churrasqueiro" com e-mail; busca pelo e-mail; só Entregador aparece no seletor de entregador do PDV.
+
+**Agenda de entregas (revisão 2026-10-02) — ✅**
+- Concluídos ocultos por padrão; chip "Concluídos N" (tracejado) traz de volta; botão "Período de entregas" primário (roxo, sombra, ícone).
+- **Saiu p/ entrega** no V-000003 concluiu na hora e baixou a Picanha; detalhe sem "Retirar", "Histórico de saídas" com "Saiu para entrega".
+- **Voltou / não entregue** › reagendar 03/10 10:00–10:30 com motivo: volta a "A retirar", falta sair 1, linha "↩ … voltou ao estoque · Voltou da entrega · <motivo>", "Saiu para entrega" reaparece.
+- "Cancelar a venda (abre no Histórico)" abre `/vendas?codigo=V-000003` já buscando a venda (não cancelada).
+- **Data por item** (V-000006: Frango hoje, Tempero amanhã, Entrega para Jhon): endereço puxado do cadastro; hoje mostra só o Frango + "+1 item em outro dia"; "Saiu p/ entrega" do card baixou só os itens de hoje; amanhã mostra só o Tempero, pendente; detalhe agrupado "Entrega em 02/10 / 03/10".
+
+**Achados corrigidos na mesma rodada:** ordem dos insumos da ficha (alfabética); texto "menu Estoque › Produção"; aviso de custo cita "Entrada de estoque ou Produção"; dica de "Data por item" ainda dizia que o pedido não entra na Agenda; histórico de saídas mostrava "1.2 Unidade (un)" (base × unidade vendida) → converte para a unidade vendida; selo de pedido de entrega "A entregar / Entrega parcial / Entregue".
+
+**Não testado aqui:** usuário Operador (ficha só leitura, mas registra produção) — exige outro login.

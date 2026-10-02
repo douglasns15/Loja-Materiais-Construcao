@@ -292,7 +292,7 @@ export function RecipeSection({
               )}
             </div>
             {recipe.notes && <p className="whitespace-pre-wrap text-xs text-gray-600">{recipe.notes}</p>}
-            <p className="text-xs text-gray-500">Para produzir, use a tela Produção (menu Estoque › Produção).</p>
+            <p className="text-xs text-gray-500">Para produzir, use a tela Produção (no menu).</p>
           </div>
         ) : (
           <p className="text-sm text-gray-600">
