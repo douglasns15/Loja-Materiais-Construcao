@@ -6034,3 +6034,21 @@ Ambiente: `nexoloja-web.imortal.workers.dev`, loja `owner_kg` (Admin), API `965f
 **Achados corrigidos na mesma rodada:** ordem dos insumos da ficha (alfabética); texto "menu Estoque › Produção"; aviso de custo cita "Entrada de estoque ou Produção"; dica de "Data por item" ainda dizia que o pedido não entra na Agenda; histórico de saídas mostrava "1.2 Unidade (un)" (base × unidade vendida) → converte para a unidade vendida; selo de pedido de entrega "A entregar / Entrega parcial / Entregue".
 
 **Não testado aqui:** usuário Operador (ficha só leitura, mas registra produção) — exige outro login.
+
+## Estoque.NfeRascunho — rascunho da importação de NF-e + "Limpar dados" (2026-10-03)
+
+Pedido urgente do Owner: o "Importar NF-e" passa a ter o comportamento do contador do Caixa (prévia salva como
+rascunho; só apaga ao importar de fato ou ao limpar). Só web (`apps/web/lib/nfeDraft.ts`, `NfeImportModal.tsx`,
+`estoque/page.tsx`), sem API/migration/core/shared. Commit `f86b3b5`.
+
+| Item | Como | Resultado |
+|---|---|---|
+| Tipos e lint | `tsc --noEmit` da web + `next build` | ✅ |
+| Deploy da web | `npm run deploy` → Version `e4519ede` + smoke pós-deploy (HTML no-store, CSS 200) | ✅ |
+| E2E: ler XML → editar item → fechar (✕ ou clique fora) → reabrir → aviso "Rascunho restaurado" e edições preservadas; selo "rascunho" no botão | Owner | ⏳ pendente |
+| E2E: "Limpar dados" pede confirmação, volta à escolha do XML e o selo some | Owner | ⏳ pendente |
+| E2E: "Confirmar entrada" sem erro apaga o rascunho (reabrir mostra a escolha do XML) | Owner | ⏳ pendente |
+
+**Decisões:** com erro em algum item, o rascunho é mantido (linhas lançadas travadas) para corrigir e reenviar; ao
+restaurar, `GET /nfe/imported` é reconsultado para travar itens lançados depois (por outro aparelho/usuário);
+rascunho chaveado por usuário (como a cesta do PDV).

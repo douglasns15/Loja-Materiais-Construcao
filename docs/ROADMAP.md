@@ -3,8 +3,18 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-10-02 — **Revisão da Agenda de entregas + Funcionários + Produção com ficha
-> técnica (ADR-043).** Roteiro: [plano-implantacao-multirramo.md](plano-implantacao-multirramo.md).
+> **Última atualização:** 2026-10-03 — **Ajuste urgente: rascunho da importação de NF-e.** Roteiro:
+> [plano-implantacao-multirramo.md](plano-implantacao-multirramo.md).
+>
+> **2026-10-03 — Importar NF-e com rascunho** (`f86b3b5`, só web, sem migration/contrato; E2E do Owner PENDENTE):
+> a prévia do De-Para fica salva no aparelho por usuário (igual ao contador do Caixa) — sair do pop-up não perde a
+> conferência; selo "rascunho" no botão; só apaga ao lançar sem erro ou em **Limpar dados** (novo, substitui
+> "Trocar arquivo", com confirmação); ao restaurar reconsulta `GET /nfe/imported`. Detalhe em
+> [DOCUMENTACAO-TECNICA.md](DOCUMENTACAO-TECNICA.md) (seção `/nfe`). **Os próximos passos de 2026-10-02 abaixo
+> continuam valendo** (Produção — Fatia 2).
+>
+> **Antes:** 2026-10-02 — **Revisão da Agenda de entregas + Funcionários + Produção com ficha
+> técnica (ADR-043).**
 >
 > **NO AR 2026-10-02 (API `490fab8d`, web `8840ab5f`) — E2E VALIDADO no navegador** (conduzido pelo Claude no
 > navegador embutido, com o login do Owner na loja `owner_kg`; evidência em

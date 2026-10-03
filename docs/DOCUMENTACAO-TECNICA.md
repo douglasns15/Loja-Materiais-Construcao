@@ -462,6 +462,14 @@ testável exaustivamente e compartilhada entre as duas apps.
 | `GET /imports` | Histórico de importações agrupado por chave de acesso (data, nota, fornecedor, arquivo, nº de itens); filtro `q` (nota/fornecedor/arquivo) e paginação por cursor `before`. |
 | `GET /imports/:accessKey` | Detalhe de uma importação: itens lançados (nome do produto, quantidade, unidade) + cabeçalho (nota/fornecedor/arquivo/data). |
 
+> **Rascunho da importação (só web, 2026-10-03):** a prévia do De-Para (nota já lida + edições por linha) fica
+> salva no aparelho em `localStorage` (`apps/web/lib/nfeDraft.ts`, chave `nexoloja.nfeDraft.<userId>` — pessoal,
+> como a cesta do PDV), no mesmo padrão do contador do Caixa (`cashDrafts.ts`). Sair do pop-up não perde o
+> trabalho; o botão "Importar NF-e" mostra o selo **rascunho**. O rascunho só é apagado quando `POST /entry` lança
+> todos os itens marcados **sem erro** (com erro ele fica, com as linhas lançadas travadas) ou em **Limpar dados**
+> (com confirmação). Ao restaurar, a tela reconsulta `GET /imported` e trava os itens lançados depois — a
+> idempotência continua garantida no servidor. Nenhum contrato da API mudou.
+
 **`/customers` e `/suppliers` — Pessoas**
 
 | Método · Rota | O que faz |
