@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   formatCnpj,
   gtinKey,
@@ -19,6 +19,7 @@ import {
 } from '@nexoloja/core';
 import { apiGet, apiPost } from '@/lib/api';
 import { parseNfeXml } from '@/lib/nfe';
+import { clearNfeDraft, readNfeDraft, saveNfeDraft } from '@/lib/nfeDraft';
 import { useModule } from '@/lib/useModule';
 import { ProductPicker } from '@/components/ProductPicker';
 import { MoneyInput } from '@/components/MoneyInput';
@@ -34,6 +35,10 @@ import { MoneyInput } from '@/components/MoneyInput';
  * remarcar à força, se de fato recebeu de novo). O operador confirma quantidade/custo por linha; na
  * 2.B cada linha tem um **fator de embalagem** (sugerido pela nota via `qTrib ÷ qCom`) que converte
  * a unidade comercial (ex.: 2 CX × 12 = 24 UN) — o payload ao servidor segue já na unidade de venda.
+ *
+ * Rascunho (pedido do Owner, igual ao contador do Caixa): a prévia lida + as edições ficam salvas no
+ * aparelho (`lib/nfeDraft.ts`) — sair do pop-up não perde nada. Só some ao lançar sem erro ou em
+ * "Limpar dados".
  */
 
 /** Campos do produto que o De-Para precisa (casar por EAN + busca do ProductPicker + rótulo). */
@@ -174,12 +179,18 @@ function convertedCost(r: Row): number {
 
 const BRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
+const DATETIME = (ms: number) =>
+  new Date(ms).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+
 export function NfeImportModal({
   products,
+  draftKey,
   onClose,
   onImported,
 }: {
   products: NfeProduct[];
+  /** Id do usuário — chave do rascunho no aparelho. Ausente/null = sem rascunho (comportamento antigo). */
+  draftKey?: string | null;
   onClose: () => void;
   /** Chamado após a importação para a tela recarregar catálogo/movimentações. */
   onImported: () => Promise<void> | void;
@@ -187,25 +198,91 @@ export function NfeImportModal({
   // Ramo (ADR-039 F2): sem o módulo de obra, os seletores de unidade escondem milheiro/saco/barra…
   // (preservando a unidade que a nota/produto já trouxe).
   const construction = useModule('CONSTRUCTION_UNITS');
-  const [doc, setDoc] = useState<NFeDoc | null>(null);
-  const [rows, setRows] = useState<Row[]>([]);
+  // Rascunho salvo (lido UMA vez ao abrir): se houver, a prévia volta exatamente como foi deixada.
+  const [initialDraft] = useState(() => (draftKey ? readNfeDraft<Row>(draftKey) : null));
+  const [doc, setDoc] = useState<NFeDoc | null>(initialDraft?.doc ?? null);
+  const [rows, setRows] = useState<Row[]>(initialDraft?.rows ?? []);
+  // Quando o rascunho restaurado foi salvo — exibe o aviso "Rascunho restaurado" (some ao limpar).
+  const [restoredAt, setRestoredAt] = useState<number | null>(initialDraft?.savedAt ?? null);
+  // Persistir o rascunho? Vira `false` quando a nota é lançada sem erro (aí o rascunho é apagado e
+  // não deve renascer pelo efeito de gravação); volta a `true` ao ler um novo XML.
+  const [persist, setPersist] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [summary, setSummary] = useState<string | null>(null);
   // Nome do arquivo XML lido — enviado na confirmação e guardado no histórico de importações.
-  const [fileName, setFileName] = useState<string | null>(null);
+  const [fileName, setFileName] = useState<string | null>(initialDraft?.fileName ?? null);
   const fileRef = useRef<HTMLInputElement>(null);
   // Corpo rolável do painel — usado para voltar ao topo ao concluir, expondo o aviso de resultado.
   const bodyRef = useRef<HTMLDivElement>(null);
 
   const inputCls = 'w-full rounded-lg border border-gray-300 px-2 py-1 text-sm';
 
+  // Grava o rascunho a cada mudança da prévia (ler XML, casar produto, fator, custo, preço…).
+  useEffect(() => {
+    if (!draftKey || !doc || !persist) return;
+    saveNfeDraft<Row>(draftKey, { doc, rows, fileName });
+  }, [draftKey, doc, rows, fileName, persist]);
+
+  // Ao RESTAURAR um rascunho, reconsulta a idempotência por item: se parte da nota deu entrada
+  // depois (outro aparelho/usuário), trava essas linhas como "já lançado" — rascunho velho nunca
+  // lança em dobro (a constraint no banco segue sendo a garantia dura).
+  useEffect(() => {
+    const accessKey = initialDraft?.doc.header.accessKey;
+    if (!accessKey) return;
+    let alive = true;
+    apiGet<{ accessKey: string; importedItems: ImportedItem[] }>(`/nfe/imported?chNFe=${accessKey}`)
+      .then((r) => {
+        if (!alive) return;
+        const imported = new Map(r.importedItems.map((it) => [it.nItem, it.importedAt]));
+        setRows((rs) =>
+          rs.map((row) =>
+            !row.alreadyImported && imported.has(row.item.nItem)
+              ? {
+                  ...row,
+                  alreadyImported: true,
+                  importedAt: imported.get(row.item.nItem) ?? null,
+                  selected: false,
+                }
+              : row,
+          ),
+        );
+      })
+      .catch(() => {
+        // Falha na checagem não trava a prévia — o servidor recusa item repetido de qualquer jeito.
+      });
+    return () => {
+      alive = false;
+    };
+  }, [initialDraft]);
+
+  /** "Limpar dados": descarta a prévia (e o rascunho) e volta à escolha do XML. */
+  function onClearPreview() {
+    if (
+      persist &&
+      !window.confirm(
+        'Descartar a prévia desta nota? As conferências e edições feitas serão perdidas.',
+      )
+    ) {
+      return;
+    }
+    if (draftKey) clearNfeDraft(draftKey);
+    setDoc(null);
+    setRows([]);
+    setError(null);
+    setSummary(null);
+    setFileName(null);
+    setRestoredAt(null);
+  }
+
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     setError(null);
     setSummary(null);
+    setRestoredAt(null);
+    setPersist(true);
     setLoading(true);
     setFileName(file.name);
     try {
@@ -333,6 +410,13 @@ export function NfeImportModal({
     try {
       const resp = await apiPost<EntryResponse>('/nfe/entry', payload);
       const byItem = new Map(resp.results.map((x) => [x.nItem, x]));
+      const failed = resp.results.filter((x) => !x.ok).length;
+      // Lançou tudo sem erro ⇒ a importação está feita: apaga o rascunho. Com erro, o rascunho fica
+      // (já com as linhas lançadas travadas) para o operador corrigir e reenviar depois.
+      if (failed === 0) {
+        setPersist(false);
+        if (draftKey) clearNfeDraft(draftKey);
+      }
       setRows((rs) =>
         rs.map((r) => {
           const res = byItem.get(r.item.nItem);
@@ -348,7 +432,6 @@ export function NfeImportModal({
           };
         }),
       );
-      const failed = resp.results.filter((x) => !x.ok).length;
       setSummary(
         `${resp.imported} ${resp.imported === 1 ? 'item lançado' : 'itens lançados'}` +
           (failed > 0 ? ` · ${failed} com erro (veja abaixo)` : '') +
@@ -406,6 +489,12 @@ export function NfeImportModal({
         {error && <p className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
         {summary && (
           <p className="mb-3 rounded-lg bg-green-50 p-3 text-sm text-green-800">{summary}</p>
+        )}
+        {restoredAt != null && doc && (
+          <p className="mb-3 rounded-lg bg-indigo-50 p-3 text-sm text-indigo-800">
+            Rascunho restaurado (salvo em {DATETIME(restoredAt)}). Continue de onde parou ou use{' '}
+            <strong>Limpar dados</strong> para descartar.
+          </p>
         )}
 
         {!doc ? (
@@ -718,18 +807,19 @@ export function NfeImportModal({
             </div>
 
             <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setDoc(null);
-                  setRows([]);
-                  setError(null);
-                  setSummary(null);
-                }}
-                className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Trocar arquivo
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={onClearPreview}
+                  className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:border-red-300 hover:bg-red-50 hover:text-red-700"
+                  title="Descarta a prévia e o rascunho desta nota e volta à escolha do XML."
+                >
+                  Limpar dados
+                </button>
+                {draftKey && persist && (
+                  <span className="text-xs text-gray-400">Rascunho salvo automaticamente</span>
+                )}
+              </div>
               <div className="flex items-center gap-3">
                 <span className="text-xs text-gray-500">{selectedCount} marcado(s)</span>
                 <button

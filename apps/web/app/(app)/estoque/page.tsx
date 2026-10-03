@@ -27,6 +27,7 @@ import { useReloadOnReconnect } from '@/lib/useReloadOnReconnect';
 import { useOnline } from '@/lib/useOnline';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { useMe } from '@/lib/useMe';
+import { hasNfeDraft } from '@/lib/nfeDraft';
 import { StoreDisabledNotice } from '@/components/StoreDisabledNotice';
 import { StockDetail, type StockProduct } from '@/components/StockDetail';
 import { MoneyInput } from '@/components/MoneyInput';
@@ -213,6 +214,12 @@ export default function EstoquePage() {
   // Importação de NF-e (ADR-025, Fatia 2) — modal De-Para (leitura do XML + entrada por item).
   const [nfeOpen, setNfeOpen] = useState(false);
   const [nfeHistoryOpen, setNfeHistoryOpen] = useState(false);
+  // Há rascunho de importação salvo no aparelho? Selo "rascunho" no botão (igual ao contador do
+  // Caixa). Reavaliado ao abrir/fechar o modal — é lá que o rascunho nasce ou é apagado.
+  const [nfeDraft, setNfeDraft] = useState(false);
+  useEffect(() => {
+    setNfeDraft(me ? hasNfeDraft(me.id) : false);
+  }, [me, nfeOpen]);
 
   // Formulário de entrada de estoque (compra/recebimento).
   const [entry, setEntry] = useState({
@@ -558,10 +565,15 @@ export default function EstoquePage() {
             type="button"
             onClick={() => setNfeOpen(true)}
             disabled={!online}
-            className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
             title="Ler o XML da NF-e de compra e dar entrada no estoque item a item."
           >
             📄 Importar NF-e
+            {nfeDraft && (
+              <span className="rounded-full bg-indigo-100 px-1.5 py-0.5 text-[11px] font-semibold text-indigo-700">
+                rascunho
+              </span>
+            )}
           </button>
           {/* Histórico das importações já feitas (por XML): datas, itens e nome do arquivo. */}
           <button
@@ -1223,6 +1235,7 @@ export default function EstoquePage() {
       {nfeOpen && (
         <NfeImportModal
           products={products}
+          draftKey={me?.id ?? null}
           onClose={() => setNfeOpen(false)}
           onImported={async () => {
             await Promise.all([loadCatalog(), loadMovements()]);
