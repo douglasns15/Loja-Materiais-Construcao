@@ -6045,9 +6045,12 @@ rascunho; só apaga ao importar de fato ou ao limpar). Só web (`apps/web/lib/nf
 |---|---|---|
 | Tipos e lint | `tsc --noEmit` da web + `next build` | ✅ |
 | Deploy da web | `npm run deploy` → Version `e4519ede` + smoke pós-deploy (HTML no-store, CSS 200) | ✅ |
-| E2E: ler XML → editar item → fechar (✕ ou clique fora) → reabrir → aviso "Rascunho restaurado" e edições preservadas; selo "rascunho" no botão | Owner | ⏳ pendente |
-| E2E: "Limpar dados" pede confirmação, volta à escolha do XML e o selo some | Owner | ⏳ pendente |
-| E2E: "Confirmar entrada" sem erro apaga o rascunho (reabrir mostra a escolha do XML) | Owner | ⏳ pendente |
+| E2E: ler XML → editar item → fechar (✕ ou clique fora) → reabrir → aviso "Rascunho restaurado" e edições preservadas; selo "rascunho" no botão | Owner | ✅ |
+| E2E: "Limpar dados" pede confirmação, volta à escolha do XML e o selo some | Owner | ✅ |
+| E2E: "Confirmar entrada" sem erro apaga o rascunho (reabrir mostra a escolha do XML) | Owner | ✅ |
+
+**E2E do Owner VALIDADO (2026-10-03):** os 4 cenários passaram (fechar e restaurar com selo; Limpar dados;
+Confirmar entrada apaga o rascunho).
 
 **Decisões:** com erro em algum item, o rascunho é mantido (linhas lançadas travadas) para corrigir e reenviar; ao
 restaurar, `GET /nfe/imported` é reconsultado para travar itens lançados depois (por outro aparelho/usuário);

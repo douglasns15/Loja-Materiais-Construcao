@@ -6,7 +6,7 @@
 > **Última atualização:** 2026-10-03 — **Ajuste urgente: rascunho da importação de NF-e.** Roteiro:
 > [plano-implantacao-multirramo.md](plano-implantacao-multirramo.md).
 >
-> **2026-10-03 — Importar NF-e com rascunho** (`f86b3b5`, só web, sem migration/contrato; E2E do Owner PENDENTE):
+> **2026-10-03 — Importar NF-e com rascunho** (`f86b3b5`, só web, sem migration/contrato; **NO AR — web `e4519ede` — E2E do Owner VALIDADO**):
 > a prévia do De-Para fica salva no aparelho por usuário (igual ao contador do Caixa) — sair do pop-up não perde a
 > conferência; selo "rascunho" no botão; só apaga ao lançar sem erro ou em **Limpar dados** (novo, substitui
 > "Trocar arquivo", com confirmação); ao restaurar reconsulta `GET /nfe/imported`. Detalhe em
