@@ -1,8 +1,9 @@
 # ADR-043 — Produção com ficha técnica (do cru ao pronto)
 
 - **Status:** **Aceito** (2026-10-02) — migration `0044` aprovada e aplicada; **Fatia 1 NO AR** (API `490fab8d`,
-  web `8840ab5f`) **+ E2E validado no navegador** (registro-de-testes 2026-10-02). **Fatia 2 implementada 2026-10-07**
-  (perda + resumo do dia + histórico por dia; sem migration). Próxima: Fatia 3.
+  web `8840ab5f`) **+ E2E validado no navegador** (registro-de-testes 2026-10-02). **Fatia 2 NO AR 2026-10-07**
+  (API `674f35a3`, web `f94f5c7f`) **+ E2E validado no navegador** (perda + resumo do dia + histórico por dia; sem
+  migration). Próxima: Fatia 3.
 
 > **Decisão do Owner (2026-10-02):** (1) insumo sem saldo **bloqueia** a produção; (2) **qualquer usuário**
 > registra produção, a ficha é só do Admin; (3) custo do pronto = **último custo** da produção; (4) o

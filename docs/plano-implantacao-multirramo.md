@@ -1,5 +1,9 @@
 # Plano — Implantação multirramo (1ª loja de alimentos) + usuário multi-loja
 
+> **Estado em 2026-10-07:** **Produção Fatia 2** (perda do pronto + resumo do dia + histórico por dia, ADR-043 §3)
+> **NO AR** (API `674f35a3`, web `f94f5c7f`; commits `9118d94`, `5e0801d`) e **E2E validado no navegador**; sem
+> migration. Próxima: **Fatia 3 (desmembramento)** ou **#6 cadastro em sequência** — Owner escolhe.
+>
 > **Estado em 2026-10-02:** E2E do Owner da agenda/peças feito; os achados viraram a **revisão da ADR-042**
 > (Saiu p/ entrega conclui, Voltou/reagendar, Data por item na agenda, concluídos ocultos) + **Funcionários
 > `0043`** + **Produção com ficha técnica (ADR-043 Fatia 1, `0044`)** — tudo **NO AR** (API `490fab8d`, web
@@ -107,7 +111,8 @@ A loja de alimentos **não consegue vender hoje**:
 | 5b | **Agenda de entregas** (Funcionários, agendamento no PDV, Agenda do dia, Período de entregas, Saiu p/ entrega) — pedido do Owner, encaixado antes da #6 (commits `74d0568`, `9dbb6ae`, `106ba9f`) — E2E do Owner feito 2026-10-02 | **Sim** — `0042` aprovada e aplicada | 042 |
 | 5c | **Revisão da agenda** (Saiu p/ entrega conclui, Voltou/reagendar, Data por item na agenda, concluídos ocultos) + **Funcionários** (e-mail + 7 funções) — **NO AR + E2E validado 2026-10-02** (commits `672da74`, `f69ad3a`, `d5c37cd`, `dbc0e5a`) | **Sim** — `0043` aprovada e aplicada | 042 (revisão) |
 | 5d | **Produção com ficha técnica — Fatia 1** (ficha, tela Produção, P-0001, último custo, módulo `RECIPES`) — **NO AR + E2E validado 2026-10-02** (commits `0164bb9`, `947522e`, `dbc0e5a`) | **Sim** — `0044` aprovada e aplicada | 043 |
-| 5e | **Produção — Fatia 2** (perda/sobra + resumo do dia) e **Fatia 3** (desmembramento, rateio pelo valor de venda) | A definir na vez | 043 |
+| 5e | **Produção — Fatia 2** (perda/sobra + resumo do dia + histórico por dia) — **NO AR + E2E validado 2026-10-07** (API `674f35a3`, web `f94f5c7f`; commits `9118d94`, `5e0801d`) | Não | 043 |
+| 5f | **Produção — Fatia 3** (desmembramento: peça → cortes, rateio pelo valor de venda) | A definir na vez (talvez tabela de "modelo de desmembramento") | 043 |
 | 6 | **Cadastro em sequência** | Não | 041 §A |
 | 7 | **Cadastro no caixa** + alerta de revisão | Não (a confirmar) | 041 §B |
 | 8 | Etiqueta de balança (`scaleCode` + parser + PDV) | (usa a #2) | 040 F3 |
@@ -118,14 +123,24 @@ A loja de alimentos **não consegue vender hoje**:
 Racional: #1–#8 são o que a loja nova precisa para abrir; a planilha fica para os poucos itens sem código e
 para clientes futuros; o multi-loja é grande e não bloqueia a abertura (se o Owner precisar dele antes, sobe).
 
-## 6. Onde paramos (2026-10-02)
+## 6. Onde paramos (2026-10-07)
+
+- **5e NO AR 2026-10-07 (API `674f35a3`, web `f94f5c7f`)** — perda do pronto (`POST /productions/loss`), resumo do
+  dia (`GET /productions/summary`) e histórico por dia na tela Produção; E2E validado no navegador (roteiro
+  [testes/e2e-producao-ficha-tecnica.md](testes/e2e-producao-ficha-tecnica.md) §D). Dado de teste novo: perda de
+  2,4 kg "Sobra do dia" do Frango Assado (estoque 20,300 kg).
+- **Próxima entrega de código:** **5f — Fatia 3 (desmembramento)** ou **#6 cadastro em sequência** (ADR-041 §A) —
+  o Owner escolhe no início da sessão.
+- Faltou testar com usuário **Operador** (ficha só leitura; registra produção e perda).
+- Push dos commits em `main`: Owner.
+
+### Histórico — onde paramos em 2026-10-02
 
 - #1–#5, 5a, 5b no ar e validadas. **5c e 5d NO AR 2026-10-02 (API `490fab8d`, web `8840ab5f`)**, E2E validado no
   navegador (roteiros [testes/e2e-pecas-e-agenda-de-entregas.md](testes/e2e-pecas-e-agenda-de-entregas.md) §F/§G e
   [testes/e2e-producao-ficha-tecnica.md](testes/e2e-producao-ficha-tecnica.md); evidência em
   [testes/registro-de-testes.md](testes/registro-de-testes.md)).
-- **Próxima entrega de código: Produção Fatia 2** (perda + resumo do dia — ADR-043 §3), depois Fatia 3
-  (desmembramento) e a **#6 cadastro em sequência** (ADR-041 §A).
+- Próxima entrega era a Produção Fatia 2 — **feita em 2026-10-07** (acima).
 - Faltou testar com usuário **Operador** (ficha só leitura; registra produção).
 - Dados de teste na loja `owner_kg`: insumos Frango inteiro congelado / Tempero baiano, ficha do Frango Assado,
   produção P-0001, venda V-000006 (Data por item), funcionário "Carlos Teste E2E".

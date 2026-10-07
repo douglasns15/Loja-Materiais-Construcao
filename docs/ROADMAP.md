@@ -3,15 +3,40 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-10-03 — **Ajuste urgente: rascunho da importação de NF-e.** Roteiro:
+> **Última atualização:** 2026-10-07 — **Produção — Fatia 2 (perda do pronto + resumo do dia).** Roteiro:
 > [plano-implantacao-multirramo.md](plano-implantacao-multirramo.md).
 >
-> **2026-10-03 — Importar NF-e com rascunho** (`f86b3b5`, só web, sem migration/contrato; **NO AR — web `e4519ede` — E2E do Owner VALIDADO**):
+> **NO AR 2026-10-07 (API `674f35a3`, web `f94f5c7f`) — E2E VALIDADO no navegador** (conduzido pelo Claude no
+> navegador embutido, com o login do Owner na loja `owner_kg`; evidência em
+> [testes/registro-de-testes.md](testes/registro-de-testes.md), roteiro
+> [testes/e2e-producao-ficha-tecnica.md](testes/e2e-producao-ficha-tecnica.md) §D). Sem migration.
+> - **Perda do pronto** ([ADR-043](adr/ADR-043-producao-e-ficha-tecnica.md) §3, `9118d94`): botão "Registrar perda"
+>   no resumo (peças ou peso; motivos Sobra do dia / Queimou / Caiu / Outro — "Outro" exige descrição). Vira
+>   `StockMovement` EXPENSE com motivo `Perda — …` + `stockQty` numa transação (ADR-001), custo atual congelado,
+>   **sem tabela nova**; não passa do disponível; só produto com ficha. Rota `POST /productions/loss`.
+> - **Resumo do dia** (`GET /productions/summary?day=`): por produto pronto, **produzido × vendido × perda × em
+>   estoque agora** (vendido = mesma regra dos Relatórios, líquido do devolvido) + lista das perdas com autor e
+>   custo + selo "Perdas no custo". Core `summarizeProductionDay` (+3 testes).
+> - **Histórico por dia**: seletor "Dia" na tela Produção (produções P-, resumo e perdas de dias anteriores;
+>   registrar é sempre hoje; botão "Hoje").
+> - **Ajustes do E2E** (`5e0801d`): corrida do seletor de dia (só a busca mais recente vale), unidade na mensagem
+>   "Só há 20,300 kg…", números da tabela sem quebra no celular.
+> - **Gates:** core 485, shared 96, API e web tsc 0, build web ok. Doc §8.2 atualizada (regra 7).
+>
+> **ONDE PARAMOS / PRÓXIMOS PASSOS (2026-10-07):**
+> 1. **Produção — Fatia 3 — desmembramento** (peça → cortes, rateio do custo pelo valor de venda; desenho na
+>    ADR-043) **ou** seguir o plano multirramo pela **#6 cadastro em sequência** (ADR-041 §A) — Owner escolhe.
+> 2. Teste com usuário **Operador** (ficha só leitura; registra produção e perda) — ainda não coberto.
+> 3. Depois: #7 cadastro no caixa, #8 etiqueta de balança, #9 planilha, #10 multi-loja.
+> 4. Push dos commits locais em `main` (Owner): `9118d94`, `5e0801d` + docs.
+> 5. NFC-e segue na branch `feat/nfe-emissao` (Owner avisa quando retomar).
+>
+> **Antes:** 2026-10-03 — **Importar NF-e com rascunho** (`f86b3b5`, só web, sem migration/contrato; **NO AR — web `e4519ede` — E2E do Owner VALIDADO**):
 > a prévia do De-Para fica salva no aparelho por usuário (igual ao contador do Caixa) — sair do pop-up não perde a
 > conferência; selo "rascunho" no botão; só apaga ao lançar sem erro ou em **Limpar dados** (novo, substitui
 > "Trocar arquivo", com confirmação); ao restaurar reconsulta `GET /nfe/imported`. Detalhe em
-> [DOCUMENTACAO-TECNICA.md](DOCUMENTACAO-TECNICA.md) (seção `/nfe`). **Os próximos passos de 2026-10-02 abaixo
-> continuam valendo** (Produção — Fatia 2).
+> [DOCUMENTACAO-TECNICA.md](DOCUMENTACAO-TECNICA.md) (seção `/nfe`). (Os próximos passos de 2026-10-02 abaixo
+> foram cumpridos/atualizados em 2026-10-07, acima.)
 >
 > **Antes:** 2026-10-02 — **Revisão da Agenda de entregas + Funcionários + Produção com ficha
 > técnica (ADR-043).**
@@ -36,7 +61,7 @@
 >   Entregue", textos.
 > - **Gates:** core 482, shared 94, API e web tsc 0. Doc §8.2 atualizada (regra 7).
 >
-> **ONDE PARAMOS / PRÓXIMOS PASSOS (2026-10-02):**
+> **ONDE PARAMOS / PRÓXIMOS PASSOS (2026-10-02) — histórico; a Fatia 2 foi feita em 2026-10-07:**
 > 1. **Produção — Fatia 2**: registrar perda (sobra do dia) + resumo do dia (produzido × vendido × perda × em
 >    estoque). Depois a **Fatia 3 — desmembramento** (peça → cortes, rateio pelo valor de venda), já desenhada na ADR-043.
 > 2. Teste com usuário **Operador** (ficha só leitura; registra produção) — não coberto no E2E.
