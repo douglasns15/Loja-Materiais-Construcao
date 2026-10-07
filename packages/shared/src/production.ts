@@ -99,3 +99,77 @@ export type ProductionRow = {
   outputs: { productId: string; name: string; unit: string; quantity: number; unitCost: number | null }[];
   inputs: { productId: string; name: string; unit: string; quantity: number; unitCost: number | null }[];
 };
+
+// -----------------------------------------------------------------------------
+// Fatia 2 — sobra/perda + resumo do dia (ADR-043 §3)
+// -----------------------------------------------------------------------------
+
+/** Motivos da perda do pronto (o que não vendeu ou se perdeu na cozinha). */
+export const PRODUCTION_LOSS_REASONS = ['LEFTOVER', 'BURNED', 'DROPPED', 'OTHER'] as const;
+export type ProductionLossReason = (typeof PRODUCTION_LOSS_REASONS)[number];
+export const productionLossReasonLabels: Record<ProductionLossReason, string> = {
+  LEFTOVER: 'Sobra do dia',
+  BURNED: 'Queimou',
+  DROPPED: 'Caiu',
+  OTHER: 'Outro',
+};
+
+/**
+ * Prefixo do motivo do `StockMovement` de perda (sem tabela nova — ADR-043 §3). O resumo do dia
+ * soma as saídas cujo motivo começa por ele.
+ */
+export const PRODUCTION_LOSS_PREFIX = 'Perda — ';
+
+/**
+ * Registrar perda do pronto (`POST /productions/loss`): quanto (unidade-base) e por quê. "Outro"
+ * exige a descrição.
+ */
+export const productionLossSchema = z
+  .object({
+    productId: z.string().uuid(),
+    quantity: qty,
+    reason: z.enum(PRODUCTION_LOSS_REASONS),
+    note: z.string().trim().max(100).optional(),
+  })
+  .refine((l) => l.reason !== 'OTHER' || !!l.note, { message: 'Descreva o motivo da perda.', path: ['note'] });
+export type ProductionLossInput = z.infer<typeof productionLossSchema>;
+
+/** Motivo gravado no movimento: "Perda — Sobra do dia" / "Perda — Queimou: 2 do fundo da máquina". */
+export function productionLossReasonText(reason: ProductionLossReason, note?: string | null): string {
+  const label = reason === 'OTHER' && note ? note : productionLossReasonLabels[reason];
+  const extra = reason !== 'OTHER' && note ? `: ${note}` : '';
+  return `${PRODUCTION_LOSS_PREFIX}${label}${extra}`.slice(0, 150);
+}
+
+/** Uma perda registrada (lista do dia). */
+export type ProductionLossRow = {
+  id: string;
+  productId: string;
+  name: string;
+  unit: string;
+  quantity: number;
+  /** Motivo sem o prefixo ("Sobra do dia", "Queimou: …"). */
+  reason: string;
+  unitCost: number | null;
+  createdAt: string;
+  registeredByName: string | null;
+};
+
+/** Linha do resumo do dia por produto pronto: produzido × vendido × perda × em estoque (unidade-base). */
+export type ProductionSummaryRow = {
+  productId: string;
+  name: string;
+  unit: string;
+  pieceWeight: number | null;
+  produced: number;
+  sold: number;
+  lost: number;
+  stockQty: number;
+};
+
+/** `GET /productions/summary?day=`. */
+export type ProductionDaySummary = {
+  day: string;
+  products: ProductionSummaryRow[];
+  losses: ProductionLossRow[];
+};

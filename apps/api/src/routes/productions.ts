@@ -1,17 +1,23 @@
 import { Hono } from 'hono';
-import { type Prisma } from '@nexoloja/db';
+import { Prisma } from '@nexoloja/db';
 import {
   availableQty,
   costPerBaseUnit,
   costPriceFromBaseCost,
   productionCost,
   productionShortages,
+  summarizeProductionDay,
   tracksStock,
 } from '@nexoloja/core';
 import {
+  PRODUCTION_LOSS_PREFIX,
   createProductionSchema,
   formatProductionNumber,
+  productionLossReasonText,
+  productionLossSchema,
   recipeSchema,
+  type ProductionDaySummary,
+  type ProductionLossRow,
   type ProductionRow,
   type RecipeRow,
 } from '@nexoloja/shared';
@@ -25,6 +31,9 @@ import { requireActiveTenant, requireAdmin, requireAuth } from '../middleware/au
  *  - **Produção** (`/`): o evento P-0001 — numa transação (ADR-001), os insumos controlados saem do
  *    estoque (EXPENSE), o pronto entra (INCOME) e o custo do pronto vira o "último custo".
  *    Qualquer usuário registra (decisão do Owner); insumo controlado sem saldo BLOQUEIA.
+ *  - **Perda e resumo do dia** (`/loss`, `/summary` — Fatia 2): o pronto que sobrou/queimou/caiu sai
+ *    do estoque como `StockMovement` EXPENSE com motivo "Perda — …" (sem tabela nova), e o resumo
+ *    mostra produzido × vendido × perda × em estoque por produto pronto.
  */
 const productions = new Hono<Env>();
 productions.use('*', requireAuth);
@@ -255,22 +264,24 @@ function toProductionRow(p: ProductionWithLines): ProductionRow {
   };
 }
 
+/** `?day=AAAA-MM-DD` (fuso da loja, -03:00) → limites do dia; ausente/inválido ⇒ hoje. */
+function dayRange(dayParam: string | undefined): { day: string; gte: Date; lte: Date } {
+  const today = new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10);
+  const day = dayParam && /^\d{4}-\d{2}-\d{2}$/.test(dayParam) ? dayParam : today;
+  return { day, gte: new Date(`${day}T00:00:00.000-03:00`), lte: new Date(`${day}T23:59:59.999-03:00`) };
+}
+
 /** Produções de um dia (`?day=AAAA-MM-DD`, fuso da loja; padrão = hoje), mais recentes primeiro. */
 productions.get('/', async (c) => {
   const tenantId = getTenantId(c);
   if (!tenantId || !getConnectionString(c.env)) {
     return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
   }
-  const dayParam = c.req.query('day');
-  const today = new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10);
-  const day = dayParam && /^\d{4}-\d{2}-\d{2}$/.test(dayParam) ? dayParam : today;
+  const { gte, lte } = dayRange(c.req.query('day'));
   try {
     const prisma = getPrisma(c);
     const rows = await prisma.production.findMany({
-      where: {
-        tenantId,
-        createdAt: { gte: new Date(`${day}T00:00:00.000-03:00`), lte: new Date(`${day}T23:59:59.999-03:00`) },
-      },
+      where: { tenantId, createdAt: { gte, lte } },
       orderBy: { createdAt: 'desc' },
       take: 200,
       include: PRODUCTION_INCLUDE,
@@ -447,6 +458,168 @@ productions.post('/', requireActiveTenant, async (c) => {
   } catch (err) {
     console.error('POST /productions falhou:', err);
     return c.json({ ok: false, error: 'Falha ao registrar a produção.' }, 500);
+  }
+});
+
+/** Monta a linha da perda para a tela (motivo sem o prefixo "Perda — "). */
+function toLossRow(m: {
+  id: string;
+  productId: string;
+  quantity: Prisma.Decimal;
+  reason: string | null;
+  unitCost: Prisma.Decimal | null;
+  createdAt: Date;
+  registeredByName: string | null;
+  product: { name: string; unit: string };
+}): ProductionLossRow {
+  return {
+    id: m.id,
+    productId: m.productId,
+    name: m.product.name,
+    unit: m.product.unit,
+    quantity: Number(m.quantity),
+    reason: (m.reason ?? '').slice(PRODUCTION_LOSS_PREFIX.length),
+    unitCost: m.unitCost != null ? Number(m.unitCost) : null,
+    createdAt: m.createdAt.toISOString(),
+    registeredByName: m.registeredByName,
+  };
+}
+
+/**
+ * Resumo do dia (ADR-043 §3): por produto pronto (com ficha), produzido × vendido × perda × em
+ * estoque, e a lista das perdas do dia. Vendido = vendas não canceladas/devolvidas do dia, em
+ * unidade-base e LÍQUIDO do devolvido (mesma regra dos Relatórios, ADR-036/037).
+ */
+productions.get('/summary', async (c) => {
+  const tenantId = getTenantId(c);
+  if (!tenantId || !getConnectionString(c.env)) {
+    return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
+  }
+  const { day, gte, lte } = dayRange(c.req.query('day'));
+  try {
+    const prisma = getPrisma(c);
+    const recipes = await prisma.recipe.findMany({
+      where: { tenantId, product: { deletedAt: null } },
+      select: { product: { select: PRODUCT_COLS } },
+    });
+    const ids = recipes.map((r) => r.product.id);
+
+    const [produced, sold, lossMovs] = await Promise.all([
+      prisma.productionLine.findMany({
+        where: { tenantId, direction: 'OUTPUT', production: { createdAt: { gte, lte } } },
+        select: { productId: true, quantity: true },
+      }),
+      ids.length === 0
+        ? Promise.resolve([] as { productId: string; qty: number }[])
+        : prisma.$queryRaw<{ productId: string; qty: number }[]>(Prisma.sql`
+            SELECT oi."productId", SUM(COALESCE(oi."baseQuantity", oi."quantity") - oi."returnedBaseQty")::float8 AS qty
+            FROM "order_items" oi
+            JOIN "orders" o ON o."id" = oi."orderId"
+            WHERE o."tenantId" = ${tenantId}::uuid
+              AND o."status" NOT IN ('CANCELLED', 'RETURNED')
+              AND o."createdAt" >= ${gte} AND o."createdAt" <= ${lte}
+              AND oi."productId" IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`))})
+            GROUP BY oi."productId"
+          `),
+      prisma.stockMovement.findMany({
+        where: {
+          tenantId,
+          type: 'EXPENSE',
+          reason: { startsWith: PRODUCTION_LOSS_PREFIX },
+          createdAt: { gte, lte },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+        include: { product: { select: { name: true, unit: true } } },
+      }),
+    ]);
+
+    const rows = summarizeProductionDay(
+      recipes.map((r) => ({
+        productId: r.product.id,
+        name: r.product.name,
+        unit: r.product.unit,
+        pieceWeight: pieceWeightOf(r.product),
+        stockQty: Number(r.product.stockQty),
+      })),
+      {
+        produced: produced.map((l) => ({ productId: l.productId, quantity: Number(l.quantity) })),
+        sold: sold.map((s) => ({ productId: s.productId, quantity: Number(s.qty) })),
+        lost: lossMovs.map((m) => ({ productId: m.productId, quantity: Number(m.quantity) })),
+      },
+    );
+    const data: ProductionDaySummary = { day, products: rows, losses: lossMovs.map(toLossRow) };
+    return c.json({ ok: true, data });
+  } catch (err) {
+    console.error('GET /productions/summary falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao montar o resumo do dia.' }, 500);
+  }
+});
+
+/**
+ * Registra a PERDA de um produto pronto (ADR-043 §3): sobra do dia, queimou, caiu… Numa transação
+ * (ADR-001): `StockMovement` EXPENSE (motivo "Perda — …", custo atual congelado) + `stockQty`
+ * decrementado. Só produto com ficha técnica; não passa do disponível. Qualquer usuário (loja ativa).
+ */
+productions.post('/loss', requireActiveTenant, async (c) => {
+  const tenantId = getTenantId(c);
+  if (!tenantId || !getConnectionString(c.env)) {
+    return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
+  }
+  const parsed = productionLossSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) {
+    return c.json(
+      { ok: false, error: parsed.error.issues[0]?.message ?? 'Dados da perda inválidos.', issues: parsed.error.flatten() },
+      400,
+    );
+  }
+  const body = parsed.data;
+  try {
+    const prisma = getPrisma(c);
+    const recipe = await prisma.recipe.findFirst({
+      where: { tenantId, productId: body.productId },
+      select: { product: { select: PRODUCT_COLS } },
+    });
+    if (!recipe || recipe.product.deletedAt) {
+      return c.json({ ok: false, error: 'A perda aqui é só de produto pronto (com ficha técnica).' }, 400);
+    }
+    const p = recipe.product;
+    if (!tracksStock(p)) {
+      return c.json({ ok: false, error: `"${p.name}" não controla estoque.` }, 400);
+    }
+    const short = productionShortages([
+      { productId: p.id, quantity: body.quantity, tracked: true, available: availableOf(p) },
+    ]);
+    if (short.length > 0) {
+      const fmt = (n: number) => n.toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+      return c.json(
+        { ok: false, error: `Só há ${fmt(short[0]!.available)} de "${p.name}" em estoque — confira a quantidade.` },
+        400,
+      );
+    }
+    const userId = c.get('userId');
+    const userName = c.get('userName');
+    const mov = await prisma.$transaction(async (tx) => {
+      const m = await tx.stockMovement.create({
+        data: {
+          tenantId,
+          productId: p.id,
+          type: 'EXPENSE',
+          quantity: body.quantity,
+          unitCost: baseCostOf(p),
+          reason: productionLossReasonText(body.reason, body.note),
+          syncStatus: 'SYNCED',
+          userId,
+          registeredByName: userName,
+        },
+      });
+      await tx.product.update({ where: { id: p.id }, data: { stockQty: { decrement: body.quantity } } });
+      return m;
+    });
+    return c.json({ ok: true, data: toLossRow({ ...mov, product: { name: p.name, unit: p.unit } }) }, 201);
+  } catch (err) {
+    console.error('POST /productions/loss falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao registrar a perda.' }, 500);
   }
 });
 

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { costPriceFromBaseCost, productionCost, productionShortages, scaleRecipe } from './index';
+import {
+  costPriceFromBaseCost,
+  productionCost,
+  productionShortages,
+  scaleRecipe,
+  summarizeProductionDay,
+} from './index';
 
 // =============================================================================
 // Produção com ficha técnica (ADR-043)
@@ -83,5 +89,58 @@ describe('costPriceFromBaseCost', () => {
   });
   it('pacote fechado de 6 guarda o custo do pacote inteiro', () => {
     expect(costPriceFromBaseCost({ unit: 'PACK', conversionFactor: 6 }, 2)).toBe(12);
+  });
+});
+
+describe('summarizeProductionDay', () => {
+  const products = [
+    { productId: 'frango', name: 'Frango assado', stockQty: 3.6 },
+    { productId: 'picanha', name: 'Picanha assada', stockQty: 0 },
+    { productId: 'marmita', name: 'Marmita', stockQty: 0 },
+  ];
+
+  it('produziu 18 kg em 2 fornadas, vendeu 12,850 kg em 3 vendas, perdeu 1,550 kg ⇒ soma por produto', () => {
+    const rows = summarizeProductionDay(products, {
+      produced: [
+        { productId: 'frango', quantity: 12 },
+        { productId: 'frango', quantity: 6 },
+      ],
+      sold: [
+        { productId: 'frango', quantity: 1.2 },
+        { productId: 'frango', quantity: 10.45 },
+        { productId: 'frango', quantity: 1.2 },
+      ],
+      lost: [{ productId: 'frango', quantity: 1.55 }],
+    });
+    expect(rows).toEqual([
+      { productId: 'frango', name: 'Frango assado', stockQty: 3.6, produced: 18, sold: 12.85, lost: 1.55 },
+    ]);
+  });
+
+  it('lista o pronto com saldo mesmo sem movimento no dia (sobra de ontem) e esconde o parado e zerado', () => {
+    const rows = summarizeProductionDay(
+      [
+        { productId: 'frango', name: 'Frango assado', stockQty: 2.4 },
+        { productId: 'marmita', name: 'Marmita', stockQty: 0 },
+      ],
+      { produced: [], sold: [], lost: [] },
+    );
+    expect(rows.map((r) => r.productId)).toEqual(['frango']);
+  });
+
+  it('vendeu sem produzir no dia (estoque de ontem) e ignora evento de produto sem ficha; ordena por nome', () => {
+    const rows = summarizeProductionDay(products, {
+      produced: [{ productId: 'picanha', quantity: 4.1 }],
+      sold: [
+        { productId: 'marmita', quantity: 2 },
+        { productId: 'coca', quantity: 5 },
+      ],
+      lost: [],
+    });
+    expect(rows.map((r) => [r.name, r.produced, r.sold])).toEqual([
+      ['Frango assado', 0, 0],
+      ['Marmita', 0, 2],
+      ['Picanha assada', 4.1, 0],
+    ]);
   });
 });

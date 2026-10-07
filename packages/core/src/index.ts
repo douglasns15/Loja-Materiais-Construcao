@@ -2678,6 +2678,40 @@ export function costPriceFromBaseCost(
     : Number(baseCost.toFixed(4));
 }
 
+/**
+ * Resumo do dia da produção (ADR-043 §3): por produto pronto, **produzido × vendido × perda × em
+ * estoque** (unidade-base). Soma os eventos do dia por produto (um produto pode ter várias produções,
+ * vendas e perdas) e lista quem teve movimento no dia OU ainda tem saldo — o pronto parado no
+ * estoque também interessa (sobra de ontem). Eventos de produto fora da lista são ignorados. Ordem
+ * por nome.
+ */
+export function summarizeProductionDay<P extends { productId: string; name: string; stockQty: number }>(
+  products: readonly P[],
+  events: {
+    produced: readonly { productId: string; quantity: number }[];
+    sold: readonly { productId: string; quantity: number }[];
+    lost: readonly { productId: string; quantity: number }[];
+  },
+): (P & { produced: number; sold: number; lost: number })[] {
+  const sum = (list: readonly { productId: string; quantity: number }[]) => {
+    const m = new Map<string, number>();
+    for (const e of list) m.set(e.productId, toLedger((m.get(e.productId) ?? 0) + e.quantity));
+    return m;
+  };
+  const produced = sum(events.produced);
+  const sold = sum(events.sold);
+  const lost = sum(events.lost);
+  return products
+    .map((p) => ({
+      ...p,
+      produced: produced.get(p.productId) ?? 0,
+      sold: sold.get(p.productId) ?? 0,
+      lost: lost.get(p.productId) ?? 0,
+    }))
+    .filter((r) => r.produced > 0 || r.sold > 0 || r.lost > 0 || toQtyUnits(r.stockQty) > 0)
+    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+}
+
 // -----------------------------------------------------------------------------
 // AGENDA DE ENTREGAS — faixas de horário (ADR-042)
 // -----------------------------------------------------------------------------

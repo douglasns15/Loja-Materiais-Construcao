@@ -1,4 +1,4 @@
-# E2E — Produção com ficha técnica (ADR-043, Fatia 1)
+# E2E — Produção com ficha técnica (ADR-043, Fatias 1 e 2)
 
 Loja de alimentos de teste (`owner_kg`), como Admin. Antes: no **painel do Super Usuário**, ligar o módulo
 **"Produção (ficha técnica)"** da loja (lojas novas do ramo Rotisseria já nascem com ele).
@@ -37,3 +37,24 @@ Loja de alimentos de teste (`owner_kg`), como Admin. Antes: no **painel do Super
 4. PDV: venda de Frango assado inteiro.
    - ✅ Baixa só o assado (o cru não mexe).
 5. Um Operador também consegue registrar produção.
+
+## D. Perda e resumo do dia (Fatia 2)
+
+Depois da seção C (produção feita e uma venda de Frango assado no dia):
+
+1. Abra **Produção** e role até **Resumo do dia**.
+   - ✅ Linha **Frango assado** com Produzido (o da produção), Vendido (o do PDV, em kg), Perda "—" e Em estoque com
+     "≈ N peças".
+   - ✅ Produtos com ficha e sem movimento nem saldo não aparecem.
+2. **Registrar perda** › Peças **2** (peso sugerido 2,400 kg) › motivo **Sobra do dia** › Registrar.
+   - ✅ Mensagem "Perda registrada: 2,400 kg de Frango assado (Sobra do dia)."; coluna Perda **2,400 kg** em vermelho;
+     Em estoque cai 2,400 kg; aparece em **Perdas** (lado direito) com autor e custo; selo "Perdas no custo".
+   - ✅ Estoque › movimentações: saída "Perda — Sobra do dia".
+3. Tente uma perda **maior que o estoque**.
+   - ✅ Bloqueia com "Só há … em estoque".
+4. Motivo **Outro** sem descrição.
+   - ✅ Pede "Descreva o motivo da perda."
+5. Mude o **Dia** para ontem.
+   - ✅ Mostra as produções, o resumo e as perdas daquele dia; "Nova produção" e "Registrar perda" somem (registrar é
+     sempre hoje); botão **Hoje** volta.
+6. Um Operador também consegue registrar perda.

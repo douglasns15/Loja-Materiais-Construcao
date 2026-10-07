@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createProductionSchema, recipeSchema } from './production';
+import { createProductionSchema, productionLossReasonText, productionLossSchema, recipeSchema } from './production';
 import { formatProductionNumber } from './format';
 import { setTenantModuleSchema } from './modules';
 
@@ -57,5 +57,22 @@ describe('código e módulo', () => {
   });
   it('o painel liga/desliga o módulo de produção', () => {
     expect(setTenantModuleSchema.safeParse({ moduleKey: 'RECIPES', isActive: true }).success).toBe(true);
+  });
+});
+
+describe('productionLossSchema', () => {
+  it('aceita sobra do dia sem descrição e exige descrição em "Outro"', () => {
+    expect(productionLossSchema.safeParse({ productId: A, quantity: 2.4, reason: 'LEFTOVER' }).success).toBe(true);
+    expect(productionLossSchema.safeParse({ productId: A, quantity: 2.4, reason: 'OTHER' }).success).toBe(false);
+    expect(productionLossSchema.safeParse({ productId: A, quantity: 2.4, reason: 'OTHER', note: 'vencido' }).success).toBe(
+      true,
+    );
+    expect(productionLossSchema.safeParse({ productId: A, quantity: 0, reason: 'BURNED' }).success).toBe(false);
+  });
+
+  it('monta o motivo do movimento com o prefixo da perda', () => {
+    expect(productionLossReasonText('LEFTOVER')).toBe('Perda — Sobra do dia');
+    expect(productionLossReasonText('BURNED', '2 do fundo')).toBe('Perda — Queimou: 2 do fundo');
+    expect(productionLossReasonText('OTHER', 'vencido')).toBe('Perda — vencido');
   });
 });

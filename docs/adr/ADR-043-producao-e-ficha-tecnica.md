@@ -1,7 +1,8 @@
 # ADR-043 — Produção com ficha técnica (do cru ao pronto)
 
 - **Status:** **Aceito** (2026-10-02) — migration `0044` aprovada e aplicada; **Fatia 1 NO AR** (API `490fab8d`,
-  web `8840ab5f`) **+ E2E validado no navegador** (registro-de-testes 2026-10-02). Próximas: Fatia 2 e Fatia 3.
+  web `8840ab5f`) **+ E2E validado no navegador** (registro-de-testes 2026-10-02). **Fatia 2 implementada 2026-10-07**
+  (perda + resumo do dia + histórico por dia; sem migration). Próxima: Fatia 3.
 
 > **Decisão do Owner (2026-10-02):** (1) insumo sem saldo **bloqueia** a produção; (2) **qualquer usuário**
 > registra produção, a ficha é só do Admin; (3) custo do pronto = **último custo** da produção; (4) o
@@ -128,13 +129,17 @@ fica abaixo de 2 MB/ano por loja — dentro do free tier (regra 6).
 
 - Fatia 1 (implementada): `GET /productions/recipes` · `GET`/`PUT` 🔒/`DELETE` 🔒 `/productions/recipes/:productId`
   (escrita Admin) · `GET /productions?day=` · `POST /productions`.
-- Fatia 2: resumo do dia e `POST /productions/loss` (perda do pronto, com motivo).
+- Fatia 2 (implementada): `GET /productions/summary?day=` (resumo + perdas do dia) · `POST /productions/loss` (perda do
+  pronto, motivo `LEFTOVER|BURNED|DROPPED|OTHER`).
 
 ## Fatias
 
 1. **Ficha + registrar produção** (migration `0044`, módulo `RECIPES`, core puro com testes: `scaleRecipe`,
    `productionCost`, `productionShortages`, `costPriceFromBaseCost`). **Implementada 2026-10-02.**
 2. **Sobra/perda + resumo do dia** (produzido × vendido × perda × em estoque) e histórico `P-0001…` por período.
+   **Implementada 2026-10-07:** perda = `StockMovement` EXPENSE com motivo `Perda — …` (custo atual congelado; não passa
+   do disponível; só produto com ficha), core `summarizeProductionDay` com testes, tela com seletor de dia (histórico
+   de produções, resumo e perdas por dia — registrar é sempre hoje).
 3. **Desmembramento** (aprovado para o planejamento pelo Owner) — desenho abaixo.
 
 ### Fatia 3 — desmembramento (peça → cortes)
