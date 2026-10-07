@@ -6055,3 +6055,29 @@ Confirmar entrada apaga o rascunho).
 **Decisões:** com erro em algum item, o rascunho é mantido (linhas lançadas travadas) para corrigir e reenviar; ao
 restaurar, `GET /nfe/imported` é reconsultado para travar itens lançados depois (por outro aparelho/usuário);
 rascunho chaveado por usuário (como a cesta do PDV).
+
+## Produção — perda do pronto + resumo do dia (ADR-043 F2) — E2E no navegador com o Owner logado (2026-10-07)
+
+Ambiente: `nexoloja-web.imortal.workers.dev`, loja `owner_kg` (Admin "Wesley"). 1º deploy API `ea0e7aa1` + web `9e9b9246`
+(commit `9118d94`); achados corrigidos e redeploy API `674f35a3` + web `f94f5c7f`. Testes conduzidos pelo Claude no
+navegador embutido (painel estreito ≈ celular + checagem em 1366 px), com o login feito pelo Owner. Roteiro
+`docs/testes/e2e-producao-ficha-tecnica.md` §D.
+
+**Resumo do dia / perda — ✅**
+- Hoje (07/10): Frango Assado 22,700 kg ≈ 19 peças, sem produção/venda; botão "Registrar perda".
+- Perda de **21 peças** (sugere 25,200 kg) ⇒ bloqueada na tela "Só há 22,700 kg em estoque." e na API (400).
+- Motivo **Outro** sem descrição ⇒ "Descreva o motivo da perda." (tela e API).
+- **2 peças · Sobra do dia** ⇒ "Perda registrada: 2,400 kg de Frango Assado (Sobra do dia)."; Perda 2,400 kg em
+  vermelho; estoque 20,300 kg ≈ 17 peças; selo "Perdas no custo: R$ 35,56" (2,4 × R$ 14,8167); lista Perdas
+  "17:47 · Wesley · Sobra do dia · R$ 35,56"; Estoque › movimentações: saída 2,4 "Perda — Sobra do dia".
+- **Histórico 02/10:** Produzido 18,000 kg, Vendido 3,600 kg, P-0001 na lista; "Nova produção"/"Registrar perda" somem;
+  botão Hoje volta.
+
+**Achados (corrigidos no mesmo dia):**
+1. 🐞 Trocar o dia pelas setas do campo de data dispara uma busca por dia; a resposta de um dia intermediário chegava
+   por último e o "Resumo de 02/10" aparecia vazio. Fix: só a busca mais recente é aplicada (contador em `useRef`).
+   Revalidado ✅.
+2. Mensagem da API sem unidade ("Só há 22,7 de…") ⇒ "Só há 20,300 kg de…". Revalidado ✅.
+3. No celular "2,400 kg" quebrava em duas linhas na tabela ⇒ `whitespace-nowrap` nas colunas de número. Revalidado ✅.
+
+**Pendente:** perda registrada por um Operador (não-Admin).

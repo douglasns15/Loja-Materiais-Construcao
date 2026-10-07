@@ -591,9 +591,12 @@ productions.post('/loss', requireActiveTenant, async (c) => {
       { productId: p.id, quantity: body.quantity, tracked: true, available: availableOf(p) },
     ]);
     if (short.length > 0) {
-      const fmt = (n: number) => n.toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+      const weighed = p.unit === 'KILOGRAM' || p.unit === 'LITER';
+      const fmt = (n: number) =>
+        n.toLocaleString('pt-BR', { minimumFractionDigits: weighed ? 3 : 0, maximumFractionDigits: weighed ? 3 : 4 });
+      const unit = p.unit === 'KILOGRAM' ? ' kg' : p.unit === 'LITER' ? ' L' : '';
       return c.json(
-        { ok: false, error: `Só há ${fmt(short[0]!.available)} de "${p.name}" em estoque — confira a quantidade.` },
+        { ok: false, error: `Só há ${fmt(short[0]!.available)}${unit} de "${p.name}" em estoque — confira a quantidade.` },
         400,
       );
     }

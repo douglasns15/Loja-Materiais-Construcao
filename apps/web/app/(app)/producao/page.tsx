@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   PRODUCTION_LOSS_REASONS,
@@ -65,12 +65,17 @@ export default function ProducaoPage() {
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
 
+  // Trocar o dia pelas setas do campo de data dispara uma busca por dia; as respostas podem chegar
+  // fora de ordem. Só a busca mais recente vale (senão "Resumo de 02/10" mostrava os dados do dia 03).
+  const loadSeq = useRef(0);
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     const [r, p, s] = await Promise.all([
       apiGet<RecipeRow[]>('/productions/recipes'),
       apiGet<ProductionRow[]>(`/productions?day=${day}`),
       apiGet<ProductionDaySummary>(`/productions/summary?day=${day}`),
     ]);
+    if (seq !== loadSeq.current) return;
     setRecipes(r);
     setToday(p);
     setSummary(s);
@@ -580,12 +585,12 @@ function SummaryCard({
                 return (
                   <tr key={r.productId} className="border-t border-gray-100">
                     <td className="px-4 py-2 font-medium text-gray-900">{r.name}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-gray-700">{cell(r.produced)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-gray-700">{cell(r.sold)}</td>
-                    <td className={`px-3 py-2 text-right tabular-nums ${r.lost > 0 ? 'text-red-700' : 'text-gray-700'}`}>
+                    <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-gray-700">{cell(r.produced)}</td>
+                    <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-gray-700">{cell(r.sold)}</td>
+                    <td className={`whitespace-nowrap px-3 py-2 text-right tabular-nums ${r.lost > 0 ? 'text-red-700' : 'text-gray-700'}`}>
                       {cell(r.lost)}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums font-semibold text-gray-900">
+                    <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums font-semibold text-gray-900">
                       {fmtQty(r.stockQty, r.unit)} {unitShort(r.unit)}
                       {hint && <span className="block text-xs font-normal text-gray-500">{hint}</span>}
                     </td>
