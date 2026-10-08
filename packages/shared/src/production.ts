@@ -88,10 +88,14 @@ export type RecipeRow = {
   updatedAt: string;
 };
 
+/** Tipo do evento: pela ficha técnica ou desmembramento da peça em cortes (Fatia 3). */
+export type ProductionKind = 'RECIPE' | 'BREAKDOWN';
+
 /** Uma produção registrada (`GET /productions`). */
 export type ProductionRow = {
   id: string;
   productionNumber: number;
+  kind: ProductionKind;
   createdAt: string;
   registeredByName: string | null;
   totalCost: number;
@@ -173,3 +177,31 @@ export type ProductionDaySummary = {
   products: ProductionSummaryRow[];
   losses: ProductionLossRow[];
 };
+
+// -----------------------------------------------------------------------------
+// Fatia 3 — desmembramento: 1 peça → N cortes (ADR-043)
+// -----------------------------------------------------------------------------
+
+/**
+ * Desmembrar uma peça (`POST /productions/breakdown`): quanto da peça foi usado (unidade-base) e
+ * quanto saiu de cada corte. A tela pré-monta os cortes do último desmembramento da peça, mas o
+ * operador remove/adiciona à vontade — só vão os cortes pesados (> 0). 1 a 30 cortes, sem repetir;
+ * que a peça não seja corte de si mesma é checado na API.
+ */
+export const createBreakdownSchema = z
+  .object({
+    productId: z.string().uuid(),
+    quantity: qty,
+    cuts: z
+      .array(z.object({ productId: z.string().uuid(), quantity: qty }))
+      .min(1, 'Informe o peso de ao menos um corte.')
+      .max(30),
+    notes: z.string().trim().max(300).optional(),
+  })
+  .refine((b) => new Set(b.cuts.map((c) => c.productId)).size === b.cuts.length, {
+    message: 'O mesmo corte aparece duas vezes.',
+  });
+export type CreateBreakdownInput = z.infer<typeof createBreakdownSchema>;
+
+/** Cortes do último desmembramento de uma peça (`GET /productions/breakdown/last/:productId`). */
+export type BreakdownLastCuts = { productId: string; name: string; unit: string }[];

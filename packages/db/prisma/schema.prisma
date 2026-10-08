@@ -200,6 +200,13 @@ enum ProductionLineDirection {
   OUTPUT // Produto pronto gerado (StockMovement INCOME)
 }
 
+/// Tipo do evento de produção (ADR-043): pela ficha técnica (insumos → 1 pronto) ou desmembramento
+/// (1 peça → N cortes, Fatia 3). Gravado no evento para a lista/histórico não depender da ficha.
+enum ProductionKind {
+  RECIPE // Produção pela ficha técnica
+  BREAKDOWN // Desmembramento da peça em cortes
+}
+
 /// Situação de retirada de um pedido SCHEDULED (ADR-020). Cache derivado dos itens,
 /// no espírito do ADR-001 (cache desnormalizado + itens/eventos como fonte de verdade).
 enum FulfillmentStatus {
@@ -480,12 +487,12 @@ model Product {
   deletedById          String?    @db.Uuid
   deletedByName        String?    @db.VarChar(100)
 
-  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  category       Category?       @relation(fields: [categoryId], references: [id])
-  orderItems     OrderItem[]
-  quoteItems     QuoteItem[]
-  stockMovements StockMovement[]
-  nfeImportItems NfeImportItem[]
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category        Category?        @relation(fields: [categoryId], references: [id])
+  orderItems      OrderItem[]
+  quoteItems      QuoteItem[]
+  stockMovements  StockMovement[]
+  nfeImportItems  NfeImportItem[]
   // Produção (ADR-043): a ficha técnica deste produto (quando é um PRONTO), as fichas em que ele
   // entra como INSUMO e as linhas de produção que o movimentaram.
   recipe          Recipe?          @relation("RecipeOutput")
@@ -493,8 +500,8 @@ model Product {
   productionLines ProductionLine[]
   // Auto-relação do par (ADR-015). `SetNull`: se o agregado for apagado de vez, o par
   // simplesmente deixa de existir e o produto principal segue vendendo avulso.
-  pairedProduct  Product?        @relation("ProductPair", fields: [pairedProductId], references: [id], onDelete: SetNull)
-  pairedBy       Product[]       @relation("ProductPair")
+  pairedProduct   Product?         @relation("ProductPair", fields: [pairedProductId], references: [id], onDelete: SetNull)
+  pairedBy        Product[]        @relation("ProductPair")
 
   @@unique([tenantId, sku])
   // PLU da balança único por loja (ADR-040 §3). Índice comum (não parcial): o Prisma 6 não expressa
@@ -1301,15 +1308,16 @@ model RecipeItem {
 /// Uma PRODUÇÃO registrada (ADR-043), exibida como "P-0001": o evento atômico em que os insumos
 /// saíram do estoque e o pronto entrou. O que entrou/saiu fica nas linhas (`ProductionLine`).
 model Production {
-  id               String   @id @default(uuid()) @db.Uuid
-  tenantId         String   @db.Uuid
+  id               String         @id @default(uuid()) @db.Uuid
+  tenantId         String         @db.Uuid
   productionNumber Int // Sequencial por loja (`Tenant.lastProductionNumber`)
-  totalCost        Decimal  @db.Decimal(12, 2) // Σ insumo usado × custo do insumo
-  notes            String?  @db.VarChar(300)
-  createdAt        DateTime @default(now())
+  kind             ProductionKind @default(RECIPE)
+  totalCost        Decimal        @db.Decimal(12, 2) // Σ insumo usado × custo do insumo
+  notes            String?        @db.VarChar(300)
+  createdAt        DateTime       @default(now())
   // Autoria (ADR-010): quem registrou. Referência solta + snapshot do nome.
-  userId           String?  @db.Uuid
-  registeredByName String?  @db.VarChar(100)
+  userId           String?        @db.Uuid
+  registeredByName String?        @db.VarChar(100)
 
   tenant Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   lines  ProductionLine[]

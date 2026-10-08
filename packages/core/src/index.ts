@@ -2712,6 +2712,55 @@ export function summarizeProductionDay<P extends { productId: string; name: stri
     .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
 }
 
+/**
+ * Rateio do custo da PEÇA entre os cortes do desmembramento (ADR-043 Fatia 3 — decisão do Owner:
+ * pelo VALOR DE VENDA, como no açougue). Cada corte absorve custo proporcional a quantidade × preço
+ * de venda por unidade-base: a picanha fica com custo/kg maior que as aparas e as margens ficam
+ * parecidas. Sem preço em nenhum corte (Σ valor = 0), cai para o rateio por quantidade (mesmo
+ * custo/kg para todos). A soma dos rateios é EXATAMENTE o custo da peça em centavos (sobra do
+ * arredondamento vai para os maiores restos). `unitCost` = rateio ÷ quantidade (4 casas, unidade-base).
+ */
+export function splitBreakdownCost(
+  inputCost: number,
+  cuts: readonly { quantity: number; salePrice: number }[],
+): { totalCost: number; unitCost: number }[] {
+  const qtys = cuts.map((c) => (c.quantity > 0 ? c.quantity : 0));
+  const byValue = cuts.map((c, i) => qtys[i]! * (c.salePrice > 0 ? c.salePrice : 0));
+  const sumValue = byValue.reduce((a, b) => a + b, 0);
+  const weights = sumValue > 0 ? byValue : qtys;
+  const sumWeight = weights.reduce((a, b) => a + b, 0);
+  const cents = Math.round(Math.max(0, inputCost) * 100);
+  if (!(sumWeight > 0) || cents === 0) return cuts.map(() => ({ totalCost: 0, unitCost: 0 }));
+
+  const raw = weights.map((w) => (cents * w) / sumWeight);
+  const share = raw.map((r) => Math.floor(r + 1e-9));
+  let rest = cents - share.reduce((a, b) => a + b, 0);
+  const order = raw
+    .map((r, i) => ({ i, frac: r - Math.floor(r + 1e-9) }))
+    .filter((o) => weights[o.i]! > 0)
+    .sort((a, b) => b.frac - a.frac || a.i - b.i);
+  for (let k = 0; rest > 0 && order.length > 0; k++, rest--) share[order[k % order.length]!.i]! += 1;
+
+  return share.map((s, i) => ({
+    totalCost: s / 100,
+    unitCost: qtys[i]! > 0 ? Number((s / 100 / qtys[i]!).toFixed(4)) : 0,
+  }));
+}
+
+/**
+ * Quebra do desmembramento (ADR-043 Fatia 3): o que a peça tinha e não virou corte (osso, sebo,
+ * aparas descartadas). Informativa — não vira produto. `shrinkPct` sobre a peça (0 se a peça é 0).
+ * Negativa ⇒ os cortes somam mais que a peça (a tela/API recusam quando as unidades são iguais).
+ */
+export function breakdownShrink(
+  inputQty: number,
+  cutQtys: readonly number[],
+): { shrinkQty: number; shrinkPct: number } {
+  const cutsTotal = cutQtys.reduce((a, q) => a + (q > 0 ? q : 0), 0);
+  const shrinkQty = toLedger(inputQty - cutsTotal);
+  return { shrinkQty, shrinkPct: inputQty > 0 ? Number(((shrinkQty / inputQty) * 100).toFixed(1)) : 0 };
+}
+
 // -----------------------------------------------------------------------------
 // AGENDA DE ENTREGAS — faixas de horário (ADR-042)
 // -----------------------------------------------------------------------------

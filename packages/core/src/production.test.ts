@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  breakdownShrink,
   costPriceFromBaseCost,
   productionCost,
   productionShortages,
   scaleRecipe,
+  splitBreakdownCost,
   summarizeProductionDay,
 } from './index';
 
@@ -142,5 +144,81 @@ describe('summarizeProductionDay', () => {
       ['Marmita', 0, 2],
       ['Picanha assada', 4.1, 0],
     ]);
+  });
+});
+
+// =============================================================================
+// Desmembramento — peça → cortes (ADR-043 Fatia 3)
+// =============================================================================
+
+describe('splitBreakdownCost', () => {
+  const sum = (r: { totalCost: number }[]) => Number(r.reduce((a, x) => a + x.totalCost, 0).toFixed(2));
+
+  it('quarto traseiro de R$ 300 rateado pelo valor de venda (picanha absorve mais custo/kg)', () => {
+    // valores de venda: picanha 4 × 100 = 400; alcatra 6 × 50 = 300; aparas 2 × 15 = 30 ⇒ 730.
+    const r = splitBreakdownCost(300, [
+      { quantity: 4, salePrice: 100 },
+      { quantity: 6, salePrice: 50 },
+      { quantity: 2, salePrice: 15 },
+    ]);
+    expect(r).toEqual([
+      { totalCost: 164.38, unitCost: 41.095 },
+      { totalCost: 123.29, unitCost: 20.5483 },
+      { totalCost: 12.33, unitCost: 6.165 },
+    ]);
+    expect(sum(r)).toBe(300);
+    // Margem igual em todos os cortes (≈ 58,9%): é o efeito do rateio por valor.
+    expect(1 - r[0]!.unitCost / 100).toBeCloseTo(1 - r[2]!.unitCost / 15, 2);
+  });
+
+  it('não perde centavo no arredondamento (3 cortes iguais de R$ 100)', () => {
+    const r = splitBreakdownCost(100, [
+      { quantity: 1, salePrice: 10 },
+      { quantity: 1, salePrice: 10 },
+      { quantity: 1, salePrice: 10 },
+    ]);
+    expect(r.map((x) => x.totalCost)).toEqual([33.34, 33.33, 33.33]);
+    expect(sum(r)).toBe(100);
+  });
+
+  it('sem preço em nenhum corte ⇒ rateio por quantidade (mesmo custo/kg)', () => {
+    const r = splitBreakdownCost(90, [
+      { quantity: 2, salePrice: 0 },
+      { quantity: 1, salePrice: 0 },
+    ]);
+    expect(r).toEqual([
+      { totalCost: 60, unitCost: 30 },
+      { totalCost: 30, unitCost: 30 },
+    ]);
+  });
+
+  it('corte sem preço quando os outros têm ⇒ fica sem custo (rateio por valor)', () => {
+    const r = splitBreakdownCost(50, [
+      { quantity: 2, salePrice: 40 },
+      { quantity: 1, salePrice: 0 },
+    ]);
+    expect(r).toEqual([
+      { totalCost: 50, unitCost: 25 },
+      { totalCost: 0, unitCost: 0 },
+    ]);
+  });
+
+  it('peça sem custo ou cortes sem quantidade ⇒ tudo zero', () => {
+    expect(splitBreakdownCost(0, [{ quantity: 1, salePrice: 10 }])).toEqual([{ totalCost: 0, unitCost: 0 }]);
+    expect(splitBreakdownCost(10, [{ quantity: 0, salePrice: 10 }])).toEqual([{ totalCost: 0, unitCost: 0 }]);
+  });
+});
+
+describe('breakdownShrink', () => {
+  it('peça de 15 kg vira 12,5 kg de cortes ⇒ quebra de 2,5 kg (16,7%)', () => {
+    expect(breakdownShrink(15, [4, 6, 2.5])).toEqual({ shrinkQty: 2.5, shrinkPct: 16.7 });
+  });
+
+  it('cortes somando mais que a peça ⇒ quebra negativa', () => {
+    expect(breakdownShrink(10, [6, 4.5])).toEqual({ shrinkQty: -0.5, shrinkPct: -5 });
+  });
+
+  it('peça zero ⇒ percentual 0', () => {
+    expect(breakdownShrink(0, [])).toEqual({ shrinkQty: 0, shrinkPct: 0 });
   });
 });

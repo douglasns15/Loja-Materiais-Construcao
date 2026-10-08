@@ -2,20 +2,24 @@ import { Hono } from 'hono';
 import { Prisma } from '@nexoloja/db';
 import {
   availableQty,
+  breakdownShrink,
   costPerBaseUnit,
   costPriceFromBaseCost,
   productionCost,
   productionShortages,
+  splitBreakdownCost,
   summarizeProductionDay,
   tracksStock,
 } from '@nexoloja/core';
 import {
   PRODUCTION_LOSS_PREFIX,
+  createBreakdownSchema,
   createProductionSchema,
   formatProductionNumber,
   productionLossReasonText,
   productionLossSchema,
   recipeSchema,
+  type BreakdownLastCuts,
   type ProductionDaySummary,
   type ProductionLossRow,
   type ProductionRow,
@@ -34,6 +38,9 @@ import { requireActiveTenant, requireAdmin, requireAuth } from '../middleware/au
  *  - **Perda e resumo do dia** (`/loss`, `/summary` — Fatia 2): o pronto que sobrou/queimou/caiu sai
  *    do estoque como `StockMovement` EXPENSE com motivo "Perda — …" (sem tabela nova), e o resumo
  *    mostra produzido × vendido × perda × em estoque por produto pronto.
+ *  - **Desmembramento** (`/breakdown` — Fatia 3): 1 peça → N cortes, o mesmo evento P- com
+ *    `kind = BREAKDOWN` (1 linha INPUT, N OUTPUT). O custo da peça é rateado entre os cortes pelo
+ *    valor de venda (decisão do Owner) e cada corte recebe o último custo.
  */
 const productions = new Hono<Env>();
 productions.use('*', requireAuth);
@@ -65,6 +72,28 @@ const baseCostOf = (p: ProductCols) =>
   });
 
 const availableOf = (p: ProductCols) => availableQty(Number(p.stockQty), Number(p.reservedQty ?? 0));
+
+/**
+ * "Último custo" (ADR-043, decisão do Owner) do produto que ENTROU pela produção: `costPrice` do
+ * cadastro a partir do custo por unidade-base, com o mesmo aviso da Entrada de estoque quando muda
+ * ("custo ajustado, confira o preço"). Sem custo (insumos/peça com cadastro zerado), não sobrescreve.
+ */
+function lastCostData(p: ProductCols, baseUnitCost: number, hasCost: boolean) {
+  if (!hasCost) return {};
+  const costPrice = costPriceFromBaseCost(
+    { unit: p.unit, conversionFactor: p.conversionFactor != null ? Number(p.conversionFactor) : null },
+    baseUnitCost,
+  );
+  return { costPrice, ...(costPrice !== Number(p.costPrice) ? { priceReviewPendingAt: new Date() } : {}) };
+}
+
+/**
+ * Produtos que o resumo do dia e a perda aceitam: os prontos com ficha técnica E tudo que já saiu de
+ * uma produção (cortes do desmembramento — decisão do Owner, Fatia 3).
+ */
+const PRODUCED_WHERE = {
+  OR: [{ recipe: { isNot: null } }, { productionLines: { some: { direction: 'OUTPUT' } } }],
+} satisfies Prisma.ProductWhereInput;
 
 /** Peso médio da peça quando o produto por peso também vende inteiro (ADR-040 §4). */
 const pieceWeightOf = (p: ProductCols) =>
@@ -255,6 +284,7 @@ function toProductionRow(p: ProductionWithLines): ProductionRow {
   return {
     id: p.id,
     productionNumber: p.productionNumber,
+    kind: p.kind,
     createdAt: p.createdAt.toISOString(),
     registeredByName: p.registeredByName,
     totalCost: Number(p.totalCost),
@@ -362,13 +392,8 @@ productions.post('/', requireActiveTenant, async (c) => {
     }
 
     const cost = productionCost(used, body.quantity);
-    const newCostPrice = costPriceFromBaseCost(
-      { unit: output.unit, conversionFactor: output.conversionFactor != null ? Number(output.conversionFactor) : null },
-      cost.unitCost,
-    );
     // Último custo (decisão do Owner). Sem custo nos insumos (cadastro zerado), não sobrescreve.
-    const updateCost = cost.totalCost > 0;
-    const costChanges = updateCost && newCostPrice !== Number(output.costPrice);
+    const outputCost = lastCostData(output, cost.unitCost, cost.totalCost > 0);
     const userId = c.get('userId');
     const userName = c.get('userName');
 
@@ -425,12 +450,8 @@ productions.post('/', requireActiveTenant, async (c) => {
       });
       await tx.product.update({
         where: { id: output.id },
-        data: {
-          stockQty: { increment: body.quantity },
-          ...(updateCost ? { costPrice: newCostPrice } : {}),
-          // Mesmo aviso da Entrada de estoque: o custo mudou, o preço não — "confira o preço".
-          ...(costChanges ? { priceReviewPendingAt: new Date() } : {}),
-        },
+        // Último custo + o mesmo aviso da Entrada de estoque: o custo mudou, o preço não — "confira o preço".
+        data: { stockQty: { increment: body.quantity }, ...outputCost },
       });
       lines.push({
         tenantId,
@@ -445,6 +466,7 @@ productions.post('/', requireActiveTenant, async (c) => {
         data: {
           tenantId,
           productionNumber: lastProductionNumber,
+          kind: 'RECIPE',
           totalCost: cost.totalCost,
           notes: body.notes || null,
           userId,
@@ -486,7 +508,8 @@ function toLossRow(m: {
 }
 
 /**
- * Resumo do dia (ADR-043 §3): por produto pronto (com ficha), produzido × vendido × perda × em
+ * Resumo do dia (ADR-043 §3): por produto pronto (com ficha ou que já saiu de uma produção — cortes
+ * do desmembramento, Fatia 3), produzido × vendido × perda × em
  * estoque, e a lista das perdas do dia. Vendido = vendas não canceladas/devolvidas do dia, em
  * unidade-base e LÍQUIDO do devolvido (mesma regra dos Relatórios, ADR-036/037).
  */
@@ -498,11 +521,11 @@ productions.get('/summary', async (c) => {
   const { day, gte, lte } = dayRange(c.req.query('day'));
   try {
     const prisma = getPrisma(c);
-    const recipes = await prisma.recipe.findMany({
-      where: { tenantId, product: { deletedAt: null } },
-      select: { product: { select: PRODUCT_COLS } },
+    const products = await prisma.product.findMany({
+      where: { tenantId, deletedAt: null, ...PRODUCED_WHERE },
+      select: PRODUCT_COLS,
     });
-    const ids = recipes.map((r) => r.product.id);
+    const ids = products.map((p) => p.id);
 
     const [produced, sold, lossMovs] = await Promise.all([
       prisma.productionLine.findMany({
@@ -535,12 +558,12 @@ productions.get('/summary', async (c) => {
     ]);
 
     const rows = summarizeProductionDay(
-      recipes.map((r) => ({
-        productId: r.product.id,
-        name: r.product.name,
-        unit: r.product.unit,
-        pieceWeight: pieceWeightOf(r.product),
-        stockQty: Number(r.product.stockQty),
+      products.map((p) => ({
+        productId: p.id,
+        name: p.name,
+        unit: p.unit,
+        pieceWeight: pieceWeightOf(p),
+        stockQty: Number(p.stockQty),
       })),
       {
         produced: produced.map((l) => ({ productId: l.productId, quantity: Number(l.quantity) })),
@@ -559,7 +582,8 @@ productions.get('/summary', async (c) => {
 /**
  * Registra a PERDA de um produto pronto (ADR-043 §3): sobra do dia, queimou, caiu… Numa transação
  * (ADR-001): `StockMovement` EXPENSE (motivo "Perda — …", custo atual congelado) + `stockQty`
- * decrementado. Só produto com ficha técnica; não passa do disponível. Qualquer usuário (loja ativa).
+ * decrementado. Só produto com ficha técnica ou que já saiu de uma produção (corte do desmembramento);
+ * não passa do disponível. Qualquer usuário (loja ativa).
  */
 productions.post('/loss', requireActiveTenant, async (c) => {
   const tenantId = getTenantId(c);
@@ -576,14 +600,13 @@ productions.post('/loss', requireActiveTenant, async (c) => {
   const body = parsed.data;
   try {
     const prisma = getPrisma(c);
-    const recipe = await prisma.recipe.findFirst({
-      where: { tenantId, productId: body.productId },
-      select: { product: { select: PRODUCT_COLS } },
+    const p = await prisma.product.findFirst({
+      where: { id: body.productId, tenantId, deletedAt: null, ...PRODUCED_WHERE },
+      select: PRODUCT_COLS,
     });
-    if (!recipe || recipe.product.deletedAt) {
-      return c.json({ ok: false, error: 'A perda aqui é só de produto pronto (com ficha técnica).' }, 400);
+    if (!p) {
+      return c.json({ ok: false, error: 'A perda aqui é só de produto produzido na loja (ficha técnica ou corte).' }, 400);
     }
-    const p = recipe.product;
     if (!tracksStock(p)) {
       return c.json({ ok: false, error: `"${p.name}" não controla estoque.` }, 400);
     }
@@ -623,6 +646,215 @@ productions.post('/loss', requireActiveTenant, async (c) => {
   } catch (err) {
     console.error('POST /productions/loss falhou:', err);
     return c.json({ ok: false, error: 'Falha ao registrar a perda.' }, 500);
+  }
+});
+
+/**
+ * Cortes do ÚLTIMO desmembramento da peça (Fatia 3) — a tela pré-monta a lista com eles (pesos em
+ * branco; o operador remove/adiciona). Sem desmembramento anterior ⇒ lista vazia. Cortes excluídos
+ * ficam de fora. Qualquer usuário.
+ */
+productions.get('/breakdown/last/:productId', async (c) => {
+  const tenantId = getTenantId(c);
+  const productId = c.req.param('productId');
+  if (!tenantId || !getConnectionString(c.env)) {
+    return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
+  }
+  if (!UUID_RE.test(productId)) {
+    return c.json({ ok: false, error: 'Produto não encontrado.' }, 404);
+  }
+  try {
+    const prisma = getPrisma(c);
+    const last = await prisma.production.findFirst({
+      where: { tenantId, kind: 'BREAKDOWN', lines: { some: { direction: 'INPUT', productId } } },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        lines: {
+          where: { direction: 'OUTPUT', product: { deletedAt: null } },
+          select: { productId: true, product: { select: { name: true, unit: true } } },
+          orderBy: { product: { name: 'asc' } },
+        },
+      },
+    });
+    const data: BreakdownLastCuts = (last?.lines ?? []).map((l) => ({
+      productId: l.productId,
+      name: l.product.name,
+      unit: l.product.unit,
+    }));
+    return c.json({ ok: true, data });
+  } catch (err) {
+    console.error('GET /productions/breakdown/last/:productId falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao buscar os cortes do último desmembramento.' }, 500);
+  }
+});
+
+/**
+ * Desmembra uma PEÇA em cortes (ADR-043 Fatia 3): peça controlada com saldo (sem saldo BLOQUEIA,
+ * como a produção), cortes controlados, distintos e diferentes da peça. Se peça e cortes estão na
+ * mesma unidade, a soma dos cortes não passa da peça (a diferença é a quebra — osso, sebo —
+ * informativa). Custo da peça (quantidade × custo por unidade-base) rateado pelo VALOR DE VENDA
+ * dos cortes (core `splitBreakdownCost`). Numa transação (ADR-001): contador P-, EXPENSE + `stockQty`
+ * da peça, INCOME + `stockQty` + último custo de cada corte, e a produção `kind = BREAKDOWN` com as
+ * linhas. Qualquer usuário (loja ativa).
+ */
+productions.post('/breakdown', requireActiveTenant, async (c) => {
+  const tenantId = getTenantId(c);
+  if (!tenantId || !getConnectionString(c.env)) {
+    return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
+  }
+  const parsed = createBreakdownSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) {
+    return c.json(
+      { ok: false, error: parsed.error.issues[0]?.message ?? 'Dados do desmembramento inválidos.', issues: parsed.error.flatten() },
+      400,
+    );
+  }
+  const body = parsed.data;
+  if (body.cuts.some((ct) => ct.productId === body.productId)) {
+    return c.json({ ok: false, error: 'A peça não pode ser corte dela mesma.' }, 400);
+  }
+  try {
+    const prisma = getPrisma(c);
+    const ids = [body.productId, ...body.cuts.map((ct) => ct.productId)];
+    const found = await prisma.product.findMany({
+      where: { tenantId, deletedAt: null, id: { in: ids } },
+      select: PRODUCT_COLS,
+    });
+    const byId = new Map(found.map((p) => [p.id, p]));
+    const piece = byId.get(body.productId);
+    if (!piece) {
+      return c.json({ ok: false, error: 'Peça não encontrada.' }, 404);
+    }
+    if (body.cuts.some((ct) => !byId.has(ct.productId))) {
+      return c.json({ ok: false, error: 'Um dos cortes não existe (ou foi excluído).' }, 400);
+    }
+    const untracked = [piece, ...body.cuts.map((ct) => byId.get(ct.productId)!)].find((p) => !tracksStock(p));
+    if (untracked) {
+      return c.json({ ok: false, error: `Ligue "Controlar estoque" em "${untracked.name}" para desmembrar.` }, 400);
+    }
+
+    const weighed = piece.unit === 'KILOGRAM' || piece.unit === 'LITER';
+    const fmt = (n: number) =>
+      n.toLocaleString('pt-BR', { minimumFractionDigits: weighed ? 3 : 0, maximumFractionDigits: weighed ? 3 : 4 });
+    const unitTxt = piece.unit === 'KILOGRAM' ? ' kg' : piece.unit === 'LITER' ? ' L' : '';
+    const short = productionShortages([
+      { productId: piece.id, quantity: body.quantity, tracked: true, available: availableOf(piece) },
+    ]);
+    if (short.length > 0) {
+      return c.json(
+        {
+          ok: false,
+          error: `Falta saldo de "${piece.name}" (tem ${fmt(short[0]!.available)}${unitTxt}, precisa ${fmt(short[0]!.needed)}${unitTxt}). Dê entrada antes de desmembrar.`,
+        },
+        400,
+      );
+    }
+    const sameUnit = body.cuts.every((ct) => byId.get(ct.productId)!.unit === piece.unit);
+    if (sameUnit && breakdownShrink(body.quantity, body.cuts.map((ct) => ct.quantity)).shrinkQty < 0) {
+      return c.json(
+        { ok: false, error: `Os cortes somam mais que a peça (${fmt(body.quantity)}${unitTxt}) — confira os pesos.` },
+        400,
+      );
+    }
+
+    const pieceUnitCost = baseCostOf(piece);
+    const pieceCost = Number((body.quantity * pieceUnitCost).toFixed(2));
+    const shares = splitBreakdownCost(
+      pieceCost,
+      body.cuts.map((ct) => {
+        const p = byId.get(ct.productId)!;
+        // Preço de venda por unidade-base (unidade fechada: preço da peça ÷ tamanho — mesma conta do custo).
+        const salePrice = costPerBaseUnit({
+          unit: p.unit,
+          conversionFactor: p.conversionFactor != null ? Number(p.conversionFactor) : null,
+          costPrice: Number(p.salePrice),
+        });
+        return { quantity: ct.quantity, salePrice };
+      }),
+    );
+    const userId = c.get('userId');
+    const userName = c.get('userName');
+
+    const created = await prisma.$transaction(async (tx) => {
+      const { lastProductionNumber } = await tx.tenant.update({
+        where: { id: tenantId },
+        data: { lastProductionNumber: { increment: 1 } },
+        select: { lastProductionNumber: true },
+      });
+      const code = formatProductionNumber(lastProductionNumber);
+      const lines: Prisma.ProductionLineCreateManyProductionInput[] = [];
+
+      const inMov = await tx.stockMovement.create({
+        data: {
+          tenantId,
+          productId: piece.id,
+          type: 'EXPENSE',
+          quantity: body.quantity,
+          unitCost: pieceUnitCost,
+          reason: `Desmembramento ${code}`,
+          syncStatus: 'SYNCED',
+          userId,
+          registeredByName: userName,
+        },
+      });
+      await tx.product.update({ where: { id: piece.id }, data: { stockQty: { decrement: body.quantity } } });
+      lines.push({
+        tenantId,
+        productId: piece.id,
+        direction: 'INPUT',
+        quantity: body.quantity,
+        unitCost: pieceUnitCost,
+        stockMovementId: inMov.id,
+      });
+
+      for (const [i, ct] of body.cuts.entries()) {
+        const p = byId.get(ct.productId)!;
+        const share = shares[i]!;
+        const mov = await tx.stockMovement.create({
+          data: {
+            tenantId,
+            productId: p.id,
+            type: 'INCOME',
+            quantity: ct.quantity,
+            unitCost: share.unitCost,
+            reason: `Desmembramento ${code} — ${piece.name}`.slice(0, 150),
+            syncStatus: 'SYNCED',
+            userId,
+            registeredByName: userName,
+          },
+        });
+        await tx.product.update({
+          where: { id: p.id },
+          data: { stockQty: { increment: ct.quantity }, ...lastCostData(p, share.unitCost, share.totalCost > 0) },
+        });
+        lines.push({
+          tenantId,
+          productId: p.id,
+          direction: 'OUTPUT',
+          quantity: ct.quantity,
+          unitCost: share.unitCost,
+          stockMovementId: mov.id,
+        });
+      }
+
+      return tx.production.create({
+        data: {
+          tenantId,
+          productionNumber: lastProductionNumber,
+          kind: 'BREAKDOWN',
+          totalCost: pieceCost,
+          notes: body.notes || null,
+          userId,
+          registeredByName: userName,
+          lines: { createMany: { data: lines } },
+        },
+        include: PRODUCTION_INCLUDE,
+      });
+    });
+    return c.json({ ok: true, data: toProductionRow(created) }, 201);
+  } catch (err) {
+    console.error('POST /productions/breakdown falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao registrar o desmembramento.' }, 500);
   }
 });
 

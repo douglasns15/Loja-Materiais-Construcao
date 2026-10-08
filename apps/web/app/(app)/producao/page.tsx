@@ -20,6 +20,7 @@ import { apiGet, apiPost } from '@/lib/api';
 import { useMe } from '@/lib/useMe';
 import { useReloadOnReconnect } from '@/lib/useReloadOnReconnect';
 import { OfflineNotice } from '@/components/OfflineNotice';
+import { BreakdownForm } from '@/components/BreakdownForm';
 import { fmtQty, parseQty, unitShort } from '@/components/RecipeSection';
 
 /**
@@ -31,6 +32,9 @@ import { fmtQty, parseQty, unitShort } from '@/components/RecipeSection';
  * Fatia 2 (ADR-043 §3): "Resumo do dia" — produzido × vendido × perda × em estoque por produto
  * pronto — com "Registrar perda" (sobra do dia, queimou, caiu) e a lista das perdas. O seletor de
  * dia abre o histórico (produções P-, resumo e perdas de dias anteriores); registrar é sempre hoje.
+ *
+ * Fatia 3: aba "Desmembrar" (peça → cortes, `BreakdownForm`) ao lado de "Pela ficha" — o mesmo
+ * evento P-, que aparece na lista do dia como "Desmembrou …"; os cortes entram no resumo e na perda.
  */
 
 const BRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -64,6 +68,7 @@ export default function ProducaoPage() {
   const [used, setUsed] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
+  const [mode, setMode] = useState<'recipe' | 'breakdown'>('recipe');
 
   // Trocar o dia pelas setas do campo de data dispara uma busca por dia; as respostas podem chegar
   // fora de ordem. Só a busca mais recente vale (senão "Resumo de 02/10" mostrava os dados do dia 03).
@@ -269,187 +274,227 @@ export default function ProducaoPage() {
           </section>
         ) : (
           <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-md">
-            <div className="bg-indigo-600 px-5 py-3 text-white">
-              <h2 className="text-base font-bold">Nova produção</h2>
-              <p className="text-xs text-indigo-100">Escolha o produto pronto</p>
-            </div>
-            <div className="space-y-4 p-5">
-              {recipes.length === 0 ? (
-                <p className="text-sm text-gray-600">
-                  Nenhum produto tem ficha técnica ainda.{' '}
-                  {isAdmin ? (
-                    <>
-                      Abra o produto pronto em{' '}
-                      <Link href="/products" className="font-medium text-indigo-700 hover:underline">
-                        Produtos
-                      </Link>{' '}
-                      e use “Criar ficha técnica”.
-                    </>
-                  ) : (
-                    'Peça ao administrador para cadastrar a ficha técnica do produto.'
-                  )}
+            <div className="flex flex-wrap items-center justify-between gap-2 bg-indigo-600 px-5 py-3 text-white">
+              <div>
+                <h2 className="text-base font-bold">Nova produção</h2>
+                <p className="text-xs text-indigo-100">
+                  {mode === 'recipe' ? 'Escolha o produto pronto' : 'Escolha a peça e pese os cortes'}
                 </p>
-              ) : (
-                <div className="flex flex-wrap gap-2" role="group" aria-label="Produto pronto">
-                  {recipes.map((r) => (
-                    <button
-                      key={r.productId}
-                      type="button"
-                      onClick={() => choose(r)}
-                      className={`rounded-lg border px-3 py-2 text-left text-sm ${
-                        selectedId === r.productId
-                          ? 'border-indigo-600 bg-indigo-50 font-semibold text-indigo-800 ring-1 ring-indigo-600'
-                          : 'border-gray-300 bg-white text-gray-800 hover:border-indigo-400'
-                      }`}
-                    >
-                      {r.productName}
-                      <span className="block text-xs font-normal text-gray-500 tabular-nums">
-                        em estoque: {fmtQty(r.stockQty, r.unit)} {unitShort(r.unit)}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
+              </div>
+              <div className="flex rounded-lg bg-indigo-700/60 p-0.5 text-sm" role="group" aria-label="Tipo de produção">
+                {(
+                  [
+                    ['recipe', 'Pela ficha'],
+                    ['breakdown', 'Desmembrar'],
+                  ] as const
+                ).map(([m, label]) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => {
+                      setMode(m);
+                      setDone(null);
+                      setError(null);
+                    }}
+                    aria-pressed={mode === m}
+                    className={`rounded-md px-3 py-1 font-semibold ${
+                      mode === m ? 'bg-white text-indigo-700 shadow-sm' : 'text-indigo-100 hover:text-white'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {mode === 'breakdown' ? (
+              <div className="p-5">
+                <BreakdownForm
+                  onDone={async (_row, message) => {
+                    setDone(message);
+                    setError(null);
+                    await load().catch((e) => setError((e as Error).message));
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="space-y-4 p-5">
+                {recipes.length === 0 ? (
+                  <p className="text-sm text-gray-600">
+                    Nenhum produto tem ficha técnica ainda.{' '}
+                    {isAdmin ? (
+                      <>
+                        Abra o produto pronto em{' '}
+                        <Link href="/products" className="font-medium text-indigo-700 hover:underline">
+                          Produtos
+                        </Link>{' '}
+                        e use “Criar ficha técnica”.
+                      </>
+                    ) : (
+                      'Peça ao administrador para cadastrar a ficha técnica do produto.'
+                    )}
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-2" role="group" aria-label="Produto pronto">
+                    {recipes.map((r) => (
+                      <button
+                        key={r.productId}
+                        type="button"
+                        onClick={() => choose(r)}
+                        className={`rounded-lg border px-3 py-2 text-left text-sm ${
+                          selectedId === r.productId
+                            ? 'border-indigo-600 bg-indigo-50 font-semibold text-indigo-800 ring-1 ring-indigo-600'
+                            : 'border-gray-300 bg-white text-gray-800 hover:border-indigo-400'
+                        }`}
+                      >
+                        {r.productName}
+                        <span className="block text-xs font-normal text-gray-500 tabular-nums">
+                          em estoque: {fmtQty(r.stockQty, r.unit)} {unitShort(r.unit)}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
   
-              {recipe && (
-                <>
-                  <div className="flex flex-wrap items-end gap-3">
-                    {recipe.pieceWeight && (
+                {recipe && (
+                  <>
+                    <div className="flex flex-wrap items-end gap-3">
+                      {recipe.pieceWeight && (
+                        <label className="text-xs font-semibold text-gray-600">
+                          Peças
+                          <input
+                            id="pr-pieces"
+                            value={pieces}
+                            onChange={(e) => onPieces(e.target.value)}
+                            inputMode="numeric"
+                            className="mt-1 block w-24 rounded-lg border border-gray-300 px-2 py-1.5 text-right text-sm tabular-nums"
+                          />
+                        </label>
+                      )}
                       <label className="text-xs font-semibold text-gray-600">
-                        Peças
+                        {recipe.pieceWeight ? `Peso total (${unitShort(recipe.unit)})` : `Quantidade (${unitShort(recipe.unit)})`}
                         <input
-                          id="pr-pieces"
-                          value={pieces}
-                          onChange={(e) => onPieces(e.target.value)}
-                          inputMode="numeric"
-                          className="mt-1 block w-24 rounded-lg border border-gray-300 px-2 py-1.5 text-right text-sm tabular-nums"
+                          id="pr-qty"
+                          value={qty}
+                          onChange={(e) => onQty(e.target.value)}
+                          inputMode="decimal"
+                          className="mt-1 block w-28 rounded-lg border border-gray-300 px-2 py-1.5 text-right text-sm tabular-nums"
                         />
                       </label>
+                    </div>
+                    {recipe.pieceWeight && (
+                      <p className="text-xs text-gray-500">
+                        Peso sugerido = peças × {fmtQty(recipe.pieceWeight, recipe.unit)} {unitShort(recipe.unit)} (peso médio
+                        do cadastro). Se pesar a bandeja, corrija para o peso real.
+                      </p>
                     )}
-                    <label className="text-xs font-semibold text-gray-600">
-                      {recipe.pieceWeight ? `Peso total (${unitShort(recipe.unit)})` : `Quantidade (${unitShort(recipe.unit)})`}
-                      <input
-                        id="pr-qty"
-                        value={qty}
-                        onChange={(e) => onQty(e.target.value)}
-                        inputMode="decimal"
-                        className="mt-1 block w-28 rounded-lg border border-gray-300 px-2 py-1.5 text-right text-sm tabular-nums"
-                      />
-                    </label>
-                  </div>
-                  {recipe.pieceWeight && (
-                    <p className="text-xs text-gray-500">
-                      Peso sugerido = peças × {fmtQty(recipe.pieceWeight, recipe.unit)} {unitShort(recipe.unit)} (peso médio
-                      do cadastro). Se pesar a bandeja, corrija para o peso real.
-                    </p>
-                  )}
   
-                  <div className="overflow-x-auto rounded-xl border border-gray-200">
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50 text-left text-xs text-gray-600">
-                        <tr>
-                          <th className="px-3 py-2">Insumo</th>
-                          <th className="px-3 py-2 text-right">Pela ficha</th>
-                          <th className="px-3 py-2 text-right">Usado de fato</th>
-                          <th className="px-3 py-2 text-right">Saldo</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {lines.map((l) => {
-                          const need = scaleRecipe(recipe, outQty > 0 ? outQty : 0).find((x) => x.productId === l.productId);
-                          const short = shortOf(l.productId);
-                          return (
-                            <tr key={l.productId} className="border-t border-gray-100">
-                              <td className="px-3 py-2">{l.name}</td>
-                              <td className="px-3 py-2 text-right tabular-nums text-gray-600">
-                                {need ? `${fmtQty(need.quantity, l.unit)} ${unitShort(l.unit)}` : '—'}
-                              </td>
-                              <td className="px-3 py-2 text-right">
-                                <span className="inline-flex items-center gap-1">
-                                  <input
-                                    value={used[l.productId] ?? ''}
-                                    onChange={(e) => setUsed((prev) => ({ ...prev, [l.productId]: e.target.value }))}
-                                    inputMode="decimal"
-                                    aria-label={`${l.name}: usado de fato`}
-                                    className={`w-24 rounded-lg border px-2 py-1 text-right tabular-nums ${
-                                      Number.isNaN(l.used) ? 'border-red-400' : 'border-gray-300'
-                                    }`}
-                                  />
-                                  <span className="w-6 text-left text-xs text-gray-500">{unitShort(l.unit)}</span>
-                                </span>
-                              </td>
-                              <td className="px-3 py-2 text-right">
-                                {l.trackStock ? (
-                                  <span
-                                    className={`rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${
-                                      short ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'
-                                    }`}
-                                  >
-                                    tem {fmtQty(l.available ?? 0, l.unit)}
+                    <div className="overflow-x-auto rounded-xl border border-gray-200">
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-50 text-left text-xs text-gray-600">
+                          <tr>
+                            <th className="px-3 py-2">Insumo</th>
+                            <th className="px-3 py-2 text-right">Pela ficha</th>
+                            <th className="px-3 py-2 text-right">Usado de fato</th>
+                            <th className="px-3 py-2 text-right">Saldo</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {lines.map((l) => {
+                            const need = scaleRecipe(recipe, outQty > 0 ? outQty : 0).find((x) => x.productId === l.productId);
+                            const short = shortOf(l.productId);
+                            return (
+                              <tr key={l.productId} className="border-t border-gray-100">
+                                <td className="px-3 py-2">{l.name}</td>
+                                <td className="px-3 py-2 text-right tabular-nums text-gray-600">
+                                  {need ? `${fmtQty(need.quantity, l.unit)} ${unitShort(l.unit)}` : '—'}
+                                </td>
+                                <td className="px-3 py-2 text-right">
+                                  <span className="inline-flex items-center gap-1">
+                                    <input
+                                      value={used[l.productId] ?? ''}
+                                      onChange={(e) => setUsed((prev) => ({ ...prev, [l.productId]: e.target.value }))}
+                                      inputMode="decimal"
+                                      aria-label={`${l.name}: usado de fato`}
+                                      className={`w-24 rounded-lg border px-2 py-1 text-right tabular-nums ${
+                                        Number.isNaN(l.used) ? 'border-red-400' : 'border-gray-300'
+                                      }`}
+                                    />
+                                    <span className="w-6 text-left text-xs text-gray-500">{unitShort(l.unit)}</span>
                                   </span>
-                                ) : (
-                                  <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800">
-                                    sem controle
-                                  </span>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                                </td>
+                                <td className="px-3 py-2 text-right">
+                                  {l.trackStock ? (
+                                    <span
+                                      className={`rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${
+                                        short ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'
+                                      }`}
+                                    >
+                                      tem {fmtQty(l.available ?? 0, l.unit)}
+                                    </span>
+                                  ) : (
+                                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                                      sem controle
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
   
-                  <div className="flex flex-wrap gap-x-6 gap-y-1 rounded-lg bg-gray-50 px-3 py-2 text-sm">
-                    <span>
-                      Custo da produção: <strong className="tabular-nums">{BRL(cost.totalCost)}</strong>
-                    </span>
-                    <span>
-                      Custo por {unitShort(recipe.unit)}:{' '}
-                      <strong className="tabular-nums">{outQty > 0 ? BRL(cost.unitCost) : '—'}</strong>
-                    </span>
-                    {recipe.salePrice > 0 && outQty > 0 && (
+                    <div className="flex flex-wrap gap-x-6 gap-y-1 rounded-lg bg-gray-50 px-3 py-2 text-sm">
                       <span>
-                        Margem:{' '}
-                        <strong className="tabular-nums">
-                          {(((recipe.salePrice - cost.unitCost) / recipe.salePrice) * 100).toFixed(0)}%
-                        </strong>
+                        Custo da produção: <strong className="tabular-nums">{BRL(cost.totalCost)}</strong>
                       </span>
+                      <span>
+                        Custo por {unitShort(recipe.unit)}:{' '}
+                        <strong className="tabular-nums">{outQty > 0 ? BRL(cost.unitCost) : '—'}</strong>
+                      </span>
+                      {recipe.salePrice > 0 && outQty > 0 && (
+                        <span>
+                          Margem:{' '}
+                          <strong className="tabular-nums">
+                            {(((recipe.salePrice - cost.unitCost) / recipe.salePrice) * 100).toFixed(0)}%
+                          </strong>
+                        </span>
+                      )}
+                    </div>
+  
+                    {firstShort && shortages[0] && (
+                      <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+                        Falta saldo de {firstShort.name} (tem {fmtQty(shortages[0].available, firstShort.unit)}, precisa{' '}
+                        {fmtQty(shortages[0].needed, firstShort.unit)}). Dê entrada na tela{' '}
+                        <Link href="/estoque" className="font-semibold underline">
+                          Estoque
+                        </Link>{' '}
+                        antes de produzir.
+                      </p>
                     )}
-                  </div>
   
-                  {firstShort && shortages[0] && (
-                    <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-                      Falta saldo de {firstShort.name} (tem {fmtQty(shortages[0].available, firstShort.unit)}, precisa{' '}
-                      {fmtQty(shortages[0].needed, firstShort.unit)}). Dê entrada na tela{' '}
-                      <Link href="/estoque" className="font-semibold underline">
-                        Estoque
-                      </Link>{' '}
-                      antes de produzir.
-                    </p>
-                  )}
-  
-                  <input
-                    id="pr-notes"
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    maxLength={300}
-                    placeholder="Observação (opcional) — ex.: 1 frango estava ruim"
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                  />
-                  <div className="flex justify-end">
-                    <button
-                      type="button"
-                      onClick={register}
-                      disabled={busy || !canSubmit}
-                      className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50"
-                    >
-                      {busy ? 'Registrando…' : 'Registrar produção'}
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
+                    <input
+                      id="pr-notes"
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      maxLength={300}
+                      placeholder="Observação (opcional) — ex.: 1 frango estava ruim"
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    />
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={register}
+                        disabled={busy || !canSubmit}
+                        className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50"
+                      >
+                        {busy ? 'Registrando…' : 'Registrar produção'}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </section>
         )}
 
@@ -459,6 +504,7 @@ export default function ProducaoPage() {
             <p className="text-sm text-gray-500">{isToday ? 'Nenhuma produção registrada hoje.' : 'Nenhuma produção neste dia.'}</p>
           ) : (
             today.map((p) => {
+              if (p.kind === 'BREAKDOWN') return <BreakdownCard key={p.id} p={p} />;
               const out = p.outputs[0];
               return (
                 <div key={p.id} className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm">
@@ -536,6 +582,45 @@ export default function ProducaoPage() {
   );
 }
 
+/** Desmembramento na lista do dia (Fatia 3): a peça que saiu, os cortes que entraram e a quebra. */
+function BreakdownCard({ p }: { p: ProductionRow }) {
+  const piece = p.inputs[0];
+  const sameUnit = !!piece && p.outputs.every((o) => o.unit === piece.unit);
+  const cutsTotal = p.outputs.reduce((a, o) => a + o.quantity, 0);
+  const shrink = piece && sameUnit ? piece.quantity - cutsTotal : null;
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm">
+      <div className="flex justify-between gap-2 font-semibold text-gray-900">
+        <span className="truncate">
+          {formatProductionNumber(p.productionNumber)} · Desmembrou {piece?.name ?? '—'}
+        </span>
+        {piece && (
+          <span className="shrink-0 tabular-nums">
+            {fmtQty(piece.quantity, piece.unit)} {unitShort(piece.unit)}
+          </span>
+        )}
+      </div>
+      <div className="text-xs text-gray-500">
+        {hm(p.createdAt)}
+        {p.registeredByName ? ` · ${p.registeredByName}` : ''} · custo {BRL(p.totalCost)}
+        {shrink != null && shrink > 0 && piece ? ` · quebra ${fmtQty(shrink, piece.unit)} ${unitShort(piece.unit)}` : ''}
+      </div>
+      <div className="text-xs text-gray-500">
+        gerou{' '}
+        {p.outputs
+          .map(
+            (o) =>
+              `${fmtQty(o.quantity, o.unit)} ${unitShort(o.unit)} ${o.name}${
+                o.unitCost != null && o.unitCost > 0 ? ` (${BRL(o.unitCost)}/${unitShort(o.unit)})` : ''
+              }`,
+          )
+          .join(', ')}
+      </div>
+      {p.notes && <div className="text-xs italic text-gray-500">{p.notes}</div>}
+    </div>
+  );
+}
+
 /** Resumo do dia: produzido × vendido × perda × em estoque por produto pronto (ADR-043 §3). */
 function SummaryCard({
   summary,
@@ -564,7 +649,7 @@ function SummaryCard({
         )}
       </div>
       {rows.length === 0 ? (
-        <p className="px-5 py-4 text-sm text-gray-500">Nada produzido, vendido ou em estoque entre os produtos com ficha.</p>
+        <p className="px-5 py-4 text-sm text-gray-500">Nada produzido, vendido ou em estoque entre os produtos feitos na loja.</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { createProductionSchema, productionLossReasonText, productionLossSchema, recipeSchema } from './production';
+import {
+  createBreakdownSchema,
+  createProductionSchema,
+  productionLossReasonText,
+  productionLossSchema,
+  recipeSchema,
+} from './production';
 import { formatProductionNumber } from './format';
 import { setTenantModuleSchema } from './modules';
 
@@ -74,5 +80,38 @@ describe('productionLossSchema', () => {
     expect(productionLossReasonText('LEFTOVER')).toBe('Perda — Sobra do dia');
     expect(productionLossReasonText('BURNED', '2 do fundo')).toBe('Perda — Queimou: 2 do fundo');
     expect(productionLossReasonText('OTHER', 'vencido')).toBe('Perda — vencido');
+  });
+});
+
+describe('createBreakdownSchema', () => {
+  const C = '00000000-0000-4000-8000-00000000000c';
+
+  it('aceita a peça + cortes pesados', () => {
+    const b = createBreakdownSchema.parse({
+      productId: A,
+      quantity: 15,
+      cuts: [
+        { productId: B, quantity: 4.2 },
+        { productId: C, quantity: 6 },
+      ],
+    });
+    expect(b.cuts).toHaveLength(2);
+  });
+
+  it('recusa sem cortes, corte repetido e corte zerado', () => {
+    expect(createBreakdownSchema.safeParse({ productId: A, quantity: 1, cuts: [] }).success).toBe(false);
+    expect(
+      createBreakdownSchema.safeParse({
+        productId: A,
+        quantity: 1,
+        cuts: [
+          { productId: B, quantity: 0.5 },
+          { productId: B, quantity: 0.2 },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(createBreakdownSchema.safeParse({ productId: A, quantity: 1, cuts: [{ productId: B, quantity: 0 }] }).success).toBe(
+      false,
+    );
   });
 });
