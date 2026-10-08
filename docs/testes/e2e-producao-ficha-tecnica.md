@@ -58,3 +58,31 @@ Depois da seção C (produção feita e uma venda de Frango assado no dia):
    - ✅ Mostra as produções, o resumo e as perdas daquele dia; "Nova produção" e "Registrar perda" somem (registrar é
      sempre hoje); botão **Hoje** volta.
 6. Um Operador também consegue registrar perda.
+
+## E. Desmembramento — peça → cortes (Fatia 3)
+
+Preparação: uma **peça** com estoque e custo (ex.: Quarto traseiro, 30 kg a R$ 25/kg) e **cortes** cadastrados por kg,
+com controle de estoque e preço de venda (ex.: Picanha R$ 100, Alcatra R$ 50, Aparas R$ 15). Na Demo Mercardinho já
+existem os de teste (`tst-qtr`, `tst-pic`, `tst-alc`, `tst-apa`).
+
+1. **Produção** › aba **Desmembrar** › Peça = Quarto traseiro.
+   - ✅ Sem desmembramento anterior: 1 linha de corte vazia e a dica "Corte em branco fica de fora".
+2. Quanto usou **acima do estoque**.
+   - ✅ Aviso vermelho "Falta saldo de … Dê entrada na tela Estoque" e botão travado.
+3. Quanto usou **15** · cortes Picanha **4**, Alcatra **6**, Aparas **6** (16 kg).
+   - ✅ "Os cortes somam 16,000 kg, mais que a peça (15,000 kg)" e botão travado.
+4. Aparas **2** (12 kg de cortes).
+   - ✅ Rateio pelo valor de venda: Picanha R$ 205,48 (51,37/kg), Alcatra R$ 154,11 (25,69/kg), Aparas R$ 15,41
+     (7,71/kg) — soma R$ 375,00; mesma margem em todos; **Quebra 3,000 kg (20%)**.
+5. **Registrar desmembramento**.
+   - ✅ "P-000N registrada: saíram 15,000 kg de … e entraram 3 cortes"; na lista "P-000N · Desmembrou … · quebra
+     3,000 kg · gerou …"; os cortes aparecem no **Resumo do dia** com "Registrar perda".
+   - ✅ Cadastro de cada corte: custo = custo/kg do rateio e o aviso "custo ajustado, confira o preço".
+6. Escolha a peça de novo.
+   - ✅ A lista vem com os cortes que costumam sair dela (mais frequentes primeiro), pesos em branco, e a dica
+     "Sugeridos pelos últimos N desmembramentos · em branco fica de fora".
+   - ✅ Remover um corte (×) e deixar outro em branco: só o pesado entra. Um desmembramento parcial **não** encolhe a
+     sugestão seguinte.
+7. **Registrar perda** de um corte (ex.: 0,5 kg de Aparas · Sobra do dia).
+   - ✅ Sai do estoque com o custo novo do corte; aparece em Perdas e no resumo.
+8. Um **Operador** também desmembra (qualquer usuário; loja ativa).

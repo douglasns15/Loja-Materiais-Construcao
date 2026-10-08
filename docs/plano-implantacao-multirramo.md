@@ -1,5 +1,10 @@
 # Plano — Implantação multirramo (1ª loja de alimentos) + usuário multi-loja
 
+> **Estado em 2026-10-08:** **Produção Fatia 3 — desmembramento** (peça → cortes, ADR-043) **NO AR** (API `2102b938`,
+> web `b776da67`; migration `0045` `productions.kind` aprovada e aplicada; commits `793e063`, `7f104a4`) e **E2E
+> validado no navegador** com usuário Operador. ADR-043 completa. Também: teste com **Operador** das Fatias 1+2
+> validado e **recarga automática pós-deploy** (ChunkLoadError, `a0814d7`). Próxima: **#6 cadastro em sequência**.
+>
 > **Estado em 2026-10-07:** **Produção Fatia 2** (perda do pronto + resumo do dia + histórico por dia, ADR-043 §3)
 > **NO AR** (API `674f35a3`, web `f94f5c7f`; commits `9118d94`, `5e0801d`) e **E2E validado no navegador**; sem
 > migration. Próxima: **Fatia 3 (desmembramento)** ou **#6 cadastro em sequência** — Owner escolhe.
@@ -112,7 +117,7 @@ A loja de alimentos **não consegue vender hoje**:
 | 5c | **Revisão da agenda** (Saiu p/ entrega conclui, Voltou/reagendar, Data por item na agenda, concluídos ocultos) + **Funcionários** (e-mail + 7 funções) — **NO AR + E2E validado 2026-10-02** (commits `672da74`, `f69ad3a`, `d5c37cd`, `dbc0e5a`) | **Sim** — `0043` aprovada e aplicada | 042 (revisão) |
 | 5d | **Produção com ficha técnica — Fatia 1** (ficha, tela Produção, P-0001, último custo, módulo `RECIPES`) — **NO AR + E2E validado 2026-10-02** (commits `0164bb9`, `947522e`, `dbc0e5a`) | **Sim** — `0044` aprovada e aplicada | 043 |
 | 5e | **Produção — Fatia 2** (perda/sobra + resumo do dia + histórico por dia) — **NO AR + E2E validado 2026-10-07** (API `674f35a3`, web `f94f5c7f`; commits `9118d94`, `5e0801d`) | Não | 043 |
-| 5f | **Produção — Fatia 3** (desmembramento: peça → cortes, rateio pelo valor de venda) | A definir na vez (talvez tabela de "modelo de desmembramento") | 043 |
+| 5f | **Produção — Fatia 3** (desmembramento: peça → cortes, rateio pelo valor de venda, cortes sugeridos pelos últimos 5 desmembramentos) — **NO AR + E2E validado 2026-10-08** (API `2102b938`, web `b776da67`; commits `793e063`, `7f104a4`) | **Sim** — `0045` (`productions.kind`) aprovada e aplicada; sem tabela de modelo | 043 |
 | 6 | **Cadastro em sequência** | Não | 041 §A |
 | 7 | **Cadastro no caixa** + alerta de revisão | Não (a confirmar) | 041 §B |
 | 8 | Etiqueta de balança (`scaleCode` + parser + PDV) | (usa a #2) | 040 F3 |
@@ -123,16 +128,31 @@ A loja de alimentos **não consegue vender hoje**:
 Racional: #1–#8 são o que a loja nova precisa para abrir; a planilha fica para os poucos itens sem código e
 para clientes futuros; o multi-loja é grande e não bloqueia a abertura (se o Owner precisar dele antes, sobe).
 
-## 6. Onde paramos (2026-10-07)
+## 6. Onde paramos (2026-10-08)
+
+- **Teste com Operador VALIDADO** (`operador_kg@lojademo.com`, papel Usuário, loja Demo Mercardinho — criado com
+  `packages/db/scripts/create-user.mjs`, senha padrão dos scripts): ficha só leitura (tela + `PUT`/`DELETE` 403),
+  registra produção (P-0002) e perda.
+- **5f NO AR 2026-10-08** — aba **Desmembrar** na Produção: peça (sem saldo bloqueia) + peso de cada corte, rateio do
+  custo **pelo valor de venda** (`splitBreakdownCost`), **quebra** informativa, cortes acima da peça recusados, último
+  custo por corte; lista pré-montada com os cortes que **costumam sair** da peça (últimos 5 desmembramentos, mais
+  frequentes primeiro — `suggestBreakdownCuts`; dica discreta na tela); cortes entram no resumo do dia e na perda.
+  Rotas `POST /productions/breakdown` e `GET /productions/breakdown/cuts/:productId`. Migration `0045`.
+- **Recarga automática pós-deploy** (só web): aba aberta antes de um deploy que caía em "Algo deu errado ao abrir a
+  tela" (ChunkLoadError) agora recarrega sozinha 1 vez (online, trava de 30 s) — `apps/web/lib/chunkReload.ts`.
+- Dados de teste na Demo Mercardinho: Quarto traseiro (teste) `tst-qtr` (12 kg), Picanha/Alcatra/Aparas (teste)
+  `tst-pic`/`tst-alc`/`tst-apa`, desmembramentos P-0003 e P-0004, perda de 0,5 kg de Aparas, produção P-0002 e perda
+  de 1,2 kg do Frango Assado (Operador).
+- **Próxima entrega de código:** **#6 cadastro em sequência** (ADR-041 §A).
+- Push dos commits em `main`: Owner (ver ROADMAP "Onde paramos").
+
+### Histórico — onde paramos em 2026-10-07
 
 - **5e NO AR 2026-10-07 (API `674f35a3`, web `f94f5c7f`)** — perda do pronto (`POST /productions/loss`), resumo do
   dia (`GET /productions/summary`) e histórico por dia na tela Produção; E2E validado no navegador (roteiro
   [testes/e2e-producao-ficha-tecnica.md](testes/e2e-producao-ficha-tecnica.md) §D). Dado de teste novo: perda de
   2,4 kg "Sobra do dia" do Frango Assado (estoque 20,300 kg).
-- **Próxima entrega de código:** **5f — Fatia 3 (desmembramento)** ou **#6 cadastro em sequência** (ADR-041 §A) —
-  o Owner escolhe no início da sessão.
-- Faltou testar com usuário **Operador** (ficha só leitura; registra produção e perda).
-- Push dos commits em `main`: Owner.
+- Próxima entrega era 5f ou #6 — o Owner escolheu a **5f**, feita em 2026-10-08 (acima), junto com o teste do Operador.
 
 ### Histórico — onde paramos em 2026-10-02
 

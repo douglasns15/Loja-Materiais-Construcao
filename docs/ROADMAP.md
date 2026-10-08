@@ -6,7 +6,7 @@
 > **Última atualização:** 2026-10-08 — **Produção — Fatia 3 (desmembramento: peça → cortes).** Roteiro:
 > [plano-implantacao-multirramo.md](plano-implantacao-multirramo.md).
 >
-> **NO AR 2026-10-08 (API `9a7e3925`, web `cecc4375`) — E2E VALIDADO no navegador** (conduzido pelo Claude com o
+> **NO AR 2026-10-08 (versões finais do dia: API `2102b938`, web `b776da67`) — E2E VALIDADO no navegador** (conduzido pelo Claude com o
 > login do Operador `operador_kg` na loja Demo Mercardinho; evidência em
 > [testes/registro-de-testes.md](testes/registro-de-testes.md)). Commit `793e063`.
 > - **Decisões do Owner (2026-10-08):** rateio do custo **pelo valor de venda**; migration **`0045`** aprovada e
@@ -26,10 +26,15 @@
 >   aviso de tela não cacheada. Validado no navegador (recarga, trava e fora da janela).
 >
 > **ONDE PARAMOS / PRÓXIMOS PASSOS (2026-10-08):**
-> 1. Seguir o plano multirramo pela **#6 cadastro em sequência** (ADR-041 §A).
+> 1. Seguir o plano multirramo pela **#6 cadastro em sequência** (ADR-041 §A) — começar lendo a ADR-041 §A e o
+>    [plano multirramo](plano-implantacao-multirramo.md) §5/§6.
 > 2. Depois: #7 cadastro no caixa, #8 etiqueta de balança, #9 planilha, #10 multi-loja.
-> 3. Push dos commits locais em `main` (Owner): `2d07e85`, `793e063` + docs.
+> 3. Push dos commits locais em `main` (Owner): `2d07e85`, `793e063`, `dac5acc`, `7f104a4`, `a0814d7`, `d6f1e1c` +
+>    o commit de fechamento desta sessão.
 > 4. NFC-e segue na branch `feat/nfe-emissao` (Owner avisa quando retomar).
+> 5. Logins de teste da loja de alimentos (Demo Mercardinho): `owner_kg@lojademo.com` (Admin) e
+>    `operador_kg@lojademo.com` (Usuário, criado 2026-10-08) — senha padrão dos scripts de `packages/db/scripts/`.
+> 6. Deploy: `npm run deploy` (API e web) costuma ser barrado pelo modo automático até o Owner autorizar no chat.
 >
 > **Antes:** 2026-10-07 — **Produção — Fatia 2 (perda do pronto + resumo do dia).**
 >
