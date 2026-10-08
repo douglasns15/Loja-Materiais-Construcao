@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { reloadForNewVersion, shouldAutoReload } from '@/lib/chunkReload';
 
 /**
  * Fronteira de erro da área logada (ADR-011, refino de resiliência offline). Um `error.tsx` de
@@ -11,6 +12,10 @@ import { useEffect } from 'react';
  * então telas **já abertas online** carregam do cache. Este fallback cobre o caso restante — abrir
  * offline uma tela cujo código **nunca** foi cacheado (ex.: rota nova, ainda não visitada após um
  * deploy): o navegador não baixa o chunk e o React lança. Vira um aviso claro, sem perder o shell.
+ *
+ * ONLINE, a mesma falha de chunk é "o app foi atualizado" (aba aberta antes do deploy pedindo um
+ * arquivo do build antigo, que não existe mais): recarrega sozinho UMA vez (`lib/chunkReload`) em
+ * vez de mostrar o erro — "Tentar novamente" não resolveria.
  */
 export default function AppError({
   error,
@@ -19,10 +24,22 @@ export default function AppError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  // Decidido uma vez, no primeiro render da fronteira (o erro não muda enquanto ela está montada).
+  const [updating] = useState(() => shouldAutoReload(error));
+
   useEffect(() => {
     // Log detalhado no console (o servidor não vê erros de cliente).
     console.error('Erro ao abrir a tela:', error);
-  }, [error]);
+    if (updating) reloadForNewVersion();
+  }, [error, updating]);
+
+  if (updating) {
+    return (
+      <div role="status" className="mx-auto max-w-md rounded-2xl bg-white p-8 text-center text-sm text-gray-600 shadow-sm">
+        O aplicativo foi atualizado — carregando a versão nova…
+      </div>
+    );
+  }
 
   const offline = typeof navigator !== 'undefined' && !navigator.onLine;
 

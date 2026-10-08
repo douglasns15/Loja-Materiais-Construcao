@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { reloadForNewVersion, shouldAutoReload } from '@/lib/chunkReload';
 
 /**
  * Fronteira de erro **da raiz** (última rede de segurança do Next). Diferente do
@@ -15,6 +16,9 @@ import { useEffect } from 'react';
  * segurança** para o caso residual (rota cujo chunk/RSC nunca foi cacheado). **Ir para a Venda**
  * dispara uma navegação real, que o Service Worker atende do cache, tirando o operador do
  * beco-sem-saída. As vendas salvas offline seguem na fila e sincronizam sozinhas.
+ *
+ * ONLINE, falha de chunk aqui é "o app foi atualizado" (build antigo pedindo arquivo que o deploy
+ * apagou): recarrega sozinho UMA vez (`lib/chunkReload`, mesma regra do `(app)/error.tsx`).
  */
 export default function GlobalError({
   error,
@@ -23,11 +27,36 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const [updating] = useState(() => shouldAutoReload(error));
+
   useEffect(() => {
     console.error('Erro global (raiz):', error);
-  }, [error]);
+    if (updating) reloadForNewVersion();
+  }, [error, updating]);
 
   const offline = typeof navigator !== 'undefined' && !navigator.onLine;
+
+  if (updating) {
+    return (
+      <html lang="pt-BR">
+        <body
+          style={{
+            margin: 0,
+            minHeight: '100dvh',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: '#f9fafb',
+            color: '#4b5563',
+            fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif',
+            fontSize: '0.875rem',
+          }}
+        >
+          <p role="status">O aplicativo foi atualizado — carregando a versão nova…</p>
+        </body>
+      </html>
+    );
+  }
 
   return (
     <html lang="pt-BR">
