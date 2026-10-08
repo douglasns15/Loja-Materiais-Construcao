@@ -6081,3 +6081,21 @@ navegador embutido (painel estreito ≈ celular + checagem em 1366 px), com o lo
 3. No celular "2,400 kg" quebrava em duas linhas na tabela ⇒ `whitespace-nowrap` nas colunas de número. Revalidado ✅.
 
 **Pendente:** perda registrada por um Operador (não-Admin).
+
+## Produção — permissões do Operador (ADR-043 F1+F2) — E2E no navegador (2026-10-08)
+
+Ambiente: `nexoloja-web.imortal.workers.dev` (API `674f35a3`, web `f94f5c7f` — sem deploy novo), loja **Demo
+Mercardinho**, login **`operador_kg@lojademo.com`** (papel Usuário = `CASHIER`), criado nesta sessão com
+`packages/db/scripts/create-user.mjs`. Testes conduzidos pelo Claude no navegador embutido, com o login feito pelo
+Owner. Fecha o pendente da entrada de 2026-10-07.
+
+| Item | Como | Resultado |
+|---|---|---|
+| Ficha só leitura na tela | Produtos › Frango Assado › bloco "Ficha técnica": insumos, custo/kg e margem visíveis; sem "Editar ficha"/"Excluir" | ✅ |
+| Ficha protegida na API | `PUT /productions/recipes/:id` (corpo vazio) e `DELETE /productions/recipes/:id` (uuid inexistente) com o token do Operador ⇒ **403** "Ação restrita a administradores." | ✅ |
+| Operador registra produção | 1 peça (1,200 kg) ⇒ **P-0002** "16:40 · operador_kg · custo R$ 16,70 (R$ 13,92/kg)"; Frango Assado 20,300 → 21,500 kg; Frango cru 2 → 1 | ✅ |
+| Operador registra perda | 1 peça · **Caiu** · "Teste E2E Operador" ⇒ −1,200 kg, lista Perdas "16:41 · operador_kg · Caiu…", "Perdas no custo: R$ 16,70"; estoque 20,300 kg | ✅ |
+| Consistência (ADR-001) | Banco: 3 `StockMovement` do Operador (saída 1 un cru "Produção P-0002", entrada 1,2 kg, saída 1,2 kg "Perda — Caiu…"); soma dos movimentos = `stockQty` (fr-ass 20,3; fr-cru 1) | ✅ |
+
+**Observação (não é bug):** a mensagem "Perda registrada…" aparece antes da lista/resumo recarregarem (~3 s na rede
+do teste); o resumo atualiza sozinho em seguida.
