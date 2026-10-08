@@ -20,6 +20,10 @@
 >   `suggestBreakdownCuts` (+11 testes).
 > - Também 2026-10-08: **teste com Operador** da Fatia 1+2 VALIDADO (ficha só leitura, 403 na API; produção e perda).
 > - **Gates:** core 496, shared 98, API e web tsc 0, build web ok. Doc §8.2 atualizada (regra 7).
+> - **Também 2026-10-08 — recarregar sozinho após deploy** (`a0814d7`, só web, web `b776da67`): aba aberta antes de um
+>   deploy caía em "Algo deu errado ao abrir a tela" (ChunkLoadError, código do build antigo apagado). Agora as telas de
+>   erro recarregam a página **uma vez** quando online (`lib/chunkReload`, trava anti-laço de 30 s); offline segue o
+>   aviso de tela não cacheada. Validado no navegador (recarga, trava e fora da janela).
 >
 > **ONDE PARAMOS / PRÓXIMOS PASSOS (2026-10-08):**
 > 1. Seguir o plano multirramo pela **#6 cadastro em sequência** (ADR-041 §A).

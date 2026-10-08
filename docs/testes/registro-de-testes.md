@@ -6124,3 +6124,22 @@ Picanha — levado ao Owner, que pediu sugerir os cortes que costumam sair da pe
 da produção/perda).
 
 **Ajuste do Owner (mesmo dia) — cortes sugeridos:** a pré-montagem passou a unir os cortes dos últimos 5 desmembramentos da peça, mais frequentes primeiro (core `suggestBreakdownCuts` +3 testes; rota renomeada para `GET /productions/breakdown/cuts/:productId`). Deploy API `2102b938` + web `124364cd`. Validado: depois do P-0004 (só Picanha) a peça volta a sugerir Picanha, Alcatra e Aparas, com a dica "Sugeridos pelos últimos 2 desmembramentos · em branco fica de fora"; a rota antiga responde 404. ✅ (Observação: logo após o deploy a aba já aberta mostrou "Algo deu errado ao abrir a tela" — ChunkLoadError do build anterior; recarregar resolveu. Comportamento antigo, não desta mudança.)
+
+## Web — recarregar sozinho quando o código da tela sumiu após deploy (ChunkLoadError) — 2026-10-08
+
+Achado do E2E da Fatia 3: logo após um deploy da web, uma aba aberta antes dele caiu em "Algo deu errado ao abrir a
+tela" (`ChunkLoadError`: o pedaço de código da rota, do build antigo, deu 404) e "Tentar novamente" não resolvia.
+Correção (commit `a0814d7`, só web): `apps/web/lib/chunkReload.ts` + fronteiras `(app)/error.tsx` e
+`global-error.tsx` recarregam a página **uma vez** quando online, com trava anti-laço de 30 s (sessionStorage);
+offline mantém o aviso de tela não cacheada. Deploy web `b776da67`.
+
+| Item | Como | Resultado |
+|---|---|---|
+| Lógica do helper | Script `tsx` (12 casos): ChunkLoadError por nome; mensagens do Next ("Loading chunk N failed", CSS), Chrome/Firefox ("dynamically imported module") e Safari ("Importing a module script failed"); NÃO dispara para erro comum nem "Failed to fetch"; janela de 30 s e relógio que volta | ✅ |
+| Recarga automática | No navegador (operador_kg): o carregamento do código da tela foi desviado para um endereço inexistente (404), como numa aba de build antigo; clique em "Devolvidos com defeito" ⇒ console "Erro ao abrir a tela: ChunkLoadError" ⇒ página **recarregou sozinha** (navegação `reload`) e a tela abriu normal | ✅ |
+| Trava anti-laço | Com recarga automática 5 s antes, nova falha (Orçamentos) ⇒ mostra "Algo deu errado ao abrir a tela", **sem recarregar** (mesmo documento) | ✅ |
+| Fora da janela | Última recarga há 1 min, falha em Entregas ⇒ recarregou sozinha e abriu | ✅ |
+
+**Observação do teste:** depois de abrir, o app pré-carrega o código das telas em segundo plano; a falha só aparece
+para quem abre uma tela cujo código ainda não rodou naquela aba — o caso real do operador com a aba aberta durante um
+deploy.
