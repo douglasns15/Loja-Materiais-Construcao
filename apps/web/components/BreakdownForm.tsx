@@ -5,7 +5,7 @@ import Link from 'next/link';
 import {
   createBreakdownSchema,
   formatProductionNumber,
-  type BreakdownLastCuts,
+  type BreakdownSuggestedCuts,
   type ProductionRow,
 } from '@nexoloja/shared';
 import { availableQty, breakdownShrink, costPerBaseUnit, splitBreakdownCost } from '@nexoloja/core';
@@ -16,8 +16,8 @@ import { fmtQty, parseQty, unitShort } from '@/components/RecipeSection';
 /**
  * Desmembramento (ADR-043 Fatia 3): escolhe a PEÇA (quarto traseiro, costela, frango para cortar),
  * informa quanto usou e pesa cada corte que saiu. Ao escolher a peça, a lista vem pré-montada com os
- * cortes do último desmembramento dela (pesos em branco) — o operador remove (×), adiciona ou deixa
- * em branco o que não saiu; só vão os cortes pesados. A tela mostra o rateio do custo pelo valor de
+ * cortes que costumam sair dela (últimos desmembramentos, mais frequentes primeiro; pesos em branco)
+ * — o operador remove (×), adiciona ou deixa em branco o que não saiu; só vão os cortes pesados. A tela mostra o rateio do custo pelo valor de
  * venda (decisão do Owner) e a QUEBRA (osso, sebo), que é informativa. Peça sem saldo bloqueia.
  */
 
@@ -54,6 +54,8 @@ export function BreakdownForm({ onDone }: { onDone: (row: ProductionRow, message
   const [pieceId, setPieceId] = useState('');
   const [pieceQty, setPieceQty] = useState('');
   const [cuts, setCuts] = useState<CutDraft[]>([]);
+  /** Em quantos desmembramentos anteriores a sugestão de cortes se baseou (0 = sem sugestão). */
+  const [basedOn, setBasedOn] = useState(0);
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -83,6 +85,7 @@ export function BreakdownForm({ onDone }: { onDone: (row: ProductionRow, message
     setPieceId(id);
     setPieceQty('');
     setError(null);
+    setBasedOn(0);
     if (!id) {
       setCuts([]);
       return;
@@ -90,10 +93,13 @@ export function BreakdownForm({ onDone }: { onDone: (row: ProductionRow, message
     const seq = ++lastSeq.current;
     setCuts([newCut()]);
     try {
-      const last = await apiGet<BreakdownLastCuts>(`/productions/breakdown/last/${id}`);
+      const sug = await apiGet<BreakdownSuggestedCuts>(`/productions/breakdown/cuts/${id}`);
       if (seq !== lastSeq.current) return;
-      const known = last.filter((ct) => byId.has(ct.productId));
-      if (known.length > 0) setCuts(known.map((ct) => newCut(ct.productId)));
+      const known = sug.cuts.filter((ct) => byId.has(ct.productId));
+      if (known.length > 0) {
+        setCuts(known.map((ct) => newCut(ct.productId)));
+        setBasedOn(sug.basedOn);
+      }
     } catch {
       // Sem pré-montagem não impede desmembrar: o operador adiciona os cortes à mão.
     }
@@ -146,6 +152,7 @@ export function BreakdownForm({ onDone }: { onDone: (row: ProductionRow, message
       setPieceId('');
       setPieceQty('');
       setCuts([]);
+      setBasedOn(0);
       setNotes('');
       // O catálogo local tem saldo/custo antigos — recarrega para o próximo desmembramento.
       apiGet<CatalogProduct[]>('/products')
@@ -214,7 +221,14 @@ export function BreakdownForm({ onDone }: { onDone: (row: ProductionRow, message
           <div className="space-y-2">
             <div className="flex items-baseline justify-between">
               <span className="text-xs font-semibold text-gray-600">Cortes que saíram</span>
-              <span className="text-xs text-gray-500">Corte em branco fica de fora</span>
+              {/* De onde vem a sugestão, discreto no lugar da dica que já existia (pedido do Owner). */}
+              <span className="text-right text-xs text-gray-500">
+                {basedOn > 1
+                  ? `Sugeridos pelos últimos ${basedOn} desmembramentos · em branco fica de fora`
+                  : basedOn === 1
+                    ? 'Sugeridos pelo último desmembramento · em branco fica de fora'
+                    : 'Corte em branco fica de fora'}
+              </span>
             </div>
             {cuts.map((ct) => {
               const p = byId.get(ct.productId);

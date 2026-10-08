@@ -6,6 +6,7 @@ import {
   productionShortages,
   scaleRecipe,
   splitBreakdownCost,
+  suggestBreakdownCuts,
   summarizeProductionDay,
 } from './index';
 
@@ -220,5 +221,33 @@ describe('breakdownShrink', () => {
 
   it('peça zero ⇒ percentual 0', () => {
     expect(breakdownShrink(0, [])).toEqual({ shrinkQty: 0, shrinkPct: 0 });
+  });
+});
+
+describe('suggestBreakdownCuts', () => {
+  const pic = { productId: 'pic', name: 'Picanha' };
+  const alc = { productId: 'alc', name: 'Alcatra' };
+  const apa = { productId: 'apa', name: 'Aparas' };
+  const mam = { productId: 'mam', name: 'Maminha' };
+
+  it('desmembramento parcial não encolhe a sugestão: une os anteriores, mais frequentes primeiro', () => {
+    // mais recente primeiro: só picanha (peça com perda), depois os completos.
+    const r = suggestBreakdownCuts([[pic], [pic, alc, apa], [pic, alc, apa, mam]]);
+    expect(r.map((c) => [c.productId, c.times])).toEqual([
+      ['pic', 3],
+      ['alc', 2],
+      ['apa', 2],
+      ['mam', 1],
+    ]);
+  });
+
+  it('empate por nome; corte repetido no mesmo desmembramento conta 1 vez', () => {
+    const r = suggestBreakdownCuts([[pic, apa, pic]]);
+    expect(r.map((c) => c.name)).toEqual(['Aparas', 'Picanha']);
+    expect(r.every((c) => c.times === 1)).toBe(true);
+  });
+
+  it('sem histórico ⇒ nada a sugerir', () => {
+    expect(suggestBreakdownCuts([])).toEqual([]);
   });
 });

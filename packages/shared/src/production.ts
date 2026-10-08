@@ -184,7 +184,7 @@ export type ProductionDaySummary = {
 
 /**
  * Desmembrar uma peça (`POST /productions/breakdown`): quanto da peça foi usado (unidade-base) e
- * quanto saiu de cada corte. A tela pré-monta os cortes do último desmembramento da peça, mas o
+ * quanto saiu de cada corte. A tela pré-monta os cortes que costumam sair da peça, mas o
  * operador remove/adiciona à vontade — só vão os cortes pesados (> 0). 1 a 30 cortes, sem repetir;
  * que a peça não seja corte de si mesma é checado na API.
  */
@@ -203,5 +203,15 @@ export const createBreakdownSchema = z
   });
 export type CreateBreakdownInput = z.infer<typeof createBreakdownSchema>;
 
-/** Cortes do último desmembramento de uma peça (`GET /productions/breakdown/last/:productId`). */
-export type BreakdownLastCuts = { productId: string; name: string; unit: string }[];
+/** Quantos desmembramentos anteriores da peça a sugestão de cortes considera. */
+export const BREAKDOWN_SUGGESTION_WINDOW = 5;
+
+/**
+ * Cortes sugeridos para uma peça (`GET /productions/breakdown/cuts/:productId`): os que saíram nos
+ * últimos desmembramentos dela (`basedOn` = quantos foram considerados, até
+ * `BREAKDOWN_SUGGESTION_WINDOW`), mais frequentes primeiro; `times` = em quantos o corte apareceu.
+ */
+export type BreakdownSuggestedCuts = {
+  basedOn: number;
+  cuts: { productId: string; name: string; unit: string; times: number }[];
+};

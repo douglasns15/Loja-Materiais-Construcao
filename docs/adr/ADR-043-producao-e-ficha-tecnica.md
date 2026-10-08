@@ -168,9 +168,12 @@ fica abaixo de 2 MB/ano por loja — dentro do free tier (regra 6).
    a soma fecha no centavo) e `breakdownShrink` (quebra).
 2. **Migration `0045`** — `ProductionKind { RECIPE, BREAKDOWN }` + `productions.kind` (default `RECIPE`): o tipo fica
    gravado no evento (a lista diz "Desmembrou …" mesmo com 1 corte só).
-3. **Sem tabela de modelo:** a tela repete os cortes do **último desmembramento** da peça
-   (`GET /productions/breakdown/last/:productId`), com pesos em branco; o operador remove (×), adiciona ou deixa em
-   branco (corte em branco fica de fora).
+3. **Sem tabela de modelo:** a tela sugere os cortes que **costumam sair** da peça — a união dos últimos 5
+   desmembramentos dela, mais frequentes primeiro (core `suggestBreakdownCuts`,
+   `GET /productions/breakdown/cuts/:productId`), com pesos em branco; o operador remove (×), adiciona ou deixa em
+   branco (corte em branco fica de fora). Ajuste do Owner no mesmo dia: a 1ª versão repetia só o último
+   desmembramento, e um desmembramento parcial (peça com perda) encolhia a sugestão seguinte. A tela diz, discreta, de
+   onde vem a sugestão ("Sugeridos pelos últimos N desmembramentos · em branco fica de fora").
 4. **Cortes no resumo e na perda:** valem para todo produto com ficha OU que já saiu de uma produção (OUTPUT).
 5. Peça e cortes precisam controlar estoque; peça sem saldo bloqueia; mesma unidade ⇒ cortes não passam da peça.
    Movimentos: EXPENSE da peça `Desmembramento P-…`, INCOME de cada corte `Desmembramento P-… — <peça>`, com último

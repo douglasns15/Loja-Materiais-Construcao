@@ -8,10 +8,12 @@ import {
   productionCost,
   productionShortages,
   splitBreakdownCost,
+  suggestBreakdownCuts,
   summarizeProductionDay,
   tracksStock,
 } from '@nexoloja/core';
 import {
+  BREAKDOWN_SUGGESTION_WINDOW,
   PRODUCTION_LOSS_PREFIX,
   createBreakdownSchema,
   createProductionSchema,
@@ -19,7 +21,7 @@ import {
   productionLossReasonText,
   productionLossSchema,
   recipeSchema,
-  type BreakdownLastCuts,
+  type BreakdownSuggestedCuts,
   type ProductionDaySummary,
   type ProductionLossRow,
   type ProductionRow,
@@ -650,11 +652,13 @@ productions.post('/loss', requireActiveTenant, async (c) => {
 });
 
 /**
- * Cortes do ÚLTIMO desmembramento da peça (Fatia 3) — a tela pré-monta a lista com eles (pesos em
- * branco; o operador remove/adiciona). Sem desmembramento anterior ⇒ lista vazia. Cortes excluídos
- * ficam de fora. Qualquer usuário.
+ * Cortes SUGERIDOS para desmembrar a peça (Fatia 3): os que saíram nos últimos
+ * `BREAKDOWN_SUGGESTION_WINDOW` desmembramentos dela, mais frequentes primeiro (core
+ * `suggestBreakdownCuts`) — um desmembramento parcial não encolhe a lista. A tela pré-monta com eles
+ * (pesos em branco; o operador remove/adiciona). Sem histórico ⇒ vazio. Cortes excluídos ficam de
+ * fora. Qualquer usuário.
  */
-productions.get('/breakdown/last/:productId', async (c) => {
+productions.get('/breakdown/cuts/:productId', async (c) => {
   const tenantId = getTenantId(c);
   const productId = c.req.param('productId');
   if (!tenantId || !getConnectionString(c.env)) {
@@ -665,26 +669,27 @@ productions.get('/breakdown/last/:productId', async (c) => {
   }
   try {
     const prisma = getPrisma(c);
-    const last = await prisma.production.findFirst({
+    const recent = await prisma.production.findMany({
       where: { tenantId, kind: 'BREAKDOWN', lines: { some: { direction: 'INPUT', productId } } },
       orderBy: { createdAt: 'desc' },
+      take: BREAKDOWN_SUGGESTION_WINDOW,
       select: {
         lines: {
           where: { direction: 'OUTPUT', product: { deletedAt: null } },
           select: { productId: true, product: { select: { name: true, unit: true } } },
-          orderBy: { product: { name: 'asc' } },
         },
       },
     });
-    const data: BreakdownLastCuts = (last?.lines ?? []).map((l) => ({
-      productId: l.productId,
-      name: l.product.name,
-      unit: l.product.unit,
-    }));
+    const data: BreakdownSuggestedCuts = {
+      basedOn: recent.length,
+      cuts: suggestBreakdownCuts(
+        recent.map((p) => p.lines.map((l) => ({ productId: l.productId, name: l.product.name, unit: l.product.unit }))),
+      ),
+    };
     return c.json({ ok: true, data });
   } catch (err) {
-    console.error('GET /productions/breakdown/last/:productId falhou:', err);
-    return c.json({ ok: false, error: 'Falha ao buscar os cortes do último desmembramento.' }, 500);
+    console.error('GET /productions/breakdown/cuts/:productId falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao buscar os cortes sugeridos.' }, 500);
   }
 });
 

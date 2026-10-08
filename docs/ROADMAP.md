@@ -10,14 +10,16 @@
 > login do Operador `operador_kg` na loja Demo Mercardinho; evidência em
 > [testes/registro-de-testes.md](testes/registro-de-testes.md)). Commit `793e063`.
 > - **Decisões do Owner (2026-10-08):** rateio do custo **pelo valor de venda**; migration **`0045`** aprovada e
->   aplicada (`productions.kind` = `RECIPE` | `BREAKDOWN`); pré-montar os cortes **repetindo o último
->   desmembramento** da peça (lista editável: remover, adicionar, deixar em branco); cortes entram no **resumo do dia
->   e na perda**.
+>   aplicada (`productions.kind` = `RECIPE` | `BREAKDOWN`); pré-montar os **cortes que costumam sair**
+>   da peça (união dos últimos 5 desmembramentos, mais frequentes primeiro — ajuste do Owner após a 1ª versão, que
+>   repetia só o último; lista editável: remover, adicionar, deixar em branco; dica discreta de onde vem a sugestão);
+>   cortes entram no **resumo do dia e na perda**.
 > - **Aba "Desmembrar"** na Produção: peça (bloqueia sem saldo) + peso de cada corte, rateio e margem por corte ao
 >   vivo, **quebra** (osso/sebo, informativa), recusa cortes acima da peça. Rotas `POST /productions/breakdown` e
->   `GET /productions/breakdown/last/:productId`; core `splitBreakdownCost` + `breakdownShrink` (+8 testes).
+>   `GET /productions/breakdown/cuts/:productId`; core `splitBreakdownCost` + `breakdownShrink` +
+>   `suggestBreakdownCuts` (+11 testes).
 > - Também 2026-10-08: **teste com Operador** da Fatia 1+2 VALIDADO (ficha só leitura, 403 na API; produção e perda).
-> - **Gates:** core 493, shared 98, API e web tsc 0, build web ok. Doc §8.2 atualizada (regra 7).
+> - **Gates:** core 496, shared 98, API e web tsc 0, build web ok. Doc §8.2 atualizada (regra 7).
 >
 > **ONDE PARAMOS / PRÓXIMOS PASSOS (2026-10-08):**
 > 1. Seguir o plano multirramo pela **#6 cadastro em sequência** (ADR-041 §A).

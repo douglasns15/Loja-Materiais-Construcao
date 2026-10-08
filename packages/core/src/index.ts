@@ -2748,6 +2748,26 @@ export function splitBreakdownCost(
 }
 
 /**
+ * Cortes SUGERIDOS para desmembrar uma peça (ADR-043 Fatia 3, pedido do Owner 2026-10-08): os cortes
+ * que costumam sair dela, tirados dos desmembramentos anteriores (a API passa os últimos N). Um
+ * desmembramento parcial (peça com perda) não encolhe a sugestão, e um corte novo entra depois de
+ * usado uma vez. Ordem: os mais frequentes primeiro; empate por nome. `times` = em quantos apareceu.
+ */
+export function suggestBreakdownCuts<C extends { productId: string; name: string }>(
+  history: readonly (readonly C[])[],
+): (C & { times: number })[] {
+  const seen = new Map<string, C & { times: number }>();
+  for (const cuts of history) {
+    for (const ct of new Map(cuts.map((c) => [c.productId, c])).values()) {
+      const cur = seen.get(ct.productId);
+      if (cur) cur.times += 1;
+      else seen.set(ct.productId, { ...ct, times: 1 });
+    }
+  }
+  return [...seen.values()].sort((a, b) => b.times - a.times || a.name.localeCompare(b.name, 'pt-BR'));
+}
+
+/**
  * Quebra do desmembramento (ADR-043 Fatia 3): o que a peça tinha e não virou corte (osso, sebo,
  * aparas descartadas). Informativa — não vira produto. `shrinkPct` sobre a peça (0 se a peça é 0).
  * Negativa ⇒ os cortes somam mais que a peça (a tela/API recusam quando as unidades são iguais).

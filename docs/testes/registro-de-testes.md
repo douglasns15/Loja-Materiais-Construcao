@@ -6120,5 +6120,7 @@ Produtos de teste criados (autor Wesley, entrada inicial na mesma transação �
 | Banco | Saldo dos movimentos = `stockQty` nos 4 produtos (peça 12; Picanha 5,5; Alcatra 6; Aparas 1,5); `costPrice` dos cortes = último custo com `priceReviewPendingAt`; P-0001/0002 `RECIPE`, P-0003/0004 `BREAKDOWN` | ✅ |
 
 **Observações:** (1) "Último desmembramento" é literal: depois do P-0004 (só Picanha), a próxima pré-montagem traz só a
-Picanha — levado ao Owner. (2) A mensagem verde aparece ~3 s antes da lista do dia recarregar (mesmo comportamento
+Picanha — levado ao Owner, que pediu sugerir os cortes que costumam sair da peça (ver ajuste abaixo). (2) A mensagem verde aparece ~3 s antes da lista do dia recarregar (mesmo comportamento
 da produção/perda).
+
+**Ajuste do Owner (mesmo dia) — cortes sugeridos:** a pré-montagem passou a unir os cortes dos últimos 5 desmembramentos da peça, mais frequentes primeiro (core `suggestBreakdownCuts` +3 testes; rota renomeada para `GET /productions/breakdown/cuts/:productId`). Deploy API `2102b938` + web `124364cd`. Validado: depois do P-0004 (só Picanha) a peça volta a sugerir Picanha, Alcatra e Aparas, com a dica "Sugeridos pelos últimos 2 desmembramentos · em branco fica de fora"; a rota antiga responde 404. ✅ (Observação: logo após o deploy a aba já aberta mostrou "Algo deu errado ao abrir a tela" — ChunkLoadError do build anterior; recarregar resolveu. Comportamento antigo, não desta mudança.)
