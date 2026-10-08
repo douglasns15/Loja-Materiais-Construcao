@@ -6099,3 +6099,26 @@ Owner. Fecha o pendente da entrada de 2026-10-07.
 
 **Observação (não é bug):** a mensagem "Perda registrada…" aparece antes da lista/resumo recarregarem (~3 s na rede
 do teste); o resumo atualiza sozinho em seguida.
+
+## Produção — desmembramento: peça → cortes (ADR-043 Fatia 3) — E2E no navegador (2026-10-08)
+
+Ambiente: `nexoloja-web.imortal.workers.dev`, API `9a7e3925` + web `cecc4375` (commit `793e063`), migration `0045`
+aplicada. Loja **Demo Mercardinho**, login **`operador_kg`** (Usuário/CASHIER — prova também que o Operador desmembra).
+Produtos de teste criados (autor Wesley, entrada inicial na mesma transação — ADR-001): **Quarto traseiro (teste)**
+30 kg a R$ 25/kg; **Picanha / Alcatra / Aparas (teste)** sem estoque e sem custo, venda R$ 100 / 50 / 15 por kg.
+
+| Item | Como | Resultado |
+|---|---|---|
+| Aba "Desmembrar" | Produção › Nova produção › "Pela ficha" · "Desmembrar" | ✅ |
+| Sem saldo bloqueia | Peça 40 kg (tem 30) ⇒ aviso vermelho na tela; API ⇒ 400 "Falta saldo de … (tem 12,000 kg, precisa 99,000 kg)" | ✅ |
+| Cortes acima da peça | 4 + 6 + 6 = 16 kg > 15 kg ⇒ aviso e botão travado; API ⇒ 400 "Os cortes somam mais que a peça" | ✅ |
+| Peça como corte | API ⇒ 400 "A peça não pode ser corte dela mesma." | ✅ |
+| Rateio pelo valor de venda | 15 kg (R$ 375,00) → Picanha 4 kg **R$ 205,48** (51,37/kg), Alcatra 6 kg **R$ 154,11** (25,69/kg), Aparas 2 kg **R$ 15,41** (7,71/kg) = R$ 375,00; margem 49% em todos; **quebra 3,000 kg (20%)** | ✅ |
+| Registro P-0003 | "P-0003 registrada: saíram 15,000 kg … e entraram 3 cortes"; lista "P-0003 · Desmembrou Quarto traseiro (teste) · quebra 3,000 kg · gerou …"; cortes no **Resumo do dia** com "Registrar perda" | ✅ |
+| Pré-montagem editável | Peça de novo ⇒ lista volta com Alcatra/Aparas/Picanha (pesos em branco); removida Aparas (×), Alcatra em branco, Picanha 1,5 kg de 3 kg ⇒ **P-0004** com 1 corte (Picanha absorve R$ 75,00) | ✅ |
+| Perda de corte | Aparas 0,5 kg Sobra do dia ⇒ R$ 3,85 (custo novo 7,705/kg); resumo Aparas produzido 2 · perda 0,5 · estoque 1,5 | ✅ |
+| Banco | Saldo dos movimentos = `stockQty` nos 4 produtos (peça 12; Picanha 5,5; Alcatra 6; Aparas 1,5); `costPrice` dos cortes = último custo com `priceReviewPendingAt`; P-0001/0002 `RECIPE`, P-0003/0004 `BREAKDOWN` | ✅ |
+
+**Observações:** (1) "Último desmembramento" é literal: depois do P-0004 (só Picanha), a próxima pré-montagem traz só a
+Picanha — levado ao Owner. (2) A mensagem verde aparece ~3 s antes da lista do dia recarregar (mesmo comportamento
+da produção/perda).

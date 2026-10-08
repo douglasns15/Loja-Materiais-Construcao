@@ -3,7 +3,8 @@
 - **Status:** **Aceito** (2026-10-02) — migration `0044` aprovada e aplicada; **Fatia 1 NO AR** (API `490fab8d`,
   web `8840ab5f`) **+ E2E validado no navegador** (registro-de-testes 2026-10-02). **Fatia 2 NO AR 2026-10-07**
   (API `674f35a3`, web `f94f5c7f`) **+ E2E validado no navegador** (perda + resumo do dia + histórico por dia; sem
-  migration). Próxima: Fatia 3.
+  migration). **Fatia 3 (desmembramento) NO AR 2026-10-08** (API `9a7e3925`, web `cecc4375`) **+ E2E validado no
+  navegador** com usuário Operador — migration `0045` (`productions.kind`) aprovada e aplicada. ADR completa.
 
 > **Decisão do Owner (2026-10-02):** (1) insumo sem saldo **bloqueia** a produção; (2) **qualquer usuário**
 > registra produção, a ficha é só do Admin; (3) custo do pronto = **último custo** da produção; (4) o
@@ -141,7 +142,7 @@ fica abaixo de 2 MB/ano por loja — dentro do free tier (regra 6).
    **Implementada 2026-10-07:** perda = `StockMovement` EXPENSE com motivo `Perda — …` (custo atual congelado; não passa
    do disponível; só produto com ficha), core `summarizeProductionDay` com testes, tela com seletor de dia (histórico
    de produções, resumo e perdas por dia — registrar é sempre hoje).
-3. **Desmembramento** (aprovado para o planejamento pelo Owner) — desenho abaixo.
+3. **Desmembramento** (aprovado para o planejamento pelo Owner) — desenho abaixo. **Implementada 2026-10-08.**
 
 ### Fatia 3 — desmembramento (peça → cortes)
 
@@ -159,6 +160,21 @@ fica abaixo de 2 MB/ano por loja — dentro do free tier (regra 6).
   mesmo custo/kg). Cada corte recebe o **último custo** (mesma regra da Fatia 1).
 - **Core:** `splitCost(inputCost, cuts[{ weight, salePrice }])` puro, com testes (soma dos rateios = custo da peça,
   sem perder centavos no arredondamento).
+
+**Decisões do Owner na implementação (2026-10-08):**
+
+1. **Rateio pelo valor de venda** (quantidade × preço de venda por unidade-base). Sem preço em nenhum corte ⇒ por
+   quantidade; corte sem preço quando os outros têm não absorve custo. Core `splitBreakdownCost` (maiores restos ⇒
+   a soma fecha no centavo) e `breakdownShrink` (quebra).
+2. **Migration `0045`** — `ProductionKind { RECIPE, BREAKDOWN }` + `productions.kind` (default `RECIPE`): o tipo fica
+   gravado no evento (a lista diz "Desmembrou …" mesmo com 1 corte só).
+3. **Sem tabela de modelo:** a tela repete os cortes do **último desmembramento** da peça
+   (`GET /productions/breakdown/last/:productId`), com pesos em branco; o operador remove (×), adiciona ou deixa em
+   branco (corte em branco fica de fora).
+4. **Cortes no resumo e na perda:** valem para todo produto com ficha OU que já saiu de uma produção (OUTPUT).
+5. Peça e cortes precisam controlar estoque; peça sem saldo bloqueia; mesma unidade ⇒ cortes não passam da peça.
+   Movimentos: EXPENSE da peça `Desmembramento P-…`, INCOME de cada corte `Desmembramento P-… — <peça>`, com último
+   custo e aviso de revisão de preço. Rota `POST /productions/breakdown` (qualquer usuário, loja ativa).
 
 ## Perguntas ao Owner
 

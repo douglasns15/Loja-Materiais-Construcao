@@ -3,8 +3,29 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-10-07 — **Produção — Fatia 2 (perda do pronto + resumo do dia).** Roteiro:
+> **Última atualização:** 2026-10-08 — **Produção — Fatia 3 (desmembramento: peça → cortes).** Roteiro:
 > [plano-implantacao-multirramo.md](plano-implantacao-multirramo.md).
+>
+> **NO AR 2026-10-08 (API `9a7e3925`, web `cecc4375`) — E2E VALIDADO no navegador** (conduzido pelo Claude com o
+> login do Operador `operador_kg` na loja Demo Mercardinho; evidência em
+> [testes/registro-de-testes.md](testes/registro-de-testes.md)). Commit `793e063`.
+> - **Decisões do Owner (2026-10-08):** rateio do custo **pelo valor de venda**; migration **`0045`** aprovada e
+>   aplicada (`productions.kind` = `RECIPE` | `BREAKDOWN`); pré-montar os cortes **repetindo o último
+>   desmembramento** da peça (lista editável: remover, adicionar, deixar em branco); cortes entram no **resumo do dia
+>   e na perda**.
+> - **Aba "Desmembrar"** na Produção: peça (bloqueia sem saldo) + peso de cada corte, rateio e margem por corte ao
+>   vivo, **quebra** (osso/sebo, informativa), recusa cortes acima da peça. Rotas `POST /productions/breakdown` e
+>   `GET /productions/breakdown/last/:productId`; core `splitBreakdownCost` + `breakdownShrink` (+8 testes).
+> - Também 2026-10-08: **teste com Operador** da Fatia 1+2 VALIDADO (ficha só leitura, 403 na API; produção e perda).
+> - **Gates:** core 493, shared 98, API e web tsc 0, build web ok. Doc §8.2 atualizada (regra 7).
+>
+> **ONDE PARAMOS / PRÓXIMOS PASSOS (2026-10-08):**
+> 1. Seguir o plano multirramo pela **#6 cadastro em sequência** (ADR-041 §A).
+> 2. Depois: #7 cadastro no caixa, #8 etiqueta de balança, #9 planilha, #10 multi-loja.
+> 3. Push dos commits locais em `main` (Owner): `2d07e85`, `793e063` + docs.
+> 4. NFC-e segue na branch `feat/nfe-emissao` (Owner avisa quando retomar).
+>
+> **Antes:** 2026-10-07 — **Produção — Fatia 2 (perda do pronto + resumo do dia).**
 >
 > **NO AR 2026-10-07 (API `674f35a3`, web `f94f5c7f`) — E2E VALIDADO no navegador** (conduzido pelo Claude no
 > navegador embutido, com o login do Owner na loja `owner_kg`; evidência em
