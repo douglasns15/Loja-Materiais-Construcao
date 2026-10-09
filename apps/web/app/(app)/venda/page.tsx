@@ -1161,6 +1161,8 @@ export default function VendaPage() {
   }
 
   // Busca do PDV: filtra por nome, nome popular, fabricante ou SKU (função pura de packages/core).
+  // Texto da busca que já é uma etiqueta de balança válida no formato da loja (ADR-040 §3).
+  const typedScaleLabel = scaleLayout ? parseScaleBarcode(productSearch, scaleLayout) : null;
   const filteredProducts = useMemo(
     () => products.filter((p) => productMatchesQuery(p, productSearch)),
     [products, productSearch],
@@ -2757,8 +2759,20 @@ export default function VendaPage() {
           {filteredProducts.length === 0 ? (
             <li className="px-3 py-6 text-center text-sm text-gray-500">
               {productSearch ? 'Nenhum produto encontrado.' : 'Nenhum produto cadastrado.'}
+              {/* Etiqueta de balança digitada (ADR-040 §3): o leitor manda Enter sozinho; quem digita (ou está no
+                  celular) lança pelo botão. Nunca oferece "Cadastrar agora" para o código de uma etiqueta — ele
+                  cadastraria um produto com o código da pesagem. */}
+              {typedScaleLabel ? (
+                <button
+                  type="button"
+                  onClick={() => addScaleLabel(productSearch)}
+                  className="mt-2 block w-full rounded-lg bg-indigo-600 px-3 py-2 font-semibold text-white hover:bg-indigo-700"
+                >
+                  Etiqueta de balança (PLU {typedScaleLabel.plu}) — Lançar etiqueta
+                </button>
+              ) : null}
               {/* Cadastro no caixa (ADR-041 §B): código desconhecido ⇒ cadastra com nome + preço e vende. */}
-              {online && looksLikeProductCode(productSearch) && (
+              {online && !typedScaleLabel && looksLikeProductCode(productSearch) && (
                 <button
                   type="button"
                   onClick={() => setQuickAddCode(productSearch.trim())}

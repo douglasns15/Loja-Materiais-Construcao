@@ -609,6 +609,8 @@ Alertas CALCULADOS sob demanda (custo-zero: nada é gravado; a pendência some q
   2. **Um único produto** casou a busca → entra no carrinho;
   3. **Nenhum produto** e a busca tem cara de código (`looksLikeProductCode`) → abre o **"Cadastrar agora"**
      (`CashierQuickAddModal`, ADR-041 §B; só online).
+  Na lista vazia (sem Enter), texto que já é etiqueta válida (`typedScaleLabel`) mostra o botão "Lançar etiqueta" e
+  **esconde** o "Cadastrar agora" — que cadastraria um produto com o código da pesagem.
 - **Etiqueta de balança (ADR-040 §3):** EAN-13 começando com `2`. Formato por loja em
   `TenantModule.config` do `SCALE_LABEL` (`{ pluDigits: 4|5|6, valueDigits: 5|6, valueCheckDigit, value:
   PRICE|WEIGHT }`), configurado no painel da plataforma (`ScaleLabelSettings`, com "Testar etiqueta") e

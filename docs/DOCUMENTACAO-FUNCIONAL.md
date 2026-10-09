@@ -184,7 +184,10 @@ cliente paga exatamente o que está impresso). Loja que nunca configurou usa ess
 
 **No caixa**
 
-- Passe o leitor na etiqueta (ou digite o código na busca e aperte Enter). O item entra no carrinho.
+- Passe o leitor na etiqueta — o leitor manda o **Enter** sozinho e o item entra no carrinho.
+- **Digitando o código** (ou no celular, sem Enter): enquanto ele estiver na busca, aparece o botão **"Etiqueta de
+  balança (PLU N) — Lançar etiqueta"**. O "Cadastrar agora" **não** aparece para código de etiqueta (cadastraria um
+  produto com o código da pesagem).
 - **Cada etiqueta vira uma linha** — duas bandejas do mesmo produto são duas linhas, cada uma com o seu valor.
 - **Formato com preço:** vale o **valor impresso**. O sistema calcula o peso (total ÷ preço por kg, 3 casas) só para
   baixar o estoque. Para o total bater no centavo, o preço por kg da linha pode aparecer levemente diferente do
@@ -228,3 +231,4 @@ plataforma.
 | Data | Mudança |
 |---|---|
 | 2026-10-09 | Criação: cadastro em sequência (#6), cadastro no caixa (#7), etiqueta de balança (#8) com formato parametrizado. |
+| 2026-10-09 | Etiqueta digitada: botão "Lançar etiqueta" no lugar do "Cadastrar agora" (achado do Owner no teste em produção). |

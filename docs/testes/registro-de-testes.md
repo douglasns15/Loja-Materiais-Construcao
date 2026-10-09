@@ -6229,3 +6229,13 @@ antiga continua valendo) — suíte 631 ✅. No navegador (API local): o `/me` e
 **Deploy (2026-10-09, autorizado pelo Owner):** Prisma Client regenerado + schema embutido conferido; API `8932d7a3`
 (anterior `7d56b1c0`) — `/health` 200, rotas protegidas 401; web `9146d36d` — a 1ª verificação pós-deploy falhou
 durante a troca de versão e passou ao repetir (BUILD_ID local = HTML ao vivo, CSS novo 200).
+
+**Validação em produção (2026-10-09, após o deploy):** login `owner_kg` no navegador do app; etiqueta `2012300010007`
++ Enter ⇒ 0,402 kg = R$ 10,00; venda concluída em Dinheiro ("Venda registrada ✅"); monitor: `POST /cart - Ok`
+(18:55:24) e `POST /orders - Ok` (18:55:45). ✅
+
+**Achado do Owner no mesmo teste:** com o código da etiqueta digitado (antes do Enter), a lista vazia oferecia
+"Cadastrar agora '2012300010007'" — clicar cadastraria um produto com o código da pesagem. Corrigido (só web): texto que
+já é etiqueta válida mostra "Etiqueta de balança (PLU 123) — Lançar etiqueta" e esconde o "Cadastrar agora". Validado no
+web de dev contra a API de produção: botão aparece, "Cadastrar agora" não, clique lança 0,402 kg = R$ 10,00 (item
+removido do carrinho depois). ✅
