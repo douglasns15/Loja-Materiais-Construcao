@@ -15,15 +15,15 @@
 >   caixa para revisar" e "Marcar como conferido" (só admin). Venda em produção validada após o deploy (Operador).
 >   Corrigiu 2 bugs antigos do PDV: tela quebrava no modo dev com item no carrinho (`isScheduled`) e o espelho do
 >   carrinho era recusado com produto sem controle de estoque (`Infinity` → `null`).
-> - **#8 Etiqueta de balança** (ADR-040 F3) — **implementada e validada no navegador; deploy pendente** (commit
->   `beefb53` + revisão do formato). PLU no cadastro, leitura no PDV (layout preço: o total impresso manda), formato
+> - **#8 Etiqueta de balança** (ADR-040 F3) — **NO AR** (API `8932d7a3`, web `9146d36d`; commits `beefb53` +
+>   `07a6ceb`, revisão do formato). PLU no cadastro, leitura no PDV (layout preço: o total impresso manda), formato
 >   **parametrizado por loja** no painel (PLU 4/5/6, valor 5/6, dígito do valor; padrão `2 CCCC 0 VVVVVV D` + preço)
 >   com "Testar etiqueta". Sem migration.
 > - **Documentação:** criada a [documentação funcional](DOCUMENTACAO-FUNCIONAL.md); técnica atualizada (§2 glossário,
 >   §8.2, §9 leitura no PDV e etiqueta). Regra combinada com o Owner: toda entrega atualiza técnica **e** funcional.
 >
 > **ONDE PARAMOS / PRÓXIMOS PASSOS (2026-10-09):**
-> 1. Deploy API → web da #8 (Owner autoriza) e conferir uma venda depois.
+> 1. ~~Deploy da #8~~ feito (API `8932d7a3`, web `9146d36d`); conferir uma venda em produção no monitor.
 > 2. Quando a balança chegar: bipar uma etiqueta no "Testar etiqueta" do painel e escolher o formato certo.
 > 3. Próxima entrega: **#9 planilha** (ADR-041 Fatia 3: modelo NexoLoja + CSV/XLSX + pré-visualização + importar).
 > 4. Push dos commits locais em `main` (Owner).

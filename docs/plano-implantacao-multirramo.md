@@ -3,8 +3,8 @@
 > **Estado em 2026-10-09 (noite):** **#8 etiqueta de balança** (ADR-040 F3) **implementada e validada no navegador**
 > (web de dev + API local contra o banco real, loja de teste de alimentos) — sem migration (`scaleCode` já na `0041`;
 > layout em `TenantModule.config`). **Formato da etiqueta parametrizado** (PLU 4/5/6, valor 5/6, dígito do valor;
-> padrão `2 CCCC 0 VVVVVV D` + preço) com "Testar etiqueta" no painel. **Deploy API → web pendente** (autorização do
-> Owner). Validar o formato com a balança real quando ela for comprada. Próxima: **#9 planilha** (ADR-041 Fatia 3).
+> padrão `2 CCCC 0 VVVVVV D` + preço) com "Testar etiqueta" no painel. **NO AR** (API `8932d7a3`, web `9146d36d`).
+> Validar o formato com a balança real quando ela for comprada. Próxima: **#9 planilha** (ADR-041 Fatia 3).
 >
 > **Estado em 2026-10-09 (tarde):** **#7 cadastro no caixa** (ADR-041 §B) **implementada e validada no navegador**
 > (web de dev + **API local** contra o banco real, loja de teste de alimentos) — sem migration (`pendingReview` já
@@ -135,7 +135,7 @@ A loja de alimentos **não consegue vender hoje**:
 | 5f | **Produção — Fatia 3** (desmembramento: peça → cortes, rateio pelo valor de venda, cortes sugeridos pelos últimos 5 desmembramentos) — **NO AR + E2E validado 2026-10-08** (API `2102b938`, web `b776da67`; commits `793e063`, `7f104a4`) | **Sim** — `0045` (`productions.kind`) aprovada e aplicada; sem tabela de modelo | 043 |
 | 6 | **Cadastro em sequência** (bipa → ficha do catálogo → preço + qtd → Enter; código já cadastrado ⇒ contagem de abertura) — **NO AR + validada no navegador 2026-10-09** (web `3e49c8d1`; commit `97a99e1`) | Não | 041 §A |
 | 7 | **Cadastro no caixa** + alerta de revisão — **NO AR + validada no navegador 2026-10-09** (API `7d56b1c0`, web `68d3dd0e`; commit `6e223b9`) | Não (`pendingReview` já na `0041`) | 041 §B |
-| 8 | Etiqueta de balança (`scaleCode` + parser + PDV) — **implementada + validada no navegador 2026-10-09**, deploy API→web pendente | Não (usa a `0041`) | 040 F3 |
+| 8 | Etiqueta de balança (`scaleCode` + parser + PDV + formato parametrizado) — **NO AR + validada no navegador 2026-10-09** (API `8932d7a3`, web `9146d36d`) | Não (usa a `0041`) | 040 F3 |
 | 9 | Importador de planilha (modelo + De-Para) | Não | 041 §1–§6 |
 | 10 | Usuário multi-loja (5 fatias da ADR-014) | **Sim** (3 migrations) | 014 |
 | — | NFC-e + download automático de NF-e | — | **aguarda o Owner** |

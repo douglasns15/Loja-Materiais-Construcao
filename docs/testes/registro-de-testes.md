@@ -6218,3 +6218,14 @@ Enter (como o leitor faz). Unitários: core `etiquetaBalanca.test.ts` (+11), sha
 **Não testado no navegador:** layout no painel da plataforma (exige login de Super Usuário) e layout PESO / PLU de 5
 dígitos (cobertos pelos testes do core e do shared); etiqueta impressa por balança real (balança ainda não comprada).
 Dados de teste: "Teste sequencia granel" ficou com PLU 123 e 1,648 kg.
+
+**Revisão do formato (mesmo dia, commit `07a6ceb`):** layout parametrizado (PLU 4/5/6, valor 5/6, dígito do valor).
+Core +5 testes (inclui o código real `2 000001 00760 0` da ajuda da Alterdata: código 6 + valor 5), shared +3 (config
+antiga continua valendo) — suíte 631 ✅. No navegador (API local): o `/me` entrega
+`{ pluDigits: 4, valueDigits: 6, valueCheckDigit: false, value: 'PRICE' }` e a etiqueta `2012300010007` segue lendo
+0,402 kg = R$ 10,00 ✅ (item removido do carrinho depois). **Não testado no navegador:** o seletor de formato e o
+"Testar etiqueta" do painel da plataforma (exigem login de Super Usuário).
+
+**Deploy (2026-10-09, autorizado pelo Owner):** Prisma Client regenerado + schema embutido conferido; API `8932d7a3`
+(anterior `7d56b1c0`) — `/health` 200, rotas protegidas 401; web `9146d36d` — a 1ª verificação pós-deploy falhou
+durante a troca de versão e passou ao repetir (BUILD_ID local = HTML ao vivo, CSS novo 200).
