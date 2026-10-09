@@ -48,6 +48,8 @@ export interface CachedProduct {
   surchargeCredit: string | null;
   /** `false` = sem controle de estoque (ADR-040 §2) — espelhado p/ a venda offline não travar. */
   trackStock?: boolean;
+  /** Código na balança (PLU, ADR-040 §3) — espelhado p/ a etiqueta de balança ler offline. */
+  scaleCode?: string | null;
 }
 
 /**

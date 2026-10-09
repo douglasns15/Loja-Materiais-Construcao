@@ -3,8 +3,10 @@ import { Hono } from 'hono';
 import { modulesForSegments } from '@nexoloja/core';
 import {
   MODULE_OFFLINE_SALES,
+  MODULE_SCALE_LABEL,
   activeModuleKeys,
   createTenantSchema,
+  parseScaleLabelLayout,
   setTenantActiveSchema,
   setTenantModuleSchema,
   slugify,
@@ -61,7 +63,7 @@ platform.get('/tenants', async (c) => {
         segments: true,
         _count: { select: { users: true } },
         // Módulos da loja (ADR-011 offline + ADR-039 módulos de ramo), para os interruptores do painel.
-        modules: { select: { moduleKey: true, isActive: true } },
+        modules: { select: { moduleKey: true, isActive: true, config: true } },
       },
     });
 
@@ -102,6 +104,8 @@ platform.get('/tenants', async (c) => {
           offlineSales: modules.some((m) => m.moduleKey === MODULE_OFFLINE_SALES && m.isActive === true),
           // Chaves dos módulos ATIVOS (ADR-039) — o painel acende os interruptores por elas.
           modules: activeModuleKeys(modules),
+          // Layout da etiqueta de balança (ADR-040 §3) — padrão quando nunca foi configurado.
+          scaleLabel: parseScaleLabelLayout(modules.find((m) => m.moduleKey === MODULE_SCALE_LABEL)?.config),
           lastActivityAt: ms !== undefined ? new Date(ms).toISOString() : null,
         };
       }),
@@ -326,7 +330,7 @@ platform.patch('/tenants/:id/modules', async (c) => {
   }
 
   const actorId = c.get('platformAdminId');
-  const { moduleKey, isActive } = parsed.data;
+  const { moduleKey, isActive, config } = parsed.data;
   try {
     const prisma = getPrisma(c);
     const target = await prisma.tenant.findUnique({ where: { id }, select: { id: true } });
@@ -342,8 +346,9 @@ platform.patch('/tenants/:id/modules', async (c) => {
     await prisma.$transaction(async (tx) => {
       await tx.tenantModule.upsert({
         where: { tenantId_moduleKey: { tenantId: id, moduleKey } },
-        create: { tenantId: id, moduleKey, isActive },
-        update: { isActive },
+        // `config` só vem para o SCALE_LABEL (layout da etiqueta, ADR-040 §3); ausente = não mexe.
+        create: { tenantId: id, moduleKey, isActive, ...(config ? { config } : {}) },
+        update: { isActive, ...(config ? { config } : {}) },
       });
       await tx.auditEvent.create({
         data: {
@@ -352,12 +357,18 @@ platform.patch('/tenants/:id/modules', async (c) => {
           entity: 'TenantModule',
           entityId: id,
           action: 'SET_TENANT_MODULE',
-          meta: { platform: true, moduleKey, before: before?.isActive ?? false, after: isActive },
+          meta: {
+            platform: true,
+            moduleKey,
+            before: before?.isActive ?? false,
+            after: isActive,
+            ...(config ? { config } : {}),
+          },
         },
       });
     });
 
-    return c.json({ ok: true, data: { id, moduleKey, isActive } });
+    return c.json({ ok: true, data: { id, moduleKey, isActive, ...(config ? { config } : {}) } });
   } catch (err) {
     console.error('PATCH /platform/tenants/:id/modules falhou:', err);
     return c.json({ ok: false, error: 'Falha ao atualizar o módulo da loja.' }, 500);

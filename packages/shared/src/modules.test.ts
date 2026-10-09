@@ -4,6 +4,7 @@ import {
   CONSTRUCTION_UNIT_TYPES,
   isOfflineSalesOn,
   moduleEnabled,
+  parseScaleLabelLayout,
   setTenantModuleSchema,
   visibleUnitTypes,
 } from './modules';
@@ -104,5 +105,20 @@ describe('createTenantSchema — ramo (ADR-039)', () => {
   it('recusa lista de ramos vazia e ramo desconhecido', () => {
     expect(createTenantSchema.safeParse({ ...base, segments: [] }).success).toBe(false);
     expect(createTenantSchema.safeParse({ ...base, segments: ['PHARMACY'] }).success).toBe(false);
+  });
+});
+
+// Etiqueta de balança (ADR-040 §3): layout por loja em `TenantModule.config`.
+describe('layout da etiqueta de balança', () => {
+  it('config ausente/malformado ⇒ padrão (4 dígitos + preço)', () => {
+    expect(parseScaleLabelLayout(null)).toEqual({ pluDigits: 4, value: 'PRICE' });
+    expect(parseScaleLabelLayout({ pluDigits: 6, value: 'PRICE' })).toEqual({ pluDigits: 4, value: 'PRICE' });
+    expect(parseScaleLabelLayout({ pluDigits: 5, value: 'WEIGHT' })).toEqual({ pluDigits: 5, value: 'WEIGHT' });
+  });
+
+  it('só o SCALE_LABEL aceita config no painel', () => {
+    const config = { pluDigits: 5, value: 'WEIGHT' };
+    expect(setTenantModuleSchema.safeParse({ moduleKey: 'SCALE_LABEL', isActive: true, config }).success).toBe(true);
+    expect(setTenantModuleSchema.safeParse({ moduleKey: 'RECIPES', isActive: true, config }).success).toBe(false);
   });
 });

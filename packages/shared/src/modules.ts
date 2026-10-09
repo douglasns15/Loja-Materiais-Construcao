@@ -122,8 +122,40 @@ export function isOfflineSalesOn(modules: readonly TenantModuleFlag[] | null | u
  * (`PATCH /platform/tenants/:id/modules`). Aceita só as chaves conhecidas (`TENANT_MODULE_KEYS`:
  * offline + os módulos de ramo do ADR-039) — chave nova entra aqui, sem afrouxar a validação.
  */
-export const setTenantModuleSchema = z.object({
-  moduleKey: z.enum(TENANT_MODULE_KEYS),
-  isActive: z.boolean(),
+/**
+ * Layout da etiqueta de balança da loja (ADR-040 §3), guardado em `TenantModule.config` do
+ * `SCALE_LABEL` (sem migration): nº de dígitos do PLU e se o valor embutido é preço ou peso.
+ */
+export const scaleLabelLayoutSchema = z.object({
+  pluDigits: z.union([z.literal(4), z.literal(5)]),
+  value: z.enum(['PRICE', 'WEIGHT']),
 });
+export type ScaleLabelLayoutInput = z.infer<typeof scaleLabelLayoutSchema>;
+
+/** Layout padrão (loja que ainda não configurou): PLU de 4 dígitos + preço — recomendação do ADR-040 §3. */
+export const DEFAULT_SCALE_LABEL_LAYOUT_INPUT: ScaleLabelLayoutInput = { pluDigits: 4, value: 'PRICE' };
+
+/** Lê o `config` do módulo `SCALE_LABEL`; ausente/malformado ⇒ o layout padrão. */
+export function parseScaleLabelLayout(config: unknown): ScaleLabelLayoutInput {
+  const parsed = scaleLabelLayoutSchema.safeParse(config);
+  return parsed.success ? parsed.data : DEFAULT_SCALE_LABEL_LAYOUT_INPUT;
+}
+
+/** Rótulos PT-BR do layout para o painel. */
+export const SCALE_LABEL_VALUE_LABELS: Record<ScaleLabelLayoutInput['value'], string> = {
+  PRICE: 'Preço total',
+  WEIGHT: 'Peso (gramas)',
+};
+
+export const setTenantModuleSchema = z
+  .object({
+    moduleKey: z.enum(TENANT_MODULE_KEYS),
+    isActive: z.boolean(),
+    /** Só para `SCALE_LABEL`: grava o layout da etiqueta. Ausente = não mexe no que já está gravado. */
+    config: scaleLabelLayoutSchema.optional(),
+  })
+  .refine((v) => v.config === undefined || v.moduleKey === MODULE_SCALE_LABEL, {
+    message: 'Só o módulo de etiqueta de balança tem configuração.',
+    path: ['config'],
+  });
 export type SetTenantModuleInput = z.infer<typeof setTenantModuleSchema>;

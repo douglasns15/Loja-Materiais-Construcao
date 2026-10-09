@@ -2887,3 +2887,90 @@ export function deliveryUrgency(
   if (minutesToStart <= URGENCY_SOON_MIN) return 'soon';
   return 'plan';
 }
+
+// =============================================================================
+// ETIQUETA DE BALANÇA (ADR-040 §3, módulo SCALE_LABEL)
+// =============================================================================
+// A balança etiquetadora imprime um EAN-13 que começa com "2" (faixa GS1 de uso interno da loja) com
+// só duas informações: o PLU (código do produto na balança) e o VALOR (preço total ou peso). Layout:
+//   2 PPPP 0 VVVVVV D   (PLU de 4 dígitos + 1 dígito de preenchimento)
+//   2 PPPPP  VVVVVV D   (PLU de 5 dígitos)
+// O valor ocupa sempre as posições 7–12 (6 dígitos): centavos (layout PRICE) ou gramas (WEIGHT).
+
+/** Layout da etiqueta configurado por loja (`TenantModule.config` do `SCALE_LABEL`). */
+export interface ScaleLabelLayout {
+  pluDigits: 4 | 5;
+  value: 'PRICE' | 'WEIGHT';
+}
+
+/** Padrão quando a loja ainda não configurou: PLU de 4 dígitos + preço (recomendação do ADR-040 §3). */
+export const DEFAULT_SCALE_LABEL_LAYOUT: ScaleLabelLayout = { pluDigits: 4, value: 'PRICE' };
+
+/** Etiqueta lida: o PLU (sem zeros à esquerda) e o valor embutido. */
+export type ScaleBarcode = { plu: string; priceCents: number } | { plu: string; grams: number };
+
+/** Dígito verificador EAN-13 (GS1 mod-10) dos 12 primeiros dígitos. */
+function ean13CheckDigit(body12: string): number {
+  let sum = 0;
+  for (let i = 0; i < 12; i++) sum += Number(body12[i]) * (i % 2 === 0 ? 1 : 3);
+  return (10 - (sum % 10)) % 10;
+}
+
+/** PLU canônico para comparar: só dígitos, sem zeros à esquerda ("0123" ≡ "123"). `null` se vazio/zero. */
+export function normalizeScaleCode(raw: string | null | undefined): string | null {
+  const digits = (raw ?? '').replace(/\D/g, '');
+  if (!digits) return null;
+  const n = digits.replace(/^0+/, '');
+  return n ? n : null;
+}
+
+/**
+ * Lê a etiqueta de balança. Devolve `null` quando o código NÃO é etiqueta de balança válida (não tem 13
+ * dígitos, não começa com "2", dígito verificador errado, PLU zero, valor zero) — aí o PDV segue a busca
+ * normal. Espaços/hífens do leitor são ignorados.
+ */
+export function parseScaleBarcode(code: string, layout: ScaleLabelLayout): ScaleBarcode | null {
+  const d = code.replace(/[\s-]/g, '');
+  if (!/^\d{13}$/.test(d) || d[0] !== '2') return null;
+  if (ean13CheckDigit(d.slice(0, 12)) !== Number(d[12])) return null;
+  const plu = normalizeScaleCode(d.slice(1, 1 + layout.pluDigits));
+  const value = Number(d.slice(6, 12));
+  if (!plu || !(value > 0)) return null;
+  return layout.value === 'PRICE' ? { plu, priceCents: value } : { plu, grams: value };
+}
+
+/**
+ * Monta o código de uma etiqueta (inverso de `parseScaleBarcode`) — usado nos testes e para gerar uma
+ * etiqueta de teste sem a balança. `value` em centavos (PRICE) ou gramas (WEIGHT), até 999999.
+ */
+export function buildScaleBarcode(plu: string | number, value: number, layout: ScaleLabelLayout): string {
+  const p = String(plu).padStart(layout.pluDigits, '0');
+  if (p.length > layout.pluDigits) throw new Error('PLU maior que o layout');
+  const v = String(Math.round(value)).padStart(6, '0');
+  if (v.length > 6) throw new Error('Valor maior que 6 dígitos');
+  const body = `2${p}${layout.pluDigits === 4 ? '0' : ''}${v}`;
+  return `${body}${ean13CheckDigit(body)}`;
+}
+
+/**
+ * Linha do carrinho a partir da etiqueta e do preço por kg/L do cadastro (`pricePerUnit` > 0):
+ * - **PRICE:** o total IMPRESSO manda (é o que o cliente viu). Quantidade = total ÷ preço, a 3 casas
+ *   (mín. 0,001), só para baixar estoque; o preço da linha é ajustado na 4ª casa (`total ÷ quantidade`)
+ *   para `quantidade × preço` fechar exatamente no total impresso (o `unitPrice` é gravado com 4 casas).
+ * - **WEIGHT:** quantidade = gramas ÷ 1000; preço = o do cadastro; total = quantidade × preço.
+ * Devolve `null` se o preço do cadastro não for positivo (não dá para converter).
+ */
+export function scaleLabelLine(
+  label: ScaleBarcode,
+  pricePerUnit: number,
+): { quantity: number; unitPrice: number; total: number } | null {
+  if (!(pricePerUnit > 0)) return null;
+  if ('priceCents' in label) {
+    const total = label.priceCents / 100;
+    const quantity = Math.max(0.001, Math.round((total / pricePerUnit) * 1000) / 1000);
+    const unitPrice = Math.round((total / quantity) * 10000) / 10000;
+    return { quantity, unitPrice, total };
+  }
+  const quantity = label.grams / 1000;
+  return { quantity, unitPrice: pricePerUnit, total: Number((quantity * pricePerUnit).toFixed(2)) };
+}

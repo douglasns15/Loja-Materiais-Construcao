@@ -37,6 +37,9 @@ import {
   sellableQty,
   sellsWholeOfWeighed,
   isWeighedUnit,
+  normalizeScaleCode,
+  parseScaleBarcode,
+  scaleLabelLine,
   wholeOfWeighedSale,
   approxPieces,
   stepQuantity,
@@ -67,6 +70,7 @@ import { cacheProducts, readCachedProducts } from '@/lib/catalog';
 import { enqueueMutation } from '@/lib/outbox';
 import { useOutboxSyncContext } from '@/lib/outboxSync';
 import { useMe } from '@/lib/useMe';
+import { useScaleLabelLayout } from '@/lib/useModule';
 import { useOnline } from '@/lib/useOnline';
 import { useCart } from '@/lib/cartStore';
 import { printArea } from '@/lib/print';
@@ -117,6 +121,8 @@ type Product = {
   surchargeCredit: string | null;
   /** `false` = sem controle de estoque (ADR-040 §2): `stockQty` vira "Infinity" (nunca trava). */
   trackStock?: boolean;
+  /** Código na balança (PLU, ADR-040 §3) — a etiqueta de balança acha o produto por ele. */
+  scaleCode?: string | null;
 };
 type CartItem = {
   /** Chave única da linha = `productId:saleMode` (o mesmo produto pode ir como metro E como rolo). */
@@ -501,6 +507,11 @@ export default function VendaPage() {
   const [weighKey, setWeighKey] = useState<string | null>(null);
   const [selected, setSelected] = useState('');
   const [productSearch, setProductSearch] = useState('');
+  // Etiqueta de balança (ADR-040 §3): layout da loja (null = módulo desligado ⇒ não tenta ler).
+  const scaleLayout = useScaleLabelLayout();
+  // Sequência p/ dar chave própria a cada etiqueta lida (duas etiquetas = duas linhas, cada uma com o
+  // seu total impresso).
+  const labelSeq = useRef(0);
   // Cadastro no caixa (ADR-041 §B): código desconhecido aberto no "Cadastrar agora" (null = fechado).
   const [quickAddCode, setQuickAddCode] = useState<string | null>(null);
   const [qty, setQty] = useState('1');
@@ -1558,6 +1569,7 @@ export default function VendaPage() {
   function onProductSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key !== 'Enter') return;
     e.preventDefault();
+    if (addScaleLabel(productSearch)) return;
     const only = filteredProducts.length === 1 ? filteredProducts[0] : undefined;
     if (only) {
       addToCart(only.id);
@@ -1565,6 +1577,46 @@ export default function VendaPage() {
       // Código desconhecido (ADR-041 §B): leitor + Enter já abre o "Cadastrar agora".
       setQuickAddCode(productSearch.trim());
     }
+  }
+
+  /**
+   * Etiqueta de balança (ADR-040 §3): se o código é uma etiqueta válida no layout da loja, lança o item
+   * e devolve `true` (com erro amigável quando o PLU não existe/não serve). `false` = não é etiqueta ⇒ a
+   * busca segue normal. Cada etiqueta vira uma LINHA PRÓPRIA (chave única): no layout "preço" o total
+   * impresso manda e o preço da linha é ajustado na 4ª casa (`scaleLabelLine`, core) — somar duas
+   * etiquetas numa linha perderia o centavo de cada uma.
+   */
+  function addScaleLabel(raw: string): boolean {
+    if (!scaleLayout) return false;
+    const label = parseScaleBarcode(raw, scaleLayout);
+    if (!label) return false;
+    setError(null);
+    setProductSearch('');
+    const p = products.find((x) => normalizeScaleCode(x.scaleCode) === label.plu);
+    if (!p) {
+      setError(`Etiqueta de balança: nenhum produto com o código ${label.plu} na balança. Informe o PLU no cadastro do produto.`);
+      return true;
+    }
+    if (!isWeighedUnit(p.unit)) {
+      setError(`"${p.name}" não é vendido por peso (kg/L) — confira a unidade no cadastro para ler a etiqueta.`);
+      return true;
+    }
+    const calc = scaleLabelLine(label, Number(p.salePrice));
+    if (!calc) {
+      setError(`"${p.name}" está sem preço de venda — não dá para ler a etiqueta.`);
+      return true;
+    }
+    const { line } = buildCartLine(p, 'BASE', calc.quantity);
+    labelSeq.current += 1;
+    const key = `${p.id}:LABEL:${labelSeq.current}`;
+    const labelLine: CartItem = { ...line, key, quantity: calc.quantity, unitPrice: calc.unitPrice };
+    if (!fitsStock(labelLine, calc.quantity, baseUsedByProduct(p.id, key))) {
+      setError(`Estoque insuficiente para "${p.name}" (disponível: ${line.stockQty}).`);
+      return true;
+    }
+    setCart([...cart, labelLine]);
+    productSearchRef.current?.focus();
+    return true;
   }
 
   /**
@@ -1597,6 +1649,7 @@ export default function VendaPage() {
    * carrinho; se casar com 0 ou vários, joga o código na busca para o operador escolher na lista.
    */
   function addByScan(code: string) {
+    if (addScaleLabel(code)) return;
     const matches = products.filter((p) => productMatchesQuery(p, code));
     const only = matches.length === 1 ? matches[0] : undefined;
     if (only) {

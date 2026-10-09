@@ -72,6 +72,14 @@ export function closedUnitTerms(unit: UnitType | string): {
 
 /// Payload para criar um produto. `tenantId` NÃO entra aqui — vem do contexto
 /// (header temporário na Fase 1; claim do JWT na Fase 2).
+/** PLU da balança: 1 a 5 dígitos, não-zero; normalizado sem zeros à esquerda (ADR-040 §3). */
+const scaleCodeSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{1,5}$/, 'O código na balança deve ter de 1 a 5 dígitos.')
+  .transform((s) => s.replace(/^0+/, ''))
+  .refine((s) => s.length > 0, 'O código na balança não pode ser zero.');
+
 export const createProductSchema = z.object({
   sku: z.string().min(1).max(60),
   /// Código de barras GTIN-8/12/13/14 (EAN/UPC), opcional e DISTINTO do `sku` (código interno).
@@ -143,6 +151,12 @@ export const createProductSchema = z.object({
    * categoria e estoque. Só de criação — a conferência usa o sinal `markReviewed` do update.
    */
   pendingReview: z.boolean().optional(),
+  /**
+   * Código do produto NA BALANÇA (PLU, ADR-040 §3) — só com o módulo `SCALE_LABEL`. Gravado sem zeros
+   * à esquerda ("0123" → "123"), para a etiqueta casar independente do nº de dígitos do layout.
+   * Único por loja (índice único; 409 se repetir).
+   */
+  scaleCode: scaleCodeSchema.optional(),
 });
 export type CreateProductInput = z.infer<typeof createProductSchema>;
 
@@ -188,5 +202,7 @@ export const updateProductSchema = createProductSchema
     // Cadastro no caixa (ADR-041 §B): `true` = o admin conferiu o produto nascido no PDV. NÃO é
     // coluna — o servidor traduz em `pendingReview: false`, e só aceita de administrador.
     markReviewed: z.boolean().optional(),
+    // ADR-040 §3: `null` tira o produto da balança (libera o PLU).
+    scaleCode: scaleCodeSchema.nullable().optional(),
   });
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;

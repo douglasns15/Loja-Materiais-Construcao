@@ -1,6 +1,13 @@
 import { Hono } from 'hono';
 
-import { activeModuleKeys, isOfflineSalesOn, toStoreRole, updateMeSchema } from '@nexoloja/shared';
+import {
+  activeModuleKeys,
+  isOfflineSalesOn,
+  MODULE_SCALE_LABEL,
+  parseScaleLabelLayout,
+  toStoreRole,
+  updateMeSchema,
+} from '@nexoloja/shared';
 import { type Env, getConnectionString, getPrisma, getTenantId } from '../lib/request';
 import { requireAuth } from '../middleware/auth';
 
@@ -29,8 +36,11 @@ me.get('/', async (c) => {
     // ativos, para a web esconder o que o ramo não usa. Uma query só (poucas linhas por loja).
     const modules = await prisma.tenantModule.findMany({
       where: { tenantId, isActive: true },
-      select: { moduleKey: true, isActive: true },
+      select: { moduleKey: true, isActive: true, config: true },
     });
+    // Etiqueta de balança (ADR-040 §3): layout da loja p/ o PDV ler a etiqueta (também offline, pelo
+    // cache do `/me`). `null` = módulo desligado.
+    const scaleModule = modules.find((m) => m.moduleKey === MODULE_SCALE_LABEL);
     // `tenantActive` (ADR-009): o front usa para avisar no topo e bloquear vendas novas quando
     // a loja está desativada. Vem do `requireAuth` (sem query extra).
     return c.json({
@@ -41,6 +51,7 @@ me.get('/', async (c) => {
         tenantActive: c.get('tenantActive'),
         offlineSales: isOfflineSalesOn(modules),
         modules: activeModuleKeys(modules),
+        scaleLabel: scaleModule ? parseScaleLabelLayout(scaleModule.config) : null,
       },
     });
   } catch (err) {

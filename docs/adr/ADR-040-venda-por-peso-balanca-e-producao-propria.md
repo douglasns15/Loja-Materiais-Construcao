@@ -175,6 +175,16 @@ Aditiva, na **mesma migration do [ADR-039](./ADR-039-ramo-da-loja-e-modulos.md)*
    **NO AR 2026-10-01 (API `22042b01`, web `8cfe172e`)**; E2E do Owner pendente.
 3. **Fatia 3 — etiqueta de balança** (migration + módulo): `scaleCode`, `parseScaleBarcode`, config do layout no
    painel, leitura no PDV. E2E com etiqueta impressa de verdade (ou gerada em tela para teste).
+   **IMPLEMENTADA 2026-10-09** (sem migration nova): core `parseScaleBarcode`/`buildScaleBarcode`/`scaleLabelLine`/
+   `normalizeScaleCode` (+`etiquetaBalanca.test.ts`, inclui varredura que garante o total impresso no centavo).
+   Posições: PLU em 2–5 (4 dígitos, + 1 de preenchimento) ou 2–6 (5 dígitos); valor sempre em 7–12 (6 dígitos).
+   **Layout PRICE:** quantidade = total ÷ preço/kg (3 casas) e o `unitPrice` da linha é ajustado na 4ª casa
+   (`total ÷ quantidade`) para fechar exatamente no total impresso — sem desconto artificial (o PDV exibe, p.ex.,
+   R$ 24,88/kg numa etiqueta de R$ 10,00 de um produto a R$ 24,90/kg). Cada etiqueta é uma linha própria do
+   carrinho. PLU gravado sem zeros à esquerda; 409 próprio para PLU repetido; soft-delete libera o PLU. Layout no
+   painel da plataforma (`config` do `SCALE_LABEL`), entregue ao PDV pelo `/me` (vale offline); padrão 4 + preço.
+   Só produto por kg/L lê etiqueta. **Validar com a balança real** quando comprada (se o layout dela fugir destas
+   posições, o parser ganha posições configuráveis).
 4. **Futuro:** exportar PLUs para a balança; balança de checkout via Web Serial; `RECIPES`.
 
 ## Relacionadas

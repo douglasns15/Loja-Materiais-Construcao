@@ -6198,3 +6198,23 @@ estoque, já conferido) e uma venda de 2 unidades (R$ 23,98, Dinheiro).
 **Deploy (2026-10-09, autorizado pelo Owner):** Prisma Client regenerado e schema embutido conferido (idêntico ao real); `wrangler deploy --dry-run` ok; API `7d56b1c0` (anterior `2102b938`, guardada p/ rollback) — smoke: `/health` 200, rotas protegidas 401, preflight `PATCH` 204; web `68d3dd0e` — smoke pós-deploy ✅, BUILD_ID local = HTML ao vivo.
 
 **Validação da escrita em produção (pós-deploy):** venda feita pelo Owner na Demo Mercardinho com o Operador `operador_kg` — `wrangler tail`: `POST /cart - Ok` (16:41:50) e `POST /orders - Ok` (16:41:55). ✅
+
+## Etiqueta de balança (ADR-040 Fatia 3, entrega #8) — 2026-10-09
+
+Web de dev apontando para a API local (banco real), login `owner_kg` (Demo Mercardinho, `SCALE_LABEL` ligado, layout
+padrão 4 dígitos + preço). Etiquetas geradas pelo mesmo algoritmo do `buildScaleBarcode` e digitadas na busca do PDV +
+Enter (como o leitor faz). Unitários: core `etiquetaBalanca.test.ts` (+11), shared layout (+2) e PLU (+3) — suíte 624 ✅.
+
+| Item | Como | Resultado |
+|---|---|---|
+| PLU no cadastro | Editar "Teste sequencia granel" (kg, R$ 24,90/kg, 2,35 kg) → PLU "0123" | ✅ `PATCH` 200, gravado "123"; campo aparece no novo produto e no detalhe |
+| Etiqueta R$ 10,00 | `2012300010007` + Enter | ✅ linha 0,402 kg = **R$ 10,00** (R$ 24,88/kg ajustado) |
+| Segunda etiqueta | `2012300007472` (R$ 7,47) | ✅ linha própria 0,300 kg = R$ 7,47; total R$ 17,47 |
+| PLU inexistente | `2099900005008` | ✅ "Etiqueta de balança: nenhum produto com o código 999 na balança…"; não oferece "Cadastrar agora" |
+| Venda | Concluir → Confirmar | ✅ `POST /orders` 201 (V-000009): itens 0,402 × 24,8756 = 10,00 e 0,300 × 24,90 = 7,47; total 17,47 |
+| PLU repetido | PLU 123 na Coca-Cola | ✅ 409 "Já existe um produto com esse código na balança (PLU)." |
+| Link `?abrir=` (de quebra) | `/products?abrir=<id>` em carregamento do zero | ✅ abre o cadastro |
+
+**Não testado no navegador:** layout no painel da plataforma (exige login de Super Usuário) e layout PESO / PLU de 5
+dígitos (cobertos pelos testes do core e do shared); etiqueta impressa por balança real (balança ainda não comprada).
+Dados de teste: "Teste sequencia granel" ficou com PLU 123 e 1,648 kg.

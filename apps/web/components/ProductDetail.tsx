@@ -83,6 +83,8 @@ export type ProductFull = {
   priceReviewPendingAt: string | null;
   // Cadastro no caixa (ADR-041 §B): nasceu no PDV só com nome e preço; o admin ainda não conferiu.
   pendingReview?: boolean;
+  // Código na balança (PLU, ADR-040 §3); null ⇒ produto fora da balança.
+  scaleCode?: string | null;
   marginPercent: number;
   createdByName: string | null;
   createdAt: string;
@@ -147,6 +149,7 @@ type FormState = {
   salePrice: string;
   minStockQty: string;
   trackStock: boolean;
+  scaleCode: string;
   weight: string;
   weightUnit: 'kg' | 'g';
   altUnit: UnitType | '';
@@ -178,6 +181,7 @@ function toForm(p: ProductFull): FormState {
     salePrice: String(Number(Number(p.salePrice).toFixed(2))),
     minStockQty: String(Number(p.minStockQty)),
     trackStock: p.trackStock !== false,
+    scaleCode: p.scaleCode ?? '',
     weight: p.weightKg === null ? '' : String(Number(p.weightKg)),
     weightUnit: 'kg',
     altUnit: p.altUnit ?? '',
@@ -229,6 +233,8 @@ function buildPatch(original: ProductFull, f: FormState): Record<string, unknown
     salePrice: Number(f.salePrice),
     minStockQty: Number(f.minStockQty || 0),
     trackStock: f.trackStock,
+    // ADR-040 §3: vazio tira o produto da balança (libera o PLU).
+    scaleCode: f.scaleCode.trim() || null,
     weightKg,
     // ADR-017/ADR-030: unidade fechada fixa o `altUnit` na régua fina (METER p/ barra/rolo, UNIT
     // p/ pacote) — inclusive se o operador trocar a unidade para uma fechada aqui na edição. Fora
@@ -267,6 +273,7 @@ function buildPatch(original: ProductFull, f: FormState): Record<string, unknown
     salePrice: Number(original.salePrice),
     minStockQty: Number(original.minStockQty),
     trackStock: original.trackStock !== false,
+    scaleCode: original.scaleCode ?? null,
     weightKg: original.weightKg === null ? null : Number(original.weightKg),
     altUnit: original.altUnit,
     conversionFactor:
@@ -345,6 +352,8 @@ export function ProductDetail({
   const construction = useModule('CONSTRUCTION_UNITS');
   // Produção com ficha técnica (ADR-043): o bloco "Ficha técnica" só aparece com o módulo ligado.
   const recipesOn = useModule('RECIPES');
+  // Etiqueta de balança (ADR-040 §3): o PLU só aparece com o módulo (ou se o produto já tem um).
+  const scaleOn = useModule('SCALE_LABEL');
   const { isAdmin } = useMe();
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<FormState>(() => toForm(product));
@@ -789,6 +798,10 @@ export function ProductDetail({
               ) : (
                 <Row label="Estoque" value="Sem controle (vende sem saldo)" />
               )}
+              {/* Código na balança (ADR-040 §3): com o módulo ligado, ou se o produto já tem PLU. */}
+              {(scaleOn || product.scaleCode) && (
+                <Row label="Código na balança (PLU)" value={product.scaleCode || null} />
+              )}
               {!closed && !savedSellsWhole && !(savedWeighed && !product.altUnit) && (
                 <Row
                   label="Embalagem fechada"
@@ -1215,6 +1228,19 @@ export function ProductDetail({
                 </span>
               </span>
             </label>
+            {(scaleOn || product.scaleCode) && (
+              <label>
+                <span className={labelCls}>Código na balança (PLU)</span>
+                <input
+                  value={form.scaleCode}
+                  onChange={(e) => setForm({ ...form, scaleCode: e.target.value.replace(/\D/g, '').slice(0, 5) })}
+                  inputMode="numeric"
+                  placeholder="Vazio = fora da balança"
+                  title="O mesmo código cadastrado na balança etiquetadora para este produto (até 5 dígitos)."
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                />
+              </label>
+            )}
             {form.trackStock && (
             <label>
               <span className={labelCls}>Estoque mínimo</span>

@@ -14,6 +14,17 @@ function likeEscape(s: string): string {
   return s.replace(/[\\%_]/g, (ch) => `\\${ch}`);
 }
 
+/**
+ * Mensagem do 409 de unicidade: o índice único pode ser o do SKU ou o do código na balança (PLU,
+ * ADR-040 §3) — o Prisma diz qual em `meta.target`.
+ */
+function uniqueConflictMessage(err: Prisma.PrismaClientKnownRequestError): string {
+  const target = JSON.stringify(err.meta?.target ?? '');
+  return target.includes('scaleCode')
+    ? 'Já existe um produto com esse código na balança (PLU).'
+    : 'Já existe um produto com esse SKU.';
+}
+
 /** Acrescenta a margem calculada (regra pura de packages/core) ao produto. */
 function withMargin<T extends { costPrice: unknown; salePrice: unknown }>(p: T) {
   return {
@@ -320,7 +331,7 @@ products.post('/', async (c) => {
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError) {
       if (err.code === 'P2002') {
-        return c.json({ ok: false, error: 'Já existe um produto com esse SKU.' }, 409);
+        return c.json({ ok: false, error: uniqueConflictMessage(err) }, 409);
       }
       if (err.code === 'P2003') {
         return c.json({ ok: false, error: 'Tenant ou categoria inexistente.' }, 400);
@@ -405,7 +416,7 @@ products.patch('/:id', async (c) => {
     return c.json({ ok: true, data: updated ? withMargin(updated) : null });
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-      return c.json({ ok: false, error: 'Já existe um produto com esse SKU.' }, 409);
+      return c.json({ ok: false, error: uniqueConflictMessage(err) }, 409);
     }
     console.error('PATCH /products/:id falhou:', err);
     return c.json({ ok: false, error: 'Falha ao atualizar o produto.' }, 500);
@@ -437,7 +448,8 @@ products.delete('/:id', async (c) => {
       const del = await tx.product.updateMany({
         where: { id, tenantId, deletedAt: null },
         // Autoria (ADR-010): quem excluiu + snapshot (o "quando" é o próprio deletedAt).
-        data: { deletedAt: new Date(), deletedById: userId, deletedByName: userName },
+        // ADR-040 §3: o índice do PLU é único comum (não parcial) ⇒ o excluído LIBERA o código na balança.
+        data: { deletedAt: new Date(), deletedById: userId, deletedByName: userName, scaleCode: null },
       });
       if (del.count === 0) return 0;
       // Par (ADR-015): limpa o vínculo reverso para não deixar referência pendurada.

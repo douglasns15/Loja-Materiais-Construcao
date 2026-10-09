@@ -108,6 +108,8 @@ export default function ProductsPage() {
   // Ramo da loja (ADR-039 F2): sem o módulo de obra, o cadastro esconde milheiro/saco/barra/rolo/m,
   // o peso p/ frete e o par (parafuso + bucha). Só apresentação — a API aceita tudo igual.
   const construction = useModule('CONSTRUCTION_UNITS');
+  // Etiqueta de balança (ADR-040 §3): o campo "Código na balança" só aparece com o módulo ligado.
+  const scaleOn = useModule('SCALE_LABEL');
   const [products, setProducts] = useState<Product[]>([]);
   const [error, setError] = useState<string | null>(null);
   // Falha na CARGA da listagem (≠ erro de validação/ação): liga a auto-recuperação (ADR-005).
@@ -132,6 +134,8 @@ export default function ProductsPage() {
     initialStock: '',
     // Controlar estoque (ADR-040 §2). Desligado = produção do dia/serviço: vende sem saldo.
     trackStock: true,
+    // Código na balança (PLU, ADR-040 §3) — só com o módulo de etiqueta de balança.
+    scaleCode: '',
     // Venda em unidade alternativa (EF-3, ADR-013). Vazios ⇒ produto de uma unidade só.
     altUnit: '' as UnitType | '',
     conversionFactor: '',
@@ -389,6 +393,8 @@ export default function ProductsPage() {
       // ADR-040 §2: sem controle de estoque não há mínimo nem estoque inicial (a API ignora).
       minStockQty: form.trackStock && form.minStockQty ? Number(form.minStockQty) : undefined,
       trackStock: form.trackStock,
+      // Código na balança (ADR-040 §3): só com o módulo; vazio não envia coluna.
+      scaleCode: scaleOn && form.scaleCode.trim() ? form.scaleCode.trim() : undefined,
       // Se preenchido, a API gera a Entrada de estoque atomicamente (ADR-001); vazio = nasce em 0.
       // ADR-017/ADR-030: p/ unidade fechada (barra/rolo/pacote) o estoque inicial é digitado em
       // unidades FECHADAS e vira régua fina (× tamanho) — metros p/ barra/rolo, unidades p/ pacote.
@@ -449,6 +455,7 @@ export default function ProductsPage() {
         minStockQty: '',
         initialStock: '',
         trackStock: true,
+        scaleCode: '',
         altUnit: '',
         conversionFactor: '',
         altSalePrice: '',
@@ -534,6 +541,8 @@ export default function ProductsPage() {
       initialStock: '',
       // Copiar um produto de produção do dia gera outro igual (sem controle de estoque).
       trackStock: p.trackStock !== false,
+      // PLU é único por produto — não copia (como o SKU).
+      scaleCode: '',
       altUnit: p.altUnit ?? '',
       conversionFactor: p.conversionFactor === null ? '' : String(Number(p.conversionFactor)),
       altSalePrice: p.altSalePrice === null ? '' : String(Number(p.altSalePrice)),
@@ -793,6 +802,20 @@ export default function ProductsPage() {
             </select>
           </div>
         </div>
+        )}
+        {/* Código na balança (PLU, ADR-040 §3): o número do produto na balança etiquetadora. A etiqueta
+            impressa traz esse código + o preço/peso, e o PDV lança o item sozinho. */}
+        {scaleOn && (
+          <Field label="Código na balança (PLU, opcional)">
+            <input
+              value={form.scaleCode}
+              onChange={(e) => setForm({ ...form, scaleCode: e.target.value.replace(/\D/g, '').slice(0, 5) })}
+              inputMode="numeric"
+              placeholder="Ex.: 123"
+              title="O mesmo código cadastrado na balança etiquetadora para este produto (até 5 dígitos)."
+              className="w-full rounded-lg border border-gray-300 px-3 py-2"
+            />
+          </Field>
         )}
         {/* Controlar estoque (ADR-040 §2). Desligado = produção do dia (frango assado, marmita,
             sorvete) ou serviço: vende sem saldo e não movimenta estoque. */}

@@ -12,6 +12,8 @@ import {
   storeSegmentSchema,
   type StoreSegment,
   type TenantModuleKey,
+  SCALE_LABEL_VALUE_LABELS,
+  type ScaleLabelLayoutInput,
 } from '@nexoloja/shared';
 import { apiGet, apiPatch, apiPost } from '@/lib/api';
 import { saveSupportSession } from '@/lib/support';
@@ -31,6 +33,8 @@ type Tenant = {
   segments: StoreSegment[];
   /** Chaves dos módulos ATIVOS (ADR-039 + offline). */
   modules: string[];
+  /** Layout da etiqueta de balança (ADR-040 §3) — padrão quando nunca foi configurado. */
+  scaleLabel?: ScaleLabelLayoutInput;
   /**
    * Momento da última operação real da loja (venda/estoque/caixa) — derivado no servidor.
    * `null` = a loja ainda não teve nenhuma atividade. Não confundir com "online/offline"
@@ -206,6 +210,28 @@ export default function PlataformaPage() {
       await apiPatch(`/platform/tenants/${t.id}/modules`, {
         moduleKey,
         isActive: !t.modules.includes(moduleKey),
+      });
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setTogglingModule(null);
+    }
+  }
+
+  /**
+   * Layout da etiqueta de balança (ADR-040 §3): nº de dígitos do PLU e valor embutido (preço ou peso),
+   * como a balança da loja foi configurada. Grava em `TenantModule.config` do SCALE_LABEL.
+   */
+  async function saveScaleLayout(t: Tenant, next: ScaleLabelLayoutInput) {
+    setError(null);
+    setSuccess(null);
+    setTogglingModule(`${t.id}:SCALE_LABEL`);
+    try {
+      await apiPatch(`/platform/tenants/${t.id}/modules`, {
+        moduleKey: 'SCALE_LABEL',
+        isActive: true,
+        config: next,
       });
       await load();
     } catch (e) {
@@ -427,6 +453,42 @@ export default function PlataformaPage() {
                         );
                       })}
                     </div>
+                    {/* Layout da etiqueta (ADR-040 §3): só com o módulo ligado. Confirme na balança da loja. */}
+                    {t.modules.includes('SCALE_LABEL') && t.scaleLabel && (
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-gray-600">
+                        <span>Etiqueta:</span>
+                        <select
+                          value={t.scaleLabel.pluDigits}
+                          onChange={(e) =>
+                            saveScaleLayout(t, { ...t.scaleLabel!, pluDigits: Number(e.target.value) as 4 | 5 })
+                          }
+                          disabled={togglingModule === `${t.id}:SCALE_LABEL`}
+                          aria-label="Dígitos do código na balança (PLU)"
+                          className="rounded border border-gray-300 bg-white px-1 py-0.5"
+                        >
+                          <option value={4}>PLU 4 dígitos</option>
+                          <option value={5}>PLU 5 dígitos</option>
+                        </select>
+                        <select
+                          value={t.scaleLabel.value}
+                          onChange={(e) =>
+                            saveScaleLayout(t, {
+                              ...t.scaleLabel!,
+                              value: e.target.value as ScaleLabelLayoutInput['value'],
+                            })
+                          }
+                          disabled={togglingModule === `${t.id}:SCALE_LABEL`}
+                          aria-label="Valor embutido na etiqueta"
+                          className="rounded border border-gray-300 bg-white px-1 py-0.5"
+                        >
+                          {(['PRICE', 'WEIGHT'] as const).map((v) => (
+                            <option key={v} value={v}>
+                              {SCALE_LABEL_VALUE_LABELS[v]}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-2">
                     <div className="flex justify-end gap-2">
