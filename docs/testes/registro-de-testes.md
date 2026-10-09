@@ -6239,3 +6239,5 @@ durante a troca de versão e passou ao repetir (BUILD_ID local = HTML ao vivo, C
 já é etiqueta válida mostra "Etiqueta de balança (PLU 123) — Lançar etiqueta" e esconde o "Cadastrar agora". Validado no
 web de dev contra a API de produção: botão aparece, "Cadastrar agora" não, clique lança 0,402 kg = R$ 10,00 (item
 removido do carrinho depois). ✅
+
+**Deploy do fix (2026-10-09, autorizado pelo Owner):** web `b17c25cd` — smoke ✅, BUILD_ID local = HTML ao vivo. Conferido em produção (`owner_kg`): etiqueta digitada sem Enter mostra "Etiqueta de balança (PLU 123) — Lançar etiqueta" e não mostra "Cadastrar agora" (busca limpa sem lançar). ✅
