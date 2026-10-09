@@ -5,7 +5,10 @@ import {
   DEFAULT_SCALE_LABEL_LAYOUT,
   normalizeScaleCode,
   parseScaleBarcode,
+  SCALE_LABEL_FORMATS,
   scaleLabelLine,
+  scaleLabelPattern,
+  scaleLayoutFits,
   type ScaleLabelLayout,
 } from './index';
 
@@ -13,9 +16,13 @@ import {
 // ETIQUETA DE BALANÇA (ADR-040 §3)
 // =============================================================================
 
-const P4: ScaleLabelLayout = { pluDigits: 4, value: 'PRICE' };
-const P5: ScaleLabelLayout = { pluDigits: 5, value: 'PRICE' };
-const W4: ScaleLabelLayout = { pluDigits: 4, value: 'WEIGHT' };
+const P4: ScaleLabelLayout = { pluDigits: 4, valueDigits: 6, valueCheckDigit: false, value: 'PRICE' };
+const P5: ScaleLabelLayout = { pluDigits: 5, valueDigits: 6, valueCheckDigit: false, value: 'PRICE' };
+const W4: ScaleLabelLayout = { pluDigits: 4, valueDigits: 6, valueCheckDigit: false, value: 'WEIGHT' };
+// Código de 6 + valor de 5 (exemplo de ajuda da Alterdata: "2 000001 00760 0").
+const P6V5: ScaleLabelLayout = { pluDigits: 6, valueDigits: 5, valueCheckDigit: false, value: 'PRICE' };
+// Código de 5 + valor de 5 + dígito verificador do valor.
+const P5V5K: ScaleLabelLayout = { pluDigits: 5, valueDigits: 5, valueCheckDigit: true, value: 'PRICE' };
 
 describe('parseScaleBarcode', () => {
   it('lê o exemplo do ADR: PLU 0123, R$ 24,68 (layout padrão: 4 dígitos + preço)', () => {
@@ -44,6 +51,45 @@ describe('parseScaleBarcode', () => {
     expect(parseScaleBarcode(buildScaleBarcode(0, 2468, P4), P4)).toBeNull(); // PLU zero
     expect(parseScaleBarcode(buildScaleBarcode(123, 0, P4), P4)).toBeNull(); // valor zero
     expect(parseScaleBarcode('ABC', P4)).toBeNull();
+  });
+});
+
+describe('formatos parametrizados', () => {
+  it('código de 6 + valor de 5 (exemplo da Alterdata: 2 000001 00760 0)', () => {
+    expect(parseScaleBarcode('2000001007600', P6V5)).toEqual({ plu: '1', priceCents: 760 });
+  });
+
+  it('dígito verificador do valor: pulado na leitura, o valor vem antes dele', () => {
+    const code = buildScaleBarcode('00123', 2468, P5V5K);
+    expect(code.slice(6, 11)).toBe('02468');
+    expect(parseScaleBarcode(code, P5V5K)).toEqual({ plu: '123', priceCents: 2468 });
+  });
+
+  it('mesma etiqueta, formato errado ⇒ leitura diferente (por isso o "Testar etiqueta" no painel)', () => {
+    const code = buildScaleBarcode('0123', 2468, P4); // 2 0123 0 002468 4
+    expect(parseScaleBarcode(code, P6V5)).toEqual({ plu: '12300', priceCents: 2468 });
+  });
+
+  it('só oferece combinações que cabem em 13 dígitos, com o desenho de cada uma', () => {
+    expect(scaleLayoutFits({ pluDigits: 6, valueDigits: 6, valueCheckDigit: false })).toBe(false);
+    expect(scaleLayoutFits({ pluDigits: 5, valueDigits: 6, valueCheckDigit: true })).toBe(false);
+    expect(SCALE_LABEL_FORMATS.map(scaleLabelPattern)).toEqual([
+      '2 CCCC 0 VVVVVV D',
+      '2 CCCC VVVVVV K D',
+      '2 CCCC 00 VVVVV D',
+      '2 CCCC 0 VVVVV K D',
+      '2 CCCCC VVVVVV D',
+      '2 CCCCC 0 VVVVV D',
+      '2 CCCCC VVVVV K D',
+      '2 CCCCCC VVVVV D',
+    ]);
+    expect(scaleLabelPattern(DEFAULT_SCALE_LABEL_LAYOUT)).toBe('2 CCCC 0 VVVVVV D');
+  });
+
+  it('formato que não cabe ⇒ não lê (null) e não monta', () => {
+    const bad: ScaleLabelLayout = { pluDigits: 6, valueDigits: 6, valueCheckDigit: false, value: 'PRICE' };
+    expect(parseScaleBarcode('2012300024684', bad)).toBeNull();
+    expect(() => buildScaleBarcode('1', 1, bad)).toThrow();
   });
 });
 

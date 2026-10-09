@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { StoreRole } from '@nexoloja/shared';
+import type { ScaleLabelLayoutInput, StoreRole } from '@nexoloja/shared';
 import { apiGet } from './api';
 import { cacheOfflineSales, readCachedOfflineSales } from './offlineFlag';
 import { cacheMe, readCachedMe } from './meCache';
@@ -26,7 +26,7 @@ export type Me = {
   modules?: string[];
   /** Layout da etiqueta de balança (ADR-040 §3) quando o módulo `SCALE_LABEL` está ligado; `null`
    * desligado. Vai no cache do `/me` — o PDV lê etiqueta também offline. Opcional (API antiga). */
-  scaleLabel?: { pluDigits: 4 | 5; value: 'PRICE' | 'WEIGHT' } | null;
+  scaleLabel?: ScaleLabelLayoutInput | null;
 };
 
 /**

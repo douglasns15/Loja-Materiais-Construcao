@@ -12,11 +12,11 @@ import {
   storeSegmentSchema,
   type StoreSegment,
   type TenantModuleKey,
-  SCALE_LABEL_VALUE_LABELS,
   type ScaleLabelLayoutInput,
 } from '@nexoloja/shared';
 import { apiGet, apiPatch, apiPost } from '@/lib/api';
 import { saveSupportSession } from '@/lib/support';
+import { ScaleLabelSettings } from '@/components/ScaleLabelSettings';
 
 type Tenant = {
   id: string;
@@ -455,39 +455,11 @@ export default function PlataformaPage() {
                     </div>
                     {/* Layout da etiqueta (ADR-040 §3): só com o módulo ligado. Confirme na balança da loja. */}
                     {t.modules.includes('SCALE_LABEL') && t.scaleLabel && (
-                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-gray-600">
-                        <span>Etiqueta:</span>
-                        <select
-                          value={t.scaleLabel.pluDigits}
-                          onChange={(e) =>
-                            saveScaleLayout(t, { ...t.scaleLabel!, pluDigits: Number(e.target.value) as 4 | 5 })
-                          }
-                          disabled={togglingModule === `${t.id}:SCALE_LABEL`}
-                          aria-label="Dígitos do código na balança (PLU)"
-                          className="rounded border border-gray-300 bg-white px-1 py-0.5"
-                        >
-                          <option value={4}>PLU 4 dígitos</option>
-                          <option value={5}>PLU 5 dígitos</option>
-                        </select>
-                        <select
-                          value={t.scaleLabel.value}
-                          onChange={(e) =>
-                            saveScaleLayout(t, {
-                              ...t.scaleLabel!,
-                              value: e.target.value as ScaleLabelLayoutInput['value'],
-                            })
-                          }
-                          disabled={togglingModule === `${t.id}:SCALE_LABEL`}
-                          aria-label="Valor embutido na etiqueta"
-                          className="rounded border border-gray-300 bg-white px-1 py-0.5"
-                        >
-                          {(['PRICE', 'WEIGHT'] as const).map((v) => (
-                            <option key={v} value={v}>
-                              {SCALE_LABEL_VALUE_LABELS[v]}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                      <ScaleLabelSettings
+                        layout={t.scaleLabel}
+                        busy={togglingModule === `${t.id}:SCALE_LABEL`}
+                        onChange={(next) => saveScaleLayout(t, next)}
+                      />
                     )}
                   </td>
                   <td className="px-4 py-2">

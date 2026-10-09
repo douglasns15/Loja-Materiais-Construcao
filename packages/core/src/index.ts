@@ -2892,19 +2892,73 @@ export function deliveryUrgency(
 // ETIQUETA DE BALANÇA (ADR-040 §3, módulo SCALE_LABEL)
 // =============================================================================
 // A balança etiquetadora imprime um EAN-13 que começa com "2" (faixa GS1 de uso interno da loja) com
-// só duas informações: o PLU (código do produto na balança) e o VALOR (preço total ou peso). Layout:
-//   2 PPPP 0 VVVVVV D   (PLU de 4 dígitos + 1 dígito de preenchimento)
-//   2 PPPPP  VVVVVV D   (PLU de 5 dígitos)
-// O valor ocupa sempre as posições 7–12 (6 dígitos): centavos (layout PRICE) ou gramas (WEIGHT).
+// só duas informações: o PLU (código do produto na balança) e o VALOR (preço total ou peso). O desenho
+// dos 13 dígitos varia por balança/configuração, então é PARAMETRIZADO por loja:
+//   posição 1        "2" (prefixo de uso interno)
+//   posições 2…      PLU com 4, 5 ou 6 dígitos
+//   (meio)           zeros de preenchimento, quando sobra espaço (ignorados)
+//   …até 12 ou 11    VALOR com 5 ou 6 dígitos — centavos (PRICE) ou gramas (WEIGHT)
+//   posição 12       dígito verificador DO VALOR, em balanças que o usam (ignorado na leitura)
+//   posição 13       dígito verificador do EAN-13 (sempre conferido)
+// Padrão (sem configuração): PLU 4 + valor 6, sem dígito do valor ⇒ "2 CCCC 0 VVVVVV D".
 
 /** Layout da etiqueta configurado por loja (`TenantModule.config` do `SCALE_LABEL`). */
 export interface ScaleLabelLayout {
-  pluDigits: 4 | 5;
+  /** Dígitos do código do produto na balança (PLU). */
+  pluDigits: 4 | 5 | 6;
+  /** Dígitos do valor embutido (preço em centavos ou peso em gramas). */
+  valueDigits: 5 | 6;
+  /** A balança imprime um dígito verificador do valor logo antes do dígito final do EAN-13. */
+  valueCheckDigit: boolean;
   value: 'PRICE' | 'WEIGHT';
 }
 
-/** Padrão quando a loja ainda não configurou: PLU de 4 dígitos + preço (recomendação do ADR-040 §3). */
-export const DEFAULT_SCALE_LABEL_LAYOUT: ScaleLabelLayout = { pluDigits: 4, value: 'PRICE' };
+/** Padrão quando a loja ainda não configurou: "2 CCCC 0 VVVVVV D" + preço (recomendação do ADR-040 §3). */
+export const DEFAULT_SCALE_LABEL_LAYOUT: ScaleLabelLayout = {
+  pluDigits: 4,
+  valueDigits: 6,
+  valueCheckDigit: false,
+  value: 'PRICE',
+};
+
+/** Dígitos de preenchimento entre o PLU e o valor; negativo ⇒ a combinação não cabe em 13 dígitos. */
+function scaleFillerDigits(l: Pick<ScaleLabelLayout, 'pluDigits' | 'valueDigits' | 'valueCheckDigit'>): number {
+  return 11 - l.pluDigits - l.valueDigits - (l.valueCheckDigit ? 1 : 0);
+}
+
+/** `true` se a combinação de dígitos cabe no EAN-13 (prefixo + PLU + valor + dígitos verificadores). */
+export function scaleLayoutFits(l: Pick<ScaleLabelLayout, 'pluDigits' | 'valueDigits' | 'valueCheckDigit'>): boolean {
+  return scaleFillerDigits(l) >= 0;
+}
+
+/**
+ * Desenho do formato para exibir ao implantador: `2` prefixo, `C` código (PLU), `0` preenchimento,
+ * `V` valor, `K` dígito verificador do valor, `D` dígito verificador do EAN-13.
+ * Ex.: padrão ⇒ "2 CCCC 0 VVVVVV D".
+ */
+export function scaleLabelPattern(l: Pick<ScaleLabelLayout, 'pluDigits' | 'valueDigits' | 'valueCheckDigit'>): string {
+  const filler = scaleFillerDigits(l);
+  return [
+    '2',
+    'C'.repeat(l.pluDigits),
+    filler > 0 ? '0'.repeat(filler) : '',
+    'V'.repeat(l.valueDigits),
+    l.valueCheckDigit ? 'K' : '',
+    'D',
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
+/** Todas as combinações de dígitos que cabem no EAN-13 — as opções do seletor "Formato" do painel. */
+export const SCALE_LABEL_FORMATS: ReadonlyArray<Pick<ScaleLabelLayout, 'pluDigits' | 'valueDigits' | 'valueCheckDigit'>> =
+  ([4, 5, 6] as const).flatMap((pluDigits) =>
+    ([6, 5] as const).flatMap((valueDigits) =>
+      ([false, true] as const)
+        .map((valueCheckDigit) => ({ pluDigits, valueDigits, valueCheckDigit }))
+        .filter(scaleLayoutFits),
+    ),
+  );
 
 /** Etiqueta lida: o PLU (sem zeros à esquerda) e o valor embutido. */
 export type ScaleBarcode = { plu: string; priceCents: number } | { plu: string; grams: number };
@@ -2926,29 +2980,35 @@ export function normalizeScaleCode(raw: string | null | undefined): string | nul
 
 /**
  * Lê a etiqueta de balança. Devolve `null` quando o código NÃO é etiqueta de balança válida (não tem 13
- * dígitos, não começa com "2", dígito verificador errado, PLU zero, valor zero) — aí o PDV segue a busca
- * normal. Espaços/hífens do leitor são ignorados.
+ * dígitos, não começa com "2", dígito verificador errado, PLU zero, valor zero, formato que não cabe) —
+ * aí o PDV segue a busca normal. Espaços/hífens do leitor são ignorados. O dígito verificador DO VALOR
+ * (quando o layout tem) é pulado, não conferido: o algoritmo varia por fabricante, e o do EAN-13 já
+ * protege a leitura.
  */
 export function parseScaleBarcode(code: string, layout: ScaleLabelLayout): ScaleBarcode | null {
+  if (!scaleLayoutFits(layout)) return null;
   const d = code.replace(/[\s-]/g, '');
   if (!/^\d{13}$/.test(d) || d[0] !== '2') return null;
   if (ean13CheckDigit(d.slice(0, 12)) !== Number(d[12])) return null;
   const plu = normalizeScaleCode(d.slice(1, 1 + layout.pluDigits));
-  const value = Number(d.slice(6, 12));
+  const valueEnd = layout.valueCheckDigit ? 11 : 12;
+  const value = Number(d.slice(valueEnd - layout.valueDigits, valueEnd));
   if (!plu || !(value > 0)) return null;
   return layout.value === 'PRICE' ? { plu, priceCents: value } : { plu, grams: value };
 }
 
 /**
  * Monta o código de uma etiqueta (inverso de `parseScaleBarcode`) — usado nos testes e para gerar uma
- * etiqueta de teste sem a balança. `value` em centavos (PRICE) ou gramas (WEIGHT), até 999999.
+ * etiqueta de teste sem a balança. `value` em centavos (PRICE) ou gramas (WEIGHT), no máximo com
+ * `valueDigits` dígitos. O dígito do valor (quando há) sai como 0 — a leitura não o confere.
  */
 export function buildScaleBarcode(plu: string | number, value: number, layout: ScaleLabelLayout): string {
+  if (!scaleLayoutFits(layout)) throw new Error('Formato não cabe em 13 dígitos');
   const p = String(plu).padStart(layout.pluDigits, '0');
   if (p.length > layout.pluDigits) throw new Error('PLU maior que o layout');
-  const v = String(Math.round(value)).padStart(6, '0');
-  if (v.length > 6) throw new Error('Valor maior que 6 dígitos');
-  const body = `2${p}${layout.pluDigits === 4 ? '0' : ''}${v}`;
+  const v = String(Math.round(value)).padStart(layout.valueDigits, '0');
+  if (v.length > layout.valueDigits) throw new Error('Valor maior que o layout');
+  const body = `2${p}${'0'.repeat(scaleFillerDigits(layout))}${v}${layout.valueCheckDigit ? '0' : ''}`;
   return `${body}${ean13CheckDigit(body)}`;
 }
 

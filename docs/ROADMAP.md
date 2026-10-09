@@ -3,8 +3,34 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
-> **Última atualização:** 2026-10-08 — **Produção — Fatia 3 (desmembramento: peça → cortes).** Roteiro:
-> [plano-implantacao-multirramo.md](plano-implantacao-multirramo.md).
+> **Última atualização:** 2026-10-09 — **Carga do catálogo e balança: entregas #6, #7 e #8 do plano multirramo.**
+> Roteiro: [plano-implantacao-multirramo.md](plano-implantacao-multirramo.md). Como cada uma funciona (visão de quem
+> usa): [DOCUMENTACAO-FUNCIONAL.md](DOCUMENTACAO-FUNCIONAL.md) — **criada nesta data**.
+>
+> - **#6 Cadastro em sequência** (ADR-041 §A) — **NO AR** (web `3e49c8d1`; commit `97a99e1`). Tela
+>   `/products/sequencia`: bipa → ficha do catálogo → preço + quantidade → Enter; código já cadastrado vira contagem de
+>   abertura. Sem rota nova (usa `POST /products` e `POST /stock/adjust`). Validada no navegador.
+> - **#7 Cadastro no caixa** (ADR-041 §B) — **NO AR** (API `7d56b1c0`, web `68d3dd0e`; commit `6e223b9`). "Cadastrar
+>   agora" no PDV para código desconhecido (nasce sem controle de estoque e `pendingReview`), alerta "Cadastrados no
+>   caixa para revisar" e "Marcar como conferido" (só admin). Venda em produção validada após o deploy (Operador).
+>   Corrigiu 2 bugs antigos do PDV: tela quebrava no modo dev com item no carrinho (`isScheduled`) e o espelho do
+>   carrinho era recusado com produto sem controle de estoque (`Infinity` → `null`).
+> - **#8 Etiqueta de balança** (ADR-040 F3) — **implementada e validada no navegador; deploy pendente** (commit
+>   `beefb53` + revisão do formato). PLU no cadastro, leitura no PDV (layout preço: o total impresso manda), formato
+>   **parametrizado por loja** no painel (PLU 4/5/6, valor 5/6, dígito do valor; padrão `2 CCCC 0 VVVVVV D` + preço)
+>   com "Testar etiqueta". Sem migration.
+> - **Documentação:** criada a [documentação funcional](DOCUMENTACAO-FUNCIONAL.md); técnica atualizada (§2 glossário,
+>   §8.2, §9 leitura no PDV e etiqueta). Regra combinada com o Owner: toda entrega atualiza técnica **e** funcional.
+>
+> **ONDE PARAMOS / PRÓXIMOS PASSOS (2026-10-09):**
+> 1. Deploy API → web da #8 (Owner autoriza) e conferir uma venda depois.
+> 2. Quando a balança chegar: bipar uma etiqueta no "Testar etiqueta" do painel e escolher o formato certo.
+> 3. Próxima entrega: **#9 planilha** (ADR-041 Fatia 3: modelo NexoLoja + CSV/XLSX + pré-visualização + importar).
+> 4. Push dos commits locais em `main` (Owner).
+> 5. Decisão pendente do Owner: no layout preço, a linha mostra o preço/kg ajustado (ex.: R$ 24,88/kg numa etiqueta de
+>    R$ 10,00 de um produto a R$ 24,90/kg) — manter ou exibir o preço do cadastro.
+>
+> **Antes:** 2026-10-08 — **Produção — Fatia 3 (desmembramento: peça → cortes).**
 >
 > **NO AR 2026-10-08 (versões finais do dia: API `2102b938`, web `b776da67`) — E2E VALIDADO no navegador** (conduzido pelo Claude com o
 > login do Operador `operador_kg` na loja Demo Mercardinho; evidência em

@@ -5,7 +5,9 @@
 > e diagramas de arquitetura.
 >
 > **Produto:** ERP/PDV multi-tenant, modular e custo-zero (PWA única para Web/Android/iOS).
-> **Última atualização:** 2026-08-20 · **Fontes:** `docs/ARCHITECTURE.md`, `docs/adr/` (ADR-001…025), código do monorepo.
+> **Última atualização:** 2026-10-09 · **Fontes:** `docs/ARCHITECTURE.md`, `docs/adr/` (ADR-001…043), código do monorepo.
+> **Par funcional:** [`docs/DOCUMENTACAO-FUNCIONAL.md`](DOCUMENTACAO-FUNCIONAL.md) — o "como funciona / como configurar" de
+> cada funcionalidade, do ponto de vista de quem usa. Toda mudança de comportamento atualiza os dois.
 
 ---
 
@@ -71,6 +73,10 @@ Referência rápida — cada sigla que aparece na documentação e no código.
 | **RBAC** | *Role-Based Access Control* | Autorização por papel: `OWNER`, `MANAGER`, `CASHIER`, `STOCK`. |
 | **EAN / GTIN** | *European Article Number* / *Global Trade Item Number* | Código de barras global do produto (usado no catálogo — ADR-025). |
 | **NFC-e / NF-e** | Nota Fiscal (Consumidor) eletrônica | Emissão fiscal — planejada para fase futura via API de terceiros. |
+| **PLU** | *Price Look-Up* | Código do produto **na balança** etiquetadora (`Product.scaleCode`, 1–6 dígitos, gravado sem zeros à esquerda — ADR-040 §3). |
+| **Etiqueta de balança** | EAN-13 de uso interno (prefixo `2`) | Código impresso pela balança com o PLU + o valor (preço ou peso). Formato parametrizado por loja — ver §9. |
+| **Carga inicial** | — | Estoque de abertura lançado no cadastro em sequência (ADR-041 §A): Entrada no produto novo, ajuste de inventário no existente. |
+| **Cadastrado no caixa** | `Product.pendingReview` | Produto criado no PDV pelo "Cadastrar agora" (ADR-041 §B), aguardando a conferência do admin. |
 
 ### Técnicas / infraestrutura
 
@@ -447,7 +453,7 @@ testável exaustivamente e compartilhada entre as duas apps.
 |---|---|
 | `GET /products` · `GET /products/search` | Lista e busca de produtos (nome, SKU, `popularName`, EAN). |
 | `GET /products/:id` | Detalhe do produto. |
-| `POST /products` 🔒 · `PATCH /products/:id` 🔒 · `DELETE /products/:id` 🔒 | Cria / edita / remove (soft-delete). Aceita `trackStock` (ADR-040 §2, default `true`): `false` = produto sem controle de estoque (produção do dia/serviço) — no `POST` o `initialStock` é ignorado; no `PATCH`, desligar com mercadoria **reservada** (retirada futura pendente) é recusado (409). Produto por kg/L "vendido inteiro também" usa a unidade alternativa (ADR-013) com `altUnit = UNIT`, `altSalePrice` = preço do inteiro e `conversionFactor` = peso médio. **Cadastro no caixa (ADR-041 §B):** o `POST` aceita `pendingReview: true` (o PDV o envia junto com `trackStock: false`, custo 0 e SKU = código lido; qualquer papel); o `PATCH` aceita o sinal `markReviewed: true` (não é coluna — vira `pendingReview = false`), **só de administrador** (403 para os demais). `pendingReview` não é editável direto no `PATCH`. **Código na balança (ADR-040 §3):** `POST`/`PATCH` aceitam `scaleCode` (PLU, 1–5 dígitos, gravado sem zeros à esquerda; `null` no `PATCH` tira da balança); repetido na loja ⇒ 409 "Já existe um produto com esse código na balança (PLU)". O `DELETE` (soft-delete) grava `scaleCode = null` — libera o PLU. |
+| `POST /products` 🔒 · `PATCH /products/:id` 🔒 · `DELETE /products/:id` 🔒 | Cria / edita / remove (soft-delete). Aceita `trackStock` (ADR-040 §2, default `true`): `false` = produto sem controle de estoque (produção do dia/serviço) — no `POST` o `initialStock` é ignorado; no `PATCH`, desligar com mercadoria **reservada** (retirada futura pendente) é recusado (409). Produto por kg/L "vendido inteiro também" usa a unidade alternativa (ADR-013) com `altUnit = UNIT`, `altSalePrice` = preço do inteiro e `conversionFactor` = peso médio. **Cadastro no caixa (ADR-041 §B):** o `POST` aceita `pendingReview: true` (o PDV o envia junto com `trackStock: false`, custo 0 e SKU = código lido; qualquer papel); o `PATCH` aceita o sinal `markReviewed: true` (não é coluna — vira `pendingReview = false`), **só de administrador** (403 para os demais). `pendingReview` não é editável direto no `PATCH`. **Código na balança (ADR-040 §3):** `POST`/`PATCH` aceitam `scaleCode` (PLU, 1–6 dígitos, gravado sem zeros à esquerda; `null` no `PATCH` tira da balança); repetido na loja ⇒ 409 "Já existe um produto com esse código na balança (PLU)". O `DELETE` (soft-delete) grava `scaleCode = null` — libera o PLU. |
 | `GET /categories` · `GET /categories/:id` | Lista e detalhe de categorias. |
 | `POST /categories` 🔒 · `PATCH /categories/:id` 🔒 · `DELETE /categories/:id` 🔒 | CRUD de categorias. |
 
@@ -559,7 +565,7 @@ Alertas CALCULADOS sob demanda (custo-zero: nada é gravado; a pendência some q
 | `GET /tenant` · `PATCH /tenant` 🔒 | Dados da loja / edição. Inclui taxas da maquininha (ADR-016) e `blindCashClose` (fechamento cego do caixa, por loja). |
 | `POST /tenant/logo` 🔒 · `DELETE /tenant/logo` 🔒 | Upload (URL assinada R2) / remoção do logo. |
 | `GET /tenant/delivery-settings` · `PUT /tenant/delivery-settings` 🔒 | Período de entregas (ADR-042): `{ slotMinutes, maxPerSlot, hours: { "0".."6": [{ start, end }] } }`. `GET` para qualquer usuário (coluna nula ⇒ padrão: 30 min, sem limite, sem restrição); `PUT` substitui o objeto inteiro — **Admin**. |
-| `GET /me` · `PATCH /me` | Perfil da sessão (+ memberships) / edição do próprio perfil. O `GET` traz `tenantActive`, `offlineSales` (ADR-011 §9) e `modules` — chaves dos módulos **ativos** da loja (ADR-039: `CONSTRUCTION_UNITS`, `SCALE_LABEL`, `OFFLINE_SALES`), para a web esconder o que o ramo não usa — e `scaleLabel` (ADR-040 §3): o layout da etiqueta de balança `{ pluDigits: 4\|5, value: 'PRICE'\|'WEIGHT' }` quando o `SCALE_LABEL` está ativo (padrão 4 + `PRICE` se nunca configurado), `null` desligado; vai no cache do `/me` para o PDV ler etiqueta offline. |
+| `GET /me` · `PATCH /me` | Perfil da sessão (+ memberships) / edição do próprio perfil. O `GET` traz `tenantActive`, `offlineSales` (ADR-011 §9) e `modules` — chaves dos módulos **ativos** da loja (ADR-039: `CONSTRUCTION_UNITS`, `SCALE_LABEL`, `OFFLINE_SALES`), para a web esconder o que o ramo não usa — e `scaleLabel` (ADR-040 §3): o formato da etiqueta de balança `{ pluDigits: 4\|5\|6, valueDigits: 5\|6, valueCheckDigit, value: 'PRICE'\|'WEIGHT' }` quando o `SCALE_LABEL` está ativo (padrão `2 CCCC 0 VVVVVV D` + `PRICE` se nunca configurado; configs antigas sem `valueDigits`/`valueCheckDigit` valem como 6/`false`), `null` desligado; vai no cache do `/me` para o PDV ler etiqueta offline. |
 | `GET /users` | Lista usuários da loja. |
 | `POST /users/invite` 🔒 · `PATCH /users/:id` 🔒 · `DELETE /users/:id` 🔒 | Convida / edita papel / remove usuário (RBAC, ADR-008). |
 
@@ -569,7 +575,7 @@ Alertas CALCULADOS sob demanda (custo-zero: nada é gravado; a pendência some q
 |---|---|
 | `GET /me` | Dados do PlatformAdmin logado. |
 | `GET /tenants` · `POST /tenants` | Lista lojas (com `segments`, `modules` ativos e `scaleLabel` — layout da etiqueta de balança, padrão quando nunca configurado — por loja) / onboarding de nova loja. O `POST` aceita `segments` (ramos, ADR-039; default `[CONSTRUCTION]`) e `seedCategories`: na mesma transação grava o ramo, liga os módulos do preset (`modulesForSegments`) e cria as categorias iniciais. |
-| `PATCH /tenants/:id` · `PATCH /tenants/:id/modules` | Edita a loja / liga-desliga módulo (`OFFLINE_SALES`, `CONSTRUCTION_UNITS`, `SCALE_LABEL`; upsert em `TenantModule` + `AuditEvent SET_TENANT_MODULE`). Só para `SCALE_LABEL`, aceita `config: { pluDigits: 4\|5, value: 'PRICE'\|'WEIGHT' }` (layout da etiqueta, gravado em `TenantModule.config`; ausente = não mexe; em outro módulo ⇒ 400). Desligar módulo de ramo só esconde recurso na tela — nunca apaga dado nem quebra venda. |
+| `PATCH /tenants/:id` · `PATCH /tenants/:id/modules` | Edita a loja / liga-desliga módulo (`OFFLINE_SALES`, `CONSTRUCTION_UNITS`, `SCALE_LABEL`; upsert em `TenantModule` + `AuditEvent SET_TENANT_MODULE`). Só para `SCALE_LABEL`, aceita `config: { pluDigits: 4\|5\|6, valueDigits: 5\|6, valueCheckDigit, value: 'PRICE'\|'WEIGHT' }` (formato da etiqueta; a combinação precisa caber nos 13 dígitos, gravado em `TenantModule.config`; ausente = não mexe; em outro módulo ⇒ 400). Desligar módulo de ramo só esconde recurso na tela — nunca apaga dado nem quebra venda. |
 | `POST /tenants/:id/support` | Abre uma sessão de suporte (emite token com escopo da loja). |
 
 **`/support` — Painel de suporte (somente-leitura, token com escopo de loja)**
@@ -595,8 +601,26 @@ Alertas CALCULADOS sob demanda (custo-zero: nada é gravado; a pendência some q
 - **Dados no cliente:**
   - `supabase-js` para CRUD trivial (sob RLS) — leituras de catálogo, clientes etc.
   - `fetch` para a API Hono nas operações críticas.
-- **Código de barras:** `BarcodeDetector` nativo com fallback `@zxing/library`. O leitor físico
-  (modo *Enter-scan*) já funciona; a câmera é evolução planejada.
+- **Código de barras:** `BarcodeDetector` nativo com fallback `@zxing/library` (importado sob demanda),
+  no componente `BarcodeScanButton` (câmera) — além do leitor físico (modo *Enter-scan*: o leitor "digita" o
+  código + Enter no campo de busca).
+- **Leitura no PDV — ordem de decisão** (`apps/web/app/(app)/venda/page.tsx`, Enter na busca ou câmera):
+  1. **Etiqueta de balança** (módulo `SCALE_LABEL` ligado e `parseScaleBarcode` reconhece) → lança a linha;
+  2. **Um único produto** casou a busca → entra no carrinho;
+  3. **Nenhum produto** e a busca tem cara de código (`looksLikeProductCode`) → abre o **"Cadastrar agora"**
+     (`CashierQuickAddModal`, ADR-041 §B; só online).
+- **Etiqueta de balança (ADR-040 §3):** EAN-13 começando com `2`. Formato por loja em
+  `TenantModule.config` do `SCALE_LABEL` (`{ pluDigits: 4|5|6, valueDigits: 5|6, valueCheckDigit, value:
+  PRICE|WEIGHT }`), configurado no painel da plataforma (`ScaleLabelSettings`, com "Testar etiqueta") e
+  entregue ao PDV pelo `/me` (vale offline, pelo cache). Posições: `2` · PLU a partir da posição 2 · zeros de
+  preenchimento · valor terminando na posição 12 (ou 11, quando há dígito verificador do valor, que é pulado)
+  · dígito do EAN-13 na 13 (conferido). **Padrão: `2 CCCC 0 VVVVVV D` + preço.** São 8 formatos válidos
+  (`SCALE_LABEL_FORMATS`, core). No layout **preço**, o total impresso manda: quantidade = total ÷ preço/kg
+  (3 casas) e o `unitPrice` da linha é ajustado na 4ª casa para fechar no centavo; cada etiqueta é uma linha
+  própria do carrinho (chave `produto:LABEL:n`). Só produto por kg/L lê etiqueta.
+- **Cadastro em sequência (ADR-041 §A):** rota `/products/sequencia`; casa o código no cliente
+  (`findProductByCode`: GTIN canônico → código interno) sobre o catálogo da loja e decide a contagem por
+  `planOpeningCount` — sem rota própria (usa `POST /products` e `POST /stock/adjust`).
 - **UX:** menos cliques, fontes legíveis, atalhos de teclado no desktop.
 
 ---
@@ -826,4 +850,5 @@ npm run dev:all      # web (3000) + API (8787)
 - Arquitetura de referência: [`docs/ARCHITECTURE.md`](ARCHITECTURE.md)
 - Decisões: [`docs/adr/`](adr/) · índice em [`docs/adr/README.md`](adr/README.md)
 - Execução / progresso: [`docs/ROADMAP.md`](ROADMAP.md)
+- Como funciona cada funcionalidade (visão de quem usa): [`docs/DOCUMENTACAO-FUNCIONAL.md`](DOCUMENTACAO-FUNCIONAL.md)
 - Diretrizes de contribuição: [`CLAUDE.md`](../CLAUDE.md)

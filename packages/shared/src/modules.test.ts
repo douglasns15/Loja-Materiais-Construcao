@@ -110,10 +110,26 @@ describe('createTenantSchema — ramo (ADR-039)', () => {
 
 // Etiqueta de balança (ADR-040 §3): layout por loja em `TenantModule.config`.
 describe('layout da etiqueta de balança', () => {
-  it('config ausente/malformado ⇒ padrão (4 dígitos + preço)', () => {
-    expect(parseScaleLabelLayout(null)).toEqual({ pluDigits: 4, value: 'PRICE' });
-    expect(parseScaleLabelLayout({ pluDigits: 6, value: 'PRICE' })).toEqual({ pluDigits: 4, value: 'PRICE' });
-    expect(parseScaleLabelLayout({ pluDigits: 5, value: 'WEIGHT' })).toEqual({ pluDigits: 5, value: 'WEIGHT' });
+  const DEFAULT = { pluDigits: 4, valueDigits: 6, valueCheckDigit: false, value: 'PRICE' };
+
+  it('config ausente/malformado ⇒ padrão (2 CCCC 0 VVVVVV D + preço)', () => {
+    expect(parseScaleLabelLayout(null)).toEqual(DEFAULT);
+    expect(parseScaleLabelLayout({ pluDigits: 7, value: 'PRICE' })).toEqual(DEFAULT);
+  });
+
+  it('config antiga (só pluDigits + value) continua valendo, com valor de 6 e sem dígito do valor', () => {
+    expect(parseScaleLabelLayout({ pluDigits: 5, value: 'WEIGHT' })).toEqual({
+      pluDigits: 5,
+      valueDigits: 6,
+      valueCheckDigit: false,
+      value: 'WEIGHT',
+    });
+  });
+
+  it('formato completo; combinação que não cabe em 13 dígitos ⇒ padrão', () => {
+    const p6v5 = { pluDigits: 6, valueDigits: 5, valueCheckDigit: false, value: 'PRICE' };
+    expect(parseScaleLabelLayout(p6v5)).toEqual(p6v5);
+    expect(parseScaleLabelLayout({ pluDigits: 6, valueDigits: 6, valueCheckDigit: false, value: 'PRICE' })).toEqual(DEFAULT);
   });
 
   it('só o SCALE_LABEL aceita config no painel', () => {

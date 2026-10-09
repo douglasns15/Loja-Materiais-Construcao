@@ -809,10 +809,10 @@ export default function ProductsPage() {
           <Field label="Código na balança (PLU, opcional)">
             <input
               value={form.scaleCode}
-              onChange={(e) => setForm({ ...form, scaleCode: e.target.value.replace(/\D/g, '').slice(0, 5) })}
+              onChange={(e) => setForm({ ...form, scaleCode: e.target.value.replace(/\D/g, '').slice(0, 6) })}
               inputMode="numeric"
               placeholder="Ex.: 123"
-              title="O mesmo código cadastrado na balança etiquetadora para este produto (até 5 dígitos)."
+              title="O mesmo código cadastrado na balança etiquetadora para este produto (até 6 dígitos)."
               className="w-full rounded-lg border border-gray-300 px-3 py-2"
             />
           </Field>

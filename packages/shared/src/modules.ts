@@ -124,16 +124,33 @@ export function isOfflineSalesOn(modules: readonly TenantModuleFlag[] | null | u
  */
 /**
  * Layout da etiqueta de balança da loja (ADR-040 §3), guardado em `TenantModule.config` do
- * `SCALE_LABEL` (sem migration): nº de dígitos do PLU e se o valor embutido é preço ou peso.
+ * `SCALE_LABEL` (sem migration): dígitos do PLU (4/5/6), dígitos do valor (5/6), se há dígito
+ * verificador do valor e se o valor embutido é preço ou peso. Configs antigas (só `pluDigits` +
+ * `value`) seguem válidas: `valueDigits` = 6 e `valueCheckDigit` = false por padrão — o mesmo
+ * comportamento de antes. A combinação precisa caber em 13 dígitos (espelha `scaleLayoutFits`, core).
  */
-export const scaleLabelLayoutSchema = z.object({
-  pluDigits: z.union([z.literal(4), z.literal(5)]),
-  value: z.enum(['PRICE', 'WEIGHT']),
-});
+export const scaleLabelLayoutSchema = z
+  .object({
+    pluDigits: z.union([z.literal(4), z.literal(5), z.literal(6)]),
+    valueDigits: z.union([z.literal(5), z.literal(6)]).default(6),
+    valueCheckDigit: z.boolean().default(false),
+    value: z.enum(['PRICE', 'WEIGHT']),
+  })
+  .refine((l) => 1 + l.pluDigits + l.valueDigits + (l.valueCheckDigit ? 1 : 0) + 1 <= 13, {
+    message: 'Esse formato não cabe nos 13 dígitos da etiqueta.',
+  });
 export type ScaleLabelLayoutInput = z.infer<typeof scaleLabelLayoutSchema>;
 
-/** Layout padrão (loja que ainda não configurou): PLU de 4 dígitos + preço — recomendação do ADR-040 §3. */
-export const DEFAULT_SCALE_LABEL_LAYOUT_INPUT: ScaleLabelLayoutInput = { pluDigits: 4, value: 'PRICE' };
+/**
+ * Layout padrão (loja que ainda não configurou): "2 CCCC 0 VVVVVV D" — PLU de 4 dígitos, valor de 6,
+ * preço — recomendação do ADR-040 §3.
+ */
+export const DEFAULT_SCALE_LABEL_LAYOUT_INPUT: ScaleLabelLayoutInput = {
+  pluDigits: 4,
+  valueDigits: 6,
+  valueCheckDigit: false,
+  value: 'PRICE',
+};
 
 /** Lê o `config` do módulo `SCALE_LABEL`; ausente/malformado ⇒ o layout padrão. */
 export function parseScaleLabelLayout(config: unknown): ScaleLabelLayoutInput {

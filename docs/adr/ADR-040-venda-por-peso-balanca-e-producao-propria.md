@@ -84,7 +84,8 @@ o protocolo serial muda por marca e, numa PWA, só funciona via Web Serial no **
 
 - Novo campo `Product.scaleCode VarChar(6)?` (o PLU), **único por loja** entre produtos não excluídos
   (índice parcial). Só aparece no cadastro quando o módulo está ligado.
-- Layout por loja em `TenantModule.config` do `SCALE_LABEL` (sem migration): `{ pluDigits: 4|5, value: 'PRICE'|'WEIGHT' }`.
+- Layout por loja em `TenantModule.config` do `SCALE_LABEL` (sem migration): `{ pluDigits: 4|5, value: 'PRICE'|'WEIGHT' }`
+  — **ampliado na implementação** para `{ pluDigits: 4|5|6, valueDigits: 5|6, valueCheckDigit, value }` (ver Fatia 3).
 - Função pura `parseScaleBarcode(code, layout) → { plu, priceCents } | { plu, grams } | null` em `packages/core`,
   com testes (DV inválido, prefixo ≠ 2, layouts 4/5 dígitos, preço × peso).
 - No PDV, a leitura de um EAN-13 iniciado em `2` (com módulo ligado) tenta primeiro a balança:
@@ -177,14 +178,23 @@ Aditiva, na **mesma migration do [ADR-039](./ADR-039-ramo-da-loja-e-modulos.md)*
    painel, leitura no PDV. E2E com etiqueta impressa de verdade (ou gerada em tela para teste).
    **IMPLEMENTADA 2026-10-09** (sem migration nova): core `parseScaleBarcode`/`buildScaleBarcode`/`scaleLabelLine`/
    `normalizeScaleCode` (+`etiquetaBalanca.test.ts`, inclui varredura que garante o total impresso no centavo).
-   Posições: PLU em 2–5 (4 dígitos, + 1 de preenchimento) ou 2–6 (5 dígitos); valor sempre em 7–12 (6 dígitos).
+   **Formato parametrizado por loja (revisão do mesmo dia, pedido do Owner):** a pesquisa mostrou balanças com
+   código de 6 dígitos (Toledo Prix 4 Uno aceita até 6), valor de 5 dígitos (ex. de ajuda da Alterdata
+   `2 000001 00760 0`) e dígito verificador do valor. O layout passou de `{pluDigits: 4|5, value}` para
+   `{pluDigits: 4|5|6, valueDigits: 5|6, valueCheckDigit, value}`: PLU a partir da posição 2, zeros de
+   preenchimento, valor terminando na posição 12 (ou 11 com o dígito do valor, que é pulado — o algoritmo varia
+   por fabricante; o dígito do EAN-13 já protege a leitura). 8 combinações cabem nos 13 dígitos
+   (`SCALE_LABEL_FORMATS`); o painel mostra cada uma desenhada (`2 CCCC 0 VVVVVV D`) e tem **"Testar etiqueta"**.
+   **Padrão: `2 CCCC 0 VVVVVV D` + preço** (= o comportamento anterior; configs gravadas antes seguem iguais).
+   PLU no cadastro aceita até 6 dígitos (a coluna já era `VARCHAR(6)`).
    **Layout PRICE:** quantidade = total ÷ preço/kg (3 casas) e o `unitPrice` da linha é ajustado na 4ª casa
    (`total ÷ quantidade`) para fechar exatamente no total impresso — sem desconto artificial (o PDV exibe, p.ex.,
    R$ 24,88/kg numa etiqueta de R$ 10,00 de um produto a R$ 24,90/kg). Cada etiqueta é uma linha própria do
    carrinho. PLU gravado sem zeros à esquerda; 409 próprio para PLU repetido; soft-delete libera o PLU. Layout no
-   painel da plataforma (`config` do `SCALE_LABEL`), entregue ao PDV pelo `/me` (vale offline); padrão 4 + preço.
-   Só produto por kg/L lê etiqueta. **Validar com a balança real** quando comprada (se o layout dela fugir destas
-   posições, o parser ganha posições configuráveis).
+   painel da plataforma (`config` do `SCALE_LABEL`), entregue ao PDV pelo `/me` (vale offline).
+   Só produto por kg/L lê etiqueta. **Validar com a balança real** quando comprada: bipar uma etiqueta no "Testar
+   etiqueta" do painel e escolher o formato que lê o PLU e o valor certos. Prefixo diferente de `2` (há balança
+   que permite outro caractere de controle) fica fora até aparecer um caso real.
 4. **Futuro:** exportar PLUs para a balança; balança de checkout via Web Serial; `RECIPES`.
 
 ## Relacionadas

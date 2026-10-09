@@ -2,8 +2,9 @@
 
 > **Estado em 2026-10-09 (noite):** **#8 etiqueta de balança** (ADR-040 F3) **implementada e validada no navegador**
 > (web de dev + API local contra o banco real, loja de teste de alimentos) — sem migration (`scaleCode` já na `0041`;
-> layout em `TenantModule.config`). **Deploy API → web pendente** (autorização do Owner). Validar o layout com a
-> balança real quando ela for comprada. Próxima: **#9 planilha** (ADR-041 Fatia 3).
+> layout em `TenantModule.config`). **Formato da etiqueta parametrizado** (PLU 4/5/6, valor 5/6, dígito do valor;
+> padrão `2 CCCC 0 VVVVVV D` + preço) com "Testar etiqueta" no painel. **Deploy API → web pendente** (autorização do
+> Owner). Validar o formato com a balança real quando ela for comprada. Próxima: **#9 planilha** (ADR-041 Fatia 3).
 >
 > **Estado em 2026-10-09 (tarde):** **#7 cadastro no caixa** (ADR-041 §B) **implementada e validada no navegador**
 > (web de dev + **API local** contra o banco real, loja de teste de alimentos) — sem migration (`pendingReview` já

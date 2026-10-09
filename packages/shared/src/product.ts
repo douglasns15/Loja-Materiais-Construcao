@@ -72,11 +72,11 @@ export function closedUnitTerms(unit: UnitType | string): {
 
 /// Payload para criar um produto. `tenantId` NÃO entra aqui — vem do contexto
 /// (header temporário na Fase 1; claim do JWT na Fase 2).
-/** PLU da balança: 1 a 5 dígitos, não-zero; normalizado sem zeros à esquerda (ADR-040 §3). */
+/** PLU da balança: 1 a 6 dígitos (VarChar(6)), não-zero; normalizado sem zeros à esquerda (ADR-040 §3). */
 const scaleCodeSchema = z
   .string()
   .trim()
-  .regex(/^\d{1,5}$/, 'O código na balança deve ter de 1 a 5 dígitos.')
+  .regex(/^\d{1,6}$/, 'O código na balança deve ter de 1 a 6 dígitos.')
   .transform((s) => s.replace(/^0+/, ''))
   .refine((s) => s.length > 0, 'O código na balança não pode ser zero.');
 
@@ -152,7 +152,7 @@ export const createProductSchema = z.object({
    */
   pendingReview: z.boolean().optional(),
   /**
-   * Código do produto NA BALANÇA (PLU, ADR-040 §3) — só com o módulo `SCALE_LABEL`. Gravado sem zeros
+   * Código do produto NA BALANÇA (PLU, ADR-040 §3, até 6 dígitos) — só com o módulo `SCALE_LABEL`. Gravado sem zeros
    * à esquerda ("0123" → "123"), para a etiqueta casar independente do nº de dígitos do layout.
    * Único por loja (índice único; 409 se repetir).
    */

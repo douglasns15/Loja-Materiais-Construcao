@@ -5,13 +5,13 @@ import { createProductSchema, updateProductSchema } from './product';
 describe('scaleCode (PLU)', () => {
   const base = { sku: 'SORV-1', name: 'Sorvete por kg', costPrice: 0, salePrice: 59.9 };
 
-  it('normaliza zeros à esquerda e aceita até 5 dígitos', () => {
+  it('normaliza zeros à esquerda e aceita até 6 dígitos', () => {
     expect(createProductSchema.parse({ ...base, scaleCode: '0123' }).scaleCode).toBe('123');
-    expect(createProductSchema.parse({ ...base, scaleCode: ' 12345 ' }).scaleCode).toBe('12345');
+    expect(createProductSchema.parse({ ...base, scaleCode: ' 123456 ' }).scaleCode).toBe('123456');
   });
 
-  it('recusa zero, letras e mais de 5 dígitos', () => {
-    for (const scaleCode of ['0000', 'A12', '123456', '']) {
+  it('recusa zero, letras e mais de 6 dígitos', () => {
+    for (const scaleCode of ['0000', 'A12', '1234567', '']) {
       expect(createProductSchema.safeParse({ ...base, scaleCode }).success).toBe(false);
     }
   });
