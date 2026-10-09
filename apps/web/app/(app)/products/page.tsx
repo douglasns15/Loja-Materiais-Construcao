@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import {
   closedUnitTerms,
@@ -555,9 +556,19 @@ export default function ProductsPage() {
 
   return (
     <div className="mx-auto max-w-6xl">
-      <h1 className="mb-6 w-fit bg-gradient-to-r from-indigo-700 to-indigo-500 bg-clip-text text-2xl font-bold text-transparent">
-        Produtos
-      </h1>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="w-fit bg-gradient-to-r from-indigo-700 to-indigo-500 bg-clip-text text-2xl font-bold text-transparent">
+          Produtos
+        </h1>
+        {/* Cadastro em sequência (ADR-041 §A): bipa → preço/quantidade → Enter, para a implantação. */}
+        <Link
+          href="/products/sequencia"
+          className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          title="Percorrer a prateleira bipando: cadastra o que é novo e conta o estoque do que já existe."
+        >
+          ▦ Cadastro em sequência
+        </Link>
+      </div>
 
       {/* Tela online-only (ADR-012 (c)): offline mostra o aviso de rede, não o erro cru. */}
       <OfflineNotice />

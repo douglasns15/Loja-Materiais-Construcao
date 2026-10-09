@@ -1,5 +1,9 @@
 # Plano — Implantação multirramo (1ª loja de alimentos) + usuário multi-loja
 
+> **Estado em 2026-10-09:** **#6 cadastro em sequência** (ADR-041 §A) **implementada e validada no navegador** (dev
+> local contra a API de produção, loja de teste de alimentos) — tela `/products/sequencia`, só web, sem rota nova nem
+> migration. **Deploy da web pendente** (autorização do Owner). Próxima: **#7 cadastro no caixa** (ADR-041 §B).
+>
 > **Estado em 2026-10-08:** **Produção Fatia 3 — desmembramento** (peça → cortes, ADR-043) **NO AR** (API `2102b938`,
 > web `b776da67`; migration `0045` `productions.kind` aprovada e aplicada; commits `793e063`, `7f104a4`) e **E2E
 > validado no navegador** com usuário Operador. ADR-043 completa. Também: teste com **Operador** das Fatias 1+2
@@ -118,7 +122,7 @@ A loja de alimentos **não consegue vender hoje**:
 | 5d | **Produção com ficha técnica — Fatia 1** (ficha, tela Produção, P-0001, último custo, módulo `RECIPES`) — **NO AR + E2E validado 2026-10-02** (commits `0164bb9`, `947522e`, `dbc0e5a`) | **Sim** — `0044` aprovada e aplicada | 043 |
 | 5e | **Produção — Fatia 2** (perda/sobra + resumo do dia + histórico por dia) — **NO AR + E2E validado 2026-10-07** (API `674f35a3`, web `f94f5c7f`; commits `9118d94`, `5e0801d`) | Não | 043 |
 | 5f | **Produção — Fatia 3** (desmembramento: peça → cortes, rateio pelo valor de venda, cortes sugeridos pelos últimos 5 desmembramentos) — **NO AR + E2E validado 2026-10-08** (API `2102b938`, web `b776da67`; commits `793e063`, `7f104a4`) | **Sim** — `0045` (`productions.kind`) aprovada e aplicada; sem tabela de modelo | 043 |
-| 6 | **Cadastro em sequência** | Não | 041 §A |
+| 6 | **Cadastro em sequência** (bipa → ficha do catálogo → preço + qtd → Enter; código já cadastrado ⇒ contagem de abertura) — **implementada + validada no navegador 2026-10-09**, deploy web pendente | Não | 041 §A |
 | 7 | **Cadastro no caixa** + alerta de revisão | Não (a confirmar) | 041 §B |
 | 8 | Etiqueta de balança (`scaleCode` + parser + PDV) | (usa a #2) | 040 F3 |
 | 9 | Importador de planilha (modelo + De-Para) | Não | 041 §1–§6 |
@@ -143,7 +147,7 @@ para clientes futuros; o multi-loja é grande e não bloqueia a abertura (se o O
 - Dados de teste na Demo Mercardinho: Quarto traseiro (teste) `tst-qtr` (12 kg), Picanha/Alcatra/Aparas (teste)
   `tst-pic`/`tst-alc`/`tst-apa`, desmembramentos P-0003 e P-0004, perda de 0,5 kg de Aparas, produção P-0002 e perda
   de 1,2 kg do Frango Assado (Operador).
-- **Próxima entrega de código:** **#6 cadastro em sequência** (ADR-041 §A).
+- **Próxima entrega de código:** **#7 cadastro no caixa** (ADR-041 §B) — a #6 foi feita em 2026-10-09.
 - Push dos commits em `main`: Owner (ver ROADMAP "Onde paramos").
 
 ### Histórico — onde paramos em 2026-10-07

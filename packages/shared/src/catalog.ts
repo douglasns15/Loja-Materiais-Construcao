@@ -68,6 +68,28 @@ export function gtinKey(raw: string): string | null {
 }
 
 /**
+ * Acha, numa lista de produtos da loja, o que tem o código lido (ADR-041 — motor único de casamento):
+ * 1. por **GTIN** (`gtinKey`) contra o `ean` OU o `sku` (cadastro legado guardava o código de barras
+ *    no SKU) — EAN-13 e GTIN-14 do mesmo item casam;
+ * 2. senão, por **igualdade exata** (sem espaços nas pontas) do código interno (`sku`) ou do `ean` —
+ *    cobre código interno/industrial que não é GTIN.
+ * Devolve o primeiro que casar, ou `null` (código novo ⇒ cadastrar).
+ */
+export function findProductByCode<T extends { sku: string; ean?: string | null }>(
+  products: readonly T[],
+  code: string,
+): T | null {
+  const raw = code.trim();
+  if (!raw) return null;
+  const key = gtinKey(raw);
+  if (key) {
+    const byGtin = products.find((p) => gtinKey(p.ean ?? '') === key || gtinKey(p.sku) === key);
+    if (byGtin) return byGtin;
+  }
+  return products.find((p) => p.sku.trim() === raw || (p.ean ?? '').trim() === raw) ?? null;
+}
+
+/**
  * Normaliza um NCM para 8 dígitos (a NF-e às vezes traz com pontos: "2523.29.10"). Devolve `null`
  * se, após limpar, não sobrarem exatamente 8 dígitos — evita gravar NCM malformado.
  */

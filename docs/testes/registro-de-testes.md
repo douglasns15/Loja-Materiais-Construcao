@@ -6143,3 +6143,22 @@ offline mantém o aviso de tela não cacheada. Deploy web `b776da67`.
 **Observação do teste:** depois de abrir, o app pré-carrega o código das telas em segundo plano; a falha só aparece
 para quem abre uma tela cujo código ainda não rodou naquela aba — o caso real do operador com a aba aberta durante um
 deploy.
+
+## Cadastro em sequência (ADR-041 §A, entrega #6) — 2026-10-09
+
+Tela nova `/products/sequencia` (só web; reusa `POST /products` + `POST /stock/adjust`). Testes unitários: shared
+`findProductByCode` (+4) e core `planOpeningCount` (+5) — suíte 603 ✅. Teste no navegador: dev local
+(`localhost:3000`) contra a API de produção, login do Owner `owner_kg` (loja de teste de alimentos).
+
+| Item | Como | Resultado |
+|---|---|---|
+| Código novo com ficha | EAN 7891000100103 ⇒ ficha do catálogo (nome, marca "Nestlé, Moça", foto), foco no preço; R$ 8,99 + 12 un + Enter | ✅ criado; Entrada "Estoque inicial (cadastro)" de 12; foco de volta no bipe |
+| Código já cadastrado | Mesmo EAN ⇒ "Já cadastrado", saldo 12, foco na contagem; 15 + Enter | ✅ ajuste "Carga inicial (cadastro em sequência)" +3; saldo 15 confirmado após recarregar |
+| Corrigir / já confere | "Corrigir" abre com a contagem 15 pré-selecionada; Enter sem mudar | ✅ "Estoque já conferia (15 un)", nenhum movimento |
+| Bipe no campo errado | Código de barras digitado no preço + Enter | ✅ recusado com aviso; nada gravado; campo volta a mostrar R$ 8,99 (achado corrigido no teste: antes o campo focado seguia exibindo o código) |
+| Código interno sem ficha, por kg | `TSTSEQ-01` ⇒ foco no nome; unidade kg; R$ 24,90 + 2,350 | ✅ criado "Teste sequencia granel", 2,35 kg |
+| Esc | Esc com item aberto | ✅ volta ao bipe sem gravar |
+
+Dados de teste criados na loja: "Leite Condensado Integral moça" (EAN 7891000100103, 15 un) e "Teste sequencia
+granel" (`TSTSEQ-01`, 2,35 kg). **Observação:** a primeira consulta de um EAN fora do cache levou ~7 s (fonte externa);
+dali em diante é instantânea (cache global).

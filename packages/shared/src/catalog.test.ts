@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { gtinKey, isValidGtin, normalizeGtin, normalizeNcm } from './catalog';
+import { findProductByCode, gtinKey, isValidGtin, normalizeGtin, normalizeNcm } from './catalog';
 
 // Dígito verificador GS1 (mod-10). Amostras com check digit conferido à mão para EAN-8, UPC-A,
 // EAN-13 e GTIN-14 — cobre os quatro comprimentos aceitos.
@@ -72,5 +72,36 @@ describe('normalizeNcm', () => {
     expect(normalizeNcm(null)).toBeNull();
     expect(normalizeNcm(undefined)).toBeNull();
     expect(normalizeNcm('')).toBeNull();
+  });
+});
+
+// Cadastro em sequência (ADR-041 §A): o código bipado casa com o produto da loja pela mesma regra
+// da NF-e — GTIN canônico (ean OU sku legado) e, para código não-GTIN, igualdade exata.
+describe('findProductByCode', () => {
+  const products = [
+    { id: 'a', sku: 'ARROZ-5', ean: '7891000100103' },
+    { id: 'b', sku: '7896202400440', ean: null }, // legado: código de barras no SKU
+    { id: 'c', sku: 'INT-001', ean: '' },
+    { id: 'd', sku: 'COD99', ean: 'FAB-123' }, // código industrial não-GTIN no ean
+  ];
+
+  it('casa pelo ean (GTIN), inclusive na forma GTIN-14 com zero à esquerda', () => {
+    expect(findProductByCode(products, '7891000100103')?.id).toBe('a');
+    expect(findProductByCode(products, '07891000100103')?.id).toBe('a');
+  });
+
+  it('casa pelo GTIN guardado no SKU (cadastro legado)', () => {
+    expect(findProductByCode(products, '07896202400440')?.id).toBe('b');
+  });
+
+  it('casa código interno/industrial por igualdade exata (sem espaços nas pontas)', () => {
+    expect(findProductByCode(products, ' INT-001 ')?.id).toBe('c');
+    expect(findProductByCode(products, 'FAB-123')?.id).toBe('d');
+  });
+
+  it('código desconhecido ou vazio ⇒ null (cadastrar)', () => {
+    expect(findProductByCode(products, '7898357410015')).toBeNull();
+    expect(findProductByCode(products, 'int-001')).toBeNull(); // sem casar por caixa
+    expect(findProductByCode(products, '   ')).toBeNull();
   });
 });

@@ -201,6 +201,12 @@ CSV é lido sem dependência (parser próprio simples, com aspas, `;` ou `,`, UT
 ## Fatias
 
 1. **Fatia 1 — Cadastro em sequência (§A)** — porta principal da loja de alimentos; sem migration.
+   **Implementada 2026-10-09** (tela `/products/sequencia`, só web): decidido **sem rota nova** — código novo usa o
+   `POST /products` com `initialStock` (Entrada "Estoque inicial (cadastro)" na mesma transação; SKU = código lido,
+   custo 0 ⇒ cai no alerta "produtos sem custo"); código existente usa `POST /stock/adjust` com o motivo "Carga
+   inicial (cadastro em sequência)" (contagem de abertura pela diferença) e `PATCH` do preço quando muda. Casamento
+   no cliente por `findProductByCode` (shared) sobre o catálogo da loja; decisão da contagem por `planOpeningCount`
+   (core). Unidades fechadas (barra/rolo/pacote) ficam de fora desta tela — exigem o cadastro completo.
 2. **Fatia 2 — Cadastro no caixa (§B)** + alerta de revisão na Central de Alertas. Depende do `trackStock` (ADR-040).
 3. **Fatia 3 — Planilha: modelo NexoLoja + CSV/XLSX + pré-visualização + importar** (casamento, estoque inicial, categorias).
 4. **Fatia 4 — Planilha: De-Para editável + perfis lembrados** (exportação de sistema anterior).

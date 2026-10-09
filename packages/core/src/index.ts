@@ -1525,6 +1525,27 @@ export function calcInventoryAdjustment(
   };
 }
 
+/**
+ * Contagem de abertura do **cadastro em sequência** (ADR-041 §A): o produto já existe e o implantador
+ * informa quanto há na prateleira. Decide o que fazer, sem I/O:
+ * - `untracked` — produto sem controle de estoque (ADR-040 §2): não há saldo a contar;
+ * - `same` — a contagem já bate com o saldo (nada a lançar);
+ * - `adjust` — gera o ajuste de inventário (ADR-004) com tipo/quantidade de `calcInventoryAdjustment`.
+ */
+export type OpeningCountPlan =
+  | { kind: 'untracked' }
+  | { kind: 'same' }
+  | { kind: 'adjust'; type: StockMovementType; quantity: number };
+
+export function planOpeningCount(
+  product: { stockQty: number; trackStock?: boolean | null },
+  countedQty: number,
+): OpeningCountPlan {
+  if (!tracksStock(product)) return { kind: 'untracked' };
+  const { type, quantity } = calcInventoryAdjustment(product.stockQty, countedQty);
+  return quantity === 0 ? { kind: 'same' } : { kind: 'adjust', type, quantity };
+}
+
 /** Saldo e mínimo de um produto — base do painel de reposição (EF-2). */
 export interface StockLevelFields {
   stockQty: number;
