@@ -23,7 +23,17 @@ export type Store = {
 // total, coerente com o carrinho e com o servidor. Ausente/0 = sem desconto por item.
 // `unit` (ADR-040 §1): sigla impressa ao lado da quantidade nas linhas vendidas por peso/volume
 // ("0,412 kg"). Ausente nas demais, que seguem só com o número.
-export type ReceiptItem = { name: string; quantity: number; unitPrice: number; discount?: number; unit?: string };
+export type ReceiptItem = {
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  discount?: number;
+  unit?: string;
+  /** Preço exibido na coluna "Unit." quando difere do gravado (etiqueta de balança: o do cadastro). */
+  displayUnitPrice?: number;
+  /** Linha de etiqueta de balança (ADR-040 §3): o total é o valor impresso — o cupom marca "(etiqueta)". */
+  label?: boolean;
+};
 
 /** Total líquido de uma linha do comprovante (ADR-036): bruto − desconto por item, travado ao bruto. */
 const receiptLineNet = (i: ReceiptItem) =>
@@ -189,13 +199,14 @@ export function ReceiptPrint({ kind, store, items, total, date, discount, paymen
                 {(i.discount ?? 0) > 0 ? (
                   <span className="rc-sub"> (desc. {BRL(i.discount as number)})</span>
                 ) : null}
+                {i.label ? <span className="rc-sub"> (etiqueta)</span> : null}
               </td>
               <td className="right">
                 {/* kg/L com 3 casas ("0,850 kg"), como o cupom de mercado (ADR-040 §1). */}
                 {isWeightUnitLabel(i.unit) ? formatWeight(Number(i.quantity)) : QTY(i.quantity)}
                 {i.unit ? ` ${i.unit}` : ''}
               </td>
-              <td className="right">{BRL(i.unitPrice)}</td>
+              <td className="right">{BRL(i.displayUnitPrice ?? i.unitPrice)}</td>
               <td className="right">{BRL(receiptLineNet(i))}</td>
             </tr>
           ))}

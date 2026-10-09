@@ -189,9 +189,14 @@ cliente paga exatamente o que está impresso). Loja que nunca configurou usa ess
   balança (PLU N) — Lançar etiqueta"**. O "Cadastrar agora" **não** aparece para código de etiqueta (cadastraria um
   produto com o código da pesagem).
 - **Cada etiqueta vira uma linha** — duas bandejas do mesmo produto são duas linhas, cada uma com o seu valor.
-- **Formato com preço:** vale o **valor impresso**. O sistema calcula o peso (total ÷ preço por kg, 3 casas) só para
-  baixar o estoque. Para o total bater no centavo, o preço por kg da linha pode aparecer levemente diferente do
-  cadastro (ex.: etiqueta de R$ 10,00 de um produto a R$ 24,90/kg ⇒ linha "0,402 kg · R$ 24,88/kg · R$ 10,00").
+- **Formato com preço:** vale o **valor impresso**. O sistema calcula o peso (total ÷ preço por kg, arredondado ao
+  grama) só para baixar o estoque. A linha do carrinho e o cupom mostram o **preço por kg do cadastro** com o selo
+  **🏷️ etiqueta** (no cupom, "(etiqueta)"), e o total é o impresso. Ex.: etiqueta de R$ 10,00 de um produto a
+  R$ 24,90/kg ⇒ "0,402 kg · R$ 24,90/kg 🏷️ etiqueta · R$ 10,00".
+  - **Por que a conta "não fecha" no centavo:** 0,402 kg × R$ 24,90 = R$ 10,01. O peso exato seria 0,40160… kg,
+    mas o estoque anda em gramas. A diferença (1 a 3 centavos; maior em etiquetas de valor pequeno) fica absorvida
+    no preço gravado na venda, ajustado na 4ª casa (R$ 24,8756/kg) para quantidade × preço = valor impresso. O selo
+    avisa o caixa e o cliente de que o total é o da etiqueta. Decisão do Owner (2026-10-09, "opção C").
 - **Formato com peso:** a quantidade é o peso impresso e o preço é o do cadastro.
 
 **Regras e mensagens**
@@ -208,6 +213,9 @@ cliente paga exatamente o que está impresso). Loja que nunca configurou usa ess
 
 **Limitações**
 
+- **Reimpressão pelo Histórico de Vendas** e relatórios mostram o preço **gravado** (ajustado, ex.: R$ 24,88/kg) e sem
+  o selo — a venda não guarda que a linha veio de etiqueta. O total é o mesmo.
+- Se o produto tiver **acréscimo de cartão** (débito/crédito), ele é somado também à linha da etiqueta.
 - Só etiquetas que **começam com 2**. Balança configurada com outro caractere inicial não é lida (ainda não houve
   caso real).
 - O dígito verificador **do valor** (formatos com `K`) não é conferido — o algoritmo muda de fabricante para
@@ -232,3 +240,4 @@ plataforma.
 |---|---|
 | 2026-10-09 | Criação: cadastro em sequência (#6), cadastro no caixa (#7), etiqueta de balança (#8) com formato parametrizado. |
 | 2026-10-09 | Etiqueta digitada: botão "Lançar etiqueta" no lugar do "Cadastrar agora" (achado do Owner no teste em produção). |
+| 2026-10-09 | Etiqueta com preço: tela e cupom mostram o preço/kg do cadastro + selo "etiqueta" (opção C do Owner). |

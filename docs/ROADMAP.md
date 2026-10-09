@@ -18,17 +18,32 @@
 > - **#8 Etiqueta de balança** (ADR-040 F3) — **NO AR** (API `8932d7a3`, web `b17c25cd`; commits `beefb53` +
 >   `07a6ceb` revisão do formato + `7f5030d` fix da etiqueta digitada). Venda validada em produção. PLU no cadastro, leitura no PDV (layout preço: o total impresso manda), formato
 >   **parametrizado por loja** no painel (PLU 4/5/6, valor 5/6, dígito do valor; padrão `2 CCCC 0 VVVVVV D` + preço)
->   com "Testar etiqueta". Sem migration.
+>   com "Testar etiqueta". Sem migration. **Exibição da etiqueta com preço — opção C do Owner** (preço/kg do
+>   cadastro + selo "🏷️ etiqueta" na tela e no cupom; valor gravado segue o ajustado): **implementada e testada no
+>   web de dev, commitada, DEPLOY WEB PENDENTE**.
 > - **Documentação:** criada a [documentação funcional](DOCUMENTACAO-FUNCIONAL.md); técnica atualizada (§2 glossário,
 >   §8.2, §9 leitura no PDV e etiqueta). Regra combinada com o Owner: toda entrega atualiza técnica **e** funcional.
 >
-> **ONDE PARAMOS / PRÓXIMOS PASSOS (2026-10-09):**
-> 1. ~~Deploy da #8~~ feito e venda validada em produção (`POST /orders - Ok`).
-> 2. Quando a balança chegar: bipar uma etiqueta no "Testar etiqueta" do painel e escolher o formato certo.
-> 3. Próxima entrega: **#9 planilha** (ADR-041 Fatia 3: modelo NexoLoja + CSV/XLSX + pré-visualização + importar).
-> 4. Push dos commits locais em `main` (Owner).
-> 5. Decisão pendente do Owner: no layout preço, a linha mostra o preço/kg ajustado (ex.: R$ 24,88/kg numa etiqueta de
->    R$ 10,00 de um produto a R$ 24,90/kg) — manter ou exibir o preço do cadastro.
+> **ONDE PARAMOS / PRÓXIMOS PASSOS (2026-10-09, fim da sessão):**
+> 1. **Deploy do web com a opção C** (só web; pedir autorização ao Owner). Depois, numa venda real com etiqueta,
+>    conferir o **cupom impresso**: "(etiqueta)" no nome e coluna Unit. com o preço do cadastro (não foi testado).
+> 2. **Próxima entrega: #9 planilha** — ADR-041 §1–§6 e Fatia 3: modelo NexoLoja para enviar ao cliente; leitura
+>    CSV/XLSX no navegador com `read-excel-file` (dependência já aprovada); pré-visualização novo/atualiza/erro;
+>    `POST /products/import` em lotes de ~100, idempotente (casa por `gtinKey` → código interno); "Estoque atual"
+>    vira movimento "Carga inicial (planilha)" pela diferença; `AuditEvent IMPORT_PRODUCTS`. Rota nova ⇒ §8.2 + doc
+>    funcional (regra 8). Reusar `findProductByCode` (shared) e o padrão de funções puras com testes.
+> 3. Quando a balança chegar: bipar uma etiqueta no "Testar etiqueta" do painel da plataforma e escolher o formato.
+> 4. **Push** dos commits locais em `main` (Owner): de `97a99e1` até o último desta sessão.
+> 5. **Como testar com a API local** (quando a mudança mexe na API): `wrangler dev` exige
+>    `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE` — usar um script que leia o `DATABASE_URL` de
+>    `apps/api/.dev.vars` e suba o wrangler com essa variável; apontar o web de dev com
+>    `apps/web/.env.development.local` (`NEXT_PUBLIC_API_URL=http://localhost:8787`, **temporário — apagar depois**).
+>    O banco é o real (usar a loja de teste Demo Mercardinho). Mudança só de web: o web de dev já fala com a API de
+>    produção (CORS aceita `localhost:3000`). O login de `localhost` é separado do de produção.
+> 6. Dados de teste na Demo Mercardinho: "Teste sequencia granel" (`TSTSEQ-01`, kg, R$ 24,90, **PLU 123**), "Leite
+>    Condensado Integral moça" (EAN 7891000100103), "Refrigerante Coca Cola Original Garrafa 2l" (EAN 7894900027013,
+>    cadastrado no caixa e já conferido). Etiqueta de teste: `2012300010007` (PLU 123, R$ 10,00) — o leitor manda
+>    Enter; digitando à mão, apertar Enter ou o botão "Lançar etiqueta".
 >
 > **Antes:** 2026-10-08 — **Produção — Fatia 3 (desmembramento: peça → cortes).**
 >

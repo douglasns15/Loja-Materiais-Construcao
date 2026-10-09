@@ -619,7 +619,11 @@ Alertas CALCULADOS sob demanda (custo-zero: nada é gravado; a pendência some q
   · dígito do EAN-13 na 13 (conferido). **Padrão: `2 CCCC 0 VVVVVV D` + preço.** São 8 formatos válidos
   (`SCALE_LABEL_FORMATS`, core). No layout **preço**, o total impresso manda: quantidade = total ÷ preço/kg
   (3 casas) e o `unitPrice` da linha é ajustado na 4ª casa para fechar no centavo; cada etiqueta é uma linha
-  própria do carrinho (chave `produto:LABEL:n`). Só produto por kg/L lê etiqueta.
+  própria do carrinho (chave `produto:LABEL:n`). Só produto por kg/L lê etiqueta. **Exibição (opção C do Owner):**
+  linha de etiqueta (`isLabelLine` = chave com `:LABEL:`) mostra o `salePrice` do cadastro (`shownUnitPrice`) + selo
+  "🏷️ etiqueta"; o cupom recebe `ReceiptItem.displayUnitPrice` + `label` (coluna "Unit." e "(etiqueta)") e calcula o
+  total pelo `unitPrice` gravado. O `OrderItem` não sabe que veio de etiqueta ⇒ reimpressão pelo Histórico mostra o
+  preço gravado (ajustado). Nenhuma mudança de contrato/API.
 - **Cadastro em sequência (ADR-041 §A):** rota `/products/sequencia`; casa o código no cliente
   (`findProductByCode`: GTIN canônico → código interno) sobre o catálogo da loja e decide a contagem por
   `planOpeningCount` — sem rota própria (usa `POST /products` e `POST /stock/adjust`).

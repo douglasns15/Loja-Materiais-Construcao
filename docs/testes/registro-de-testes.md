@@ -6241,3 +6241,9 @@ web de dev contra a API de produção: botão aparece, "Cadastrar agora" não, c
 removido do carrinho depois). ✅
 
 **Deploy do fix (2026-10-09, autorizado pelo Owner):** web `b17c25cd` — smoke ✅, BUILD_ID local = HTML ao vivo. Conferido em produção (`owner_kg`): etiqueta digitada sem Enter mostra "Etiqueta de balança (PLU 123) — Lançar etiqueta" e não mostra "Cadastrar agora" (busca limpa sem lançar). ✅
+
+**Opção C — exibição da etiqueta (decisão do Owner, 2026-10-09; só web):** linha de etiqueta mostra o preço do cadastro +
+selo. Validado no web de dev contra a API de produção (`owner_kg`): etiqueta `2012300010007` + Enter ⇒
+"0,402 kg · R$ 24,90/kg 🏷️ etiqueta · R$ 10,00" ✅ (item removido do carrinho depois). **Não testado:** o cupom impresso
+("(etiqueta)" e coluna Unit. com o preço do cadastro) — verificado só por tipos; conferir numa venda real com impressão.
+**Deploy web PENDENTE** (autorização do Owner).

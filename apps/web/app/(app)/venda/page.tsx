@@ -1163,6 +1163,18 @@ export default function VendaPage() {
   // Busca do PDV: filtra por nome, nome popular, fabricante ou SKU (função pura de packages/core).
   // Texto da busca que já é uma etiqueta de balança válida no formato da loja (ADR-040 §3).
   const typedScaleLabel = scaleLayout ? parseScaleBarcode(productSearch, scaleLayout) : null;
+  /**
+   * Linha lançada por etiqueta de balança (chave `produto:LABEL:n`, ver `addScaleLabel`). Decisão do Owner
+   * (2026-10-09, opção C): a tela e o cupom mostram o preço/kg do CADASTRO + o selo "etiqueta"; o
+   * `unitPrice` gravado continua o ajustado (total impresso = quantidade × preço), então o total não muda.
+   */
+  const isLabelLine = (c: { key: string }) => c.key.includes(':LABEL:');
+  /** Preço por kg/L exibido: o do cadastro nas linhas de etiqueta; o da linha nas demais. */
+  const shownUnitPrice = (c: { key: string; productId: string; unitPrice: number }) => {
+    if (!isLabelLine(c)) return c.unitPrice;
+    const p = products.find((x) => x.id === c.productId);
+    return p && Number(p.salePrice) > 0 ? Number(p.salePrice) : c.unitPrice;
+  };
   const filteredProducts = useMemo(
     () => products.filter((p) => productMatchesQuery(p, productSearch)),
     [products, productSearch],
@@ -2591,6 +2603,9 @@ export default function VendaPage() {
             // kg/L (ADR-040 §1): o cupom mostra "0,412 kg" na coluna Qtd.
             ...(weightAbbr(i) ? { unit: weightAbbr(i) } : {}),
             unitPrice: i.unitPrice,
+            // Etiqueta de balança (opção C): coluna "Unit." mostra o preço do cadastro + "(etiqueta)";
+            // o total da linha segue calculado do `unitPrice` gravado (= valor impresso).
+            ...(isLabelLine(i) ? { displayUnitPrice: shownUnitPrice(i), label: true } : {}),
             // Desconto por item (ADR-036): o comprovante imprime o total líquido da linha. Par não
             // tem desconto por item (v1), então `lineDiscountOf` já devolve 0 nesses casos.
             ...(lineDiscountOf(i) > 0 ? { discount: lineDiscountOf(i) } : {}),
@@ -3162,7 +3177,15 @@ export default function VendaPage() {
                     </span>
                   </div>
                   <span className="shrink-0 text-xs text-gray-500 tabular-nums">
-                    {BRL(i.unitPrice)}/{weightAbbr(i) || 'un'}
+                    {BRL(shownUnitPrice(i))}/{weightAbbr(i) || 'un'}
+                    {isLabelLine(i) && (
+                      <span
+                        className="ml-1 rounded bg-indigo-50 px-1 py-0.5 text-[10px] font-medium text-indigo-700"
+                        title="Etiqueta de balança: o total é o valor impresso na etiqueta."
+                      >
+                        🏷️ etiqueta
+                      </span>
+                    )}
                   </span>
                 </div>
 

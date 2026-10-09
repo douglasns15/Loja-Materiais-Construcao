@@ -188,8 +188,10 @@ Aditiva, na **mesma migration do [ADR-039](./ADR-039-ramo-da-loja-e-modulos.md)*
    **Padrão: `2 CCCC 0 VVVVVV D` + preço** (= o comportamento anterior; configs gravadas antes seguem iguais).
    PLU no cadastro aceita até 6 dígitos (a coluna já era `VARCHAR(6)`).
    **Layout PRICE:** quantidade = total ÷ preço/kg (3 casas) e o `unitPrice` da linha é ajustado na 4ª casa
-   (`total ÷ quantidade`) para fechar exatamente no total impresso — sem desconto artificial (o PDV exibe, p.ex.,
-   R$ 24,88/kg numa etiqueta de R$ 10,00 de um produto a R$ 24,90/kg). Cada etiqueta é uma linha própria do
+   (`total ÷ quantidade`) para fechar exatamente no total impresso — sem desconto artificial. **Exibição — decisão do
+   Owner 2026-10-09 (opção C, entre A "preço ajustado" e B "preço do cadastro"):** tela e cupom mostram o preço/kg
+   do cadastro + selo "etiqueta"; o valor gravado segue o ajustado (consistência quantidade × preço = total, inclusive
+   para a futura NFC-e). Cada etiqueta é uma linha própria do
    carrinho. PLU gravado sem zeros à esquerda; 409 próprio para PLU repetido; soft-delete libera o PLU. Layout no
    painel da plataforma (`config` do `SCALE_LABEL`), entregue ao PDV pelo `/me` (vale offline).
    Só produto por kg/L lê etiqueta. **Validar com a balança real** quando comprada: bipar uma etiqueta no "Testar
