@@ -147,7 +147,23 @@ export function AlertDetailModal({
                 <tbody>
                   {products.map((p) => (
                     <tr key={p.id} className="border-b border-gray-100">
-                      <td className="px-2 py-1.5 text-gray-800">{p.name}</td>
+                      <td className="px-2 py-1.5 text-gray-800">
+                        {/* Abre o cadastro direto na tela de Produtos para corrigir/conferir. */}
+                        <Link
+                          href={`/products?abrir=${p.id}`}
+                          onClick={(e) => {
+                            // Já em Produtos: navegar para a mesma rota não remonta a tela — avisa por evento.
+                            if (window.location.pathname === '/products') {
+                              e.preventDefault();
+                              window.dispatchEvent(new CustomEvent('nexoloja:open-product', { detail: p.id }));
+                            }
+                            onClose();
+                          }}
+                          className="text-indigo-700 hover:underline"
+                        >
+                          {p.name}
+                        </Link>
+                      </td>
                       <td className="px-2 py-1.5 text-gray-500">{p.sku}</td>
                       <td className="px-2 py-1.5 text-gray-500">{p.ean ?? '—'}</td>
                       <td className="px-2 py-1.5 text-right tabular-nums text-gray-700">{BRL(p.salePrice)}</td>

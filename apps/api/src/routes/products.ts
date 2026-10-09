@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { createPrismaClient, Prisma } from '@nexoloja/db';
 import { calcMarginPercent } from '@nexoloja/core';
-import { createProductSchema, updateProductSchema } from '@nexoloja/shared';
+import { createProductSchema, isAdminRole, updateProductSchema } from '@nexoloja/shared';
 import { type Env, getConnectionString, getPrisma, getTenantId } from '../lib/request';
 import { requireAuth } from '../middleware/auth';
 
@@ -362,7 +362,12 @@ products.patch('/:id', async (c) => {
     // Item 5 da esteira: `dismissPriceReview` NÃO é coluna — é um sinal. Traduz em limpar
     // `priceReviewPendingAt` e não vaza para o Prisma (senão o update quebraria por campo
     // desconhecido). Separado do resto do payload por desestruturação.
-    const { dismissPriceReview, ...patchData } = parsed.data;
+    const { dismissPriceReview, markReviewed, ...patchData } = parsed.data;
+    // Cadastro no caixa (ADR-041 §B): `markReviewed` também é sinal (vira `pendingReview: false`) e
+    // é a conferência do ADMIN — o operador cadastra no caixa, mas não se auto-confere.
+    if (markReviewed && !isAdminRole(c.get('role'))) {
+      return c.json({ ok: false, error: 'Só o administrador marca o produto como conferido.' }, 403);
+    }
     // ADR-040 §2: desligar o controle com mercadoria RESERVADA (retirada futura pendente) deixaria a
     // reserva órfã — a retirada não baixaria nem liberaria. Recusa até as retiradas acabarem.
     if (patchData.trackStock === false) {
@@ -388,6 +393,7 @@ products.patch('/:id', async (c) => {
       data: {
         ...patchData,
         ...(dismissPriceReview ? { priceReviewPendingAt: null } : {}),
+        ...(markReviewed ? { pendingReview: false } : {}),
         updatedById: c.get('userId'),
         updatedByName: c.get('userName'),
       },

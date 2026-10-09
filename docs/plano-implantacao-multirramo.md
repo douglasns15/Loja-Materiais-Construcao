@@ -1,5 +1,10 @@
 # Plano — Implantação multirramo (1ª loja de alimentos) + usuário multi-loja
 
+> **Estado em 2026-10-09 (tarde):** **#7 cadastro no caixa** (ADR-041 §B) **implementada e validada no navegador**
+> (web de dev + **API local** contra o banco real, loja de teste de alimentos) — sem migration (`pendingReview` já
+> existia, `0041`). **Deploy API → web pendente** (autorização do Owner). Corrigidos no caminho 2 bugs antigos do PDV
+> (ver registro de testes). Próxima: **#8 etiqueta de balança** (ADR-040 F3).
+>
 > **Estado em 2026-10-09:** **#6 cadastro em sequência** (ADR-041 §A) **implementada e validada no navegador** (dev
 > local contra a API de produção, loja de teste de alimentos) — tela `/products/sequencia`, só web, sem rota nova nem
 > migration. **NO AR** (web `3e49c8d1`, deploy autorizado pelo Owner). Próxima: **#7 cadastro no caixa** (ADR-041 §B).
@@ -123,7 +128,7 @@ A loja de alimentos **não consegue vender hoje**:
 | 5e | **Produção — Fatia 2** (perda/sobra + resumo do dia + histórico por dia) — **NO AR + E2E validado 2026-10-07** (API `674f35a3`, web `f94f5c7f`; commits `9118d94`, `5e0801d`) | Não | 043 |
 | 5f | **Produção — Fatia 3** (desmembramento: peça → cortes, rateio pelo valor de venda, cortes sugeridos pelos últimos 5 desmembramentos) — **NO AR + E2E validado 2026-10-08** (API `2102b938`, web `b776da67`; commits `793e063`, `7f104a4`) | **Sim** — `0045` (`productions.kind`) aprovada e aplicada; sem tabela de modelo | 043 |
 | 6 | **Cadastro em sequência** (bipa → ficha do catálogo → preço + qtd → Enter; código já cadastrado ⇒ contagem de abertura) — **NO AR + validada no navegador 2026-10-09** (web `3e49c8d1`; commit `97a99e1`) | Não | 041 §A |
-| 7 | **Cadastro no caixa** + alerta de revisão | Não (a confirmar) | 041 §B |
+| 7 | **Cadastro no caixa** + alerta de revisão — **implementada + validada no navegador 2026-10-09**, deploy API→web pendente | Não (`pendingReview` já na `0041`) | 041 §B |
 | 8 | Etiqueta de balança (`scaleCode` + parser + PDV) | (usa a #2) | 040 F3 |
 | 9 | Importador de planilha (modelo + De-Para) | Não | 041 §1–§6 |
 | 10 | Usuário multi-loja (5 fatias da ADR-014) | **Sim** (3 migrations) | 014 |
@@ -147,7 +152,7 @@ para clientes futuros; o multi-loja é grande e não bloqueia a abertura (se o O
 - Dados de teste na Demo Mercardinho: Quarto traseiro (teste) `tst-qtr` (12 kg), Picanha/Alcatra/Aparas (teste)
   `tst-pic`/`tst-alc`/`tst-apa`, desmembramentos P-0003 e P-0004, perda de 0,5 kg de Aparas, produção P-0002 e perda
   de 1,2 kg do Frango Assado (Operador).
-- **Próxima entrega de código:** **#7 cadastro no caixa** (ADR-041 §B) — a #6 foi feita em 2026-10-09.
+- **Próxima entrega de código:** **#8 etiqueta de balança** (ADR-040 F3) — #6 e #7 feitas em 2026-10-09.
 - Push dos commits em `main`: Owner (ver ROADMAP "Onde paramos").
 
 ### Histórico — onde paramos em 2026-10-07

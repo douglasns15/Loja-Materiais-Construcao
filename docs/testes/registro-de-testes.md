@@ -6164,3 +6164,33 @@ granel" (`TSTSEQ-01`, 2,35 kg). **Observação:** a primeira consulta de um EAN 
 dali em diante é instantânea (cache global).
 
 **Deploy (2026-10-09, autorizado pelo Owner):** web `3e49c8d1` (100%); smoke pós-deploy ✅; BUILD_ID local = HTML ao vivo; `/products/sequencia` responde 200.
+
+## Cadastro no caixa (ADR-041 §B, entrega #7) — 2026-10-09
+
+Testado no navegador com o web de dev apontando para a **API local** (`wrangler dev`, Hyperdrive emulado com o
+`DATABASE_URL` do `.dev.vars` ⇒ banco real), login do Owner `owner_kg` (loja de teste de alimentos). Unitários: shared
+`looksLikeProductCode` (+2) e `persistableCartItems` (+3) — suíte 608 ✅.
+
+| Item | Como | Resultado |
+|---|---|---|
+| Leitor + Enter com EAN desconhecido | 7894900027013 na busca do PDV + Enter | ✅ abre "Cadastrar agora"; ficha (nome, foto, marca); foco no preço |
+| Cadastrar e vender | R$ 11,99 + Enter | ✅ `POST /products` 201 (sem controle de estoque, `pendingReview`); item no carrinho |
+| Quantidade e venda | "+" para 2 (sem trava de estoque); Concluir → Confirmar | ✅ venda registrada, R$ 23,98 |
+| Alerta do admin | Sino | ✅ "Cadastrados no caixa para revisar · 1"; "Ver" lista o produto com link |
+| Abrir pelo sino | Clique no nome | ✅ abre o cadastro em Produtos (custo R$ 0,00, "Sem controle"), aviso com "Revisar cadastro"/"Marcar como conferido" |
+| Conferir | "Marcar como conferido" | ✅ `PATCH` 200, aviso some, alerta sai do sino (3 → 2) |
+| Código interno pelo botão | `TSTCX-01` ⇒ "Nenhum produto encontrado" + botão "Cadastrar agora" | ✅ modal com foco no nome; Enter sem preço ⇒ "Informe o preço de venda."; "Voltar" fecha sem gravar |
+
+**Não testado no navegador:** recusa (403) do "Marcar como conferido" para Operador (exigiria login do Operador) —
+coberto pelo guard no `PATCH` (`isAdminRole`).
+
+**Bugs antigos encontrados e corrigidos no caminho:**
+1. **PDV quebrava no modo dev com qualquer item no carrinho** ("Cannot access 'isScheduled' before initialization",
+   desde `9dbb6ae`): o memo do total lia o apelido `isScheduled`, declarado mais abaixo. Em produção não se manifestava
+   (vendas funcionando). Correção: ler `showSchedule`.
+2. **Espelho do carrinho recusado com produto sem controle de estoque** (desde a #5): o disponível `Infinity` virava
+   `null` no JSON e o `POST /cart` respondia 400 ("Expected number, received null") — a venda funcionava, mas a cesta
+   não sincronizava entre aparelhos. Correção: `persistableCartItems` grava um finito enorme (`UNLIMITED_STOCK_QTY`).
+
+Dados de teste criados na loja: "Refrigerante Coca Cola Original Garrafa 2l" (EAN 7894900027013, R$ 11,99, sem controle de
+estoque, já conferido) e uma venda de 2 unidades (R$ 23,98, Dinheiro).

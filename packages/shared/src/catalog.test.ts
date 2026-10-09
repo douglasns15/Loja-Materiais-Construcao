@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findProductByCode, gtinKey, isValidGtin, normalizeGtin, normalizeNcm } from './catalog';
+import { findProductByCode, gtinKey, looksLikeProductCode, isValidGtin, normalizeGtin, normalizeNcm } from './catalog';
 
 // Dígito verificador GS1 (mod-10). Amostras com check digit conferido à mão para EAN-8, UPC-A,
 // EAN-13 e GTIN-14 — cobre os quatro comprimentos aceitos.
@@ -103,5 +103,22 @@ describe('findProductByCode', () => {
     expect(findProductByCode(products, '7898357410015')).toBeNull();
     expect(findProductByCode(products, 'int-001')).toBeNull(); // sem casar por caixa
     expect(findProductByCode(products, '   ')).toBeNull();
+  });
+});
+
+// Cadastro no caixa (ADR-041 §B): só oferece "Cadastrar agora" quando a busca é um código.
+describe('looksLikeProductCode', () => {
+  it('EAN e código interno com dígito contam como código', () => {
+    expect(looksLikeProductCode('7891000100103')).toBe(true);
+    expect(looksLikeProductCode(' TSTSEQ-01 ')).toBe(true);
+    expect(looksLikeProductCode('A123')).toBe(true);
+  });
+
+  it('nome, texto sem dígito ou curto demais não contam', () => {
+    expect(looksLikeProductCode('pão de queijo')).toBe(false);
+    expect(looksLikeProductCode('arroz 5kg')).toBe(false); // tem espaço ⇒ é busca por nome
+    expect(looksLikeProductCode('cimento')).toBe(false);
+    expect(looksLikeProductCode('123')).toBe(false);
+    expect(looksLikeProductCode('')).toBe(false);
   });
 });

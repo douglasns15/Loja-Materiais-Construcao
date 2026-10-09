@@ -81,6 +81,8 @@ export type ProductFull = {
   trackStock?: boolean;
   // Item 5 da esteira: instante em que uma Entrada de estoque ajustou o custo; null ⇒ nada pendente.
   priceReviewPendingAt: string | null;
+  // Cadastro no caixa (ADR-041 §B): nasceu no PDV só com nome e preço; o admin ainda não conferiu.
+  pendingReview?: boolean;
   marginPercent: number;
   createdByName: string | null;
   createdAt: string;
@@ -357,6 +359,9 @@ export function ProductDetail({
   // Item 5 da esteira: aviso "custo ajustado por Entrada de estoque, confira o preço".
   const priceReviewPending = product.priceReviewPendingAt != null;
   const [dismissingReview, setDismissingReview] = useState(false);
+  // Cadastro no caixa (ADR-041 §B): aviso até o admin conferir (botão ou salvando a edição).
+  const cashierPending = product.pendingReview === true;
+  const [markingReviewed, setMarkingReviewed] = useState(false);
   // "Sincronizar dados pelo EAN" (ADR-025): busca a ficha e propõe diferenças p/ o operador escolher.
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
@@ -474,6 +479,8 @@ export function ProductDetail({
       await apiPatch(`/products/${product.id}`, {
         ...parsed.data,
         ...(priceReviewPending ? { dismissPriceReview: true } : {}),
+        // Admin editando um produto nascido no caixa = conferiu (o operador não se auto-confere).
+        ...(cashierPending && isAdmin ? { markReviewed: true } : {}),
       });
       await onSaved();
       setEditing(false);
@@ -523,6 +530,20 @@ export function ProductDetail({
       setError((e as Error).message);
     } finally {
       setDismissingReview(false);
+    }
+  }
+
+  /** Cadastro no caixa (ADR-041 §B): o admin confere sem precisar editar ("Marcar como conferido"). */
+  async function onMarkReviewed() {
+    setError(null);
+    setMarkingReviewed(true);
+    try {
+      await apiPatch(`/products/${product.id}`, { markReviewed: true });
+      await onSaved();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setMarkingReviewed(false);
     }
   }
 
@@ -941,6 +962,39 @@ export function ProductDetail({
                 </div>
               )}
             </div>
+
+            {/* Cadastro no caixa (ADR-041 §B): nasceu no PDV só com nome e preço, sem custo/categoria e
+                sem controle de estoque. Fica no sino até o admin conferir (aqui ou salvando a edição). */}
+            {cashierPending && (
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                <p className="text-xs text-amber-800">
+                  🧾 Cadastrado <strong>no caixa</strong>
+                  {product.createdByName ? ` por ${product.createdByName}` : ''} só com nome e preço.{' '}
+                  {isAdmin
+                    ? 'Confira custo, categoria e controle de estoque — salvar a edição também conta como conferido.'
+                    : 'Aguardando a conferência do administrador.'}
+                </p>
+                {isAdmin && (
+                  <div className="flex shrink-0 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditing(true)}
+                      className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-100"
+                    >
+                      Revisar cadastro
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onMarkReviewed}
+                      disabled={markingReviewed}
+                      className="rounded-lg px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100 disabled:opacity-60"
+                    >
+                      {markingReviewed ? '…' : 'Marcar como conferido'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Item 5 da esteira: aviso discreto de que o custo foi ajustado por uma Entrada de
                 estoque e a margem mudou — pedindo para conferir o Preço de Venda. Persiste até o

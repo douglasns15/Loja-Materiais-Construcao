@@ -171,8 +171,10 @@ export default function ProductsPage() {
 
   // Produto aberto no painel de visualizar/editar (null = painel fechado).
   const [detailId, setDetailId] = useState<string | null>(null);
-  // Lê da lista (e não de um estado próprio) para o painel refletir o recarregamento pós-save.
-  const detail = products.find((p) => p.id === detailId) ?? null;
+  // Lê da lista (e não de um estado próprio) para o painel refletir o recarregamento pós-save. Produto
+  // fora da página carregada (aberto por link `?abrir=`) vem do catálogo completo (lazy).
+  const detail =
+    products.find((p) => p.id === detailId) ?? catalog?.find((p) => p.id === detailId) ?? null;
 
   // Enter-scan (leitor físico): destaca a linha do produto encontrado por alguns segundos.
   const [highlightId, setHighlightId] = useState<string | null>(null);
@@ -245,6 +247,26 @@ export default function ProductsPage() {
     setDetailId(id);
     void ensureCatalog().catch(() => {});
   }
+
+  // Link direto `/products?abrir=<id>` (ex.: lista do sino — cadastrados no caixa, ADR-041 §B): abre o
+  // painel do produto e tira o parâmetro da URL (recarregar não reabre).
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('abrir');
+    if (!id) return;
+    openDetail(id);
+    window.history.replaceState(null, '', window.location.pathname);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // Já nesta tela, o link não remonta a página: o sino avisa por evento de `window`.
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const id = (e as CustomEvent<string>).detail;
+      if (id) openDetail(id);
+    };
+    window.addEventListener('nexoloja:open-product', onOpen);
+    return () => window.removeEventListener('nexoloja:open-product', onOpen);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Busca no servidor com debounce (300 ms): recarrega a 1ª página a cada termo, sem baixar a base
   // inteira. Roda também na montagem (termo vazio = primeiros PAGE_SIZE em ordem alfabética).

@@ -9,7 +9,7 @@
  *
  * A chave inclui o `userId` — a cesta é pessoal (outro usuário no mesmo aparelho nunca vê a alheia).
  */
-import type { CartItem } from '@nexoloja/shared';
+import { persistableCartItems, type CartItem } from '@nexoloja/shared';
 
 export type { CartItem };
 
@@ -36,7 +36,9 @@ export function readCachedCart(userId: string): CartMirror | null {
 /** Persiste o espelho local da cesta do usuário (chamado a cada mudança, antes do POST debounced). */
 export function writeCachedCart(userId: string, items: CartItem[], updatedAt: number): void {
   try {
-    localStorage.setItem(keyFor(userId), JSON.stringify({ items, updatedAt }));
+    // Disponível infinito (produto sem controle de estoque) vira finito — senão o JSON grava `null` e o
+    // `POST /cart` (que lê este espelho) recusa a cesta.
+    localStorage.setItem(keyFor(userId), JSON.stringify({ items: persistableCartItems(items), updatedAt }));
   } catch {
     // localStorage indisponível (modo privado/SSR) — segue só com o estado em memória.
   }

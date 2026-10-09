@@ -57,6 +57,24 @@ export type CartItem = z.infer<typeof cartItemSchema>;
 /** Teto de linhas distintas na cesta (protege o free tier; muito acima de um carrinho real). */
 export const CART_MAX_ITEMS = 200;
 
+/**
+ * Disponível "sem limite" na forma persistível. Produto sem controle de estoque (ADR-040 §2) chega ao
+ * carrinho com `stockQty = Infinity` (`sellableQty`), que o JSON grava como `null` — e o `POST /cart`
+ * recusava a cesta inteira ("Expected number, received null"), sem o operador perceber. Um finito
+ * enorme mantém a trava sem barrar nada e passa no schema.
+ */
+export const UNLIMITED_STOCK_QTY = Number.MAX_SAFE_INTEGER;
+
+/** Prepara as linhas para gravar/enviar a cesta: troca o disponível infinito por `UNLIMITED_STOCK_QTY`. */
+export function persistableCartItems(items: readonly CartItem[]): CartItem[] {
+  const finite = (n: number) => (Number.isFinite(n) ? n : UNLIMITED_STOCK_QTY);
+  return items.map((i) => ({
+    ...i,
+    stockQty: finite(i.stockQty),
+    ...(i.pair ? { pair: { ...i.pair, partnerStockQty: finite(i.pair.partnerStockQty) } } : {}),
+  }));
+}
+
 /** Payload da cesta persistida (corpo do `POST /cart`). */
 export const cartSnapshotSchema = z.object({
   items: z.array(cartItemSchema).max(CART_MAX_ITEMS),

@@ -48,6 +48,7 @@ const PRODUCT_ALERT_KINDS: AlertKind[] = [
   'product-no-price',
   'product-no-ean',
   'product-no-category',
+  'product-pending-review',
   'stock-negative',
   'stock-below-min',
 ];
@@ -72,6 +73,9 @@ function productAlertPredicate(kind: AlertKind): Prisma.Sql {
       return Prisma.sql`("ean" IS NULL OR "ean" = '')`;
     case 'product-no-category':
       return Prisma.sql`"categoryId" IS NULL`;
+    case 'product-pending-review':
+      // Cadastro no caixa (ADR-041 §B): lista EXATA do que nasceu no PDV e o admin ainda não conferiu.
+      return Prisma.sql`"pendingReview"`;
     case 'stock-negative':
       // Saldo abaixo de zero ⇒ movimentação inconsistente (danger). É a fonte de verdade EXIBIDA.
       // ADR-040 §2: produto sem controle de estoque não entra em alerta de estoque.

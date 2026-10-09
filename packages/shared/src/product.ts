@@ -137,6 +137,12 @@ export const createProductSchema = z.object({
    * (ADR-010). É exclusivo da criação — não existe no update (ver `updateProductSchema`).
    */
   initialStock: z.number().nonnegative().optional(),
+  /**
+   * Cadastro no caixa (ADR-041 §B): `true` = o produto nasceu no PDV ("Cadastrar agora", só nome e
+   * preço) e entra no alerta "Cadastrados no caixa para revisar" até o admin conferir custo,
+   * categoria e estoque. Só de criação — a conferência usa o sinal `markReviewed` do update.
+   */
+  pendingReview: z.boolean().optional(),
 });
 export type CreateProductInput = z.infer<typeof createProductSchema>;
 
@@ -149,7 +155,7 @@ export type CreateProductInput = z.infer<typeof createProductSchema>;
  * gravado, nem desfazer a embalagem alternativa (EF-3) de um produto.
  */
 export const updateProductSchema = createProductSchema
-  .omit({ initialStock: true })
+  .omit({ initialStock: true, pendingReview: true })
   .partial()
   .extend({
     // `null` limpa o código de barras gravado (volta a casar só pelo sku).
@@ -179,5 +185,8 @@ export const updateProductSchema = createProductSchema
     // servidor traduz em `priceReviewPendingAt: null` (ver PATCH /products/:id). Assim uma edição
     // de estoque mínimo (que manda só `minStockQty`) nunca dispensa o aviso sem querer.
     dismissPriceReview: z.boolean().optional(),
+    // Cadastro no caixa (ADR-041 §B): `true` = o admin conferiu o produto nascido no PDV. NÃO é
+    // coluna — o servidor traduz em `pendingReview: false`, e só aceita de administrador.
+    markReviewed: z.boolean().optional(),
   });
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;

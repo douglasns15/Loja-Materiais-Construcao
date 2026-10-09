@@ -208,6 +208,12 @@ CSV é lido sem dependência (parser próprio simples, com aspas, `;` ou `,`, UT
    no cliente por `findProductByCode` (shared) sobre o catálogo da loja; decisão da contagem por `planOpeningCount`
    (core). Unidades fechadas (barra/rolo/pacote) ficam de fora desta tela — exigem o cadastro completo.
 2. **Fatia 2 — Cadastro no caixa (§B)** + alerta de revisão na Central de Alertas. Depende do `trackStock` (ADR-040).
+   **Implementada 2026-10-09:** estoque decidido como a recomendação — o produto nasce com `trackStock = false`
+   (não inventa saldo) + `pendingReview = true`, custo 0, SKU = código lido. Gatilho no PDV: busca com cara de
+   código (`looksLikeProductCode`) sem resultado ⇒ Enter do leitor/câmera abre o modal; a lista vazia mostra o botão.
+   Contrato: `POST /products` aceita `pendingReview`; `PATCH` aceita o sinal `markReviewed` (só admin, 403 aos
+   demais); alerta `product-pending-review` ("Cadastrados no caixa para revisar"). O admin abre o produto pela lista
+   do sino (`/products?abrir=<id>`) e confere com "Marcar como conferido" (salvar a edição também conta).
 3. **Fatia 3 — Planilha: modelo NexoLoja + CSV/XLSX + pré-visualização + importar** (casamento, estoque inicial, categorias).
 4. **Fatia 4 — Planilha: De-Para editável + perfis lembrados** (exportação de sistema anterior).
 5. **Futuro:** download automático de NF-e (§C, fase NFC-e); importar clientes/fornecedores; perfis prontos por

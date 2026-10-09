@@ -10,6 +10,7 @@ import {
   closedUnitTerms,
   formatQuoteNumber,
   formatWeight,
+  looksLikeProductCode,
   FULFILLMENT_TYPE_LABELS,
   type FulfillmentType,
   paymentMethodLabel,
@@ -76,6 +77,7 @@ import { OfflineSalesNotice } from '@/components/OfflineSalesNotice';
 import { BarcodeScanButton } from '@/components/BarcodeScanButton';
 import { MoneyInput } from '@/components/MoneyInput';
 import { CustomerQuickAddModal } from '@/components/CustomerQuickAddModal';
+import { CashierQuickAddModal, type CreatedProduct } from '@/components/CashierQuickAddModal';
 import {
   EMPTY_SCHEDULE,
   localDateTimeIso,
@@ -499,6 +501,8 @@ export default function VendaPage() {
   const [weighKey, setWeighKey] = useState<string | null>(null);
   const [selected, setSelected] = useState('');
   const [productSearch, setProductSearch] = useState('');
+  // Cadastro no caixa (ADR-041 §B): código desconhecido aberto no "Cadastrar agora" (null = fechado).
+  const [quickAddCode, setQuickAddCode] = useState<string | null>(null);
   const [qty, setQty] = useState('1');
   // Pagamento dividido: uma ou mais parcelas (forma + valor). A 1ª forma é a "principal" que
   // precifica o carrinho (ADR-016). O valor vazio numa linha assume o "resto" (ver resolvePaymentLines),
@@ -1233,8 +1237,11 @@ export default function VendaPage() {
     let group = 0;
     // ADR-020: quando a previsão é por item, anexa a data da linha (`itemPickupDates[key]`) ao(s)
     // item(ns) do payload. No par, os dois lados herdam a data da linha.
+    // `showSchedule` (e não o apelido `isScheduled`, declarado mais abaixo): o memo `totals` chama
+    // esta função ANTES dessa declaração no mesmo render — no dev isso lançava "Cannot access
+    // 'isScheduled' before initialization" com qualquer item no carrinho.
     const lineDate = (key: string) =>
-      isScheduled && perItemSchedule && itemPickupDates[key]
+      showSchedule && perItemSchedule && itemPickupDates[key]
         ? { scheduledPickupAt: itemPickupDates[key] }
         : {};
     // Parte do carrinho JÁ reprecificado (ADR-016) — o `unitPrice` daqui é o que será cobrado,
@@ -1400,9 +1407,10 @@ export default function VendaPage() {
 
   // `productId` padrão = seleção do dropdown; o scanner/Enter passa o id do único match da busca.
   // `mode` (EF-3): 'ALT' vende a embalagem fechada (rolo); default 'BASE' = venda de sempre.
-  function addToCart(productId: string = selected, mode: SaleUnitMode = 'BASE') {
+  // `override`: produto recém-criado no "Cadastrar agora" (ADR-041 §B), que ainda não está no estado.
+  function addToCart(productId: string = selected, mode: SaleUnitMode = 'BASE', override?: Product) {
     setError(null);
-    const p = products.find((x) => x.id === productId);
+    const p = override ?? products.find((x) => x.id === productId);
     const typedQty = Number(qty);
     if (!p || !(typedQty > 0)) {
       setError('Selecione um produto e uma quantidade válida.');
@@ -1553,7 +1561,35 @@ export default function VendaPage() {
     const only = filteredProducts.length === 1 ? filteredProducts[0] : undefined;
     if (only) {
       addToCart(only.id);
+    } else if (filteredProducts.length === 0 && online && looksLikeProductCode(productSearch)) {
+      // Código desconhecido (ADR-041 §B): leitor + Enter já abre o "Cadastrar agora".
+      setQuickAddCode(productSearch.trim());
     }
+  }
+
+  /**
+   * Produto criado no "Cadastrar agora" (ADR-041 §B): entra no catálogo do caixa (e no espelho
+   * offline) e vai direto para o carrinho com a quantidade digitada — a venda segue. Nasce sem
+   * controle de estoque, então o disponível é "Infinity" (`sellableQty`), como no `loadProducts`.
+   */
+  function onQuickCreated(raw: CreatedProduct) {
+    const created = raw as unknown as Product & { reservedQty?: string };
+    const p: Product = {
+      ...created,
+      stockQty: String(
+        sellableQty({
+          trackStock: created.trackStock,
+          stockQty: Number(created.stockQty),
+          reservedQty: Number(created.reservedQty ?? 0),
+        }),
+      ),
+    };
+    const next = [...products.filter((x) => x.id !== p.id), p];
+    setProducts(next);
+    void cacheProducts(next);
+    setQuickAddCode(null);
+    addToCart(p.id, 'BASE', p);
+    productSearchRef.current?.focus();
   }
 
   /**
@@ -1565,6 +1601,10 @@ export default function VendaPage() {
     const only = matches.length === 1 ? matches[0] : undefined;
     if (only) {
       addToCart(only.id);
+    } else if (matches.length === 0 && online && looksLikeProductCode(code)) {
+      // Código desconhecido lido pela câmera (ADR-041 §B): oferece o cadastro na hora.
+      setProductSearch(code);
+      setQuickAddCode(code.trim());
     } else {
       setProductSearch(code);
     }
@@ -2664,6 +2704,16 @@ export default function VendaPage() {
           {filteredProducts.length === 0 ? (
             <li className="px-3 py-6 text-center text-sm text-gray-500">
               {productSearch ? 'Nenhum produto encontrado.' : 'Nenhum produto cadastrado.'}
+              {/* Cadastro no caixa (ADR-041 §B): código desconhecido ⇒ cadastra com nome + preço e vende. */}
+              {online && looksLikeProductCode(productSearch) && (
+                <button
+                  type="button"
+                  onClick={() => setQuickAddCode(productSearch.trim())}
+                  className="mt-2 block w-full rounded-lg bg-emerald-600 px-3 py-2 font-semibold text-white hover:bg-emerald-700"
+                >
+                  Cadastrar agora “{productSearch.trim()}”
+                </button>
+              )}
             </li>
           ) : (
             filteredProducts.map((p) => {
@@ -3594,6 +3644,18 @@ export default function VendaPage() {
             />
           );
         })()}
+
+      {/* Cadastro no caixa (ADR-041 §B): código desconhecido ⇒ nome + preço ⇒ entra no carrinho. */}
+      {quickAddCode !== null && (
+        <CashierQuickAddModal
+          code={quickAddCode}
+          onCreated={onQuickCreated}
+          onClose={() => {
+            setQuickAddCode(null);
+            productSearchRef.current?.focus();
+          }}
+        />
+      )}
 
       {/* Cadastro rápido de cliente (a partir da busca do PDV): cria e já seleciona na venda. */}
       {customerModalName !== null && (

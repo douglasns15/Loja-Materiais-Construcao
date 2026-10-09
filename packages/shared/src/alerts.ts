@@ -19,6 +19,7 @@ export type AlertKind =
   | 'product-no-price' // salePrice = 0 → vendável a R$ 0 por engano
   | 'product-no-ean' // ean IS NULL → atrapalha o leitor no PDV
   | 'product-no-category' // categoryId IS NULL → suja relatórios/busca
+  | 'product-pending-review' // pendingReview → nasceu no caixa (ADR-041 §B), falta conferir
   | 'stock-negative' // stockQty < 0 → movimentação inconsistente (ADR-001)
   | 'stock-below-min' // minStockQty > 0 AND stockQty <= minStockQty → ruptura
   | 'cash-open-too-long' // CashSession OPEN há muito tempo → esqueceram de fechar
@@ -112,6 +113,14 @@ export const ALERT_META: Record<AlertKind, AlertMeta> = {
     roles: ADMIN,
     downloadable: true,
   },
+  'product-pending-review': {
+    kind: 'product-pending-review',
+    label: 'Cadastrados no caixa para revisar',
+    description: 'Nasceram no caixa só com nome e preço: confira custo, categoria e estoque e marque como conferido.',
+    severity: 'warn',
+    roles: ADMIN,
+    downloadable: true,
+  },
   'stock-negative': {
     kind: 'stock-negative',
     label: 'Estoque negativo',
@@ -165,6 +174,7 @@ export const alertProductsQuerySchema = z.object({
     'product-no-price',
     'product-no-ean',
     'product-no-category',
+    'product-pending-review',
     'stock-negative',
     'stock-below-min',
   ]),

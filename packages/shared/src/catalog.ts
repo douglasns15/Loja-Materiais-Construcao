@@ -90,6 +90,16 @@ export function findProductByCode<T extends { sku: string; ean?: string | null }
 }
 
 /**
+ * `true` quando o texto da busca do PDV parece um **código** (lido pelo leitor ou digitado), e não um
+ * nome: sem espaços, com pelo menos 4 caracteres e algum dígito. É o gatilho do "Cadastrar agora"
+ * (ADR-041 §B) — busca por nome sem resultado não oferece cadastro (não há código para o SKU).
+ */
+export function looksLikeProductCode(query: string): boolean {
+  const q = query.trim();
+  return q.length >= 4 && !/\s/.test(q) && /\d/.test(q);
+}
+
+/**
  * Normaliza um NCM para 8 dígitos (a NF-e às vezes traz com pontos: "2523.29.10"). Devolve `null`
  * se, após limpar, não sobrarem exatamente 8 dígitos — evita gravar NCM malformado.
  */
