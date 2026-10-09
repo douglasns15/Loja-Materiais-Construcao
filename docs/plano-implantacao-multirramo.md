@@ -2,7 +2,7 @@
 
 > **Estado em 2026-10-09:** **#6 cadastro em sequência** (ADR-041 §A) **implementada e validada no navegador** (dev
 > local contra a API de produção, loja de teste de alimentos) — tela `/products/sequencia`, só web, sem rota nova nem
-> migration. **Deploy da web pendente** (autorização do Owner). Próxima: **#7 cadastro no caixa** (ADR-041 §B).
+> migration. **NO AR** (web `3e49c8d1`, deploy autorizado pelo Owner). Próxima: **#7 cadastro no caixa** (ADR-041 §B).
 >
 > **Estado em 2026-10-08:** **Produção Fatia 3 — desmembramento** (peça → cortes, ADR-043) **NO AR** (API `2102b938`,
 > web `b776da67`; migration `0045` `productions.kind` aprovada e aplicada; commits `793e063`, `7f104a4`) e **E2E
@@ -122,7 +122,7 @@ A loja de alimentos **não consegue vender hoje**:
 | 5d | **Produção com ficha técnica — Fatia 1** (ficha, tela Produção, P-0001, último custo, módulo `RECIPES`) — **NO AR + E2E validado 2026-10-02** (commits `0164bb9`, `947522e`, `dbc0e5a`) | **Sim** — `0044` aprovada e aplicada | 043 |
 | 5e | **Produção — Fatia 2** (perda/sobra + resumo do dia + histórico por dia) — **NO AR + E2E validado 2026-10-07** (API `674f35a3`, web `f94f5c7f`; commits `9118d94`, `5e0801d`) | Não | 043 |
 | 5f | **Produção — Fatia 3** (desmembramento: peça → cortes, rateio pelo valor de venda, cortes sugeridos pelos últimos 5 desmembramentos) — **NO AR + E2E validado 2026-10-08** (API `2102b938`, web `b776da67`; commits `793e063`, `7f104a4`) | **Sim** — `0045` (`productions.kind`) aprovada e aplicada; sem tabela de modelo | 043 |
-| 6 | **Cadastro em sequência** (bipa → ficha do catálogo → preço + qtd → Enter; código já cadastrado ⇒ contagem de abertura) — **implementada + validada no navegador 2026-10-09**, deploy web pendente | Não | 041 §A |
+| 6 | **Cadastro em sequência** (bipa → ficha do catálogo → preço + qtd → Enter; código já cadastrado ⇒ contagem de abertura) — **NO AR + validada no navegador 2026-10-09** (web `3e49c8d1`; commit `97a99e1`) | Não | 041 §A |
 | 7 | **Cadastro no caixa** + alerta de revisão | Não (a confirmar) | 041 §B |
 | 8 | Etiqueta de balança (`scaleCode` + parser + PDV) | (usa a #2) | 040 F3 |
 | 9 | Importador de planilha (modelo + De-Para) | Não | 041 §1–§6 |

@@ -6162,3 +6162,5 @@ Tela nova `/products/sequencia` (só web; reusa `POST /products` + `POST /stock/
 Dados de teste criados na loja: "Leite Condensado Integral moça" (EAN 7891000100103, 15 un) e "Teste sequencia
 granel" (`TSTSEQ-01`, 2,35 kg). **Observação:** a primeira consulta de um EAN fora do cache levou ~7 s (fonte externa);
 dali em diante é instantânea (cache global).
+
+**Deploy (2026-10-09, autorizado pelo Owner):** web `3e49c8d1` (100%); smoke pós-deploy ✅; BUILD_ID local = HTML ao vivo; `/products/sequencia` responde 200.
