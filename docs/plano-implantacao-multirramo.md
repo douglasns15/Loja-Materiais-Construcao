@@ -2,7 +2,7 @@
 
 > **Estado em 2026-10-09 (tarde):** **#7 cadastro no caixa** (ADR-041 §B) **implementada e validada no navegador**
 > (web de dev + **API local** contra o banco real, loja de teste de alimentos) — sem migration (`pendingReview` já
-> existia, `0041`). **Deploy API → web pendente** (autorização do Owner). Corrigidos no caminho 2 bugs antigos do PDV
+> existia, `0041`). **NO AR** (API `7d56b1c0`, web `68d3dd0e`; deploy autorizado pelo Owner). Corrigidos no caminho 2 bugs antigos do PDV
 > (ver registro de testes). Próxima: **#8 etiqueta de balança** (ADR-040 F3).
 >
 > **Estado em 2026-10-09:** **#6 cadastro em sequência** (ADR-041 §A) **implementada e validada no navegador** (dev
@@ -128,7 +128,7 @@ A loja de alimentos **não consegue vender hoje**:
 | 5e | **Produção — Fatia 2** (perda/sobra + resumo do dia + histórico por dia) — **NO AR + E2E validado 2026-10-07** (API `674f35a3`, web `f94f5c7f`; commits `9118d94`, `5e0801d`) | Não | 043 |
 | 5f | **Produção — Fatia 3** (desmembramento: peça → cortes, rateio pelo valor de venda, cortes sugeridos pelos últimos 5 desmembramentos) — **NO AR + E2E validado 2026-10-08** (API `2102b938`, web `b776da67`; commits `793e063`, `7f104a4`) | **Sim** — `0045` (`productions.kind`) aprovada e aplicada; sem tabela de modelo | 043 |
 | 6 | **Cadastro em sequência** (bipa → ficha do catálogo → preço + qtd → Enter; código já cadastrado ⇒ contagem de abertura) — **NO AR + validada no navegador 2026-10-09** (web `3e49c8d1`; commit `97a99e1`) | Não | 041 §A |
-| 7 | **Cadastro no caixa** + alerta de revisão — **implementada + validada no navegador 2026-10-09**, deploy API→web pendente | Não (`pendingReview` já na `0041`) | 041 §B |
+| 7 | **Cadastro no caixa** + alerta de revisão — **NO AR + validada no navegador 2026-10-09** (API `7d56b1c0`, web `68d3dd0e`; commit `6e223b9`) | Não (`pendingReview` já na `0041`) | 041 §B |
 | 8 | Etiqueta de balança (`scaleCode` + parser + PDV) | (usa a #2) | 040 F3 |
 | 9 | Importador de planilha (modelo + De-Para) | Não | 041 §1–§6 |
 | 10 | Usuário multi-loja (5 fatias da ADR-014) | **Sim** (3 migrations) | 014 |

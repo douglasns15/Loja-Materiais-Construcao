@@ -6194,3 +6194,5 @@ coberto pelo guard no `PATCH` (`isAdminRole`).
 
 Dados de teste criados na loja: "Refrigerante Coca Cola Original Garrafa 2l" (EAN 7894900027013, R$ 11,99, sem controle de
 estoque, já conferido) e uma venda de 2 unidades (R$ 23,98, Dinheiro).
+
+**Deploy (2026-10-09, autorizado pelo Owner):** Prisma Client regenerado e schema embutido conferido (idêntico ao real); `wrangler deploy --dry-run` ok; API `7d56b1c0` (anterior `2102b938`, guardada p/ rollback) — smoke: `/health` 200, rotas protegidas 401, preflight `PATCH` 204; web `68d3dd0e` — smoke pós-deploy ✅, BUILD_ID local = HTML ao vivo.
