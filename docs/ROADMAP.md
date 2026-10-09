@@ -15,25 +15,28 @@
 >   caixa para revisar" e "Marcar como conferido" (só admin). Venda em produção validada após o deploy (Operador).
 >   Corrigiu 2 bugs antigos do PDV: tela quebrava no modo dev com item no carrinho (`isScheduled`) e o espelho do
 >   carrinho era recusado com produto sem controle de estoque (`Infinity` → `null`).
-> - **#8 Etiqueta de balança** (ADR-040 F3) — **NO AR** (API `8932d7a3`, web `b17c25cd`; commits `beefb53` +
+> - **#8 Etiqueta de balança** (ADR-040 F3) — **NO AR** (API `8932d7a3`, web `dbc04cb7`; commits `beefb53` +
 >   `07a6ceb` revisão do formato + `7f5030d` fix da etiqueta digitada). Venda validada em produção. PLU no cadastro, leitura no PDV (layout preço: o total impresso manda), formato
 >   **parametrizado por loja** no painel (PLU 4/5/6, valor 5/6, dígito do valor; padrão `2 CCCC 0 VVVVVV D` + preço)
 >   com "Testar etiqueta". Sem migration. **Exibição da etiqueta com preço — opção C do Owner** (preço/kg do
->   cadastro + selo "🏷️ etiqueta" na tela e no cupom; valor gravado segue o ajustado): **implementada e testada no
->   web de dev, commitada, DEPLOY WEB PENDENTE**.
+>   cadastro + selo "🏷️ etiqueta" na tela e no cupom; valor gravado segue o ajustado): **NO AR** (web `dbc04cb7`,
+>   commit `6083920`), conferida em produção (linha "0,402 kg · R$ 24,90/kg 🏷️ etiqueta · R$ 10,00").
+>
+> **Versões ativas ao fim da sessão (conferidas no `wrangler deployments status`, 100%):** API `8932d7a3`, web
+> `dbc04cb7`. Nada pendente de deploy; working tree limpo.
 > - **Documentação:** criada a [documentação funcional](DOCUMENTACAO-FUNCIONAL.md); técnica atualizada (§2 glossário,
 >   §8.2, §9 leitura no PDV e etiqueta). Regra combinada com o Owner: toda entrega atualiza técnica **e** funcional.
 >
 > **ONDE PARAMOS / PRÓXIMOS PASSOS (2026-10-09, fim da sessão):**
-> 1. **Deploy do web com a opção C** (só web; pedir autorização ao Owner). Depois, numa venda real com etiqueta,
->    conferir o **cupom impresso**: "(etiqueta)" no nome e coluna Unit. com o preço do cadastro (não foi testado).
+> 1. ~~Deploy do web com a opção C~~ feito (web `dbc04cb7`). Falta só, numa venda real com etiqueta, conferir o
+>    **cupom impresso**: "(etiqueta)" no nome e coluna Unit. com o preço do cadastro (não foi testado).
 > 2. **Próxima entrega: #9 planilha** — ADR-041 §1–§6 e Fatia 3: modelo NexoLoja para enviar ao cliente; leitura
 >    CSV/XLSX no navegador com `read-excel-file` (dependência já aprovada); pré-visualização novo/atualiza/erro;
 >    `POST /products/import` em lotes de ~100, idempotente (casa por `gtinKey` → código interno); "Estoque atual"
 >    vira movimento "Carga inicial (planilha)" pela diferença; `AuditEvent IMPORT_PRODUCTS`. Rota nova ⇒ §8.2 + doc
 >    funcional (regra 8). Reusar `findProductByCode` (shared) e o padrão de funções puras com testes.
 > 3. Quando a balança chegar: bipar uma etiqueta no "Testar etiqueta" do painel da plataforma e escolher o formato.
-> 4. **Push** dos commits locais em `main` (Owner): de `97a99e1` até o último desta sessão.
+> 4. **Push** dos commits locais em `main`: o Owner faz ao fim desta sessão (de `97a99e1` até o último).
 > 5. **Como testar com a API local** (quando a mudança mexe na API): `wrangler dev` exige
 >    `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE` — usar um script que leia o `DATABASE_URL` de
 >    `apps/api/.dev.vars` e suba o wrangler com essa variável; apontar o web de dev com
