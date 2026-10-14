@@ -6297,3 +6297,16 @@ categoria, mínimo e nome — todos ✅; campos vazios preservados; saldo do pro
 
 **Achado (fora do escopo):** a 1ª chamada após o deploy voltou 401 com token válido (wall 5.001 ms) — o JWKS do Supabase
 estoura o timeout padrão de 5 s do `jose` numa instância nova do Worker; a seguinte passou. Tarefa separada sugerida.
+
+## 401 falso na 1ª requisição após deploy (auth com chaves locais) — 2026-10-14
+
+Achado no teste da #9 (1ª chamada após o deploy da API voltou 401 com token válido, wall 5.001 ms = timeout do JWKS
+no `jose`). Correção: var `SUPABASE_JWKS` (verificação sem rede, remoto só como reserva) + 503 quando não dá para obter
+as chaves. Unitários: `apps/api/src/lib/supabaseToken.test.ts` — 7 ✅ (válido só com chaves locais e Supabase "fora do
+ar"; adulterado/expirado/audiência errada/sem sub/lixo/outro emissor ⇒ 401; rotação de chave ⇒ remoto confere;
+chave desconhecida + remoto fora ⇒ 503; var ausente/malformada ⇒ remoto). API local + token real do Supabase: 200;
+adulterado 401 em 23 ms, sem busca remota; nenhum aviso de JWKS no log.
+
+**Deploy (2026-10-14):** API `38a04bb8` (anterior `fcca9ce2`). **Validação em produção:** 1ª chamada `/me` logo após o
+deploy = **200 em 1,4 s** (antes: 401 em 5 s); mais 5 `/me` e `/products` 200; token adulterado 401 (96 ms); sem
+token 401. ✅

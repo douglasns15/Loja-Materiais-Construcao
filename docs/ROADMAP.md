@@ -28,7 +28,7 @@
 >   isolate novo (~1,2 s; passando dos 5 s do `jose`, virava "Token inválido" com token válido). Agora as chaves
 >   públicas ficam na var `SUPABASE_JWKS` do `wrangler.toml` (verificação sem rede; remoto só como reserva para
 >   rotação de chave) e falha ao obter as chaves responde **503** (tente de novo), não 401. Primeiros testes da API
->   (`supabaseToken.test.ts`, 7 casos de segurança). Validado com a API local + token real.
+>   (`supabaseToken.test.ts`, 7 casos de segurança). **NO AR** (API `38a04bb8`): 1ª chamada após o deploy = 200 em 1,4 s.
 > - **Ferramenta:** `apps/api/scripts/dev-local.mjs` + configuração **"api"** no `.claude/launch.json` sobem a API
 >   local (`wrangler dev` com a connection string do `.dev.vars`) — substitui o passo manual do item 5 abaixo.
 >
