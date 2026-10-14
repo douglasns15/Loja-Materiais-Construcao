@@ -6373,3 +6373,7 @@ Verdade por loja (sem RLS): Mercadinho 17 produtos / Loja Demo 119 / Maria 702.
 `is_platform_admin`; id inexistente ⇒ `[]`. `supabase_auth_admin` com `SELECT` em `tenant_memberships` + política
 `auth_admin_read_memberships` ✅ (não deu para executar o hook COMO esse papel — o usuário do banco não pode `SET ROLE`
 para ele; a prova é o token real abaixo). `migrate deploy` ✅; regressão depois = ensaio ✅; `migrate diff` vazio ✅.
+**Login real em produção (2026-10-14 19:31, Owner logou o `owner_kg` no navegador do app):** token emitido pelo Supabase
+Auth já com `tenant_ids` = [Demo Mercardinho, Loja Demo] + `tenant_id`/`user_role` da loja de casa (OWNER) ✅ — prova
+de que o hook roda como `supabase_auth_admin` e lê os vínculos; seletor ⇒ Loja Demo (MANAGER), chip no topo, produtos
+carregados ✅.

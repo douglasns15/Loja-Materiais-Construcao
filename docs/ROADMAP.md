@@ -15,7 +15,7 @@
 >   leitura ⇒ token como antes) e as **31 políticas** de leitura por loja passaram a "uma das lojas do token"
 >   (`current_tenant_ids()`, que cai na loja única para tokens antigos). Ensaio em transação desfeita pegou um erro de
 >   SQL antes de aplicar (corrigido); regressão de isolamento antes/depois: token antigo, 1 loja, sem loja e anônimo
->   **idênticos**; token de 2 lojas vê as duas e nenhuma terceira. Sem deploy (só banco). Volta de emergência pronta
+>   **idênticos**; token de 2 lojas vê as duas e nenhuma terceira. **Login real em produção validado** (token novo com as 2 lojas). Sem deploy (só banco). Volta de emergência pronta
 >   (`packages/db/scripts/rollback-0047.sql`). **Próxima: Fatia 4** (convite com aceite + Super Usuário concede +
 >   sair de uma loja).
 > - **#10 Usuário multi-loja (ADR-014) — Fatia 2 NO AR** (API `e41cb88b`, web `fee5d11e`; sem migration): loja ativa
