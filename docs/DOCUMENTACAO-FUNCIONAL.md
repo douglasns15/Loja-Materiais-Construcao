@@ -270,7 +270,8 @@ cliente paga exatamente o que está impresso). Loja que nunca configurou usa ess
 - **Formato com preço:** vale o **valor impresso**. O sistema calcula o peso (total ÷ preço por kg, arredondado ao
   grama) só para baixar o estoque. A linha do carrinho e o cupom mostram o **preço por kg do cadastro** com o selo
   **🏷️ etiqueta** (no cupom, "(etiqueta)"), e o total é o impresso. Ex.: etiqueta de R$ 10,00 de um produto a
-  R$ 24,90/kg ⇒ "0,402 kg · R$ 24,90/kg 🏷️ etiqueta · R$ 10,00".
+  R$ 24,90/kg ⇒ "0,402 kg · R$ 24,90/kg 🏷️ etiqueta · R$ 10,00". No cupom de 80 mm a linha sai como
+  "Teste sequencia granel (etiqueta) | 0,402 kg | R$ 24,90 | R$ 10,00" (conferido em 2026-10-14).
   - **Por que a conta "não fecha" no centavo:** 0,402 kg × R$ 24,90 = R$ 10,01. O peso exato seria 0,40160… kg,
     mas o estoque anda em gramas. A diferença (1 a 3 centavos; maior em etiquetas de valor pequeno) fica absorvida
     no preço gravado na venda, ajustado na 4ª casa (R$ 24,8756/kg) para quantidade × preço = valor impresso. O selo
@@ -320,3 +321,4 @@ plataforma.
 | 2026-10-09 | Etiqueta digitada: botão "Lançar etiqueta" no lugar do "Cadastrar agora" (achado do Owner no teste em produção). |
 | 2026-10-09 | Etiqueta com preço: tela e cupom mostram o preço/kg do cadastro + selo "etiqueta" (opção C do Owner). |
 | 2026-10-14 | Importar planilha (#9): modelo NexoLoja, .xlsx/.csv, pré-visualização, importação idempotente e CSV de erros. |
+| 2026-10-14 | Cupom com etiqueta conferido; colunas Qtd/Unit./Total do cupom 80 mm não grudam nem quebram mais. |
