@@ -276,7 +276,6 @@ model Tenant {
   updatedAt            DateTime       @updatedAt
 
   // Relações
-  users               User[]
   memberships         TenantMembership[] // Vínculos usuário↔loja (ADR-014)
   modules             TenantModule[]
   products            Product[]
@@ -330,24 +329,24 @@ model TenantModule {
 /// ADR-005: as credenciais são propriedade do Supabase Auth (auth.users), não desta tabela.
 /// `id` é fornecido pela aplicação e DEVE ser igual ao `auth.users.id` do Supabase Auth.
 /// O vínculo formal (FK cross-schema para auth.users) será configurado na Fase 2 (Auth/RLS).
+/// IDENTIDADE da pessoa (= auth.users.id). Desde a Fatia 5 do multi-loja (ADR-014, migration 0049) não guarda loja nem
+/// papel: o acesso e o papel POR LOJA vivem em `TenantMembership`.
 model User {
   id        String   @id @db.Uuid // = Supabase Auth user id (auth.users.id)
-  tenantId  String   @db.Uuid
   name      String   @db.VarChar(100)
-  email     String   @db.VarChar(150)
+  /// E-mail da identidade — ÚNICO no sistema (ADR-014 Fatia 5: uma pessoa, um login, N lojas). Gravado em
+  /// minúsculas pela API (convite/plataforma normalizam).
+  email     String   @unique @db.VarChar(150)
   phone     String?  @db.VarChar(20) // Telefone pessoal do usuário (opcional; só dígitos)
-  role      UserRole @default(CASHIER)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   orders       Order[]
   cashSessions CashSession[]
   cart         Cart? // Cesta persistente do PDV (ADR-021): uma por usuário
   memberships  TenantMembership[] // Lojas a que a pessoa tem acesso (ADR-014)
 
-  @@unique([tenantId, email])
   @@map("users")
 }
 

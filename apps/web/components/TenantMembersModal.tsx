@@ -19,7 +19,6 @@ type Member = {
   status: 'ACTIVE' | 'PENDING';
   isActive: boolean;
   invitedByName: string | null;
-  isHomeStore: boolean;
 };
 
 export function TenantMembersModal({
@@ -118,7 +117,6 @@ export function TenantMembersModal({
                     <div className="font-medium">{m.name}</div>
                     <div className="text-xs text-gray-500">
                       {m.email}
-                      {m.isHomeStore ? ' · loja principal' : ''}
                     </div>
                   </td>
                   <td className="py-2">{m.role === 'OWNER' ? 'Dono' : STORE_ROLE_LABELS[m.storeRole]}</td>

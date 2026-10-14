@@ -69,16 +69,17 @@ async function main() {
       create: { name: tenantName, slug: tenantSlug },
     });
 
+    // Identidade (ADR-005) + vínculo de DONO com a loja (ADR-014: loja e papel vivem no vínculo).
     await prisma.user.upsert({
       where: { id: userId },
-      update: { tenantId: tenant.id, role: 'OWNER', email, isActive: true },
-      create: {
-        id: userId, // = auth.users.id (ADR-005)
-        tenantId: tenant.id,
-        name: email.split('@')[0],
-        email,
-        role: 'OWNER',
-      },
+      update: { email, isActive: true },
+      create: { id: userId, name: email.split('@')[0], email }, // id = auth.users.id
+      select: { id: true },
+    });
+    await prisma.tenantMembership.upsert({
+      where: { userId_tenantId: { userId, tenantId: tenant.id } },
+      update: { role: 'OWNER', status: 'ACTIVE', isActive: true },
+      create: { userId, tenantId: tenant.id, role: 'OWNER', status: 'ACTIVE', isActive: true },
     });
 
     console.log('\n✅ Bootstrap concluído:');

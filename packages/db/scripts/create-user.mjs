@@ -76,16 +76,18 @@ async function main() {
       throw new Error(`Loja com slug "${tenantSlug}" não encontrada (rode o bootstrap antes).`);
     }
 
+    // Identidade (ADR-005) + vínculo com a loja no papel pedido (ADR-014). Rodar de novo com OUTRA loja dá à mesma
+    // pessoa acesso às duas (usuário multi-loja) — não "move" a pessoa.
     await prisma.user.upsert({
       where: { id: userId },
-      update: { tenantId: tenant.id, role, email, isActive: true },
-      create: {
-        id: userId, // = auth.users.id (ADR-005)
-        tenantId: tenant.id,
-        name: email.split('@')[0],
-        email,
-        role,
-      },
+      update: { email, isActive: true },
+      create: { id: userId, name: email.split('@')[0], email }, // id = auth.users.id
+      select: { id: true },
+    });
+    await prisma.tenantMembership.upsert({
+      where: { userId_tenantId: { userId, tenantId: tenant.id } },
+      update: { role, status: 'ACTIVE', isActive: true },
+      create: { userId, tenantId: tenant.id, role, status: 'ACTIVE', isActive: true },
     });
 
     console.log('\n✅ Usuário pronto:');

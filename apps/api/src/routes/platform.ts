@@ -179,15 +179,12 @@ platform.post('/tenants', async (c) => {
     // Cria/recupera o admin no Auth e dispara o e-mail de convite.
     const adminId = await inviteAuthUser(c.env, adminEmail, redirectTo, { store_name: name });
 
-    // Um `auth.users` mapeia para uma única linha em `users` (ADR-005): se o e-mail já
-    // pertence a alguma loja, não sequestrar para a nova.
+    // Multi-loja (ADR-014): a identidade é uma só. E-mail que JÁ tem conta (ex.: o dono abrindo a 2ª loja) vira
+    // Dono da loja nova por VÍNCULO, sem criar outra conta — antes era recusado ("já vinculado a uma loja").
     const linked = await prisma.user.findUnique({
       where: { id: adminId },
-      select: { tenantId: true },
+      select: { id: true },
     });
-    if (linked) {
-      return c.json({ ok: false, error: 'Este e-mail de admin já está vinculado a uma loja.' }, 409);
-    }
 
     const result = await prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
@@ -203,15 +200,21 @@ platform.post('/tenants', async (c) => {
           data: seedCategories.map((catName) => ({ tenantId: tenant.id, name: catName })),
         });
       }
-      const admin = await tx.user.create({
-        data: {
-          id: adminId, // = auth.users.id (ADR-005)
-          tenantId: tenant.id,
-          name: adminName ?? adminEmail.split('@')[0] ?? adminEmail,
-          email: adminEmail,
-          role: 'OWNER', // primeiro Admin da loja nova é o dono
-        },
+      if (!linked) {
+        await tx.user.create({
+          data: {
+            id: adminId, // = auth.users.id (ADR-005)
+            name: adminName ?? adminEmail.split('@')[0] ?? adminEmail,
+            email: adminEmail,
+          },
+          select: { id: true },
+        });
+      }
+      // Loja e papel vivem no vínculo (ADR-014, Fatia 5): o primeiro Admin da loja nova é o dono.
+      await tx.tenantMembership.create({
+        data: { userId: adminId, tenantId: tenant.id, role: 'OWNER', status: 'ACTIVE', isActive: true },
       });
+      const admin = { id: adminId, email: adminEmail, role: 'OWNER' as const };
       await tx.auditEvent.create({
         data: {
           tenantId: tenant.id,
@@ -224,6 +227,7 @@ platform.post('/tenants', async (c) => {
             slug,
             adminEmail,
             adminRole: 'OWNER',
+            adminHadAccount: Boolean(linked),
             segments,
             modules: presetModules,
             seedCategories: seedCategories.length,
@@ -449,7 +453,7 @@ platform.get('/tenants/:id/members', async (c) => {
         status: true,
         isActive: true,
         invitedByName: true,
-        user: { select: { name: true, email: true, tenantId: true } },
+        user: { select: { name: true, email: true } },
       },
       orderBy: { createdAt: 'asc' },
     });
@@ -464,8 +468,6 @@ platform.get('/tenants/:id/members', async (c) => {
         status: r.status,
         isActive: r.isActive,
         invitedByName: r.invitedByName,
-        // Loja "de casa" da pessoa (ainda `users.tenantId` até a Fatia 5) — ajuda o suporte a entender o vínculo.
-        isHomeStore: r.user.tenantId === c.req.param('id'),
       })),
     });
   } catch (err) {

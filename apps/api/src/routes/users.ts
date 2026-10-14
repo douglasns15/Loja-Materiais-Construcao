@@ -21,8 +21,8 @@ users.use('*', requireAdmin);
 /**
  * Multi-loja (ADR-014, Fatia 4): a gestão é POR LOJA — opera sobre o VÍNCULO (`tenant_memberships`) da pessoa com a
  * loja ativa, nunca sobre a identidade (`users`), que pode ter acesso a outras lojas. Papel e ativação valem só para
- * esta loja; "remover" tira só desta loja. Não grava mais `users.role/isActive` (o vínculo é a fonte do acesso; o
- * espelho `users → vínculo de casa` da 0046 continua para os outros caminhos até a Fatia 5).
+ * esta loja; "remover" tira só desta loja. Não lê nem grava `users.tenantId/role` (removidos na Fatia 5 — o vínculo é
+ * a única fonte de loja e papel).
  */
 
 /** Mensagem de bloqueio do `membershipChangeBlocked` (core). */
@@ -223,7 +223,7 @@ users.delete('/:id', async (c) => {
 /**
  * Convida alguém para ESTA loja (ADR-008 fatia 2 + ADR-014 §4). Regra anti-sequestro (`planMembershipInvite`, core):
  * - e-mail SEM conta ⇒ convite do Supabase Auth (e-mail com link de definir senha) + identidade com esta loja de
- *   casa; definir a senha é o consentimento (vínculo ACTIVE, pelo espelho da 0046);
+ *   casa; definir a senha é o consentimento (vínculo ACTIVE criado junto — desde a Fatia 5, sem o espelho da 0046);
  * - conta EXISTENTE ⇒ vínculo **PENDING**: a pessoa vê "Aceitar/Recusar" ao entrar; só então acessa a loja.
  * Resposta SEMPRE igual ("convite enviado"), exista a conta ou não — o admin não descobre quem já tem conta nem em
  * quais lojas está. Requer `SUPABASE_SERVICE_ROLE_KEY` (para o caso de e-mail novo).
@@ -295,7 +295,7 @@ users.post('/invite', async (c) => {
       return sent();
     }
 
-    // E-mail novo: convite do Auth + identidade com esta loja de casa (vínculo ACTIVE pelo gatilho da 0046).
+    // E-mail novo: convite do Auth + identidade + vínculo ACTIVE com esta loja (criado explicitamente abaixo).
     const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { name: true } });
     const authUserId = await inviteAuthUser(c.env, email, redirectTo, {
       store_name: tenant?.name ?? 'sua loja',
@@ -311,14 +311,18 @@ users.post('/invite', async (c) => {
           update: { role, status: 'PENDING', isActive: true, invitedByName: actorName },
         });
       } else {
+        // Identidade nova + vínculo ACTIVE com esta loja (definir a senha é o consentimento). Desde a Fatia 5 o
+        // vínculo é criado aqui, explícito — `users` não guarda mais loja/papel.
         await tx.user.create({
           data: {
             id: authUserId, // = auth.users.id (ADR-005)
-            tenantId,
             name: name ?? email.split('@')[0] ?? email,
             email,
-            role,
           },
+          select: { id: true },
+        });
+        await tx.tenantMembership.create({
+          data: { userId: authUserId, tenantId, role, status: 'ACTIVE', isActive: true, invitedByName: actorName },
         });
       }
       await tx.auditEvent.create({

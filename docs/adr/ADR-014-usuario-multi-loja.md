@@ -1,6 +1,6 @@
 # ADR-014 — Usuário multi-loja (membership + loja ativa da sessão)
 
-- **Status:** **Aceito** (2026-09-30) — aprovado como está (papel por loja, loja ativa por header, convite com
+- **Status:** **Aceito** (2026-09-30) — **IMPLEMENTADO POR COMPLETO em 2026-10-14 (Fatias 1–5)** — aprovado como está (papel por loja, loja ativa por header, convite com
   consentimento, RLS-B). **Executa por último** na fila da implantação multirramo
   (`docs/plano-implantacao-multirramo.md` §5, item 10); as 3 migrations serão apresentadas de novo, uma a uma,
   quando chegar a vez (regra 1).
@@ -276,7 +276,13 @@ Migrations **aditivas** e faseadas (padrão do projeto: `migrate diff` + `migrat
    não variar com a existência da conta; regras puras `planMembershipInvite` + `membershipChangeBlocked` (core, com
    testes); "Sair desta loja" só com 2+ lojas e nunca como Dono. Cuidado do dual-source: um script que regrave
    `users.role` faz o gatilho da 0046 reativar o vínculo de casa — some na Fatia 5.
-5. **Fatia 5 — Cleanup (migration 3).** Remover `users.tenantId`/`role` quando todo o read-path estiver na
+5. **Fatia 5 — Cleanup (migration 3).** **Feita 2026-10-14** em DOIS passos com deploy no meio, para nenhum fluxo
+   quebrar: `0048` (colunas opcionais, gatilho ignora usuário sem loja, RLS de `users` por vínculo ACEITO) → API que não
+   lê/grava mais as colunas e cria o vínculo explícito (convite, onboarding, scripts; `move-user-to-new-tenant.mjs`
+   removido; onboarding com e-mail que já tem conta passou a dar Dono por vínculo em vez de 409) → `0049` (hook só com
+   `tenant_ids`, `current_tenant_ids()` só da lista, sem `current_tenant_id()`, sem gatilho, sem `users.tenantId/role`,
+   e-mail único). Ensaios em transação desfeita, inclusive do `rollback-0049.sql` (restaurou 10/10 idênticos).
+   Remover `users.tenantId`/`role` quando todo o read-path estiver na
    membership. Só após validação ponta a ponta.
 
 Cada fatia com seus gates (core/tsc/build) e — nas que tocam banco — aprovação da migration antes de codar.
@@ -285,15 +291,15 @@ Cada fatia com seus gates (core/tsc/build) e — nas que tocam banco — aprova�
 
 ## Action Items (após aprovação)
 
-1. [ ] **Owner aprova o modelo** (tabela `TenantMembership`, papel por loja, Opção **RLS-B**, concessão "ambos"
+1. [x] **Owner aprova o modelo** (tabela `TenantMembership`, papel por loja, Opção **RLS-B**, concessão "ambos"
        com consentimento) e o **fatiamento**.
-2. [ ] **Fatia 1** — migration `TenantMembership` + `MembershipStatus` + RLS + backfill (aprovar migration).
-3. [ ] **Fatia 2** — read-path loja ativa (`x-active-tenant`), `GET /me` com memberships, login/seletor + switcher,
+2. [x] **Fatia 1** — migration `TenantMembership` + `MembershipStatus` + RLS + backfill (aprovar migration).
+3. [x] **Fatia 2** — read-path loja ativa (`x-active-tenant`), `GET /me` com memberships, login/seletor + switcher,
        cache offline por loja. Gates + deploy + E2E.
-4. [ ] **Fatia 3** — hook `tenant_ids` + políticas RLS `= ANY(...)` (aprovar migration) + regressão de isolamento.
-5. [ ] **Fatia 4** — concessão "ambos" + consentimento `PENDING`/anti-hijack + auditoria. Gates + deploy + E2E.
-6. [ ] **Fatia 5** — cleanup de `users.tenantId`/`role` (aprovar migration).
-7. [ ] Atualizar `ROADMAP.md`, registro de testes e o índice das ADRs a cada fatia.
+4. [x] **Fatia 3** — hook `tenant_ids` + políticas RLS `= ANY(...)` (aprovar migration) + regressão de isolamento.
+5. [x] **Fatia 4** — concessão "ambos" + consentimento `PENDING`/anti-hijack + auditoria. Gates + deploy + E2E.
+6. [x] **Fatia 5** — cleanup de `users.tenantId`/`role` (migrations `0048` + `0049`, 2026-10-14).
+7. [x] Atualizar `ROADMAP.md`, registro de testes e o índice das ADRs a cada fatia.
 
 ---
 

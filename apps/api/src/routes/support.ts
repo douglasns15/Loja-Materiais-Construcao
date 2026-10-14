@@ -112,7 +112,8 @@ support.get('/:tenantId/overview', async (c) => {
       await Promise.all([
         prisma.product.count({ where: { tenantId, deletedAt: null } }),
         prisma.customer.count({ where: { tenantId, deletedAt: null } }),
-        prisma.user.count({ where: { tenantId } }),
+        // Multi-loja (ADR-014): quem acessa a loja = vínculos ativos e aceitos.
+        prisma.tenantMembership.count({ where: { tenantId, status: 'ACTIVE', isActive: true } }),
         prisma.cashSession.findFirst({
           where: { tenantId, closedAt: null },
           orderBy: { openedAt: 'desc' },

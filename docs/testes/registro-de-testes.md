@@ -6408,3 +6408,18 @@ um e-mail real; o caminho é o mesmo de antes da Fatia 4).
 **Painel da plataforma — teste do Owner (2026-10-14):** "Membros" ⇒ conceder acesso ao `caixa@lojademo.com` e revogar
 ✅ (Super Usuário). Achado do Owner: a tabela de lojas cortava a coluna de ações (página limitada a `max-w-5xl`).
 Corrigido: página até `max-w-screen-2xl` e botões de ação empilhados sem quebra de texto (só layout, web).
+
+## Multi-loja Fatia 5 — migrations 0048 + 0049, `users` só identidade (ADR-014) — 2026-10-14
+
+Dados conferidos antes: 10 usuários, 10 e-mails distintos e minúsculos; todo usuário com vínculo "de casa" e papel
+idêntico. **0048** (colunas opcionais + gatilho ignora sem loja + RLS de `users` por vínculo ACEITO): ensaio em transação
+= regressão idêntica ✅; aplicada; `migrate diff` vazio ✅. **Código** (passo 2): convite/onboarding/scripts criam identidade
++ vínculo explícito; teste no banco (transação desfeita): identidade sem loja ⇒ gatilho não cria vínculo; vínculo
+explícito ⇒ 1, sem duplicar; hook ⇒ `tenant_ids` certo ✅; scripts `inspect-*` rodados contra o banco ✅; core 526, API 7,
+`tsc` API/web ✅; deploy API `590296e3` + web `86f735c2` ✅; produção: `/me` (OWNER no Mercadinho, 2 lojas),
+`/me/stores`, `/users`, `PATCH /me` ✅. **0049**: ensaio em transação (0049 + regressão + `rollback-0049.sql` na mesma
+transação + ROLLBACK): `users` = id,name,email,isActive,createdAt,updatedAt,phone; hook owner_kg = 2 lojas, Maria = 1,
+Super Usuário = `[]` + `is_platform_admin`; regressão B/C/D/E idênticas, A (token sem lista, anterior à 0047) sem dados de
+loja — esperado; **rollback restaurou `users.tenantId/role` 10/10 idênticos** ✅. Aplicada + client regenerado + API
+`c04e20f8` em seguida; `migrate diff` vazio ✅; regressão real = ensaio ✅; produção: `/me` OWNER no Mercadinho e MANAGER na
+Loja Demo, `/me/stores`, `/users`, `/products` (110 na Loja Demo), `PATCH /me` ✅.

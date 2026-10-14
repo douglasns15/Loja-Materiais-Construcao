@@ -13,14 +13,20 @@ const prisma = new PrismaClient();
 try {
   const tenant = await prisma.tenant.findUnique({
     where: { slug },
-    select: { id: true, name: true, users: { select: { email: true, role: true, isActive: true } } },
+    // Membros = vínculos com a loja (ADR-014), não `users`.
+    select: {
+      id: true,
+      name: true,
+      memberships: { select: { role: true, status: true, isActive: true, user: { select: { email: true } } } },
+    },
   });
   if (!tenant) {
     console.log(`Loja "${slug}" não encontrada.`);
   } else {
     console.log(`\n=== ${tenant.name} (${slug}) ===`);
-    for (const u of tenant.users) console.log(`  ${u.role.padEnd(8)} ${u.email}  ativo=${u.isActive}`);
-    console.log(`  OWNERs: ${tenant.users.filter((u) => u.role === 'OWNER').length}`);
+    for (const m of tenant.memberships)
+      console.log(`  ${m.role.padEnd(8)} ${m.user.email}  ativo=${m.isActive}  ${m.status === 'PENDING' ? '(convite pendente)' : ''}`);
+    console.log(`  OWNERs: ${tenant.memberships.filter((m) => m.role === 'OWNER').length}`);
   }
 } finally {
   await prisma.$disconnect();

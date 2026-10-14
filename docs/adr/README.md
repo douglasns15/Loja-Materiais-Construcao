@@ -32,7 +32,7 @@ Um *Architecture Decision Record* é um documento curto e versionado que captura
 | [ADR-011](./ADR-011-fila-de-sincronizacao-offline.md) | Fila de sincronização offline (IndexedDB → Supabase) | Aceito |
 | [ADR-012](./ADR-012-cold-start-offline-first-leitura.md) | Cold-start / offline-first de leitura (cache de caixa, catálogo e navegação) | Aceito |
 | [ADR-013](./ADR-013-venda-em-unidade-alternativa.md) | Venda em unidade alternativa (segundo preço: rolo fechado × por metro) | Aceito (Opção A) — implementado/validado |
-| [ADR-014](./ADR-014-usuario-multi-loja.md) | Usuário multi-loja (membership + loja ativa da sessão) | Aceito (2026-09-30) — executa por último na implantação multirramo; 3 migrations a apresentar na vez |
+| [ADR-014](./ADR-014-usuario-multi-loja.md) | Usuário multi-loja (membership + loja ativa da sessão) | Aceito (2026-09-30) — **implementado por completo 2026-10-14** (Fatias 1–5; migrations 0046–0049) |
 | [ADR-015](./ADR-015-produto-agregado-venda-em-par.md) | Produto agregado: venda em par com preço promocional (parafuso + bucha) | Aceito — implementado/validado |
 | [ADR-016](./ADR-016-preco-e-margem-por-forma-de-pagamento.md) | Preço e margem por forma de pagamento (taxa da maquininha + acréscimo por produto) | Aceito — implementado/validado |
 | [ADR-017](./ADR-017-unidade-fechada-como-principal-barra.md) | Unidade fechada como principal (barra/rolo) + venda por metro | Aceito — implementado/validado |

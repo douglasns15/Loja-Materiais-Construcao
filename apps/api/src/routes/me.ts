@@ -138,7 +138,8 @@ me.post('/stores/:tenantId/leave', requireIdentity, async (c) => {
 // Demais rotas de `/me`: perfil na LOJA ATIVA.
 me.use('/', requireAuth);
 
-const SELECT = { id: true, name: true, email: true, phone: true, role: true } as const;
+// Identidade da pessoa; o papel vem do vínculo da loja ativa (ADR-014), nunca de `users`.
+const SELECT = { id: true, name: true, email: true, phone: true } as const;
 
 /** Perfil do usuário autenticado — usado pelo front para RBAC e tela "Meus dados". */
 me.get('/', async (c) => {
@@ -215,7 +216,7 @@ me.patch('/', async (c) => {
 
   try {
     const prisma = getPrisma(c);
-    await prisma.user.update({ where: { id: userId }, data: parsed.data });
+    await prisma.user.update({ where: { id: userId }, data: parsed.data, select: { id: true } });
     const user = await prisma.user.findUnique({ where: { id: userId }, select: SELECT });
     // Papel da LOJA ATIVA (ADR-014), como no `GET /me`.
     const role = c.get('role');

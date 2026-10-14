@@ -136,7 +136,8 @@ O isolamento entre lojas é garantido **no banco**, não só na aplicação — 
     USING ("tenantId" = ANY ((SELECT public.current_tenant_ids())::uuid[]));
   ```
 
-  `current_tenant_ids()` cai na loja única (`tenant_id`) quando o token não tem a lista. O `(SELECT …)::uuid[]` faz a
+  Desde a `0049` (Fatia 5) o token traz **só** `tenant_ids` — `current_tenant_ids()` lê a lista (sem ela, nenhuma loja) e
+  a antiga `current_tenant_id()` não existe mais. O `(SELECT …)::uuid[]` faz a
   lista ser calculada uma vez por consulta (sem o cast, o Postgres trata como subconsulta e falha). A **loja ativa**
   (uma só) é imposta pela API; o RLS garante "só as lojas da pessoa".
 - **API Hono:** valida o JWT em middleware, extrai `tenant_id`/`role` e injeta o contexto em toda operação Prisma; nunca confia em `tenantId` vindo do corpo da requisição.

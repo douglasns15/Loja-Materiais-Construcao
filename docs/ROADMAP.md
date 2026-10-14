@@ -10,6 +10,13 @@
 >
 > **Última atualização:** 2026-10-14 — **#9 Importar planilha (ADR-041 Fatia 3) + início do #10 multi-loja.**
 >
+> - **#10 Usuário multi-loja (ADR-014) — CONCLUÍDO (Fatia 5 feita):** migrations **`0048`** (colunas legadas opcionais,
+>   gatilho ignora usuário sem loja, RLS de `users` por vínculo ACEITO) → API `590296e3` (não lê/grava mais
+>   `users.tenantId/role`; convite/onboarding/scripts criam o vínculo explícito; onboarding com conta existente vira Dono
+>   por vínculo) → **`0049`** (hook só `tenant_ids`, sem `current_tenant_id()`, sem gatilho de espelho, sem
+>   `users.tenantId/role`, e-mail único) + API `c04e20f8` com o client novo. Ensaios em transação desfeita (inclusive do
+>   `rollback-0049.sql`: restaurou 10/10), regressão de isolamento real = ensaio, API em produção OK (papel por loja,
+>   lojas, usuários, produtos, editar dados). `users` agora é só a identidade.
 > - **#10 Usuário multi-loja (ADR-014) — Fatia 4 NO AR** (API `b4b93cbf`, web `8baaa080`; sem migration): convite a
 >   conta existente vira **pendente** com Aceitar/Recusar (faixa no topo + seletor, que não entra direto com convite);
 >   resposta do convite sempre igual (anti-enumeração); Configurações → Usuários por **vínculo** da loja (pendente só com

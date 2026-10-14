@@ -23,10 +23,9 @@ try {
         id: true,
         email: true,
         name: true,
-        role: true,
         isActive: true,
-        tenantId: true,
-        tenant: { select: { name: true, slug: true } },
+        // Lojas da pessoa (ADR-014): uma linha por vínculo.
+        memberships: { select: { role: true, status: true, isActive: true, tenant: { select: { name: true, slug: true } } } },
       },
     });
     console.log(`\n=== ${email} ===`);
@@ -44,11 +43,12 @@ try {
       ]);
       console.log(`  id:        ${u.id}`);
       console.log(`  nome:      ${u.name}`);
-      console.log(`  papel:     ${u.role}   ativo: ${u.isActive}`);
-      console.log(`  loja:      ${u.tenant?.name} (${u.tenant?.slug}) [${u.tenantId}]`);
+      console.log(`  conta ativa: ${u.isActive}`);
+      for (const m of u.memberships)
+        console.log(`  loja:      ${m.tenant.name} (${m.tenant.slug}) — ${m.role} ${m.status}${m.isActive ? '' : ' (desativado)'}`);
       console.log(`  histórico: orders=${orders} cashSessions=${cashSessions} stockMovements=${stockMovements} cashMovements=${cashMovements} auditEvents=${auditEvents}`);
-      const isOwner = u.role === 'OWNER';
-      console.log(`  OWNER da loja? ${isOwner ? 'SIM (remoção travada por padrão)' : 'não'}`);
+      const owned = u.memberships.filter((m) => m.role === 'OWNER').map((m) => m.tenant.name);
+      console.log(`  DONO de: ${owned.length ? owned.join(', ') + ' (remoção travada por padrão)' : '—'}`);
     }
   }
 } finally {

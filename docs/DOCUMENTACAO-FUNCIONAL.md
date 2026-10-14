@@ -330,7 +330,8 @@ sempre.
   Recusar"**. Só depois de **Aceitar** a loja entra na sua lista. Se você ainda não usa o NexoLoja, chega o e-mail de
   sempre para definir a senha.
 - **Equipe NexoLoja (implantação):** pelo painel da plataforma, em **Membros** da loja, damos o acesso direto a uma
-  conta que já existe (sem o passo de aceite) e retiramos ao fim.
+  conta que já existe (sem o passo de aceite) e retiramos ao fim. Ao **criar uma loja nova** para alguém que já usa o
+  NexoLoja (ex.: o dono abrindo a segunda loja), essa pessoa vira a **Dona da loja nova** com o mesmo login.
 - **Sair de uma loja:** na escolha da loja, **"Sair desta loja"** (só aparece com 2 ou mais lojas e nunca onde você é
   o Dono). O que você registrou na loja continua lá.
 
@@ -382,4 +383,5 @@ plataforma.
 | 2026-10-14 | Importar planilha (#9): modelo NexoLoja, .xlsx/.csv, pré-visualização, importação idempotente e CSV de erros. |
 | 2026-10-14 | Cupom com etiqueta conferido; colunas Qtd/Unit./Total do cupom 80 mm não grudam nem quebram mais. |
 | 2026-10-14 | Usuário com mais de uma loja (multi-loja, Fatia 2): escolha da loja no login e "Trocar de loja". |
+| 2026-10-14 | Multi-loja, Fatia 5: criar loja nova para quem já tem conta (vira Dono com o mesmo login). |
 | 2026-10-14 | Multi-loja, Fatia 4: convite com aceite, "Sair desta loja", Usuários por loja (pendente só com e-mail; remover da loja), Membros no painel da plataforma. |
