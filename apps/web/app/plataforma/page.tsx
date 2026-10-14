@@ -246,7 +246,8 @@ export default function PlataformaPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="mx-auto max-w-screen-2xl">
+      {/* Largura da tela (até 2xl): a tabela de lojas tem 8 colunas e cortava a de ações no max-w-5xl. */}
       <h1 className="mb-1 text-2xl font-bold">Lojas</h1>
       <p className="mb-6 text-sm text-gray-600">
         Gestão da plataforma — criar lojas e controlar quais estão ativas.
@@ -383,7 +384,7 @@ export default function PlataformaPage() {
               <th className="px-4 py-2">Última atividade</th>
               <th className="px-4 py-2">Status</th>
               <th className="px-4 py-2">Ramo e módulos</th>
-              <th className="px-4 py-2 text-right">Ação</th>
+              <th className="px-4 py-2 text-center">Ação</th>
             </tr>
           </thead>
           <tbody>
@@ -467,7 +468,8 @@ export default function PlataformaPage() {
                     )}
                   </td>
                   <td className="px-4 py-2">
-                    <div className="flex justify-end gap-2">
+                    {/* Ações empilhadas e sem quebra de texto: a coluna fica estreita e nunca corta os botões. */}
+                    <div className="flex flex-col items-stretch gap-1.5 whitespace-nowrap">
                       <button
                         onClick={() => setMembersOf(t)}
                         className="rounded-lg border border-indigo-300 px-3 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-50"

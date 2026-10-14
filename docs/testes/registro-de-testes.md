@@ -6404,3 +6404,7 @@ convite **só com o e-mail** (nome oculto), PENDING ✅; **Cancelar convite** �
 {plan: CREATE_PENDING}` + `REVOKE_MEMBERSHIP {pendingInvite}` no Mercadinho ✅. Nenhum e-mail disparado (conta existente).
 **Não testado:** painel da plataforma "Membros" (exige login de Super Usuário) e convite de e-mail **novo** (dispararia
 um e-mail real; o caminho é o mesmo de antes da Fatia 4).
+
+**Painel da plataforma — teste do Owner (2026-10-14):** "Membros" ⇒ conceder acesso ao `caixa@lojademo.com` e revogar
+✅ (Super Usuário). Achado do Owner: a tabela de lojas cortava a coluna de ações (página limitada a `max-w-5xl`).
+Corrigido: página até `max-w-screen-2xl` e botões de ação empilhados sem quebra de texto (só layout, web).
