@@ -6253,3 +6253,30 @@ não teve mudança desde `8932d7a3` (nenhum arquivo em `apps/api`/`packages` alt
 produção (`owner_kg`): etiqueta `2012300010007` + Enter ⇒ "0,402 kg · R$ 24,90/kg 🏷️ etiqueta · R$ 10,00" ✅ (item
 removido do carrinho depois). Cupom impresso segue não testado.
 
+
+## Importar planilha (ADR-041 Fatia 3, entrega #9) — 2026-10-14
+
+Ambiente: web de dev (`localhost:3000`) + **API local** (`wrangler dev` via `apps/api/scripts/dev-local.mjs`) contra o
+banco real, login do admin `owner_kg` (Wesley) na loja **Demo Mercardinho** (módulos `SCALE_LABEL` + `RECIPES`, sem
+obra). Arquivos entregues à tela por "arrastar e soltar" simulado. Unitários: shared `productImport.test.ts` (+26) —
+shared 140 ✅, core 517 ✅; `tsc` API/web ✅; `next build` ✅ (`/products/importar` 6,75 kB).
+
+| Caso | Entrada | Resultado |
+|---|---|---|
+| CSV `;` com 12 linhas + 1 em branco | `teste-importacao.csv` | ✅ 11 linhas (branca pulada); colunas reconhecidas; 3 novos · 2 atualiza · 1 sem mudança · 5 erros |
+| Atualiza por EAN | Leite Condensado: preço 8,99→9,49, custo 0→6,20, categoria "Mercearia > Doces", estoque 15→20 | ✅ gravado; Entrada +5 "Carga inicial (planilha)"; "Doces" criada sob a "Mercearia" existente |
+| Sem controle de estoque | Coca 2L com estoque 10 | ✅ "Sem mudança" + aviso "estoque ignorado"; nenhum movimento |
+| Atualiza por código interno | `TSTSEQ-01` com unidade UN e mínimo 2 | ✅ mínimo 0→2; aviso "unidade mantida (kg)" |
+| Novos | arroz (EAN, 30 un), queijo (kg 4,250, PLU 456, "Frios > Queijos"), sorvete (sem código, S/N = N) | ✅ criados; Entradas 30 e 4,25 com custo; SKU gerado `TESTE-PLANILHA-SORVETE-POTE-2L`; categorias criadas |
+| Erros | preço "abc", EAN com DV errado, EAN repetido, milheiro sem módulo de obra, PLU 123 já usado | ✅ todos com o motivo certo; linhas puladas |
+| Auditoria | — | ✅ 1 `AuditEvent IMPORT_PRODUCTS` (created 3, updated 2, stockMovements 3, stockAdjustments 1) |
+| Reimportar o mesmo arquivo | — | ✅ 0 novos · 0 atualiza · 6 sem mudança — "Nada para importar" |
+| Lote reenviado direto à API (retry) | 3 linhas que eram novo/atualiza | ✅ 200, 3× `unchanged`, nenhum movimento |
+| `.xlsx` | modelo vazio / modelo preenchido (EAN e preço como número, "R$ 32,90" texto, "kg") | ✅ vazio recusado com mensagem; preenchido: 2 novos lidos e importados |
+| CSV de erros | 2 linhas com erro | ✅ cabeçalho original + coluna "Erro" ("Linha N: motivo"), `;`, aspas escapadas; nome digitado aparece na linha com erro (ajuste feito no teste) |
+
+Observação: lote local levou 6–8 s (API local fala direto com o Supabase, sem Hyperdrive) — medir em produção.
+Dados de teste criados na Demo Mercardinho: "Teste planilha arroz 5kg" (`7899990000014`), "Teste planilha queijo
+mussarela" (`TPL-QJ`, PLU 456), "Teste planilha sorvete pote 2L", "Teste xlsx feijão 1kg" (`7899990000021`), "Teste xlsx
+linguiça" (`TXL-LING`); categorias Frios, Frios > Queijos, Sorvetes, Mercearia > Doces; Leite Condensado agora R$ 9,49,
+custo 6,20, estoque 20, categoria Mercearia > Doces; `TSTSEQ-01` com mínimo 2.

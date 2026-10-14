@@ -29,5 +29,6 @@ export * from './alerts';
 export * from './tenant';
 export * from './modules';
 export * from './outbox';
+export * from './productImport';
 export * from './format';
 export * from './roles';

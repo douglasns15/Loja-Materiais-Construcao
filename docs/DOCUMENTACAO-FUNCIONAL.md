@@ -10,7 +10,7 @@
 > **Cobertura:** começa pelas entregas de 2026-10-09 (carga do catálogo e balança). As funcionalidades anteriores
 > entram aqui conforme forem tocadas — ver [Pendências de cobertura](#pendências-de-cobertura).
 >
-> **Última atualização:** 2026-10-09.
+> **Última atualização:** 2026-10-14.
 
 ---
 
@@ -19,6 +19,7 @@
 1. [Carga do catálogo](#1-carga-do-catálogo)
    - 1.1 [Cadastro em sequência](#11-cadastro-em-sequência)
    - 1.2 [Cadastro no caixa ("Cadastrar agora")](#12-cadastro-no-caixa-cadastrar-agora)
+   - 1.3 [Importar planilha](#13-importar-planilha)
 2. [Venda por peso e balança](#2-venda-por-peso-e-balança)
    - 2.1 [Etiqueta de balança](#21-etiqueta-de-balança)
 3. [Pendências de cobertura](#pendências-de-cobertura)
@@ -30,7 +31,8 @@
 
 A loja não precisa ter 100% do catálogo no primeiro dia. A implantação cadastra os itens que mais giram pelo
 **cadastro em sequência**; o restante se cadastra sozinho nas primeiras semanas, conforme aparece no caixa, pelo
-**cadastro no caixa**. Itens com nota fiscal eletrônica podem entrar pela importação de NF-e (Estoque → Importar NF-e).
+**cadastro no caixa**. Itens com nota fiscal eletrônica podem entrar pela importação de NF-e (Estoque → Importar NF-e),
+e um catálogo pronto (planilha do lojista ou exportação do sistema anterior) entra pela **importação de planilha**.
 Decisão: [ADR-041](adr/ADR-041-importacao-de-catalogo-por-planilha.md).
 
 ### 1.1 Cadastro em sequência
@@ -121,6 +123,82 @@ administrador.
 - Se o código já existe na loja mas não aparece no caixa (produto **inativo**), a janela avisa e não cadastra de
   novo — o administrador confere em Produtos.
 - Um **operador não consegue marcar como conferido** (só administrador).
+
+### 1.3 Importar planilha
+
+**Para que serve:** cadastrar ou atualizar **muitos produtos de uma vez** a partir de uma planilha — a que o lojista
+preencheu em casa no **modelo NexoLoja** ou a exportação do sistema que ele usava antes. Também serve para corrigir
+preços em massa ou fazer a contagem de abertura do estoque.
+
+**Quem usa:** **só o administrador** da loja (na implantação acompanhada, quem implanta com o acesso de administrador).
+
+**Onde fica:** **Produtos → botão "⤒ Importar planilha"** (endereço `/products/importar`). Precisa de internet.
+
+**Passo a passo**
+
+1. **Baixar o modelo** (botão "⤓ Baixar modelo (.xlsx)") e mandar ao lojista por WhatsApp ou e-mail. A aba
+   **Produtos** tem as colunas certas (com lista de escolha em Unidade e em "Controla estoque") e a aba
+   **Instruções** explica cada coluna, com exemplos. Já tem a planilha do sistema anterior? Pode usar direto.
+2. **Enviar a planilha:** clicar em "Escolher arquivo ou arrastar aqui" (aceita **.xlsx** e **.csv**, até 5.000
+   produtos e 10 MB).
+3. **Conferir as colunas:** a tela mostra quais colunas foram reconhecidas e quais serão ignoradas. As colunas são
+   reconhecidas **pelo título** — "Preço", "Vlr. Venda" e "Preço de venda" valem a mesma coisa; uma planilha sem
+   coluna de nome usa a "Descrição" como nome. Faltando **Nome** ou **Preço de venda**, a tela pede para acertar o
+   título e enviar de novo.
+4. **Pré-visualizar:** cada linha aparece como **Novo**, **Atualiza** (com o que muda: "Preço de venda: 8,99 → 9,49"),
+   **Sem mudança** ou **Erro** (com o motivo). O resumo no topo conta tudo ("3 novos · 2 atualizações · 1 sem mudança ·
+   5 com erro"). Os filtros mostram cada grupo.
+5. **Importar:** o botão "Importar N produtos" grava os novos e as atualizações, com barra de progresso (não feche a
+   tela). As linhas com erro são **puladas**.
+6. **Corrigir os erros:** "Baixar linhas com erro (CSV)" gera um arquivo só com essas linhas e uma coluna **Erro** com
+   o motivo. Corrija ali mesmo e envie esse arquivo — o resto já entrou.
+
+**Colunas do modelo** (só Nome e Preço de venda são obrigatórias)
+
+| Coluna | Como preencher |
+|---|---|
+| Nome | Nome do produto como aparece no caixa. |
+| Preço de venda | `24,90`, `R$ 24,90` ou `24.90`. |
+| Unidade | `UN` (padrão), `KG`, `L`. Aceita apelidos: "Quilo", "Litro", "Unid". Lojas de obra: `M`, `M2`, `M3`, `MIL`, `SC`. |
+| Código de barras | O EAN da embalagem (8, 12, 13 ou 14 dígitos). O dígito verificador é conferido. |
+| Código interno | Código da loja. Vazio: usa o código de barras; sem nenhum código, é **gerado a partir do nome** (ex.: `SORVETE-DE-CHOCOLATE`). |
+| Nome popular, Marca, Descrição | Texto livre. |
+| Categoria | `Sorvetes` ou `Sorvetes > Premium` (até 2 níveis). **Criada** se não existir; maiúsculas e acentos não importam para achar a que já existe. |
+| Custo | Quanto a loja paga por unidade. |
+| Estoque atual | Quantidade na loja hoje (ver regras de estoque). |
+| Estoque mínimo | Ponto de reposição (alerta de estoque baixo). |
+| Controla estoque (S/N) | `N` para o que não se conta (produção do dia, serviço). Vazio = `S`. |
+| Código na balança | O PLU, só para loja que usa etiqueta de balança. |
+| NCM | 8 dígitos (pontos são aceitos: `1006.30.21`). |
+
+**Regras**
+
+| Situação | O que o sistema faz |
+|---|---|
+| Como acha o produto que já existe | Pelo **código de barras** (EAN-13 e a forma de 14 dígitos da caixa valem igual) → senão pelo **código interno** → linha sem nenhum código: pelo **nome exato** (sem diferença de maiúscula/acento). |
+| Reimportar a mesma planilha | **Não duplica**: o que já entrou aparece como "Sem mudança". |
+| Célula vazia em produto existente | **Não apaga** o dado do cadastro — só o que está preenchido é atualizado. |
+| Produto novo com Estoque atual | Cria o produto e lança uma **Entrada "Carga inicial (planilha)"** com a quantidade (custo da planilha). |
+| Produto existente com Estoque atual | Vira **contagem de abertura**: lança só a **diferença** para o saldo, com o motivo "Carga inicial (planilha)". Ex.: saldo 15, planilha 20 ⇒ entrada de 5. Igual ao saldo ⇒ nada. |
+| Produto sem controle de estoque | O Estoque atual é ignorado (aviso na linha). |
+| Custo muda e a planilha não traz preço | O produto ganha o aviso **"custo ajustado, confira o preço"** (como na NF-e). Planilha com preço = preço já revisado. |
+| Unidade ou "Controla estoque" diferente do cadastro | **Não muda** (mudaria o sentido do saldo e do histórico) — aviso na linha; troque editando o produto. |
+| Código de barras com dígito errado | Erro: "não é um código de barras válido". Se for um código da própria loja, use a coluna Código interno. |
+| Mesmo código (ou mesmo nome, sem código) em duas linhas | A segunda vira erro: "repetido na linha N". |
+| Dois produtos do cadastro com o mesmo nome e linha sem código | Erro: informe o código para saber qual atualizar. |
+| Código interno ou PLU de outro produto | Erro com o nome do produto dono do código. |
+| Unidade de obra (milheiro, saco, metro) em loja sem o módulo de obra | Erro: unidade não disponível para o ramo da loja. |
+| Código na balança em loja sem etiqueta de balança | Ignorado (aviso na linha). |
+| Produto novo sem custo | Custo **zero** — aparece no sino como "Produtos sem custo". |
+
+**Limitações**
+
+- Produtos vendidos em **barra, rolo ou pacote fechado** não entram pela planilha (precisam do tamanho da embalagem) —
+  use o cadastro completo em Produtos.
+- Planilhas **.xls** antigas: abrir no Excel e salvar como .xlsx ou .csv. Só a **primeira aba** é lida.
+- O casamento das colunas é automático; escolher à mão qual coluna é qual (De-Para) e lembrar o perfil de um sistema
+  anterior ficam para a próxima etapa.
+- Não importa foto, preço por forma de pagamento, par (parafuso + bucha) nem embalagem alternativa.
 
 ---
 
@@ -241,3 +319,4 @@ plataforma.
 | 2026-10-09 | Criação: cadastro em sequência (#6), cadastro no caixa (#7), etiqueta de balança (#8) com formato parametrizado. |
 | 2026-10-09 | Etiqueta digitada: botão "Lançar etiqueta" no lugar do "Cadastrar agora" (achado do Owner no teste em produção). |
 | 2026-10-09 | Etiqueta com preço: tela e cupom mostram o preço/kg do cadastro + selo "etiqueta" (opção C do Owner). |
+| 2026-10-14 | Importar planilha (#9): modelo NexoLoja, .xlsx/.csv, pré-visualização, importação idempotente e CSV de erros. |

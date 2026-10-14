@@ -8,7 +8,23 @@
 > custo fixo do Prisma por requisição já passa de 10 ms). **Correção: Owner assinou o Workers Paid** (teto 30 s) —
 > pós-assinatura 130 requisições reais + 30 de stress, 0 falhas. Sem mudança de código. Ver ADR-005, adendo 2026-10-14.
 >
-> **Última atualização:** 2026-10-09 — **Carga do catálogo e balança: entregas #6, #7 e #8 do plano multirramo.**
+> **Última atualização:** 2026-10-14 — **#9 Importar planilha (ADR-041 Fatia 3).**
+>
+> - **#9 Importar planilha** — **implementada e validada no navegador** (web de dev + API local contra o banco real,
+>   loja Demo Mercardinho); **deploy PENDENTE**. Produtos → "⤒ Importar planilha" (só admin): modelo NexoLoja
+>   (`public/modelos/modelo-produtos-nexoloja.xlsx`, gerado por `apps/web/scripts/gerar-modelo-planilha.mjs`, sem
+>   dependência), `.xlsx` (`read-excel-file@9.3.10`, fixa) ou `.csv` lidos no navegador, colunas casadas por apelido,
+>   pré-visualização Novo/Atualiza/Sem mudança/Erro, importação em lotes de 100 com progresso e CSV das linhas com
+>   erro. Rota nova **`POST /products/import`** (admin; relê o cadastro e roda o mesmo `planProductImport` do shared
+>   numa transação; Entrada/contagem "Carga inicial (planilha)" pela diferença; categorias criadas; 1 `AuditEvent
+>   IMPORT_PRODUCTS` por importação). **Sem migration.** Idempotência validada na tela e no servidor (lote reenviado ⇒
+>   "sem mudança"). Decisões tomadas na implementação (para o Owner conferir): unidade e "controla estoque" não mudam
+>   produto existente (aviso); barra/rolo/pacote fora; produto sem código ganha SKU do nome e é reconhecido pelo nome
+>   na reimportação. De-Para editável + perfis = Fatia 4. Testes: shared 140 (+26), core 517.
+> - **Ferramenta:** `apps/api/scripts/dev-local.mjs` + configuração **"api"** no `.claude/launch.json` sobem a API
+>   local (`wrangler dev` com a connection string do `.dev.vars`) — substitui o passo manual do item 5 abaixo.
+>
+> **Antes:** 2026-10-09 — **Carga do catálogo e balança: entregas #6, #7 e #8 do plano multirramo.**
 > Roteiro: [plano-implantacao-multirramo.md](plano-implantacao-multirramo.md). Como cada uma funciona (visão de quem
 > usa): [DOCUMENTACAO-FUNCIONAL.md](DOCUMENTACAO-FUNCIONAL.md) — **criada nesta data**.
 >

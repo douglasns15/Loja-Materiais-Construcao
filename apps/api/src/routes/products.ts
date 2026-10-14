@@ -1,9 +1,19 @@
 import { Hono } from 'hono';
 import { createPrismaClient, Prisma } from '@nexoloja/db';
-import { calcMarginPercent } from '@nexoloja/core';
-import { createProductSchema, isAdminRole, updateProductSchema } from '@nexoloja/shared';
+import { calcMarginPercent, planOpeningCount } from '@nexoloja/core';
+import {
+  createProductSchema,
+  importNameKey,
+  isAdminRole,
+  planProductImport,
+  productImportBatchSchema,
+  updateProductSchema,
+  type ImportCategory,
+  type ImportExistingProduct,
+  type ImportLineResult,
+} from '@nexoloja/shared';
 import { type Env, getConnectionString, getPrisma, getTenantId } from '../lib/request';
-import { requireAuth } from '../middleware/auth';
+import { requireActiveTenant, requireAdmin, requireAuth } from '../middleware/auth';
 
 /**
  * Escapa os curingas do `LIKE`/`ILIKE` (`%`, `_`, `\`) para que o token seja tratado como
@@ -339,6 +349,258 @@ products.post('/', async (c) => {
     }
     console.error('POST /products falhou:', err);
     return c.json({ ok: false, error: 'Falha ao criar o produto.' }, 500);
+  }
+});
+
+/** Motivo da Entrada/ajuste gerado pelo "Estoque atual" da planilha (ADR-041 §4). */
+const IMPORT_STOCK_REASON = 'Carga inicial (planilha)';
+
+/**
+ * Importação de catálogo por planilha (ADR-041 §1–§6, Fatia 3) — recebe UM LOTE (≤100 linhas já
+ * interpretadas no navegador) e o grava numa transação. **Só admin.**
+ *
+ * A API não confia na pré-visualização: relê o cadastro DENTRO da transação e roda o MESMO
+ * `planProductImport` (shared) — casamento por código de barras → código interno → nome, célula vazia
+ * não apaga. Por isso é idempotente: reenviar o lote (retry de rede) dá "sem mudança" no que já entrou.
+ *
+ * - Produto novo: criado com o "Estoque atual" como Entrada "Carga inicial (planilha)" (ADR-001).
+ * - Produto existente: atualiza só o que mudou; o estoque vira contagem de abertura pela DIFERENÇA
+ *   (`planOpeningCount`, relida com `FOR UPDATE` para uma venda simultânea não ser apagada). Custo
+ *   mudou sem preço na planilha ⇒ acende o aviso de revisão de preço (mesma regra da NF-e).
+ * - Categoria "A > B" criada se não existir.
+ * - Um único `AuditEvent` `IMPORT_PRODUCTS` por importação (`importId`), somado lote a lote (regra 6).
+ *
+ * Gating de módulo é só de tela (ADR-039 §3): aqui tudo é aceito. Lote com conflito de código
+ * concorrente (P2002) volta 409 e não grava nada.
+ */
+products.post('/import', requireAdmin, requireActiveTenant, async (c) => {
+  const tenantId = getTenantId(c);
+  if (!tenantId) {
+    return c.json({ ok: false, error: 'Header x-tenant-id ausente ou inválido.' }, 400);
+  }
+  const connectionString = getConnectionString(c.env);
+  if (!connectionString) {
+    return c.json({ ok: false, error: 'Sem conexão com o banco.' }, 500);
+  }
+
+  const parsed = productImportBatchSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) {
+    return c.json({ ok: false, error: 'Linhas da planilha inválidas.', issues: parsed.error.flatten() }, 400);
+  }
+  const batch = parsed.data;
+  const userId = c.get('userId');
+  const userName = c.get('userName');
+
+  try {
+    const prisma = getPrisma(c);
+    const data = await prisma.$transaction(async (tx) => {
+      // Cadastro atual em SQL cru (numéricos como float, sem Decimal — ADR-005), INCLUINDO os
+      // excluídos: o SKU deles segue ocupando o índice único.
+      const all = await tx.$queryRaw<Array<ImportExistingProduct & { deleted: boolean }>>(Prisma.sql`
+        SELECT p."id", p."sku", p."ean", p."name", p."unit"::text AS "unit", p."popularName",
+               p."manufacturer", p."description", p."categoryId",
+               p."salePrice"::float8 AS "salePrice", p."costPrice"::float8 AS "costPrice",
+               p."stockQty"::float8 AS "stockQty", p."minStockQty"::float8 AS "minStockQty",
+               p."trackStock", p."scaleCode", p."ncm", (p."deletedAt" IS NOT NULL) AS "deleted"
+        FROM "products" p
+        WHERE p."tenantId" = ${tenantId}::uuid
+      `);
+      const categories: ImportCategory[] = await tx.category.findMany({
+        where: { tenantId, deletedAt: null },
+        select: { id: true, name: true, parentId: true },
+      });
+      const plan = planProductImport(
+        batch.rows,
+        all.filter((p) => !p.deleted),
+        { categories, planStock: planOpeningCount, takenSkus: new Set(all.map((p) => p.sku)) },
+      );
+
+      // Categoria pelo caminho: reusa (sem acento/caixa) ou cria o que faltar, nível a nível.
+      const catCache = [...categories];
+      const ensureCategory = async (path: string[]): Promise<string> => {
+        let parentId: string | null = null;
+        for (const part of path) {
+          const key = importNameKey(part);
+          let found = catCache.find((x) => x.parentId === parentId && importNameKey(x.name) === key);
+          if (!found) {
+            found = await tx.category.create({
+              data: { tenantId, name: part, parentId },
+              select: { id: true, name: true, parentId: true },
+            });
+            catCache.push(found);
+          }
+          parentId = found.id;
+        }
+        return parentId!;
+      };
+
+      const authorship = { updatedById: userId, updatedByName: userName };
+      const movements: Prisma.StockMovementCreateManyInput[] = [];
+
+      // --- Produtos novos ---
+      const creates: Prisma.ProductCreateManyInput[] = [];
+      for (const item of plan) {
+        if (item.kind !== 'create') continue;
+        const r = item.row;
+        const id = crypto.randomUUID();
+        creates.push({
+          id,
+          tenantId,
+          sku: item.sku,
+          ean: r.ean ?? null,
+          name: r.name!,
+          popularName: r.popularName ?? null,
+          manufacturer: r.manufacturer ?? null,
+          description: r.description ?? null,
+          categoryId: r.category ? await ensureCategory(r.category) : null,
+          unit: item.unit,
+          costPrice: r.costPrice ?? 0,
+          salePrice: r.salePrice!,
+          minStockQty: r.minStockQty ?? 0,
+          trackStock: item.trackStock,
+          scaleCode: r.scaleCode ?? null,
+          ncm: r.ncm ?? null,
+          stockQty: item.initialStock,
+          createdById: userId,
+          createdByName: userName,
+          ...authorship,
+        });
+        if (item.initialStock > 0) {
+          movements.push({
+            tenantId,
+            productId: id,
+            type: 'INCOME',
+            quantity: item.initialStock,
+            unitCost: r.costPrice ?? 0,
+            reason: IMPORT_STOCK_REASON,
+            syncStatus: 'SYNCED',
+            userId,
+            registeredByName: userName,
+          });
+        }
+      }
+      if (creates.length) await tx.product.createMany({ data: creates });
+
+      // --- Produtos existentes ---
+      // Saldo relido com trava de linha só para quem terá ajuste: uma venda entre a leitura acima e a
+      // gravação não pode ser "desfeita" pela contagem.
+      const adjustIds = plan.flatMap((i) => (i.kind === 'update' && i.stock.kind === 'adjust' ? [i.product.id] : []));
+      const fresh = new Map<string, number>();
+      if (adjustIds.length) {
+        const locked = await tx.$queryRaw<Array<{ id: string; stockQty: number }>>(Prisma.sql`
+          SELECT "id", "stockQty"::float8 AS "stockQty" FROM "products"
+          WHERE "id" IN (${Prisma.join(adjustIds.map((id) => Prisma.sql`${id}::uuid`))})
+          FOR UPDATE
+        `);
+        for (const l of locked) fresh.set(l.id, l.stockQty);
+      }
+      let stockAdjustments = 0;
+      for (const item of plan) {
+        if (item.kind !== 'update') continue;
+        const { patch, row } = item;
+        const update: Prisma.ProductUpdateInput = {
+          ...(patch.name !== undefined ? { name: patch.name } : {}),
+          ...(patch.sku !== undefined ? { sku: patch.sku } : {}),
+          ...(patch.ean !== undefined ? { ean: patch.ean } : {}),
+          ...(patch.popularName !== undefined ? { popularName: patch.popularName } : {}),
+          ...(patch.manufacturer !== undefined ? { manufacturer: patch.manufacturer } : {}),
+          ...(patch.description !== undefined ? { description: patch.description } : {}),
+          ...(patch.salePrice !== undefined ? { salePrice: patch.salePrice } : {}),
+          ...(patch.costPrice !== undefined ? { costPrice: patch.costPrice } : {}),
+          ...(patch.minStockQty !== undefined ? { minStockQty: patch.minStockQty } : {}),
+          ...(patch.scaleCode !== undefined ? { scaleCode: patch.scaleCode } : {}),
+          ...(patch.ncm !== undefined ? { ncm: patch.ncm } : {}),
+          ...(patch.category ? { category: { connect: { id: await ensureCategory(patch.category) } } } : {}),
+          // Preço na planilha = o lojista definiu o preço AGORA (limpa o aviso). Só o custo mudou ⇒
+          // margem mudou e o preço não: acende o aviso de revisão (mesma precedência da NF-e).
+          ...(row.salePrice != null
+            ? { priceReviewPendingAt: null }
+            : patch.costPrice !== undefined
+              ? { priceReviewPendingAt: new Date() }
+              : {}),
+          ...authorship,
+        };
+        if (item.stock.kind === 'adjust' && item.stock.countedQty != null) {
+          const current = fresh.get(item.product.id) ?? item.product.stockQty;
+          const s = planOpeningCount({ stockQty: current, trackStock: item.product.trackStock }, item.stock.countedQty);
+          if (s.kind === 'adjust') {
+            update.stockQty = s.type === 'INCOME' ? { increment: s.quantity } : { decrement: s.quantity };
+            movements.push({
+              tenantId,
+              productId: item.product.id,
+              type: s.type,
+              quantity: s.quantity,
+              reason: IMPORT_STOCK_REASON,
+              syncStatus: 'SYNCED',
+              userId,
+              registeredByName: userName,
+            });
+            stockAdjustments++;
+          }
+        }
+        await tx.product.update({ where: { id: item.product.id }, data: update });
+      }
+      if (movements.length) await tx.stockMovement.createMany({ data: movements });
+
+      // --- Auditoria: um evento por importação, somado lote a lote ---
+      const results: ImportLineResult[] = plan.map((i) =>
+        i.kind === 'error'
+          ? { line: i.line, status: 'error', message: i.message }
+          : { line: i.line, status: i.kind === 'create' ? 'created' : i.kind === 'update' ? 'updated' : 'unchanged' },
+      );
+      const counts = {
+        created: creates.length,
+        updated: results.filter((r) => r.status === 'updated').length,
+        unchanged: results.filter((r) => r.status === 'unchanged').length,
+        errors: results.filter((r) => r.status === 'error').length,
+        stockMovements: movements.length,
+        stockAdjustments,
+      };
+      const prev = await tx.auditEvent.findFirst({
+        where: { id: batch.importId, tenantId, action: 'IMPORT_PRODUCTS' },
+        select: { meta: true },
+      });
+      if (prev) {
+        const m = (prev.meta ?? {}) as Record<string, number>;
+        await tx.auditEvent.update({
+          where: { id: batch.importId },
+          data: {
+            meta: {
+              ...m,
+              batches: (m.batches ?? 0) + 1,
+              ...Object.fromEntries(Object.entries(counts).map(([k, v]) => [k, (m[k] ?? 0) + v])),
+            },
+          },
+        });
+      } else {
+        await tx.auditEvent.create({
+          data: {
+            id: batch.importId,
+            tenantId,
+            userId,
+            entity: 'ProductImport',
+            entityId: batch.importId,
+            action: 'IMPORT_PRODUCTS',
+            meta: { fileName: batch.fileName ?? null, batches: 1, ...counts },
+          },
+        });
+      }
+      return { results, counts };
+    });
+    return c.json({ ok: true, data });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      console.warn('POST /products/import conflito de código:', err.meta);
+      return c.json(
+        {
+          ok: false,
+          error: 'Outro cadastro usou um destes códigos (SKU ou balança) agora há pouco. Reabra a planilha e importe de novo.',
+        },
+        409,
+      );
+    }
+    console.error('POST /products/import falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao importar este lote da planilha.' }, 500);
   }
 });
 

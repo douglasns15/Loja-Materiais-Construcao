@@ -215,6 +215,15 @@ CSV é lido sem dependência (parser próprio simples, com aspas, `;` ou `,`, UT
    demais); alerta `product-pending-review` ("Cadastrados no caixa para revisar"). O admin abre o produto pela lista
    do sino (`/products?abrir=<id>`) e confere com "Marcar como conferido" (salvar a edição também conta).
 3. **Fatia 3 — Planilha: modelo NexoLoja + CSV/XLSX + pré-visualização + importar** (casamento, estoque inicial, categorias).
+   **Implementada 2026-10-14** (tela `/products/importar`, só admin; rota `POST /products/import`; sem migration). O
+   planejador é UM só (`planProductImport`, shared) — roda na pré-visualização e de novo na API, dentro da transação,
+   contra o banco. Decisões da implementação: (a) casamento ganhou um 3º degrau — linha **sem nenhum código** casa pelo
+   **nome exato** (sem acento/caixa) quando só um produto tem o nome, para a reimportação não duplicar o "sorvete sem
+   código"; o SKU desse produto é gerado do nome; (b) **unidade e "controla estoque" não mudam** produto existente
+   (mudariam o sentido do saldo/histórico) — viram aviso; (c) barra/rolo/pacote ficam fora (exigem o tamanho da
+   embalagem), como no §A; (d) o `AuditEvent` único por importação usa `id = importId` e soma as contagens lote a
+   lote; (e) o modelo `.xlsx` é um arquivo estático gerado por script sem dependência (a `read-excel-file` só lê).
+   O casamento de colunas desta fatia é automático (apelidos); o De-Para editável fica na Fatia 4.
 4. **Fatia 4 — Planilha: De-Para editável + perfis lembrados** (exportação de sistema anterior).
 5. **Futuro:** download automático de NF-e (§C, fase NFC-e); importar clientes/fornecedores; perfis prontos por
    sistema de mercado.

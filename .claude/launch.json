@@ -4,8 +4,22 @@
     {
       "name": "web",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "-w", "@nexoloja/web"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "-w",
+        "@nexoloja/web"
+      ],
       "port": 3000
+    },
+    {
+      "name": "api",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "apps/api/scripts/dev-local.mjs"
+      ],
+      "port": 8787,
+      "url": "http://localhost:8787"
     }
   ]
 }

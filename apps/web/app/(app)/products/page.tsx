@@ -18,6 +18,7 @@ import {
 } from '@nexoloja/core';
 import { apiGet, apiPatch, apiPost } from '@/lib/api';
 import { useReloadOnReconnect } from '@/lib/useReloadOnReconnect';
+import { useMe } from '@/lib/useMe';
 import { useModule } from '@/lib/useModule';
 import { useOnline } from '@/lib/useOnline';
 import { OfflineNotice } from '@/components/OfflineNotice';
@@ -105,6 +106,7 @@ function SectionTitle({ n, children }: { n: number; children: React.ReactNode })
 
 export default function ProductsPage() {
   const online = useOnline();
+  const { isAdmin } = useMe();
   // Ramo da loja (ADR-039 F2): sem o módulo de obra, o cadastro esconde milheiro/saco/barra/rolo/m,
   // o peso p/ frete e o par (parafuso + bucha). Só apresentação — a API aceita tudo igual.
   const construction = useModule('CONSTRUCTION_UNITS');
@@ -591,14 +593,26 @@ export default function ProductsPage() {
         <h1 className="w-fit bg-gradient-to-r from-indigo-700 to-indigo-500 bg-clip-text text-2xl font-bold text-transparent">
           Produtos
         </h1>
-        {/* Cadastro em sequência (ADR-041 §A): bipa → preço/quantidade → Enter, para a implantação. */}
-        <Link
-          href="/products/sequencia"
-          className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          title="Percorrer a prateleira bipando: cadastra o que é novo e conta o estoque do que já existe."
-        >
-          ▦ Cadastro em sequência
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          {/* Importar planilha (ADR-041 §1–§6): carga do catálogo em lote — só admin (a rota também exige). */}
+          {isAdmin && (
+            <Link
+              href="/products/importar"
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              title="Cadastrar ou atualizar muitos produtos de uma vez, a partir de uma planilha .xlsx ou .csv."
+            >
+              ⤒ Importar planilha
+            </Link>
+          )}
+          {/* Cadastro em sequência (ADR-041 §A): bipa → preço/quantidade → Enter, para a implantação. */}
+          <Link
+            href="/products/sequencia"
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            title="Percorrer a prateleira bipando: cadastra o que é novo e conta o estoque do que já existe."
+          >
+            ▦ Cadastro em sequência
+          </Link>
+        </div>
       </div>
 
       {/* Tela online-only (ADR-012 (c)): offline mostra o aviso de rede, não o erro cru. */}

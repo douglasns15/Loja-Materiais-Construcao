@@ -5,7 +5,7 @@
 > e diagramas de arquitetura.
 >
 > **Produto:** ERP/PDV multi-tenant, modular e custo-zero (PWA única para Web/Android/iOS).
-> **Última atualização:** 2026-10-09 · **Fontes:** `docs/ARCHITECTURE.md`, `docs/adr/` (ADR-001…043), código do monorepo.
+> **Última atualização:** 2026-10-14 · **Fontes:** `docs/ARCHITECTURE.md`, `docs/adr/` (ADR-001…043), código do monorepo.
 > **Par funcional:** [`docs/DOCUMENTACAO-FUNCIONAL.md`](DOCUMENTACAO-FUNCIONAL.md) — o "como funciona / como configurar" de
 > cada funcionalidade, do ponto de vista de quem usa. Toda mudança de comportamento atualiza os dois.
 
@@ -114,6 +114,7 @@ Cada camada, a tecnologia escolhida e a justificativa. (Versões conforme os `pa
 | **PWA / Offline shell** | Service Worker + Web App Manifest | — | Instalável; cache de assets e leituras. |
 | **UI / estilo** | Tailwind CSS | `^3.4.17` | Utilitário, rápido e consistente. |
 | **Leitor de código de barras** | `BarcodeDetector` API + `@zxing/library` | `^0.21.3` | Nativo do navegador quando disponível, com fallback. |
+| **Leitura de planilha (.xlsx)** | `read-excel-file` | `9.3.10` (fixa) | Só leitura, carregada sob demanda na importação de planilha (ADR-041); CSV usa parser próprio. |
 | **Backend / API** | Hono | `^4.6.14` | Framework minúsculo, ótimo no edge (Workers). |
 | **JWT no backend** | `jose` | `^5.9.6` | Verificação/decodificação de JWT sem dependências pesadas. |
 | **ORM / schema** | Prisma + `@prisma/client` | `^6.19.3` | Type-safety e migrações versionadas. |
@@ -454,6 +455,7 @@ testável exaustivamente e compartilhada entre as duas apps.
 | `GET /products` · `GET /products/search` | Lista e busca de produtos (nome, SKU, `popularName`, EAN). |
 | `GET /products/:id` | Detalhe do produto. |
 | `POST /products` 🔒 · `PATCH /products/:id` 🔒 · `DELETE /products/:id` 🔒 | Cria / edita / remove (soft-delete). Aceita `trackStock` (ADR-040 §2, default `true`): `false` = produto sem controle de estoque (produção do dia/serviço) — no `POST` o `initialStock` é ignorado; no `PATCH`, desligar com mercadoria **reservada** (retirada futura pendente) é recusado (409). Produto por kg/L "vendido inteiro também" usa a unidade alternativa (ADR-013) com `altUnit = UNIT`, `altSalePrice` = preço do inteiro e `conversionFactor` = peso médio. **Cadastro no caixa (ADR-041 §B):** o `POST` aceita `pendingReview: true` (o PDV o envia junto com `trackStock: false`, custo 0 e SKU = código lido; qualquer papel); o `PATCH` aceita o sinal `markReviewed: true` (não é coluna — vira `pendingReview = false`), **só de administrador** (403 para os demais). `pendingReview` não é editável direto no `PATCH`. **Código na balança (ADR-040 §3):** `POST`/`PATCH` aceitam `scaleCode` (PLU, 1–6 dígitos, gravado sem zeros à esquerda; `null` no `PATCH` tira da balança); repetido na loja ⇒ 409 "Já existe um produto com esse código na balança (PLU)". O `DELETE` (soft-delete) grava `scaleCode = null` — libera o PLU. |
+| `POST /products/import` 🔒 | **Importação por planilha** (ADR-041 §1–§6, Fatia 3) — **só admin** (`requireAdmin`) e loja ativa. Corpo `productImportBatchSchema` (shared): `{ importId: uuid, fileName?, rows: ImportRow[] }`, 1–100 linhas **já interpretadas no navegador** (`line` + campos opcionais `name, salePrice, unit, ean (8–14 díg.), sku, popularName, manufacturer, description, category: string[1..2], costPrice, stockQty, minStockQty, trackStock, scaleCode, ncm`; ausente = não mexe). Numa **única transação**: relê o cadastro (SQL cru com `float8`, inclusive excluídos — o SKU deles segue ocupado), roda o **mesmo** `planProductImport` (shared) da pré-visualização e grava: `createMany` dos novos (+ Entrada INCOME "Carga inicial (planilha)" com o custo da linha quando `stockQty > 0` e controla estoque), `update` dos existentes só no que mudou (custo mudou sem preço ⇒ `priceReviewPendingAt = now`; preço na linha ⇒ limpa), estoque de existente como contagem de abertura (`planOpeningCount` do core sobre o saldo relido com `FOR UPDATE`; `stockQty` por `increment/decrement` + movimento INCOME/EXPENSE), categorias do caminho criadas se faltarem. Um `AuditEvent` **por importação** (`id = entityId = importId`, `entity = ProductImport`, `action = IMPORT_PRODUCTS`, `meta` somado lote a lote: `fileName, batches, created, updated, unchanged, errors, stockMovements, stockAdjustments`). Resposta `{ results: [{ line, status: created\|updated\|unchanged\|error, message? }], counts }`. **Idempotente:** reenviar o lote dá `unchanged`. Conflito concorrente de SKU/PLU (P2002) ⇒ 409 e nada é gravado. Gating de módulo não se aplica aqui (ADR-039 §3). |
 | `GET /categories` · `GET /categories/:id` | Lista e detalhe de categorias. |
 | `POST /categories` 🔒 · `PATCH /categories/:id` 🔒 · `DELETE /categories/:id` 🔒 | CRUD de categorias. |
 
@@ -627,6 +629,26 @@ Alertas CALCULADOS sob demanda (custo-zero: nada é gravado; a pendência some q
 - **Cadastro em sequência (ADR-041 §A):** rota `/products/sequencia`; casa o código no cliente
   (`findProductByCode`: GTIN canônico → código interno) sobre o catálogo da loja e decide a contagem por
   `planOpeningCount` — sem rota própria (usa `POST /products` e `POST /stock/adjust`).
+- **Importar planilha (ADR-041 §1–§6, Fatia 3):** rota `/products/importar` (só admin; botão em Produtos só para
+  admin). Leitura **no navegador** (`apps/web/lib/planilha.ts`): `.xlsx` pela `read-excel-file@9.3.10`
+  (`read-excel-file/browser`, importada sob demanda; só a 1ª aba), `.csv` por `parseCsv` (shared; separador `;`/`,`/
+  tab pela 1ª linha, aspas, UTF-8 com fallback Windows-1252); teto 10 MB e `IMPORT_MAX_ROWS` = 5.000 linhas.
+  Pipeline puro em `packages/shared/src/productImport.ts`: `findHeaderRow` (1ª das 10 primeiras linhas com ≥ 2 títulos
+  conhecidos) → `matchImportColumns` (apelidos normalizados sem acento/caixa; 1ª coluna de cada campo vence; sem
+  coluna de nome, "Descrição" vira nome) → `normalizeImportRow` (erros de formato: dinheiro BR/número da célula com
+  até 4 casas, quantidade com milhar BR, S/N, unidade por apelido, EAN com DV, NCM 8 díg., PLU 1–6 díg., categoria
+  ≤ 2 níveis × 80 car.; teto `IMPORT_MAX_VALUE` = 1.000.000 contra código colado no preço) → `planProductImport`
+  (casamento `gtinKey` → código interno → nome exato quando a linha não tem código e há UM produto com o nome;
+  repetição no arquivo; produto novo exige nome+preço, unidade padrão `UNIT`, barra/rolo/pacote recusados, unidade
+  de obra recusada sem `CONSTRUCTION_UNITS`; SKU = código interno → EAN → `skuFromName` com sufixo `-2`, `-3`…;
+  existente: diff só do preenchido, nome não muda quando o casamento foi pelo nome, unidade/`trackStock` não mudam
+  (aviso); PLU ignorado com aviso sem `SCALE_LABEL`; estoque via `planStock` injetado = `planOpeningCount` do core,
+  pois o shared não depende do core). Envio em lotes de `IMPORT_BATCH_SIZE` = 100 com **1 nova tentativa** por lote
+  (seguro: idempotente); o plano da tela é congelado durante a importação. "Linhas com erro" = CSV com `;` + BOM,
+  cabeçalho original + coluna "Erro". **Modelo NexoLoja** estático em `apps/web/public/modelos/
+  modelo-produtos-nexoloja.xlsx`, gerado sem dependência por `node apps/web/scripts/gerar-modelo-planilha.mjs`
+  (ZIP + XML à mão; colunas espelham `IMPORT_FIELD_LABELS`; códigos formatados como texto; listas em Unidade e S/N;
+  aba "Instruções").
 - **UX:** menos cliques, fontes legíveis, atalhos de teclado no desktop.
 
 ---
