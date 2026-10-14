@@ -8,7 +8,15 @@
 > custo fixo do Prisma por requisição já passa de 10 ms). **Correção: Owner assinou o Workers Paid** (teto 30 s) —
 > pós-assinatura 130 requisições reais + 30 de stress, 0 falhas. Sem mudança de código. Ver ADR-005, adendo 2026-10-14.
 >
-> **Última atualização:** 2026-10-14 — **#9 Importar planilha (ADR-041 Fatia 3).**
+> **Última atualização:** 2026-10-14 — **#9 Importar planilha (ADR-041 Fatia 3) + início do #10 multi-loja.**
+>
+> - **#10 Usuário multi-loja (ADR-014) — Fatia 1 FEITA:** migration **`0046_tenant_memberships` aprovada pelo Owner e
+>   aplicada** — tabela de vínculo usuário↔loja (papel por loja, `ACTIVE`/`PENDING`), backfill 10/10 conferido, RLS
+>   (loja do token ou os próprios vínculos) e **gatilho de espelho** `users → vínculo "de casa"` enquanto
+>   `users.tenantId/role` existirem (sai na Fatia 5). Gatilho testado numa transação desfeita (papel, desativar,
+>   nome não dispara, troca de loja, usuário novo, exclusão). Sem mudança de comportamento e sem deploy (só banco).
+>   **Próxima: Fatia 2** — loja ativa por `x-active-tenant`, `GET /me` com as lojas, seletor no login e "trocar de
+>   loja" no topo, caches offline por loja.
 >
 > - **#9 Importar planilha** — **NO AR 2026-10-14 (API `fcca9ce2`, web `ece4829a`; deploy autorizado pelo Owner) e
 >   validada em produção** (Demo Mercardinho, `owner_kg`), além do teste com a API local. Ajuste pós-deploy: as

@@ -4,6 +4,9 @@
   consentimento, RLS-B). **Executa por último** na fila da implantação multirramo
   (`docs/plano-implantacao-multirramo.md` §5, item 10); as 3 migrations serão apresentadas de novo, uma a uma,
   quando chegar a vez (regra 1).
+- **Execução:** **Fatia 1 CONCLUÍDA 2026-10-14** — migration `0046_tenant_memberships` aprovada pelo Owner (com o
+  gatilho de espelho) e aplicada no Supabase; backfill 10/10 conferido; gatilho testado em transação desfeita. Sem
+  mudança de comportamento (o app segue lendo `users`).
 - **Data:** 2026-07-17 (proposta) · 2026-09-30 (aceite)
 - **Contexto de fase:** Fase 3 (produção). Assenta sobre o RBAC da loja (ADR-008) e a plataforma/multi-loja
   do Super Usuário (ADR-009), **sem** se confundir com eles (ver "Não é isto" abaixo).
@@ -237,6 +240,9 @@ Migrations **aditivas** e faseadas (padrão do projeto: `migrate diff` + `migrat
 
 1. **Fatia 1 — Modelo de dados (migration 1 + backfill).** Cria `TenantMembership`, popula 1 linha por usuário,
    mantém `users.tenantId`/`role` como espelho (dual-source). **Sem mudança de comportamento** — infra dormente.
+   **Feita 2026-10-14 (migration `0046`).** Decisão da implementação, aprovada pelo Owner: o espelho é um **gatilho
+   no banco** (`users_sync_home_membership`) em vez de alterar os 7 caminhos que gravam `users` (convite, papel,
+   desativar, onboarding da plataforma, 3 scripts) — nenhum fica dessincronizado. Sai na Fatia 5.
 2. **Fatia 2 — Read-path da loja ativa + login/seletor + switcher.** API resolve loja ativa por `x-active-tenant`
    validado na membership; `GET /me` devolve as lojas; UI de seleção/troca. Single-store intacto. **Sem RLS ainda**
    (a API já isola). Cache offline chaveado por loja.

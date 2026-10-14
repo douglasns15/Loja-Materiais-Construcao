@@ -6320,3 +6320,12 @@ classe `rc-capture`, a mesma do comprovante de WhatsApp): **achado** — Unit. e
 "0,402 kg" em 2 linhas. Corrigido no CSS (colunas numéricas sem quebra + respiro à esquerda); conferido no web de dev:
 "0,402 kg | R$ 24,90 | R$ 10,00" em uma linha, o nome quebra ✅. Carrinho de teste limpo.
 **Deploy:** web `4e28ba69` (anterior `ece4829a`) — smoke ✅. **Falta:** impressão física na térmica (Owner).
+
+## Multi-loja Fatia 1 — migration 0046 (ADR-014) — 2026-10-14
+
+`migrate diff` (banco → schema) gerou só objetos novos (sem deriva); `migrate deploy` aplicou `0046_tenant_memberships`.
+Conferência: 10 usuários = 10 vínculos, os 10 batendo em loja/papel/ativo/status ✅. Gatilho em transação com
+**ROLLBACK** (nenhum dado real alterado): CASHIER→MANAGER refletido ✅; desativar refletido ✅; gravar só nome/telefone
+não dispara ✅; troca de loja move o vínculo ✅; usuário novo ganha vínculo STOCK/ACTIVE ✅; exclusão apaga o vínculo
+(cascade) ✅; após o ROLLBACK: 10 vínculos, 2 caixas (igual ao antes) ✅. RLS `tenant_memberships_select_tenant_or_own`
+e gatilho ativos ✅. `migrate diff` pós-deploy = migration vazia ✅. `prisma generate` + `tsc` API/web ✅.

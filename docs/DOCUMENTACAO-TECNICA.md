@@ -691,7 +691,7 @@ erDiagram
 
 | Grupo | Modelos |
 |---|---|
-| **Plataforma / lojas** | `Tenant`, `TenantModule`, `PlatformAdmin`, `User` |
+| **Plataforma / lojas** | `Tenant`, `TenantModule`, `PlatformAdmin`, `User`, `TenantMembership` (vínculo usuário↔loja com papel por loja — ADR-014; Fatia 1 dormente, ver abaixo) |
 | **Catálogo** | `Category`, `Product`, `ProductCatalog` |
 | **Pessoas** | `Customer`, `Supplier` |
 | **Venda / PDV** | `Order`, `OrderItem`, `Payment`, `Cart` |
@@ -704,7 +704,15 @@ erDiagram
 
 **Enums de domínio:** `SyncStatus`, `TransactionType`, `OrderStatus`, `CashMovementKind`,
 `ReceivableStatus`, `ReturnTarget`, `QuoteStatus`, `UnitType`, `UserRole`, `DeliveryStatus`,
-`DeliveryMode`, `FulfillmentStatus`.
+`DeliveryMode`, `FulfillmentStatus`, `MembershipStatus`.
+
+**Multi-loja (ADR-014) — Fatia 1, migration `0046` (2026-10-14):** tabela `tenant_memberships` (`userId`, `tenantId`,
+`role` por loja, `status` ACTIVE|PENDING, `isActive`, `invitedByName`; único `(userId, tenantId)`; FKs com cascade),
+backfill de 1 vínculo ACTIVE por usuário e RLS `SELECT` para `authenticated` = loja do token **ou** os próprios
+vínculos (`auth.uid()`). **Dual-source até a Fatia 5:** o app ainda lê `users.tenantId/role`; o gatilho
+`users_sync_home_membership` (função `public.sync_home_membership`) espelha no vínculo "de casa" toda criação de usuário
+e toda gravação de `tenantId`/`role`/`isActive` (mudança de loja move o vínculo; exclusão apaga por cascade). Sai na
+Fatia 5 junto com essas colunas. Vínculos a outras lojas (Fatia 4) serão gravados direto, fora do gatilho.
 
 ### Convenções de persistência (custo-zero, obrigatórias)
 

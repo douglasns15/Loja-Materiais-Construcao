@@ -142,7 +142,7 @@ A loja de alimentos **não consegue vender hoje**:
 | 7 | **Cadastro no caixa** + alerta de revisão — **NO AR + validada no navegador 2026-10-09** (API `7d56b1c0`, web `68d3dd0e`; commit `6e223b9`) | Não (`pendingReview` já na `0041`) | 041 §B |
 | 8 | Etiqueta de balança (`scaleCode` + parser + PDV + formato parametrizado + exibição "preço do cadastro + selo") — **NO AR + validada em produção 2026-10-09** (API `8932d7a3`, web `dbc04cb7`) | Não (usa a `0041`) | 040 F3 |
 | 9 | Importador de planilha (modelo NexoLoja + .xlsx/.csv + pré-visualização + importar idempotente) — **NO AR + validada em produção 2026-10-14** (API `fcca9ce2`, web `ece4829a`). De-Para editável = Fatia 4, **adiada** (volta com o 1º cliente que trouxer exportação de outro sistema) | Não | 041 §1–§6 |
-| 10 | Usuário multi-loja (5 fatias da ADR-014) | **Sim** (3 migrations) | 014 |
+| 10 | Usuário multi-loja (5 fatias da ADR-014) — **Fatia 1 feita 2026-10-14** (migration `0046`: `tenant_memberships` + backfill + RLS + gatilho de espelho; sem mudança de comportamento). Próxima: Fatia 2 (loja ativa + seletor/troca de loja) | **Sim** (3 migrations; `0046` aprovada e aplicada) | 014 |
 | — | NFC-e + download automático de NF-e | — | **aguarda o Owner** |
 
 Racional: #1–#8 são o que a loja nova precisa para abrir; a planilha fica para os poucos itens sem código e

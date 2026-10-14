@@ -152,6 +152,13 @@ enum StoreSegment {
   GENERAL_RETAIL // Varejo geral
 }
 
+/// Situação do vínculo usuário↔loja (ADR-014). `PENDING` = convite a uma identidade que já existe,
+/// aguardando o consentimento da pessoa (anti-sequestro, Fatia 4); só `ACTIVE` dá acesso.
+enum MembershipStatus {
+  ACTIVE
+  PENDING
+}
+
 /// Papel do usuário dentro de um tenant
 enum UserRole {
   OWNER // Dono da loja (acesso total)
@@ -270,6 +277,7 @@ model Tenant {
 
   // Relações
   users               User[]
+  memberships         TenantMembership[] // Vínculos usuário↔loja (ADR-014)
   modules             TenantModule[]
   products            Product[]
   categories          Category[]
@@ -333,13 +341,38 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   orders       Order[]
   cashSessions CashSession[]
   cart         Cart? // Cesta persistente do PDV (ADR-021): uma por usuário
+  memberships  TenantMembership[] // Lojas a que a pessoa tem acesso (ADR-014)
 
   @@unique([tenantId, email])
   @@map("users")
+}
+
+/// Vínculo usuário↔loja (ADR-014 — usuário multi-loja): "a pessoa é membro desta loja, com este papel".
+/// `users` passa a ser a IDENTIDADE (uma por pessoa, = auth.users.id); o papel vive no vínculo (Dono na loja A,
+/// Caixa na B). Fatia 1 (migration 0046): tabela + backfill (1 vínculo ACTIVE por usuário) + gatilho que espelha
+/// `users.tenantId/role/isActive` no vínculo "de casa" enquanto essas colunas existirem (removido na Fatia 5).
+/// O histórico (vendas, caixa, estoque, autoria ADR-010) ancora em `userId` + `tenantId`, NUNCA no vínculo.
+model TenantMembership {
+  id            String           @id @default(uuid()) @db.Uuid
+  userId        String           @db.Uuid
+  tenantId      String           @db.Uuid
+  role          UserRole // Papel NESTA loja
+  status        MembershipStatus @default(ACTIVE)
+  isActive      Boolean          @default(true) // false = acesso a ESTA loja cortado (as outras seguem)
+  invitedByName String?          @db.VarChar(100) // Quem concedeu (snapshot, ADR-010)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tenantId])
+  @@index([tenantId])
+  @@map("tenant_memberships")
 }
 
 /// Super Usuário (fabricante) — identidade de PLATAFORMA, acima de qualquer loja (ADR-009).
