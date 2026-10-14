@@ -8,7 +8,24 @@
 > custo fixo do Prisma por requisição já passa de 10 ms). **Correção: Owner assinou o Workers Paid** (teto 30 s) —
 > pós-assinatura 130 requisições reais + 30 de stress, 0 falhas. Sem mudança de código. Ver ADR-005, adendo 2026-10-14.
 >
-> **Última atualização:** 2026-10-14 — **#9 Importar planilha (ADR-041 Fatia 3) + início do #10 multi-loja.**
+> **ONDE PARAMOS / PRÓXIMOS PASSOS (2026-10-14, fim da sessão):**
+> - **Plano multirramo CONCLUÍDO (#1–#10).** Hoje: #9 Importar planilha + #10 Usuário multi-loja (ADR-014, Fatias 1–5,
+>   migrations `0046`–`0049`) + fix do 401 falso pós-deploy (JWKS local) + cupom 80 mm + layout do painel da plataforma.
+> - **Versões no ar:** API `c04e20f8`, web `86f735c2`. Working tree limpo; commits locais em `main` — **push do Owner**.
+> - **Próxima sessão:** Owner escolhe — **NFC-e** (branch `feat/nfe-emissao`, aguarda o sinal do Owner) ou outro item do
+>   [PRODUCT-ROADMAP](PRODUCT-ROADMAP.md).
+>
+> **📌 OBSERVAÇÕES PARA O FUTURO (pendências anotadas em 2026-10-14):**
+> 1. **Vínculo de teste do `owner_kg`** — Gerente na **Loja Demo** (`invitedByName` "Teste Fatia 2 (Claude)"), criado para
+>    testar o multi-loja. Revogar pelo painel da plataforma → Loja Demo → **Membros** quando não for mais útil.
+> 2. **Convite para e-mail NOVO** (Configurações → Usuários) — não testado de ponta a ponta para não disparar e-mail real;
+>    o caminho é o de antes da Fatia 4 + vínculo explícito da Fatia 5. Testar quando houver um endereço real.
+> 3. **Cupom com etiqueta de balança na térmica real** — conteúdo e layout 80 mm conferidos na tela; falta imprimir uma
+>    vez numa venda real (quando a impressora/balança estiverem na loja).
+> 4. **Planilha — Fatia 4 (De-Para editável + perfis lembrados)** — **ADIADA pelo Owner**; volta para discussão quando
+>    aparecer o primeiro cliente com exportação de outro sistema (ver ADR-041, Fatia 4).
+>
+> **Última atualização:** 2026-10-14 — **#9 Importar planilha (ADR-041 Fatia 3) + #10 multi-loja concluído (ADR-014).**
 >
 > - **#10 Usuário multi-loja (ADR-014) — CONCLUÍDO (Fatia 5 feita):** migrations **`0048`** (colunas legadas opcionais,
 >   gatilho ignora usuário sem loja, RLS de `users` por vínculo ACEITO) → API `590296e3` (não lê/grava mais
