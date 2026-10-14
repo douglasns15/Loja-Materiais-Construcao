@@ -6377,3 +6377,30 @@ para ele; a prova é o token real abaixo). `migrate deploy` ✅; regressão depo
 Auth já com `tenant_ids` = [Demo Mercardinho, Loja Demo] + `tenant_id`/`user_role` da loja de casa (OWNER) ✅ — prova
 de que o hook roda como `supabase_auth_admin` e lê os vínculos; seletor ⇒ Loja Demo (MANAGER), chip no topo, produtos
 carregados ✅.
+
+## Multi-loja Fatia 4 — convite com aceite, remover/sair da loja, Membros na plataforma (ADR-014) — 2026-10-14
+
+Unitários: core `multiLoja.test.ts` (+4: `planMembershipInvite` — conta existente nunca ganha acesso sem aceite;
+`membershipChangeBlocked`) — core 526, shared 140, API 7 ✅; `tsc` API/web ✅; `next build` ✅.
+
+**API local + web local (banco real, `owner_kg`):** `PATCH /users` no `operador_kg` (Mercadinho): desativar ⇒ vínculo
+`isActive=false`; virar Admin ⇒ MANAGER; voltar ⇒ CASHIER ativo — conta (`users`) **intacta** (CASHIER, ativa) ✅; 3
+`CHANGE_ROLE` na auditoria ✅; mexer no próprio acesso / remover a si ⇒ 400 ✅. Convite local ⇒ 503 (a API local não tem
+`SUPABASE_SERVICE_ROLE_KEY`; checagem no início mantida de propósito) — testado em produção (abaixo). Lado do convidado,
+com o vínculo do `owner_kg` na Loja Demo marcado PENDING (convite simulado no banco): topo mostra "Você tem 1 convite
+para outra loja — Ver convite" e o chip some (1 loja ativa) ✅; seletor mostra "Você foi convidado para Loja Demo como
+Admin" e **não entra direto** ✅; **Aceitar** ⇒ Loja Demo na lista ✅ (a 1ª leitura da tela foi antes de a API local
+responder — falso alarme, conferido no banco e na API); **Sair desta loja** (só na Loja Demo, nunca no Mercadinho onde é
+Dono) ⇒ removida ✅; novo convite simulado ⇒ **Recusar** ⇒ vínculo apagado ✅; auditoria `ACCEPT_MEMBERSHIP`,
+`REVOKE_MEMBERSHIP {self}`, `DECLINE_MEMBERSHIP` ✅. Vínculo de teste do `owner_kg` (Gerente na Loja Demo) restaurado.
+Configurações → Usuários: "Desativar", "Remover da loja" e texto novo do convite ✅.
+
+**Deploy:** API `b4b93cbf` (anterior `e41cb88b`) — `/health` 200, `/me/invites` sem token 401; web `8baaa080` (anterior
+`fee5d11e`) — smoke ✅, BUILD_ID = HTML ao vivo.
+**Produção (`owner_kg`, admin do Mercadinho):** convidar `Caixa@LojaDemo.com` (conta existente da Loja Demo) ⇒ `201
+{ invited: true }` ✅; convidar `operador_kg` (já membro) ⇒ **a mesma resposta** ✅ (anti-enumeração); lista mostra o
+convite **só com o e-mail** (nome oculto), PENDING ✅; **Cancelar convite** ⇒ vínculo pendente apagado,
+`identityDeleted: false` ✅; o `caixa@lojademo.com` segue ACTIVE na Loja Demo, conta ativa ✅; auditoria `GRANT_MEMBERSHIP
+{plan: CREATE_PENDING}` + `REVOKE_MEMBERSHIP {pendingInvite}` no Mercadinho ✅. Nenhum e-mail disparado (conta existente).
+**Não testado:** painel da plataforma "Membros" (exige login de Super Usuário) e convite de e-mail **novo** (dispararia
+um e-mail real; o caminho é o mesmo de antes da Fatia 4).

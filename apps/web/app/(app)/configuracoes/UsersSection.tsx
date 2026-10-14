@@ -1,23 +1,20 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { STORE_ROLE_LABELS, type StoreRole } from '@nexoloja/shared';
+import { STORE_ROLE_LABELS, type StoreMember, type StoreRole } from '@nexoloja/shared';
 import { apiDelete, apiGet, apiPatch, apiPost } from '@/lib/api';
 
-type StoreUser = {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  isActive: boolean;
-  storeRole: StoreRole;
-};
+type StoreUser = StoreMember;
 
 /**
  * Gestão de usuários da loja (ADR-008) — visível só para Admin.
  * Lista os usuários e permite definir papel (Admin/Usuário) e ativar/desativar.
  * O dono (`OWNER`) aparece como Admin, mas não é editável (a API bloqueia).
  * Convite por e-mail (ADR-008, fatia 2) cria o usuário no Supabase Auth + linha em `users`.
+ *
+ * Multi-loja (ADR-014, Fatia 4): a lista é de quem tem VÍNCULO com esta loja; papel, desativar e remover valem só
+ * para esta loja. Convidar um e-mail que já tem conta vira **convite pendente** (aparece só o e-mail até a pessoa
+ * aceitar) — a resposta é sempre "convite enviado", sem revelar se a conta existia.
  */
 export function UsersSection({ currentUserId }: { currentUserId: string | null }) {
   const [users, setUsers] = useState<StoreUser[]>([]);
@@ -57,12 +54,12 @@ export function UsersSection({ currentUserId }: { currentUserId: string | null }
   }
 
   async function remove(u: StoreUser) {
-    if (
-      !window.confirm(
-        `Excluir o usuário "${u.name}" (${u.email})? Esta ação remove o acesso de vez e libera o e-mail. ` +
-          `Se o usuário tiver histórico de vendas/caixa, use "Desativar".`,
-      )
-    ) {
+    const question =
+      u.status === 'PENDING'
+        ? `Cancelar o convite para ${u.email}?`
+        : `Remover "${u.name}" (${u.email}) desta loja? A pessoa perde o acesso a esta loja; o histórico de vendas e ` +
+          `caixa dela continua registrado. Para só bloquear por um tempo, use "Desativar".`;
+    if (!window.confirm(question)) {
       return;
     }
     setBusyId(u.id);
@@ -87,19 +84,19 @@ export function UsersSection({ currentUserId }: { currentUserId: string | null }
     }
     setInviting(true);
     try {
-      const created = await apiPost<StoreUser>('/users/invite', {
+      await apiPost<{ email: string }>('/users/invite', {
         email,
         storeRole: inviteRole,
         redirectTo: `${window.location.origin}/definir-senha`,
       });
-      // Insere/atualiza na lista sem refazer o GET.
-      setUsers((list) => {
-        const rest = list.filter((u) => u.id !== created.id);
-        return [created, ...rest];
-      });
+      // A resposta é genérica (não diz se a conta existia) — recarrega a lista para ver o novo membro/convite.
+      await load();
       setInviteEmail('');
       setInviteRole('USER');
-      setInviteMsg({ ok: true, text: `Convite enviado para ${created.email}.` });
+      setInviteMsg({
+        ok: true,
+        text: `Convite enviado para ${email}. Se a pessoa já usa o NexoLoja, ela vê o convite ao entrar e precisa aceitar.`,
+      });
     } catch (err) {
       setInviteMsg({ ok: false, text: (err as Error).message });
     } finally {
@@ -135,7 +132,13 @@ export function UsersSection({ currentUserId }: { currentUserId: string | null }
               return (
                 <tr key={u.id} className="border-t border-gray-100 hover:bg-gray-50">
                   <td className="px-4 py-2 font-medium">
-                    {u.name}
+                    {u.status === 'PENDING' ? (
+                      <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                        Convite pendente
+                      </span>
+                    ) : (
+                      u.name
+                    )}
                     {u.id === currentUserId && (
                       <span className="ml-2 text-xs text-gray-500">(você)</span>
                     )}
@@ -164,26 +167,30 @@ export function UsersSection({ currentUserId }: { currentUserId: string | null }
                     )}
                   </td>
                   <td className="px-4 py-2">
-                    {u.isActive ? (
+                    {u.status === 'PENDING' ? (
+                      <span className="text-amber-700">Aguardando aceite</span>
+                    ) : u.isActive ? (
                       <span className="text-green-700">Ativo</span>
                     ) : (
                       <span className="text-gray-500">Inativo</span>
                     )}
                     {!isOwner(u) && u.id !== currentUserId && (
                       <>
-                        <button
-                          onClick={() => patch(u.id, { isActive: !u.isActive })}
-                          disabled={busyId === u.id}
-                          className="ml-3 text-xs font-medium text-gray-600 underline hover:text-gray-900 disabled:opacity-50"
-                        >
-                          {u.isActive ? 'Desativar' : 'Ativar'}
-                        </button>
+                        {u.status !== 'PENDING' && (
+                          <button
+                            onClick={() => patch(u.id, { isActive: !u.isActive })}
+                            disabled={busyId === u.id}
+                            className="ml-3 text-xs font-medium text-gray-600 underline hover:text-gray-900 disabled:opacity-50"
+                          >
+                            {u.isActive ? 'Desativar' : 'Ativar'}
+                          </button>
+                        )}
                         <button
                           onClick={() => remove(u)}
                           disabled={busyId === u.id}
                           className="ml-3 text-xs font-medium text-red-600 underline hover:text-red-800 disabled:opacity-50"
                         >
-                          Excluir
+                          {u.status === 'PENDING' ? 'Cancelar convite' : 'Remover da loja'}
                         </button>
                       </>
                     )}
@@ -198,7 +205,8 @@ export function UsersSection({ currentUserId }: { currentUserId: string | null }
       <form onSubmit={invite} className="mt-6 border-t border-gray-100 pt-6">
         <h3 className="text-sm font-semibold text-gray-900">Convidar novo usuário</h3>
         <p className="mt-1 text-xs text-gray-600">
-          Enviaremos um e-mail com um link para a pessoa definir a senha e acessar a loja.
+          Quem ainda não usa o NexoLoja recebe um e-mail para definir a senha. Quem já usa (em outra loja) vê o convite
+          ao entrar e precisa aceitar.
         </p>
         <div className="mt-3 flex flex-wrap items-end gap-3">
           <div className="flex-1 min-w-[220px]">

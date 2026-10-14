@@ -322,6 +322,30 @@ sempre.
 3. No topo de todas as telas aparece o **nome da loja atual** (com o símbolo ⇄). Toque nele — ou em **"Trocar de loja"**
    no menu da sua conta — para voltar à lista e escolher outra loja, sem sair e entrar de novo.
 
+**Ganhar acesso a outra loja**
+
+- **Convite do administrador da loja:** ele vai em **Configurações → Usuários → Convidar novo usuário**, digita o seu
+  e-mail e escolhe o papel. Se você já usa o NexoLoja, o convite fica **pendente**: no topo do app aparece **"Você tem
+  1 convite para outra loja — Ver convite"** e, na escolha da loja, **"Você foi convidado para a Loja X — Aceitar /
+  Recusar"**. Só depois de **Aceitar** a loja entra na sua lista. Se você ainda não usa o NexoLoja, chega o e-mail de
+  sempre para definir a senha.
+- **Equipe NexoLoja (implantação):** pelo painel da plataforma, em **Membros** da loja, damos o acesso direto a uma
+  conta que já existe (sem o passo de aceite) e retiramos ao fim.
+- **Sair de uma loja:** na escolha da loja, **"Sair desta loja"** (só aparece com 2 ou mais lojas e nunca onde você é
+  o Dono). O que você registrou na loja continua lá.
+
+**Para o administrador (Configurações → Usuários)**
+
+- A lista mostra **quem tem acesso a esta loja** — inclusive **convites pendentes**, que aparecem **só com o e-mail**
+  (o nome e outros dados da pessoa ficam ocultos até ela aceitar).
+- O convite responde sempre **"Convite enviado"** — o sistema não conta se a pessoa já tinha conta nem em quais lojas
+  ela está.
+- **Papel** e **Desativar** valem **só para esta loja** (a pessoa continua com as outras).
+- **Remover da loja** tira o acesso a esta loja (o histórico de vendas/caixa dela fica). Se a pessoa não tiver mais
+  loja nenhuma nem histórico, a conta é apagada e o e-mail fica livre para um convite novo. Em convite pendente, o
+  botão é **Cancelar convite**.
+- O **Dono** e você mesmo não podem ser alterados nem removidos ali.
+
 **Regras**
 
 | Situação | O que acontece |
@@ -335,9 +359,8 @@ sempre.
 
 **Limitações (por enquanto)**
 
-- Quem **dá** acesso a uma segunda loja ainda é a equipe NexoLoja; o convite pelo administrador da loja (com aceite da
-  pessoa) é a próxima etapa.
-- Na tela de **Usuários** de uma loja aparecem só as pessoas que têm aquela loja como principal.
+- O convite para quem **já usa** o NexoLoja não manda e-mail: a pessoa vê o convite **ao entrar no sistema**.
+- Sair da **única** loja não é possível pela própria pessoa (fale com o administrador).
 - O carrinho é **um por pessoa**: ao trocar de loja, o carrinho em montagem na loja anterior se perde.
 
 ---
@@ -359,3 +382,4 @@ plataforma.
 | 2026-10-14 | Importar planilha (#9): modelo NexoLoja, .xlsx/.csv, pré-visualização, importação idempotente e CSV de erros. |
 | 2026-10-14 | Cupom com etiqueta conferido; colunas Qtd/Unit./Total do cupom 80 mm não grudam nem quebram mais. |
 | 2026-10-14 | Usuário com mais de uma loja (multi-loja, Fatia 2): escolha da loja no login e "Trocar de loja". |
+| 2026-10-14 | Multi-loja, Fatia 4: convite com aceite, "Sair desta loja", Usuários por loja (pendente só com e-mail; remover da loja), Membros no painel da plataforma. |

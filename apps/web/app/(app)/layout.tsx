@@ -706,6 +706,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
+        {/* Convite para outra loja (ADR-014 Fatia 4): a pessoa responde no seletor de loja. */}
+        {(me?.pendingInvites ?? 0) > 0 && (
+          <Link
+            href={SELECT_STORE_PATH}
+            className="flex items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 hover:bg-amber-100"
+          >
+            <span>
+              Você tem {me!.pendingInvites === 1 ? '1 convite' : `${me!.pendingInvites} convites`} para outra loja.
+            </span>
+            <span className="font-semibold">Ver convite →</span>
+          </Link>
+        )}
+
         {/* Aviso de loja desativada pelo Super Usuário (ADR-009): visível no topo de toda tela.
             As vendas novas ficam bloqueadas (a API barra e a tela de Nova Venda também). */}
         {me?.tenantActive === false && (

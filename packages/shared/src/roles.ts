@@ -82,3 +82,27 @@ export const inviteUserSchema = z.object({
   redirectTo: z.string().url().optional(),
 });
 export type InviteUserInput = z.infer<typeof inviteUserSchema>;
+
+/**
+ * Concessão DIRETA de acesso a uma loja pelo Super Usuário (ADR-014 §4, Fatia 4 — painel da plataforma). Só para
+ * conta que JÁ existe: o vínculo nasce ACTIVE (a plataforma é confiável). E-mail sem conta usa o convite da loja.
+ */
+export const grantMembershipSchema = z.object({
+  email: z.string().trim().toLowerCase().email('E-mail inválido.'),
+  storeRole: z.enum(['ADMIN', 'USER']).default('USER'),
+});
+export type GrantMembershipInput = z.infer<typeof grantMembershipSchema>;
+
+/**
+ * Membro de uma loja na tela de Usuários (ADR-014, Fatia 4): o vínculo com a loja ativa. Convite pendente
+ * mostra SÓ o e-mail (`name: null`) — o admin nunca vê dado da identidade de quem ainda não aceitou.
+ */
+export type StoreMember = {
+  id: string;
+  name: string | null;
+  email: string;
+  role: string;
+  storeRole: StoreRole;
+  isActive: boolean;
+  status: 'ACTIVE' | 'PENDING';
+};

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveActiveStore } from './index';
+import { membershipChangeBlocked, planMembershipInvite, resolveActiveStore } from './index';
 
 // =============================================================================
 // Usuário multi-loja — loja ativa da requisição (ADR-014, Fatia 2)
@@ -34,5 +34,27 @@ describe('resolveActiveStore', () => {
   it('nenhum vínculo ativo: sem acesso', () => {
     expect(resolveActiveStore([], undefined)).toEqual({ ok: false, reason: 'NO_ACCESS' });
     expect(resolveActiveStore([], B.tenantId)).toEqual({ ok: false, reason: 'NOT_MEMBER' });
+  });
+});
+
+describe('planMembershipInvite (anti-sequestro, ADR-014 §4)', () => {
+  it('e-mail sem conta: convite normal (definir a senha é o aceite)', () => {
+    expect(planMembershipInvite(false, null)).toBe('NEW_IDENTITY');
+  });
+  it('conta existente nunca ganha acesso sem aceite', () => {
+    expect(planMembershipInvite(true, null)).toBe('CREATE_PENDING');
+    expect(planMembershipInvite(true, { status: 'PENDING', isActive: true })).toBe('REFRESH_PENDING');
+    expect(planMembershipInvite(true, { status: 'ACTIVE', isActive: false })).toBe('REINVITE');
+  });
+  it('já é membro ativo: nada a fazer', () => {
+    expect(planMembershipInvite(true, { status: 'ACTIVE', isActive: true })).toBe('ALREADY_MEMBER');
+  });
+});
+
+describe('membershipChangeBlocked', () => {
+  it('não mexe no próprio vínculo nem no do dono', () => {
+    expect(membershipChangeBlocked('a', 'a', 'CASHIER')).toBe('SELF');
+    expect(membershipChangeBlocked('a', 'b', 'OWNER')).toBe('OWNER');
+    expect(membershipChangeBlocked('a', 'b', 'MANAGER')).toBeNull();
   });
 });

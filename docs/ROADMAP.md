@@ -10,14 +10,20 @@
 >
 > **Última atualização:** 2026-10-14 — **#9 Importar planilha (ADR-041 Fatia 3) + início do #10 multi-loja.**
 >
+> - **#10 Usuário multi-loja (ADR-014) — Fatia 4 NO AR** (API `b4b93cbf`, web `8baaa080`; sem migration): convite a
+>   conta existente vira **pendente** com Aceitar/Recusar (faixa no topo + seletor, que não entra direto com convite);
+>   resposta do convite sempre igual (anti-enumeração); Configurações → Usuários por **vínculo** da loja (pendente só com
+>   e-mail; papel/desativar só nesta loja; "Remover da loja" — sem loja e sem histórico apaga a conta e libera o
+>   e-mail); "Sair desta loja" no seletor; **Membros** no painel da plataforma (ver, conceder a conta existente sem
+>   aceite, revogar). Validado local e em produção (convite real, cancelamento, conta do convidado intacta). **Falta o
+>   Owner testar o painel "Membros"** (login de Super Usuário). **Próxima: Fatia 5** (cleanup, migration 3).
 > - **#10 Usuário multi-loja (ADR-014) — Fatia 3 FEITA:** migration **`0047_rls_multi_tenant` aprovada pelo Owner e
 >   aplicada** — o token do login ganhou `tenant_ids` (lojas com vínculo ativo; o hook nunca quebra o login: falha na
 >   leitura ⇒ token como antes) e as **31 políticas** de leitura por loja passaram a "uma das lojas do token"
 >   (`current_tenant_ids()`, que cai na loja única para tokens antigos). Ensaio em transação desfeita pegou um erro de
 >   SQL antes de aplicar (corrigido); regressão de isolamento antes/depois: token antigo, 1 loja, sem loja e anônimo
 >   **idênticos**; token de 2 lojas vê as duas e nenhuma terceira. **Login real em produção validado** (token novo com as 2 lojas). Sem deploy (só banco). Volta de emergência pronta
->   (`packages/db/scripts/rollback-0047.sql`). **Próxima: Fatia 4** (convite com aceite + Super Usuário concede +
->   sair de uma loja).
+>   (`packages/db/scripts/rollback-0047.sql`). Fatia 4 feita (acima).
 > - **#10 Usuário multi-loja (ADR-014) — Fatia 2 NO AR** (API `e41cb88b`, web `fee5d11e`; sem migration): loja ativa
 >   por `x-active-tenant` conferida contra os vínculos (core `resolveActiveStore`, +5 testes), papel **por loja**,
 >   `GET /me/stores` + tela **`/selecionar-loja`** (login: 1 loja entra direto, 2+ escolhe), chip da loja atual + "Trocar

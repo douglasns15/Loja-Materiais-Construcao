@@ -3074,3 +3074,50 @@ export function resolveActiveStore<M extends { tenantId: string }>(
   if (memberships.length === 1) return { ok: true, membership: memberships[0]! };
   return { ok: false, reason: 'SELECT_STORE' };
 }
+
+/**
+ * Situação de um vínculo existente (ADR-014): `null` quando a pessoa nunca teve vínculo com a loja.
+ */
+export interface MembershipState {
+  status: 'ACTIVE' | 'PENDING';
+  isActive: boolean;
+}
+
+/** O que fazer ao convidar um e-mail para uma loja (ADR-014 §4, Fatia 4). */
+export type InvitePlan =
+  /** E-mail sem conta: convite normal do Auth (definir a senha é o consentimento) — nasce ACTIVE. */
+  | 'NEW_IDENTITY'
+  /** Conta existente sem vínculo com a loja: cria vínculo PENDING (precisa do aceite da pessoa). */
+  | 'CREATE_PENDING'
+  /** Já havia convite pendente: atualiza o papel e segue PENDING. */
+  | 'REFRESH_PENDING'
+  /** Vínculo revogado/desativado: volta a ser convite PENDING (precisa de novo aceite). */
+  | 'REINVITE'
+  /** Já é membro ativo: nada a fazer (a loja já o vê na lista). */
+  | 'ALREADY_MEMBER';
+
+/**
+ * Decide o convite de um e-mail para uma loja. `identityExists` = já há conta (linha em `users`) com o e-mail;
+ * `membership` = vínculo atual dessa conta com ESTA loja. Nunca ativa acesso de uma conta existente sem aceite —
+ * é a regra anti-sequestro da ADR-014 (o admin concede acesso à loja dele, não ganha poder sobre a identidade).
+ */
+export function planMembershipInvite(identityExists: boolean, membership: MembershipState | null): InvitePlan {
+  if (!identityExists) return 'NEW_IDENTITY';
+  if (!membership) return 'CREATE_PENDING';
+  if (membership.status === 'PENDING') return 'REFRESH_PENDING';
+  return membership.isActive ? 'ALREADY_MEMBER' : 'REINVITE';
+}
+
+/**
+ * Pode mexer (papel/ativação/remoção) no vínculo de outra pessoa nesta loja? Recusa o próprio vínculo (não se
+ * auto-bloquear) e o do DONO (toda loja mantém um dono — ADR-008). Devolve o motivo ou `null` se pode.
+ */
+export function membershipChangeBlocked(
+  actorId: string,
+  targetUserId: string,
+  targetRole: string,
+): 'SELF' | 'OWNER' | null {
+  if (actorId === targetUserId) return 'SELF';
+  if (targetRole === 'OWNER') return 'OWNER';
+  return null;
+}

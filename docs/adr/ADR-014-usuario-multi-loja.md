@@ -10,7 +10,8 @@
   `fee5d11e`; sem migration) — validada local e em produção com o `owner_kg` (Dono na Demo Mercardinho + Gerente na
   Loja Demo, vínculo de teste). **Fatia 3 CONCLUÍDA 2026-10-14** — migration `0047_rls_multi_tenant` aprovada pelo
   Owner e aplicada (hook com `tenant_ids`, `current_tenant_ids()`, 31 políticas `= ANY(...)`); ensaio em transação
-  desfeita + regressão de isolamento antes/depois idênticas onde deviam ser.
+  desfeita + regressão de isolamento antes/depois idênticas onde deviam ser. **Fatia 4 CONCLUÍDA 2026-10-14** (sem
+  migration) — convite com aceite, concessão pelo Super Usuário, remover/sair da loja; ver decisões na seção Fatiamento.
 - **Data:** 2026-07-17 (proposta) · 2026-09-30 (aceite)
 - **Contexto de fase:** Fase 3 (produção). Assenta sobre o RBAC da loja (ADR-008) e a plataforma/multi-loja
   do Super Usuário (ADR-009), **sem** se confundir com eles (ver "Não é isto" abaixo).
@@ -267,6 +268,14 @@ Migrations **aditivas** e faseadas (padrão do projeto: `migrate diff` + `migrat
 4. **Fatia 4 — Concessão/remoção de acesso "ambos" + consentimento.** Super Usuário concede; Admin convida
    existente com fluxo `PENDING → ACEITAR`, resposta genérica, anti-vazamento, auditoria. Inclui **revogar
    membership (sair de uma loja)** e a nova semântica de exclusão da seção 5 (identidade vs. vínculo).
+   **Fatia 4 feita 2026-10-14.** Decisões da implementação: a gestão `/users` opera SÓ no vínculo (não grava mais
+   `users.role/isActive`; desativar numa loja não bloqueia as outras); "remover" apaga o vínculo e, se a pessoa ficar
+   sem loja e sem histórico, apaga a identidade + Auth (o antigo "Excluir"); convite a conta existente não manda
+   e-mail (o Auth não reenvia convite a conta existente) — a pessoa vê na entrada (faixa no topo + seletor, que não
+   entra direto com convite pendente); a checagem da credencial de serviço fica no início do convite para a resposta
+   não variar com a existência da conta; regras puras `planMembershipInvite` + `membershipChangeBlocked` (core, com
+   testes); "Sair desta loja" só com 2+ lojas e nunca como Dono. Cuidado do dual-source: um script que regrave
+   `users.role` faz o gatilho da 0046 reativar o vínculo de casa — some na Fatia 5.
 5. **Fatia 5 — Cleanup (migration 3).** Remover `users.tenantId`/`role` quando todo o read-path estiver na
    membership. Só após validação ponta a ponta.
 

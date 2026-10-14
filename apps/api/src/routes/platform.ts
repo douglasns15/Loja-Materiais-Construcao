@@ -6,6 +6,9 @@ import {
   MODULE_SCALE_LABEL,
   activeModuleKeys,
   createTenantSchema,
+  grantMembershipSchema,
+  storeRoleToUserRole,
+  toStoreRole,
   parseScaleLabelLayout,
   setTenantActiveSchema,
   setTenantModuleSchema,
@@ -61,7 +64,8 @@ platform.get('/tenants', async (c) => {
         createdAt: true,
         // Ramos da loja (ADR-039), exibidos como chips na lista.
         segments: true,
-        _count: { select: { users: true } },
+        // Multi-loja (ADR-014): conta os VÍNCULOS ativos e aceitos (quem de fato acessa a loja), não `users.tenantId`.
+        _count: { select: { memberships: { where: { status: 'ACTIVE', isActive: true } } } },
         // Módulos da loja (ADR-011 offline + ADR-039 módulos de ramo), para os interruptores do painel.
         modules: { select: { moduleKey: true, isActive: true, config: true } },
       },
@@ -100,7 +104,7 @@ platform.get('/tenants', async (c) => {
         const ms = lastActivity.get(t.id);
         return {
           ...t,
-          userCount: _count.users,
+          userCount: _count.memberships,
           offlineSales: modules.some((m) => m.moduleKey === MODULE_OFFLINE_SALES && m.isActive === true),
           // Chaves dos módulos ATIVOS (ADR-039) — o painel acende os interruptores por elas.
           modules: activeModuleKeys(modules),
@@ -425,6 +429,130 @@ platform.post('/tenants/:id/support', async (c) => {
   } catch (err) {
     console.error('POST /platform/tenants/:id/support falhou:', err);
     return c.json({ ok: false, error: 'Falha ao iniciar a sessão de suporte.' }, 500);
+  }
+});
+
+// ---------------------------------------------------------------------------------------------
+// Membros de uma loja (ADR-014 §4, Fatia 4) — o Super Usuário concede/revoga acesso DIRETO (identidade de plataforma,
+// confiável: sem o passo de aceite). Mesma tabela e trilha de auditoria do convite da loja.
+// ---------------------------------------------------------------------------------------------
+
+/** Membros (vínculos) de uma loja, com nome — o Super Usuário vê a identidade (é a plataforma). */
+platform.get('/tenants/:id/members', async (c) => {
+  try {
+    const prisma = getPrisma(c);
+    const rows = await prisma.tenantMembership.findMany({
+      where: { tenantId: c.req.param('id') },
+      select: {
+        userId: true,
+        role: true,
+        status: true,
+        isActive: true,
+        invitedByName: true,
+        user: { select: { name: true, email: true, tenantId: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    return c.json({
+      ok: true,
+      data: rows.map((r) => ({
+        userId: r.userId,
+        name: r.user.name,
+        email: r.user.email,
+        role: r.role,
+        storeRole: toStoreRole(r.role),
+        status: r.status,
+        isActive: r.isActive,
+        invitedByName: r.invitedByName,
+        // Loja "de casa" da pessoa (ainda `users.tenantId` até a Fatia 5) — ajuda o suporte a entender o vínculo.
+        isHomeStore: r.user.tenantId === c.req.param('id'),
+      })),
+    });
+  } catch (err) {
+    console.error('GET /platform/tenants/:id/members falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao listar os membros.' }, 500);
+  }
+});
+
+/**
+ * Concede acesso a uma loja a uma conta que JÁ existe (implantação acompanhada, implantador temporário etc.).
+ * Vínculo nasce ACTIVE (ou um convite pendente vira ACTIVE). E-mail sem conta ⇒ 404 orientando o convite da loja.
+ * `AuditEvent GRANT_MEMBERSHIP` com `platform: true`.
+ */
+platform.post('/tenants/:id/members', async (c) => {
+  const tenantId = c.req.param('id');
+  const parsed = grantMembershipSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) {
+    return c.json({ ok: false, error: 'Dados inválidos.', issues: parsed.error.flatten() }, 400);
+  }
+  const { email, storeRole } = parsed.data;
+  const role = storeRoleToUserRole(storeRole);
+  try {
+    const prisma = getPrisma(c);
+    const [tenant, identity] = await Promise.all([
+      prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true } }),
+      prisma.user.findFirst({ where: { email: { equals: email, mode: 'insensitive' } }, select: { id: true } }),
+    ]);
+    if (!tenant) return c.json({ ok: false, error: 'Loja não encontrada.' }, 404);
+    if (!identity) {
+      return c.json(
+        { ok: false, error: 'Este e-mail ainda não tem conta no NexoLoja. Use o convite pela tela de Usuários da loja.' },
+        404,
+      );
+    }
+    await prisma.$transaction(async (tx) => {
+      await tx.tenantMembership.upsert({
+        where: { userId_tenantId: { userId: identity.id, tenantId } },
+        create: { userId: identity.id, tenantId, role, status: 'ACTIVE', isActive: true, invitedByName: c.get('platformAdminName') },
+        update: { role, status: 'ACTIVE', isActive: true, invitedByName: c.get('platformAdminName') },
+      });
+      await tx.auditEvent.create({
+        data: {
+          tenantId,
+          userId: c.get('platformAdminId'),
+          entity: 'User',
+          entityId: identity.id,
+          action: 'GRANT_MEMBERSHIP',
+          meta: { platform: true, email, roleAfter: role },
+        },
+      });
+    });
+    return c.json({ ok: true, data: { userId: identity.id, granted: true } }, 201);
+  } catch (err) {
+    console.error('POST /platform/tenants/:id/members falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao conceder o acesso.' }, 500);
+  }
+});
+
+/** Revoga o acesso de alguém a uma loja (apaga o vínculo; histórico intacto). Nunca o DONO. `REVOKE_MEMBERSHIP`. */
+platform.delete('/tenants/:id/members/:userId', async (c) => {
+  const tenantId = c.req.param('id');
+  const userId = c.req.param('userId');
+  try {
+    const prisma = getPrisma(c);
+    const m = await prisma.tenantMembership.findUnique({
+      where: { userId_tenantId: { userId, tenantId } },
+      select: { role: true },
+    });
+    if (!m) return c.json({ ok: false, error: 'Vínculo não encontrado.' }, 404);
+    if (m.role === 'OWNER') return c.json({ ok: false, error: 'O dono da loja não pode ser removido.' }, 400);
+    await prisma.$transaction(async (tx) => {
+      await tx.tenantMembership.delete({ where: { userId_tenantId: { userId, tenantId } } });
+      await tx.auditEvent.create({
+        data: {
+          tenantId,
+          userId: c.get('platformAdminId'),
+          entity: 'User',
+          entityId: userId,
+          action: 'REVOKE_MEMBERSHIP',
+          meta: { platform: true, roleBefore: m.role },
+        },
+      });
+    });
+    return c.json({ ok: true, data: { userId, revoked: true } });
+  } catch (err) {
+    console.error('DELETE /platform/tenants/:id/members/:userId falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao revogar o acesso.' }, 500);
   }
 });
 

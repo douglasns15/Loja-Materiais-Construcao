@@ -33,6 +33,8 @@ export type Me = {
   tenantName?: string | null;
   /** Lojas a que a pessoa tem acesso — com 2+, o shell mostra a loja atual e "Trocar de loja". */
   stores?: { tenantId: string; name: string; role: string; storeRole: StoreRole; tenantActive: boolean }[];
+  /** Convites de loja aguardando a resposta da pessoa (ADR-014 Fatia 4) — o topo do app avisa. */
+  pendingInvites?: number;
 };
 
 /**

@@ -17,6 +17,7 @@ import {
 import { apiGet, apiPatch, apiPost } from '@/lib/api';
 import { saveSupportSession } from '@/lib/support';
 import { ScaleLabelSettings } from '@/components/ScaleLabelSettings';
+import { TenantMembersModal } from '@/components/TenantMembersModal';
 
 type Tenant = {
   id: string;
@@ -100,6 +101,9 @@ export default function PlataformaPage() {
   function toggleSegment(seg: StoreSegment) {
     setSegments((cur) => (cur.includes(seg) ? cur.filter((x) => x !== seg) : [...cur, seg]));
   }
+
+  // Membros da loja (ADR-014 Fatia 4): janela com quem tem acesso, conceder e revogar.
+  const [membersOf, setMembersOf] = useState<Tenant | null>(null);
 
   async function load() {
     try {
@@ -465,6 +469,13 @@ export default function PlataformaPage() {
                   <td className="px-4 py-2">
                     <div className="flex justify-end gap-2">
                       <button
+                        onClick={() => setMembersOf(t)}
+                        className="rounded-lg border border-indigo-300 px-3 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-50"
+                        title="Ver quem tem acesso a esta loja, conceder ou revogar"
+                      >
+                        Membros
+                      </button>
+                      <button
                         onClick={() => enterSupport(t)}
                         disabled={supportingId === t.id}
                         className="rounded-lg border border-blue-600 px-3 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
@@ -491,6 +502,15 @@ export default function PlataformaPage() {
           </tbody>
         </table>
       </div>
+      {membersOf && (
+        <TenantMembersModal
+          tenant={membersOf}
+          onClose={() => {
+            setMembersOf(null);
+            void load();
+          }}
+        />
+      )}
     </div>
   );
 }

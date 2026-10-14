@@ -31,6 +31,110 @@ function toStoreList(memberships: Env['Variables']['memberships']) {
  */
 me.get('/stores', requireIdentity, (c) => c.json({ ok: true, data: toStoreList(c.get('memberships')) }));
 
+/**
+ * Convites PENDENTES da pessoa (ADR-014 §4, Fatia 4) — "Você foi convidado para a Loja X". Mostra a loja, o papel
+ * oferecido e quem convidou (snapshot). Só identidade: aparece no seletor, antes de escolher a loja.
+ */
+me.get('/invites', requireIdentity, async (c) => {
+  try {
+    const prisma = getPrisma(c);
+    const rows = await prisma.tenantMembership.findMany({
+      where: { userId: c.get('userId'), status: 'PENDING', isActive: true },
+      select: { tenantId: true, role: true, invitedByName: true, createdAt: true, tenant: { select: { name: true } } },
+      orderBy: { createdAt: 'asc' },
+    });
+    return c.json({
+      ok: true,
+      data: rows.map((r) => ({
+        tenantId: r.tenantId,
+        name: r.tenant.name,
+        role: r.role,
+        storeRole: toStoreRole(r.role),
+        invitedByName: r.invitedByName,
+        invitedAt: r.createdAt,
+      })),
+    });
+  } catch (err) {
+    console.error('GET /me/invites falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao carregar os convites.' }, 500);
+  }
+});
+
+/**
+ * Responde a um convite: `accept` ⇒ vínculo ACTIVE (a loja entra na lista); `decline` ⇒ vínculo apagado (nada muda
+ * para a pessoa). Só o PRÓPRIO convidado responde, e só convite pendente. `AuditEvent ACCEPT_/DECLINE_MEMBERSHIP` na
+ * trilha da loja que convidou (ADR-004).
+ */
+me.post('/invites/:tenantId/:answer', requireIdentity, async (c) => {
+  const answer = c.req.param('answer');
+  if (answer !== 'accept' && answer !== 'decline') {
+    return c.json({ ok: false, error: 'Resposta inválida.' }, 400);
+  }
+  const userId = c.get('userId');
+  const tenantId = c.req.param('tenantId');
+  if (!/^[0-9a-f-]{36}$/i.test(tenantId)) return c.json({ ok: false, error: 'Convite não encontrado.' }, 404);
+  try {
+    const prisma = getPrisma(c);
+    const invite = await prisma.tenantMembership.findFirst({
+      where: { userId, tenantId, status: 'PENDING', isActive: true },
+      select: { id: true, role: true },
+    });
+    if (!invite) return c.json({ ok: false, error: 'Convite não encontrado.' }, 404);
+    await prisma.$transaction(async (tx) => {
+      if (answer === 'accept') {
+        await tx.tenantMembership.update({ where: { id: invite.id }, data: { status: 'ACTIVE' } });
+      } else {
+        await tx.tenantMembership.delete({ where: { id: invite.id } });
+      }
+      await tx.auditEvent.create({
+        data: {
+          tenantId,
+          userId,
+          entity: 'User',
+          entityId: userId,
+          action: answer === 'accept' ? 'ACCEPT_MEMBERSHIP' : 'DECLINE_MEMBERSHIP',
+          meta: { role: invite.role },
+        },
+      });
+    });
+    return c.json({ ok: true, data: { tenantId, accepted: answer === 'accept' } });
+  } catch (err) {
+    console.error('POST /me/invites falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao responder o convite.' }, 500);
+  }
+});
+
+/**
+ * A própria pessoa SAI de uma loja (ADR-014 §5a). Só com 2+ lojas (sair da única deixaria a conta sem acesso — isso
+ * é com o administrador) e nunca como DONO (toda loja mantém um dono). O histórico dela na loja fica intacto.
+ */
+me.post('/stores/:tenantId/leave', requireIdentity, async (c) => {
+  const userId = c.get('userId');
+  const tenantId = c.req.param('tenantId');
+  const stores = c.get('memberships');
+  const target = stores.find((m) => m.tenantId === tenantId);
+  if (!target) return c.json({ ok: false, error: 'Você não tem acesso a esta loja.' }, 404);
+  if (target.role === 'OWNER') {
+    return c.json({ ok: false, error: 'O dono não pode sair da própria loja.' }, 400);
+  }
+  if (stores.length < 2) {
+    return c.json({ ok: false, error: 'Esta é a sua única loja. Para sair, fale com o administrador.' }, 400);
+  }
+  try {
+    const prisma = getPrisma(c);
+    await prisma.$transaction(async (tx) => {
+      await tx.tenantMembership.delete({ where: { userId_tenantId: { userId, tenantId } } });
+      await tx.auditEvent.create({
+        data: { tenantId, userId, entity: 'User', entityId: userId, action: 'REVOKE_MEMBERSHIP', meta: { self: true, roleBefore: target.role } },
+      });
+    });
+    return c.json({ ok: true, data: { tenantId, left: true } });
+  } catch (err) {
+    console.error('POST /me/stores/:tenantId/leave falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao sair da loja.' }, 500);
+  }
+});
+
 // Demais rotas de `/me`: perfil na LOJA ATIVA.
 me.use('/', requireAuth);
 
@@ -76,6 +180,10 @@ me.get('/', async (c) => {
         activeTenantId: tenantId,
         tenantName: stores.find((s) => s.tenantId === tenantId)?.name ?? null,
         stores,
+        // Convites aguardando resposta (ADR-014 Fatia 4) — o topo do app avisa e leva ao seletor.
+        pendingInvites: await prisma.tenantMembership.count({
+          where: { userId, status: 'PENDING', isActive: true },
+        }),
         tenantActive: c.get('tenantActive'),
         offlineSales: isOfflineSalesOn(modules),
         modules: activeModuleKeys(modules),
