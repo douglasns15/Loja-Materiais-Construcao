@@ -6280,3 +6280,20 @@ Dados de teste criados na Demo Mercardinho: "Teste planilha arroz 5kg" (`7899990
 mussarela" (`TPL-QJ`, PLU 456), "Teste planilha sorvete pote 2L", "Teste xlsx feijão 1kg" (`7899990000021`), "Teste xlsx
 linguiça" (`TXL-LING`); categorias Frios, Frios > Queijos, Sorvetes, Mercearia > Doces; Leite Condensado agora R$ 9,49,
 custo 6,20, estoque 20, categoria Mercearia > Doces; `TSTSEQ-01` com mínimo 2.
+
+**Deploy (2026-10-14, autorizado pelo Owner):** API `29f879e9` (anterior `8932d7a3`) — `/health` e `/db-check` 200,
+`POST /products/import` sem token 401, preflight 204; web `ece4829a` (anterior `dbc04cb7`) — smoke ✅, BUILD_ID local =
+HTML ao vivo, modelo `.xlsx` servido (200, tipo planilha, 4.838 B).
+
+**Validação em produção (`owner_kg`):** planilha com 1 novo, 5 atualizações, 1 sem mudança e 1 erro ⇒ "1 cadastrados ·
+5 atualizados · 1 sem mudança · 1 com erro" ✅; reenvio do mesmo lote 3× ⇒ tudo `unchanged` ✅. **Medição:** lote só de
+leitura 1,5–2,0 s de relógio com 42–214 ms de CPU — limitado pela ida e volta ao banco (~0,25 s por comando).
+
+**Ajuste de desempenho:** as atualizações do lote viraram um único `UPDATE … FROM (VALUES …)` (antes: 1 comando por
+produto ⇒ 100 atualizações estourariam os 20 s da transação). Testado com a API local contra o banco: preço (limpa o
+aviso de revisão), custo sem preço (acende o aviso), estoque para baixo (saída de 1) e para cima (entrada de 6),
+categoria, mínimo e nome — todos ✅; campos vazios preservados; saldo do produto = soma dos movimentos ✅. Deploy da API
+`fcca9ce2`: 6 atualizações reais ≈ 2,5 s de relógio, 172 ms de CPU ✅ (o tempo não cresce com o lote).
+
+**Achado (fora do escopo):** a 1ª chamada após o deploy voltou 401 com token válido (wall 5.001 ms) — o JWKS do Supabase
+estoura o timeout padrão de 5 s do `jose` numa instância nova do Worker; a seguinte passou. Tarefa separada sugerida.

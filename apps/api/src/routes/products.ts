@@ -494,37 +494,23 @@ products.post('/import', requireAdmin, requireActiveTenant, async (c) => {
         `);
         for (const l of locked) fresh.set(l.id, l.stockQty);
       }
+      // UM único UPDATE para todas as linhas "Atualiza" do lote (`UPDATE … FROM (VALUES …)`). Medido em
+      // produção (2026-10-14): o lote é limitado pela IDA E VOLTA ao banco (~0,2–0,3 s por comando), não
+      // por CPU — um `update` por produto faria 100 atualizações estourarem os 20 s da transação. A
+      // importação nunca APAGA dado (célula vazia = manter), então NULL na lista = "não mexe" (`COALESCE`).
+      // `review`: 0 mantém o aviso de revisão de preço, 1 limpa (a planilha trouxe preço), 2 acende (só o
+      // custo mudou — mesma precedência da NF-e). `delta` = diferença do estoque (contagem de abertura).
       let stockAdjustments = 0;
+      const updateRows: Prisma.Sql[] = [];
       for (const item of plan) {
         if (item.kind !== 'update') continue;
         const { patch, row } = item;
-        const update: Prisma.ProductUpdateInput = {
-          ...(patch.name !== undefined ? { name: patch.name } : {}),
-          ...(patch.sku !== undefined ? { sku: patch.sku } : {}),
-          ...(patch.ean !== undefined ? { ean: patch.ean } : {}),
-          ...(patch.popularName !== undefined ? { popularName: patch.popularName } : {}),
-          ...(patch.manufacturer !== undefined ? { manufacturer: patch.manufacturer } : {}),
-          ...(patch.description !== undefined ? { description: patch.description } : {}),
-          ...(patch.salePrice !== undefined ? { salePrice: patch.salePrice } : {}),
-          ...(patch.costPrice !== undefined ? { costPrice: patch.costPrice } : {}),
-          ...(patch.minStockQty !== undefined ? { minStockQty: patch.minStockQty } : {}),
-          ...(patch.scaleCode !== undefined ? { scaleCode: patch.scaleCode } : {}),
-          ...(patch.ncm !== undefined ? { ncm: patch.ncm } : {}),
-          ...(patch.category ? { category: { connect: { id: await ensureCategory(patch.category) } } } : {}),
-          // Preço na planilha = o lojista definiu o preço AGORA (limpa o aviso). Só o custo mudou ⇒
-          // margem mudou e o preço não: acende o aviso de revisão (mesma precedência da NF-e).
-          ...(row.salePrice != null
-            ? { priceReviewPendingAt: null }
-            : patch.costPrice !== undefined
-              ? { priceReviewPendingAt: new Date() }
-              : {}),
-          ...authorship,
-        };
+        let delta = 0;
         if (item.stock.kind === 'adjust' && item.stock.countedQty != null) {
           const current = fresh.get(item.product.id) ?? item.product.stockQty;
           const s = planOpeningCount({ stockQty: current, trackStock: item.product.trackStock }, item.stock.countedQty);
           if (s.kind === 'adjust') {
-            update.stockQty = s.type === 'INCOME' ? { increment: s.quantity } : { decrement: s.quantity };
+            delta = s.type === 'INCOME' ? s.quantity : -s.quantity;
             movements.push({
               tenantId,
               productId: item.product.id,
@@ -538,7 +524,41 @@ products.post('/import', requireAdmin, requireActiveTenant, async (c) => {
             stockAdjustments++;
           }
         }
-        await tx.product.update({ where: { id: item.product.id }, data: update });
+        const categoryId = patch.category ? await ensureCategory(patch.category) : null;
+        const review = row.salePrice != null ? 1 : patch.costPrice !== undefined ? 2 : 0;
+        updateRows.push(Prisma.sql`(
+          ${item.product.id}::uuid, ${patch.name ?? null}::text, ${patch.sku ?? null}::text, ${patch.ean ?? null}::text,
+          ${patch.popularName ?? null}::text, ${patch.manufacturer ?? null}::text, ${patch.description ?? null}::text,
+          ${patch.salePrice ?? null}::numeric, ${patch.costPrice ?? null}::numeric, ${patch.minStockQty ?? null}::numeric,
+          ${patch.scaleCode ?? null}::text, ${patch.ncm ?? null}::text, ${categoryId}::uuid,
+          ${delta}::numeric, ${review}::int
+        )`);
+      }
+      if (updateRows.length) {
+        await tx.$executeRaw(Prisma.sql`
+          UPDATE "products" AS p SET
+            "name" = COALESCE(v.name, p."name"),
+            "sku" = COALESCE(v.sku, p."sku"),
+            "ean" = COALESCE(v.ean, p."ean"),
+            "popularName" = COALESCE(v.popular, p."popularName"),
+            "manufacturer" = COALESCE(v.manufacturer, p."manufacturer"),
+            "description" = COALESCE(v.description, p."description"),
+            "salePrice" = COALESCE(v.sale, p."salePrice"),
+            "costPrice" = COALESCE(v.cost, p."costPrice"),
+            "minStockQty" = COALESCE(v.min, p."minStockQty"),
+            "scaleCode" = COALESCE(v.scale, p."scaleCode"),
+            "ncm" = COALESCE(v.ncm, p."ncm"),
+            "categoryId" = COALESCE(v.cat, p."categoryId"),
+            "stockQty" = p."stockQty" + v.delta,
+            "priceReviewPendingAt" = CASE v.review WHEN 1 THEN NULL WHEN 2 THEN now() ELSE p."priceReviewPendingAt" END,
+            "updatedById" = ${userId ?? null}::uuid,
+            "updatedByName" = ${userName ?? null}::text,
+            "updatedAt" = now()
+          FROM (VALUES ${Prisma.join(updateRows)}) AS v(
+            id, name, sku, ean, popular, manufacturer, description, sale, cost, min, scale, ncm, cat, delta, review
+          )
+          WHERE p."id" = v.id AND p."tenantId" = ${tenantId}::uuid
+        `);
       }
       if (movements.length) await tx.stockMovement.createMany({ data: movements });
 
@@ -589,8 +609,12 @@ products.post('/import', requireAdmin, requireActiveTenant, async (c) => {
     });
     return c.json({ ok: true, data });
   } catch (err) {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-      console.warn('POST /products/import conflito de código:', err.meta);
+    // Conflito de unicidade: P2002 (createMany) ou P2010 com 23505 do Postgres (o UPDATE em SQL cru).
+    const uniqueClash =
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      (err.code === 'P2002' || (err.code === 'P2010' && JSON.stringify(err.meta ?? {}).includes('23505')));
+    if (uniqueClash) {
+      console.warn('POST /products/import conflito de código:', (err as Prisma.PrismaClientKnownRequestError).meta);
       return c.json(
         {
           ok: false,

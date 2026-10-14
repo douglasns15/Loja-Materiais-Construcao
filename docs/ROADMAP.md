@@ -10,8 +10,10 @@
 >
 > **Última atualização:** 2026-10-14 — **#9 Importar planilha (ADR-041 Fatia 3).**
 >
-> - **#9 Importar planilha** — **implementada e validada no navegador** (web de dev + API local contra o banco real,
->   loja Demo Mercardinho); **deploy PENDENTE**. Produtos → "⤒ Importar planilha" (só admin): modelo NexoLoja
+> - **#9 Importar planilha** — **NO AR 2026-10-14 (API `fcca9ce2`, web `ece4829a`; deploy autorizado pelo Owner) e
+>   validada em produção** (Demo Mercardinho, `owner_kg`), além do teste com a API local. Ajuste pós-deploy: as
+>   atualizações do lote viraram **um único `UPDATE`** (medido: ~0,25 s por comando ao banco; 6 atualizações ≈ 2,5 s,
+>   e o tempo não cresce com o lote). Decisões da implementação **confirmadas pelo Owner**. Produtos → "⤒ Importar planilha" (só admin): modelo NexoLoja
 >   (`public/modelos/modelo-produtos-nexoloja.xlsx`, gerado por `apps/web/scripts/gerar-modelo-planilha.mjs`, sem
 >   dependência), `.xlsx` (`read-excel-file@9.3.10`, fixa) ou `.csv` lidos no navegador, colunas casadas por apelido,
 >   pré-visualização Novo/Atualiza/Sem mudança/Erro, importação em lotes de 100 com progresso e CSV das linhas com
@@ -21,6 +23,8 @@
 >   "sem mudança"). Decisões tomadas na implementação (para o Owner conferir): unidade e "controla estoque" não mudam
 >   produto existente (aviso); barra/rolo/pacote fora; produto sem código ganha SKU do nome e é reconhecido pelo nome
 >   na reimportação. De-Para editável + perfis = Fatia 4. Testes: shared 140 (+26), core 517.
+> - **Achado fora do escopo (tarefa separada sugerida):** a 1ª requisição após um deploy da API pode voltar 401 com
+>   token válido — o JWKS do Supabase estoura o timeout de 5 s do `jose` numa instância nova do Worker.
 > - **Ferramenta:** `apps/api/scripts/dev-local.mjs` + configuração **"api"** no `.claude/launch.json` sobem a API
 >   local (`wrangler dev` com a connection string do `.dev.vars`) — substitui o passo manual do item 5 abaixo.
 >
