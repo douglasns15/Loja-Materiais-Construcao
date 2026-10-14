@@ -1,23 +1,10 @@
 import { createMiddleware } from 'hono/factory';
-import { createRemoteJWKSet, jwtVerify } from 'jose';
 
 import { isAdminRole } from '@nexoloja/shared';
 import { type Env, getConnectionString, getPrisma } from '../lib/request';
 import { verifySupportToken } from '../lib/supportToken';
+import { TOKEN_UNAVAILABLE, verifySupabaseToken } from '../lib/supabaseToken';
 import { withDbRetry } from '../lib/dbRetry';
-
-// O conjunto de chaves públicas (JWKS) do Supabase é cacheado no isolate do Worker.
-let jwks: ReturnType<typeof createRemoteJWKSet> | undefined;
-let jwksUrl: string | undefined;
-
-function getJwks(supabaseUrl: string) {
-  const url = `${supabaseUrl}/auth/v1/.well-known/jwks.json`;
-  if (!jwks || jwksUrl !== url) {
-    jwks = createRemoteJWKSet(new URL(url));
-    jwksUrl = url;
-  }
-  return jwks;
-}
 
 /**
  * Exige um access token válido do Supabase Auth no header `Authorization: Bearer <jwt>`.
@@ -37,17 +24,13 @@ export const requireAuth = createMiddleware<Env>(async (c, next) => {
     return c.json({ ok: false, error: 'SUPABASE_URL não configurada.' }, 500);
   }
 
-  let sub: string;
-  try {
-    const { payload } = await jwtVerify(token, getJwks(supabaseUrl), {
-      issuer: `${supabaseUrl}/auth/v1`,
-      audience: 'authenticated',
-    });
-    if (!payload.sub) throw new Error('JWT sem sub');
-    sub = payload.sub;
-  } catch {
-    return c.json({ ok: false, error: 'Token inválido ou expirado.' }, 401);
+  const check = await verifySupabaseToken(token, supabaseUrl, c.env.SUPABASE_JWKS);
+  if (!check.ok) {
+    return check.transient
+      ? c.json({ ok: false, error: TOKEN_UNAVAILABLE }, 503)
+      : c.json({ ok: false, error: 'Token inválido ou expirado.' }, 401);
   }
+  const sub = check.sub;
 
   const connectionString = getConnectionString(c.env);
   if (!connectionString) {
@@ -138,17 +121,13 @@ export const requirePlatformAuth = createMiddleware<Env>(async (c, next) => {
     return c.json({ ok: false, error: 'SUPABASE_URL não configurada.' }, 500);
   }
 
-  let sub: string;
-  try {
-    const { payload } = await jwtVerify(token, getJwks(supabaseUrl), {
-      issuer: `${supabaseUrl}/auth/v1`,
-      audience: 'authenticated',
-    });
-    if (!payload.sub) throw new Error('JWT sem sub');
-    sub = payload.sub;
-  } catch {
-    return c.json({ ok: false, error: 'Token inválido ou expirado.' }, 401);
+  const check = await verifySupabaseToken(token, supabaseUrl, c.env.SUPABASE_JWKS);
+  if (!check.ok) {
+    return check.transient
+      ? c.json({ ok: false, error: TOKEN_UNAVAILABLE }, 503)
+      : c.json({ ok: false, error: 'Token inválido ou expirado.' }, 401);
   }
+  const sub = check.sub;
 
   const connectionString = getConnectionString(c.env);
   if (!connectionString) {

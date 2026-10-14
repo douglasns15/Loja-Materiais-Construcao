@@ -225,6 +225,10 @@ CSV é lido sem dependência (parser próprio simples, com aspas, `;` ou `,`, UT
    lote; (e) o modelo `.xlsx` é um arquivo estático gerado por script sem dependência (a `read-excel-file` só lê).
    O casamento de colunas desta fatia é automático (apelidos); o De-Para editável fica na Fatia 4.
 4. **Fatia 4 — Planilha: De-Para editável + perfis lembrados** (exportação de sistema anterior).
+   **ADIADA por decisão do Owner (2026-10-14):** não é necessária agora — o modelo NexoLoja, que é o que vai para os
+   lojistas, não precisa dela, e os apelidos automáticos cobrem os títulos comuns. **Volta para discussão quando
+   aparecer o primeiro cliente com exportação de outro sistema** — com o arquivo real em mãos decide-se entre ajustar
+   apelidos, criar um perfil pronto daquele sistema ou construir o De-Para editável (só web, sem rota nem migration).
 5. **Futuro:** download automático de NF-e (§C, fase NFC-e); importar clientes/fornecedores; perfis prontos por
    sistema de mercado.
 

@@ -7,6 +7,11 @@ compatibility_flags = ["nodejs_compat"]
 # Variáveis públicas (não-segredas)
 [vars]
 SUPABASE_URL = "https://esxssekaflzewibbklpu.supabase.co"
+# Chaves PÚBLICAS do Supabase Auth (cópia de <SUPABASE_URL>/auth/v1/.well-known/jwks.json): o JWT é
+# verificado sem baixar o JWKS a cada isolate novo (o download chegou a estourar 5 s e virar 401 falso
+# logo após um deploy — 2026-10-14). Não é segredo. Se o Supabase ROTACIONAR a chave, tokens novos caem
+# no JWKS remoto (reserva automática, com aviso no log) — atualize esta linha e redeploye.
+SUPABASE_JWKS = '{"keys":[{"alg":"ES256","crv":"P-256","ext":true,"key_ops":["verify"],"kid":"b20145d8-1f96-41a1-a86a-c2edc1dfac40","kty":"EC","use":"sig","x":"NxqHIueYWXiTuMX5FKMiWPhqpN9NQmW5qzxGew5TdiA","y":"eZnxYPCiJdIvQ_mEr07tDnxDNa0KjIB1NnMFZQJlhkI"}]}'
 
 # --- Keep-alive do pool (ADR-005 / causa raiz do cold start) ---
 # Cron a cada 5 min → dispara o handler `scheduled` (src/index.ts → runKeepAlive), que faz um

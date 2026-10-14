@@ -22,9 +22,13 @@
 >   IMPORT_PRODUCTS` por importação). **Sem migration.** Idempotência validada na tela e no servidor (lote reenviado ⇒
 >   "sem mudança"). Decisões tomadas na implementação (para o Owner conferir): unidade e "controla estoque" não mudam
 >   produto existente (aviso); barra/rolo/pacote fora; produto sem código ganha SKU do nome e é reconhecido pelo nome
->   na reimportação. De-Para editável + perfis = Fatia 4. Testes: shared 140 (+26), core 517.
-> - **Achado fora do escopo (tarefa separada sugerida):** a 1ª requisição após um deploy da API pode voltar 401 com
->   token válido — o JWKS do Supabase estoura o timeout de 5 s do `jose` numa instância nova do Worker.
+>   na reimportação. De-Para editável + perfis = Fatia 4 — **ADIADA pelo Owner** (volta para discussão quando aparecer
+>   um cliente com exportação de outro sistema). Testes: shared 140 (+26), core 517.
+> - **401 falso na 1ª requisição após deploy — CORRIGIDO** (achado no teste da #9): o JWKS do Supabase era baixado a cada
+>   isolate novo (~1,2 s; passando dos 5 s do `jose`, virava "Token inválido" com token válido). Agora as chaves
+>   públicas ficam na var `SUPABASE_JWKS` do `wrangler.toml` (verificação sem rede; remoto só como reserva para
+>   rotação de chave) e falha ao obter as chaves responde **503** (tente de novo), não 401. Primeiros testes da API
+>   (`supabaseToken.test.ts`, 7 casos de segurança). Validado com a API local + token real.
 > - **Ferramenta:** `apps/api/scripts/dev-local.mjs` + configuração **"api"** no `.claude/launch.json` sobem a API
 >   local (`wrangler dev` com a connection string do `.dev.vars`) — substitui o passo manual do item 5 abaixo.
 >

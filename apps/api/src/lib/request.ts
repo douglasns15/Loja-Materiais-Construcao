@@ -9,6 +9,11 @@ export type Bindings = {
   /** URL do projeto Supabase (para verificar o JWT via JWKS). */
   SUPABASE_URL?: string;
   /**
+   * JWKS PÚBLICO do Supabase (JSON de `/auth/v1/.well-known/jwks.json`), var do `wrangler.toml`.
+   * Verifica o JWT sem baixar as chaves a cada isolate novo; o remoto fica de reserva (ver auth.ts).
+   */
+  SUPABASE_JWKS?: string;
+  /**
    * Chave `service_role` do Supabase (secret do Worker) — usada só para operações
    * administrativas do Auth (convite de usuário por e-mail, ADR-008 fatia 2). NUNCA
    * expor ao cliente: ignora o RLS. Provisionar com `wrangler secret put`.

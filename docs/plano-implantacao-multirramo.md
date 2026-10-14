@@ -1,8 +1,9 @@
 # Plano — Implantação multirramo (1ª loja de alimentos) + usuário multi-loja
 
 > **Estado em 2026-10-14:** **#9 importar planilha** (ADR-041 Fatia 3) **NO AR e validada em produção** (API
-> `fcca9ce2`, web `ece4829a`) — sem migration; rota nova `POST /products/import`; decisões confirmadas pelo Owner. Próxima: **#10 usuário multi-loja** (ADR-014) ou a **Fatia 4** da planilha (De-Para editável), a
-> critério do Owner.
+> `fcca9ce2`, web `ece4829a`) — sem migration; rota nova `POST /products/import`; decisões confirmadas pelo Owner. Fatia 4 da planilha (De-Para editável)
+> **adiada** pelo Owner até aparecer um cliente com exportação de outro sistema. Próxima: correção do 401 falso pós-deploy,
+> conferência do cupom com etiqueta e então **#10 usuário multi-loja** (ADR-014).
 >
 > **Estado em 2026-10-09 (noite):** **#8 etiqueta de balança** (ADR-040 F3) **implementada e validada no navegador**
 > (web de dev + API local contra o banco real, loja de teste de alimentos) — sem migration (`scaleCode` já na `0041`;
@@ -140,7 +141,7 @@ A loja de alimentos **não consegue vender hoje**:
 | 6 | **Cadastro em sequência** (bipa → ficha do catálogo → preço + qtd → Enter; código já cadastrado ⇒ contagem de abertura) — **NO AR + validada no navegador 2026-10-09** (web `3e49c8d1`; commit `97a99e1`) | Não | 041 §A |
 | 7 | **Cadastro no caixa** + alerta de revisão — **NO AR + validada no navegador 2026-10-09** (API `7d56b1c0`, web `68d3dd0e`; commit `6e223b9`) | Não (`pendingReview` já na `0041`) | 041 §B |
 | 8 | Etiqueta de balança (`scaleCode` + parser + PDV + formato parametrizado + exibição "preço do cadastro + selo") — **NO AR + validada em produção 2026-10-09** (API `8932d7a3`, web `dbc04cb7`) | Não (usa a `0041`) | 040 F3 |
-| 9 | Importador de planilha (modelo NexoLoja + .xlsx/.csv + pré-visualização + importar idempotente) — **NO AR + validada em produção 2026-10-14** (API `fcca9ce2`, web `ece4829a`). De-Para editável = Fatia 4 | Não | 041 §1–§6 |
+| 9 | Importador de planilha (modelo NexoLoja + .xlsx/.csv + pré-visualização + importar idempotente) — **NO AR + validada em produção 2026-10-14** (API `fcca9ce2`, web `ece4829a`). De-Para editável = Fatia 4, **adiada** (volta com o 1º cliente que trouxer exportação de outro sistema) | Não | 041 §1–§6 |
 | 10 | Usuário multi-loja (5 fatias da ADR-014) | **Sim** (3 migrations) | 014 |
 | — | NFC-e + download automático de NF-e | — | **aguarda o Owner** |
 
