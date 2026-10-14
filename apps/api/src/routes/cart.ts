@@ -12,6 +12,11 @@ import { requireAuth } from '../middleware/auth';
  *
  * A sincronização entre aparelhos é **last-write-wins** por `updatedAt` (rascunho — não vale um
  * merge). Isolamento por USUÁRIO: cada rota opera só sobre a cesta de `c.get('userId')`.
+ *
+ * Multi-loja (ADR-014, Fatia 2): continua UMA cesta por usuário (sem migration), mas ela pertence à loja
+ * em que foi gravada (`tenantId`). Na leitura, cesta de OUTRA loja = cesta vazia (nunca mostra produto da
+ * loja A no PDV da loja B); ao gravar/limpar, a cesta passa a ser da loja ativa. Quem alterna lojas perde
+ * o rascunho da loja anterior — é um rascunho, e a troca de loja já limpa o espelho local.
  */
 const cart = new Hono<Env>();
 cart.use('*', requireAuth);
@@ -27,11 +32,12 @@ cart.get('/', async (c) => {
     const prisma = getPrisma(c);
     const row = await prisma.cart.findUnique({
       where: { userId },
-      select: { items: true, updatedAt: true },
+      select: { items: true, updatedAt: true, tenantId: true },
     });
+    const own = row && row.tenantId === getTenantId(c) ? row : null;
     return c.json({
       ok: true,
-      data: { items: row?.items ?? [], updatedAt: row?.updatedAt ?? null },
+      data: { items: own?.items ?? [], updatedAt: own?.updatedAt ?? null },
     });
   } catch (err) {
     console.error('GET /cart falhou:', err);
@@ -68,7 +74,7 @@ cart.post('/', async (c) => {
     const row = await prisma.cart.upsert({
       where: { userId },
       create: { userId, tenantId, items: parsed.data.items, updatedAt: now },
-      update: { items: parsed.data.items, updatedAt: now },
+      update: { tenantId, items: parsed.data.items, updatedAt: now },
       select: { updatedAt: true },
     });
     return c.json({ ok: true, data: { updatedAt: row.updatedAt } });
@@ -100,7 +106,7 @@ cart.delete('/', async (c) => {
     const row = await prisma.cart.upsert({
       where: { userId },
       create: { userId, tenantId, items: [], updatedAt: now },
-      update: { items: [], updatedAt: now },
+      update: { tenantId, items: [], updatedAt: now },
       select: { updatedAt: true },
     });
     return c.json({ ok: true, data: { cleared: true, updatedAt: row.updatedAt } });

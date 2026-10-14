@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { SELECT_STORE_PATH, clearActiveTenantId, getActiveTenantId } from './activeTenant';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL!;
 
@@ -22,18 +23,37 @@ async function getAccessToken(): Promise<string | null> {
   }
 }
 
-/** Monta o header Authorization com o access token da sessão atual (renovando se preciso). */
-async function authHeaders(): Promise<Record<string, string>> {
+/**
+ * Monta o header Authorization com o access token da sessão atual (renovando se preciso) e a LOJA
+ * ATIVA (`x-active-tenant`, ADR-014) — a API confere a loja contra os vínculos da pessoa. `tenantId`
+ * força uma loja específica (a fila offline envia cada venda para a loja em que ela foi feita).
+ */
+async function authHeaders(tenantId?: string | null): Promise<Record<string, string>> {
   const token = await getAccessToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+  const store = tenantId ?? getActiveTenantId();
+  if (store) headers['x-active-tenant'] = store;
+  return headers;
 }
 
 type ApiOk<T> = { ok: true; data: T };
-type ApiErr = { ok: false; error: string };
+type ApiErr = { ok: false; error: string; code?: string };
+
+/**
+ * A API pediu a escolha da loja (`SELECT_STORE`, 409) ou recusou a loja guardada (`STORE_FORBIDDEN`, 403 —
+ * vínculo revogado/desativado): esquece a loja e leva ao seletor. Fora do navegador, nada a fazer.
+ */
+function goToStoreSelection(code: string | undefined): void {
+  if (code !== 'SELECT_STORE' && code !== 'STORE_FORBIDDEN') return;
+  if (typeof window === 'undefined') return;
+  clearActiveTenantId();
+  if (window.location.pathname !== SELECT_STORE_PATH) window.location.assign(SELECT_STORE_PATH);
+}
 
 async function handle<T>(res: Response): Promise<T> {
   const json = (await res.json().catch(() => null)) as ApiOk<T> | ApiErr | null;
   if (!res.ok || !json || json.ok === false) {
+    goToStoreSelection(json && 'code' in json ? json.code : undefined);
     throw new Error((json && 'error' in json && json.error) || `Erro ${res.status}`);
   }
   return json.data;
@@ -194,10 +214,15 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
  * **apenas** em falha de REDE (offline/timeout) — que o worker trata como transitória. Reaproveita
  * o `authHeaders` (Bearer do Supabase); a autoria/tenant são resolvidos no servidor pelo JWT.
  */
-export async function apiPostForSync(path: string, body: unknown): Promise<{ status: number }> {
+export async function apiPostForSync(
+  path: string,
+  body: unknown,
+  tenantId?: string | null,
+): Promise<{ status: number }> {
   const res = await fetch(`${API_URL}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+    // Loja da VENDA (gravada ao enfileirar), não a loja ativa de agora (ADR-014).
+    headers: { 'Content-Type': 'application/json', ...(await authHeaders(tenantId)) },
     body: JSON.stringify(body),
   });
   return { status: res.status };

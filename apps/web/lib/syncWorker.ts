@@ -43,7 +43,7 @@ function reason(outcome: SyncOutcome, detail: string): string {
 /** Tenta sincronizar UM item; devolve o desfecho do core a partir do status HTTP (ou rede). */
 async function syncOne(rec: OutboxRecord): Promise<SyncOutcome> {
   try {
-    const { status } = await apiPostForSync('/orders', rec.envelope.payload);
+    const { status } = await apiPostForSync('/orders', rec.envelope.payload, rec.tenantId);
     return classifyHttpOutcome(status);
   } catch {
     // Sem resposta HTTP (offline/DNS/timeout) — sempre transitório.

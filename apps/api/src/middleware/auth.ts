@@ -1,4 +1,7 @@
+import type { Context } from 'hono';
 import { createMiddleware } from 'hono/factory';
+
+import { resolveActiveStore } from '@nexoloja/core';
 
 import { isAdminRole } from '@nexoloja/shared';
 import { type Env, getConnectionString, getPrisma } from '../lib/request';
@@ -6,13 +9,20 @@ import { verifySupportToken } from '../lib/supportToken';
 import { TOKEN_UNAVAILABLE, verifySupabaseToken } from '../lib/supabaseToken';
 import { withDbRetry } from '../lib/dbRetry';
 
+/** Header com a loja ativa da sessão (ADR-014 §2) — o cliente envia; a API confere contra os vínculos. */
+export const ACTIVE_TENANT_HEADER = 'x-active-tenant';
+
+/** Vínculo utilizável como o `requireAuth`/`requireIdentity` carregam (ACTIVE + isActive). */
+export type LoadedMembership = { tenantId: string; role: string; tenant: { name: string; isActive: boolean } };
+
+type Identity = { sub: string; name: string; memberships: LoadedMembership[] };
+
 /**
- * Exige um access token válido do Supabase Auth no header `Authorization: Bearer <jwt>`.
- * Verifica a assinatura via JWKS (chaves públicas ES256) e resolve `tenantId`/`role`
- * a partir da tabela `users` (sub do JWT = auth.users.id = users.id).
- * Substitui a confiança no header `x-tenant-id` da Fase 1.
+ * Parte comum dos dois middlewares de usuário de loja: confere o token do Supabase e carrega a
+ * identidade (`users`) com os vínculos utilizáveis (ADR-014) — UMA consulta, a mesma de antes do
+ * multi-loja (o vínculo vem junto). Devolve a resposta de erro pronta quando não dá para seguir.
  */
-export const requireAuth = createMiddleware<Env>(async (c, next) => {
+async function loadIdentity(c: Context<Env>): Promise<Identity | Response> {
   const header = c.req.header('Authorization');
   const token = header?.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) {
@@ -45,32 +55,81 @@ export const requireAuth = createMiddleware<Env>(async (c, next) => {
       prisma.user.findUnique({
         where: { id: sub },
         select: {
-          tenantId: true,
-          role: true,
           name: true,
           isActive: true,
-          tenant: { select: { isActive: true } },
+          // Lojas a que a pessoa tem acesso (ADR-014): só vínculos aceitos e ativos.
+          memberships: {
+            where: { status: 'ACTIVE', isActive: true },
+            select: { tenantId: true, role: true, tenant: { select: { name: true, isActive: true } } },
+            orderBy: { createdAt: 'asc' },
+          },
         },
       }),
     );
     if (!user || !user.isActive) {
       return c.json({ ok: false, error: 'Usuário sem acesso a este sistema.' }, 403);
     }
-    c.set('tenantId', user.tenantId);
-    c.set('userId', sub);
-    c.set('role', user.role);
-    // Nome do operador para a atribuição de autoria (ADR-010): gravado como snapshot em
-    // vendas/estoque/caixa/cadastros ("Registrado por …"). Congela o nome no momento da ação.
-    c.set('userName', user.name);
-    // Loja inativada pelo Super Usuário (ADR-009): não barra o login (o usuário ainda vê
-    // relatórios/fecha caixa), mas o front avisa e operações novas são bloqueadas via
-    // `requireActiveTenant`. Não achar o tenant é tratado como inativo (conservador).
-    c.set('tenantActive', user.tenant?.isActive ?? false);
+    return { sub, name: user.name, memberships: user.memberships };
   } catch (err) {
     console.error('requireAuth: falha ao resolver usuário:', err);
     return c.json({ ok: false, error: 'Falha na autenticação.' }, 500);
   }
+}
 
+/**
+ * Exige um access token válido do Supabase Auth no header `Authorization: Bearer <jwt>`.
+ * Verifica a assinatura via JWKS (chaves públicas ES256) e resolve `tenantId`/`role`
+ * a partir da tabela `users` (sub do JWT = auth.users.id = users.id).
+ * Substitui a confiança no header `x-tenant-id` da Fase 1.
+ *
+ * Multi-loja (ADR-014, Fatia 2): a loja e o PAPEL vêm do vínculo (`tenant_memberships`) da **loja
+ * ativa**, informada no header `x-active-tenant` e conferida contra os vínculos (`resolveActiveStore`,
+ * core). Sem o header e com uma loja só, entra nela (o app antigo segue funcionando). Respostas:
+ * 409 `SELECT_STORE` (tem várias e não escolheu) e 403 `STORE_FORBIDDEN` (pediu loja que não é sua) —
+ * o `code` deixa a web voltar ao seletor de loja.
+ */
+export const requireAuth = createMiddleware<Env>(async (c, next) => {
+  const identity = await loadIdentity(c);
+  if (identity instanceof Response) return identity;
+
+  const resolved = resolveActiveStore(identity.memberships, c.req.header(ACTIVE_TENANT_HEADER));
+  if (!resolved.ok) {
+    if (resolved.reason === 'SELECT_STORE') {
+      return c.json({ ok: false, code: 'SELECT_STORE', error: 'Selecione a loja para continuar.' }, 409);
+    }
+    if (resolved.reason === 'NOT_MEMBER') {
+      return c.json({ ok: false, code: 'STORE_FORBIDDEN', error: 'Você não tem acesso a esta loja.' }, 403);
+    }
+    return c.json({ ok: false, error: 'Usuário sem acesso a este sistema.' }, 403);
+  }
+  const m = resolved.membership;
+  c.set('tenantId', m.tenantId);
+  c.set('userId', identity.sub);
+  c.set('role', m.role);
+  // Nome do operador para a atribuição de autoria (ADR-010): gravado como snapshot em
+  // vendas/estoque/caixa/cadastros ("Registrado por …"). Congela o nome no momento da ação.
+  c.set('userName', identity.name);
+  // Loja inativada pelo Super Usuário (ADR-009): não barra o login (o usuário ainda vê
+  // relatórios/fecha caixa), mas o front avisa e operações novas são bloqueadas via
+  // `requireActiveTenant`. Não achar o tenant é tratado como inativo (conservador).
+  c.set('tenantActive', m.tenant?.isActive ?? false);
+  c.set('memberships', identity.memberships);
+
+  await next();
+});
+
+/**
+ * Só a IDENTIDADE (token válido + usuário ativo), SEM escolher loja — para a tela de seleção de loja
+ * (`GET /me/stores`), que precisa listar as lojas justamente quando o `requireAuth` responderia
+ * 409 "selecione a loja". Popula `userId`, `userName` e `memberships`; NÃO popula `tenantId`/`role`
+ * (rota que use isto não pode tocar dado de loja).
+ */
+export const requireIdentity = createMiddleware<Env>(async (c, next) => {
+  const identity = await loadIdentity(c);
+  if (identity instanceof Response) return identity;
+  c.set('userId', identity.sub);
+  c.set('userName', identity.name);
+  c.set('memberships', identity.memberships);
   await next();
 });
 

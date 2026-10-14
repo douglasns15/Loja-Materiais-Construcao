@@ -9,6 +9,12 @@ import { useModule } from '@/lib/useModule';
 import { isPlatformAdmin } from '@/lib/session';
 import { useMe } from '@/lib/useMe';
 import { clearCachedMe } from '@/lib/meCache';
+import {
+  SELECT_STORE_PATH,
+  clearActiveTenantId,
+  clearStoreCaches,
+  isActiveTenantStorageEvent,
+} from '@/lib/activeStore';
 import { OutboxSyncProvider } from '@/lib/outboxSync';
 import { CartProvider } from '@/lib/cartStore';
 import { FloatingPanelsProvider } from '@/lib/floatingPanels';
@@ -291,6 +297,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [ready, setReady] = useState(false);
   const { me, setMe, isAdmin } = useMe();
+  // Multi-loja (ADR-014): com 2+ lojas, a loja atual fica sempre visível no topo e há "Trocar de loja".
+  const multiStore = (me?.stores?.length ?? 0) > 1;
+
+  // Outra aba trocou a loja ativa: ESTA aba ainda mostra a loja antiga, mas suas próximas chamadas já iriam
+  // para a nova (a escolha é compartilhada no aparelho). Recarrega para nunca vender/gravar na loja errada.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (isActiveTenantStorageEvent(e)) window.location.reload();
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
   // Itens do menu que dependem de módulo da loja (ADR-039): lidos do cache do `/me`, sem fetch.
   const modulesOn: Record<TenantModuleKey, boolean> = {
     CONSTRUCTION_UNITS: useModule('CONSTRUCTION_UNITS'),
@@ -400,6 +418,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   async function logout() {
     clearCachedMe();
+    // Multi-loja (ADR-014): o próximo login (talvez outra conta) começa sem loja e sem caches desta.
+    await clearStoreCaches();
+    clearActiveTenantId();
     await supabase.auth.signOut();
     router.replace('/login');
   }
@@ -570,9 +591,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 {me && (
                   <div className="mt-0.5 text-xs text-gray-500">
                     {STORE_ROLE_LABELS[me.storeRole]}
+                    {me.tenantName ? ` · ${me.tenantName}` : ''}
                   </div>
                 )}
               </div>
+              {multiStore && (
+                <Link
+                  href={SELECT_STORE_PATH}
+                  onClick={() => setMenuOpen(false)}
+                  className="block w-full border-t border-gray-100 px-3 py-2 text-left text-sm font-medium text-indigo-700 hover:bg-indigo-50"
+                >
+                  Trocar de loja
+                </Link>
+              )}
               <button
                 onClick={() => {
                   setMenuOpen(false);
@@ -651,6 +682,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </svg>
           </button>
           <span className="truncate font-semibold text-gray-800">{currentLabel}</span>
+          {/* Loja atual (ADR-014) — só para quem tem 2+ lojas: nunca operar na loja errada sem perceber. */}
+          {multiStore && me?.tenantName && (
+            <Link
+              href={SELECT_STORE_PATH}
+              title="Trocar de loja"
+              className="inline-flex min-w-0 max-w-[40%] items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
+            >
+              <span className="truncate">{me.tenantName}</span>
+              <span aria-hidden="true">⇄</span>
+            </Link>
+          )}
           {/* Status da fila offline (aparece só quando há vendas na fila) — drenagem global. */}
           <QueueChip />
           {/* Grupo à direita: sino de pendências (ADR-029) + cesta (ADR-021), sempre visíveis. */}

@@ -6,7 +6,9 @@
   quando chegar a vez (regra 1).
 - **Execução:** **Fatia 1 CONCLUÍDA 2026-10-14** — migration `0046_tenant_memberships` aprovada pelo Owner (com o
   gatilho de espelho) e aplicada no Supabase; backfill 10/10 conferido; gatilho testado em transação desfeita. Sem
-  mudança de comportamento (o app segue lendo `users`).
+  mudança de comportamento (o app segue lendo `users`). **Fatia 2 CONCLUÍDA e NO AR 2026-10-14** (API `e41cb88b`, web
+  `fee5d11e`; sem migration) — validada local e em produção com o `owner_kg` (Dono na Demo Mercardinho + Gerente na
+  Loja Demo, vínculo de teste).
 - **Data:** 2026-07-17 (proposta) · 2026-09-30 (aceite)
 - **Contexto de fase:** Fase 3 (produção). Assenta sobre o RBAC da loja (ADR-008) e a plataforma/multi-loja
   do Super Usuário (ADR-009), **sem** se confundir com eles (ver "Não é isto" abaixo).
@@ -243,7 +245,13 @@ Migrations **aditivas** e faseadas (padrão do projeto: `migrate diff` + `migrat
    **Feita 2026-10-14 (migration `0046`).** Decisão da implementação, aprovada pelo Owner: o espelho é um **gatilho
    no banco** (`users_sync_home_membership`) em vez de alterar os 7 caminhos que gravam `users` (convite, papel,
    desativar, onboarding da plataforma, 3 scripts) — nenhum fica dessincronizado. Sai na Fatia 5.
-2. **Fatia 2 — Read-path da loja ativa + login/seletor + switcher.** API resolve loja ativa por `x-active-tenant`
+2. **Fatia 2 — Read-path da loja ativa + login/seletor + switcher.** **Feita 2026-10-14.** Decisões da implementação:
+   rota `GET /me/stores` com `requireIdentity` (lista as lojas ANTES de escolher, quando o `requireAuth` daria 409);
+   respostas com `code` `SELECT_STORE` (409) / `STORE_FORBIDDEN` (403) levam a web a `/selecionar-loja`; login sempre passa
+   pelo seletor (1 loja entra direto); trocar de loja **limpa** os caches da loja (não chaveia) e recarrega, e é
+   **bloqueada** com vendas offline pendentes; cada venda da fila guarda a loja e é enviada para ela; outra aba que troca
+   a loja força o reload desta; a cesta do servidor (uma por usuário, ADR-021) só é devolvida se for da loja ativa e
+   passa a ser da loja ativa ao gravar. API resolve loja ativa por `x-active-tenant`
    validado na membership; `GET /me` devolve as lojas; UI de seleção/troca. Single-store intacto. **Sem RLS ainda**
    (a API já isola). Cache offline chaveado por loja.
 3. **Fatia 3 — RLS multi-loja (migration 2, Opção RLS-B).** Hook `tenant_ids` + políticas `= ANY(...)`. Testes de

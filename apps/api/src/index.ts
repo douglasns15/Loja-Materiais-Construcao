@@ -38,7 +38,9 @@ app.use(
       'http://127.0.0.1:3000',
       'https://nexoloja-web.imortal.workers.dev',
     ],
-    allowHeaders: ['Authorization', 'Content-Type'],
+    // `x-active-tenant`: loja ativa da sessão do usuário multi-loja (ADR-014); sem ele no preflight o
+    // navegador barra toda requisição autenticada do app.
+    allowHeaders: ['Authorization', 'Content-Type', 'x-active-tenant'],
     // PUT entrou com `PUT /tenant/delivery-settings` (ADR-042); sem ele o preflight barra a rota.
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   }),

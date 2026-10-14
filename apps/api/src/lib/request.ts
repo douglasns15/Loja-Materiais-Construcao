@@ -52,6 +52,9 @@ export type Variables = {
   /** `Tenant.isActive` da loja do usuário (populado por `requireAuth`). Uma loja
    * inativada pelo Super Usuário (ADR-009) bloqueia operações novas (ex.: vendas). */
   tenantActive: boolean;
+  /** Lojas a que o usuário tem acesso (vínculos ACTIVE + isActive, ADR-014), populado por
+   * `requireAuth`/`requireIdentity`. Usado pelo `GET /me` e `GET /me/stores` (lista do seletor). */
+  memberships: Array<{ tenantId: string; role: string; tenant: { name: string; isActive: boolean } }>;
   platformAdminId: string;
   platformAdminName: string;
   platformAdminEmail: string;

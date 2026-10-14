@@ -5,6 +5,7 @@ import type { ScaleLabelLayoutInput, StoreRole } from '@nexoloja/shared';
 import { apiGet } from './api';
 import { cacheOfflineSales, readCachedOfflineSales } from './offlineFlag';
 import { cacheMe, readCachedMe } from './meCache';
+import { getActiveTenantId, setActiveTenantId } from './activeTenant';
 
 export type Me = {
   id: string;
@@ -27,6 +28,11 @@ export type Me = {
   /** Layout da etiqueta de balança (ADR-040 §3) quando o módulo `SCALE_LABEL` está ligado; `null`
    * desligado. Vai no cache do `/me` — o PDV lê etiqueta também offline. Opcional (API antiga). */
   scaleLabel?: ScaleLabelLayoutInput | null;
+  /** Loja ativa desta resposta e o nome dela (ADR-014). Opcionais: API antiga não manda. */
+  activeTenantId?: string;
+  tenantName?: string | null;
+  /** Lojas a que a pessoa tem acesso — com 2+, o shell mostra a loja atual e "Trocar de loja". */
+  stores?: { tenantId: string; name: string; role: string; storeRole: StoreRole; tenantActive: boolean }[];
 };
 
 /**
@@ -46,6 +52,9 @@ export function useMe() {
       // shell e o `/me` falha sem rede — o cache preserva papel (isAdmin)/nome. Também persiste o flag
       // OFFLINE_SALES (ADR-011 §9) para o fallback do PDV.
       cacheMe(data);
+      // Loja ativa (ADR-014): quem tem uma loja só (ou veio de uma versão antiga do app) passa a mandar
+      // o `x-active-tenant` a partir daqui — a escolha fica explícita em toda chamada.
+      if (data.activeTenantId && !getActiveTenantId()) setActiveTenantId(data.activeTenantId);
       cacheOfflineSales(data.offlineSales === true);
     } catch {
       // Offline: usa o último `/me` bom (papel/nome preservados, decisão (a) do ADR-012). Online, uma

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { tokenIsPlatformAdmin } from '@/lib/session';
+import { SELECT_STORE_PATH } from '@/lib/activeTenant';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -23,9 +24,10 @@ export default function LoginPage() {
       return;
     }
     // Roteia pelo token recém-emitido (sem depender de getSession, que pode vir defasado):
-    // Super Usuário (fabricante) → painel de plataforma; usuário de loja → app.
+    // Super Usuário (fabricante) → painel de plataforma; usuário de loja → seleção da loja (ADR-014),
+    // que entra direto quando a pessoa tem uma loja só.
     const toPlatform = tokenIsPlatformAdmin(data.session.access_token);
-    router.push(toPlatform ? '/plataforma' : '/products');
+    router.push(toPlatform ? '/plataforma' : SELECT_STORE_PATH);
   }
 
   return (

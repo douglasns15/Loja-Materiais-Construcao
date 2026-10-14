@@ -22,8 +22,9 @@
    - 1.3 [Importar planilha](#13-importar-planilha)
 2. [Venda por peso e balança](#2-venda-por-peso-e-balança)
    - 2.1 [Etiqueta de balança](#21-etiqueta-de-balança)
-3. [Pendências de cobertura](#pendências-de-cobertura)
-4. [Histórico deste documento](#histórico-deste-documento)
+3. [Usuário com mais de uma loja](#3-usuário-com-mais-de-uma-loja)
+4. [Pendências de cobertura](#pendências-de-cobertura)
+5. [Histórico deste documento](#histórico-deste-documento)
 
 ---
 
@@ -306,6 +307,41 @@ cliente paga exatamente o que está impresso). Loja que nunca configurou usa ess
 
 ---
 
+## 3. Usuário com mais de uma loja
+
+**Para que serve:** o dono de duas lojas (ou um gerente que atende mais de uma) entra com **um único login** e escolhe
+em qual loja vai trabalhar — sem precisar de um e-mail por loja. Decisão: [ADR-014](adr/ADR-014-usuario-multi-loja.md).
+
+**Quem usa:** quem tem acesso a 2 ou mais lojas. **Quem tem uma loja só não vê nada diferente** — entra direto, como
+sempre.
+
+**Passo a passo**
+
+1. Entre com e-mail e senha. Aparece **"Selecione a loja"** com as suas lojas e o seu papel em cada uma.
+2. Toque na loja. O sistema abre nela.
+3. No topo de todas as telas aparece o **nome da loja atual** (com o símbolo ⇄). Toque nele — ou em **"Trocar de loja"**
+   no menu da sua conta — para voltar à lista e escolher outra loja, sem sair e entrar de novo.
+
+**Regras**
+
+| Situação | O que acontece |
+|---|---|
+| Papel por loja | Você pode ser **Admin numa loja e Usuário em outra**: telas e ações seguem o papel da loja atual. |
+| Trocar de loja | O sistema recarrega na loja escolhida e **apaga deste aparelho os dados da loja anterior** (carrinho, caixa aberto em tela, rascunhos, catálogo guardado para uso offline). O carrinho em montagem fica para trás. |
+| Vendas offline ainda não enviadas | **Não dá para trocar de loja** até elas serem enviadas (aviso na tela). Cada venda offline é sempre enviada para a loja em que foi feita. |
+| Duas abas abertas | Trocar de loja numa aba **recarrega as outras** na loja nova — nenhuma aba fica operando a loja antiga. |
+| Acesso a uma loja retirado | Na próxima ação, o sistema avisa "Você não tem acesso a esta loja" e volta para a escolha da loja. |
+| Sair | Ao sair, a loja escolhida e os dados dela são apagados do aparelho. |
+
+**Limitações (por enquanto)**
+
+- Quem **dá** acesso a uma segunda loja ainda é a equipe NexoLoja; o convite pelo administrador da loja (com aceite da
+  pessoa) é a próxima etapa.
+- Na tela de **Usuários** de uma loja aparecem só as pessoas que têm aquela loja como principal.
+- O carrinho é **um por pessoa**: ao trocar de loja, o carrinho em montagem na loja anterior se perde.
+
+---
+
 ## Pendências de cobertura
 
 Funcionalidades já em uso que ainda não estão descritas aqui (entram conforme forem tocadas): PDV (pagamentos,
@@ -322,3 +358,4 @@ plataforma.
 | 2026-10-09 | Etiqueta com preço: tela e cupom mostram o preço/kg do cadastro + selo "etiqueta" (opção C do Owner). |
 | 2026-10-14 | Importar planilha (#9): modelo NexoLoja, .xlsx/.csv, pré-visualização, importação idempotente e CSV de erros. |
 | 2026-10-14 | Cupom com etiqueta conferido; colunas Qtd/Unit./Total do cupom 80 mm não grudam nem quebram mais. |
+| 2026-10-14 | Usuário com mais de uma loja (multi-loja, Fatia 2): escolha da loja no login e "Trocar de loja". |

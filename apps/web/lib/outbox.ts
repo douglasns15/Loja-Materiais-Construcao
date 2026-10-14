@@ -1,5 +1,6 @@
 import type { MutationEnvelope } from '@nexoloja/shared';
 import { openDb, reqAsPromise, OUTBOX_STORE as STORE, hasIndexedDb } from './db';
+import { getActiveTenantId } from './activeTenant';
 
 /**
  * Store `outbox` no IndexedDB — a fila de mutações offline (ADR-011 §1, AI 5).
@@ -31,6 +32,11 @@ export interface OutboxRecord {
   enqueuedAt: string;
   /** ISO 8601 — última mudança de estado. */
   updatedAt: string;
+  /**
+   * Loja ativa quando a venda foi feita (ADR-014). O envio usa ESTA loja no `x-active-tenant`, mesmo que
+   * a pessoa tenha trocado de loja depois. Ausente em itens antigos ⇒ loja ativa do momento do envio.
+   */
+  tenantId?: string | null;
 }
 
 /** `true` quando o ambiente tem IndexedDB (evita quebrar no SSR/hydration do Next).
@@ -74,6 +80,7 @@ export async function enqueueMutation(envelope: MutationEnvelope): Promise<numbe
   const now = new Date().toISOString();
   const record: OutboxRecord = {
     envelope,
+    tenantId: getActiveTenantId(),
     status: 'PENDING',
     attempts: 0,
     enqueuedAt: now,

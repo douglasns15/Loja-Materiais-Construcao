@@ -9,10 +9,30 @@ import {
   updateMeSchema,
 } from '@nexoloja/shared';
 import { type Env, getConnectionString, getPrisma, getTenantId } from '../lib/request';
-import { requireAuth } from '../middleware/auth';
+import { requireAuth, requireIdentity } from '../middleware/auth';
 
 const me = new Hono<Env>();
-me.use('*', requireAuth);
+
+/** Loja da lista do seletor (ADR-014): id, nome, papel NELA e se está ativa (ADR-009). */
+function toStoreList(memberships: Env['Variables']['memberships']) {
+  return memberships.map((m) => ({
+    tenantId: m.tenantId,
+    name: m.tenant.name,
+    role: m.role,
+    storeRole: toStoreRole(m.role),
+    tenantActive: m.tenant.isActive,
+  }));
+}
+
+/**
+ * Lojas a que a pessoa tem acesso (ADR-014, Fatia 2) — para o SELETOR de loja no login e o "trocar de
+ * loja" no topo. Só exige a identidade (`requireIdentity`): é chamada justamente quando ainda não há
+ * loja ativa escolhida (o `requireAuth` responderia 409). Não toca dado de loja.
+ */
+me.get('/stores', requireIdentity, (c) => c.json({ ok: true, data: toStoreList(c.get('memberships')) }));
+
+// Demais rotas de `/me`: perfil na LOJA ATIVA.
+me.use('/', requireAuth);
 
 const SELECT = { id: true, name: true, email: true, phone: true, role: true } as const;
 
@@ -43,11 +63,19 @@ me.get('/', async (c) => {
     const scaleModule = modules.find((m) => m.moduleKey === MODULE_SCALE_LABEL);
     // `tenantActive` (ADR-009): o front usa para avisar no topo e bloquear vendas novas quando
     // a loja está desativada. Vem do `requireAuth` (sem query extra).
+    // Multi-loja (ADR-014): o papel é o do vínculo da LOJA ATIVA (Dono numa, Caixa noutra), não o
+    // `users.role`; `stores` = todas as lojas da pessoa (o shell mostra "trocar de loja" com 2+).
+    const role = c.get('role');
+    const stores = toStoreList(c.get('memberships'));
     return c.json({
       ok: true,
       data: {
         ...user,
-        storeRole: toStoreRole(user.role),
+        role,
+        storeRole: toStoreRole(role),
+        activeTenantId: tenantId,
+        tenantName: stores.find((s) => s.tenantId === tenantId)?.name ?? null,
+        stores,
         tenantActive: c.get('tenantActive'),
         offlineSales: isOfflineSalesOn(modules),
         modules: activeModuleKeys(modules),
@@ -81,7 +109,9 @@ me.patch('/', async (c) => {
     const prisma = getPrisma(c);
     await prisma.user.update({ where: { id: userId }, data: parsed.data });
     const user = await prisma.user.findUnique({ where: { id: userId }, select: SELECT });
-    return c.json({ ok: true, data: user ? { ...user, storeRole: toStoreRole(user.role) } : null });
+    // Papel da LOJA ATIVA (ADR-014), como no `GET /me`.
+    const role = c.get('role');
+    return c.json({ ok: true, data: user ? { ...user, role, storeRole: toStoreRole(role) } : null });
   } catch (err) {
     console.error('PATCH /me falhou:', err);
     return c.json({ ok: false, error: 'Falha ao salvar o perfil.' }, 500);

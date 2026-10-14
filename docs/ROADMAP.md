@@ -10,13 +10,20 @@
 >
 > **Última atualização:** 2026-10-14 — **#9 Importar planilha (ADR-041 Fatia 3) + início do #10 multi-loja.**
 >
+> - **#10 Usuário multi-loja (ADR-014) — Fatia 2 NO AR** (API `e41cb88b`, web `fee5d11e`; sem migration): loja ativa
+>   por `x-active-tenant` conferida contra os vínculos (core `resolveActiveStore`, +5 testes), papel **por loja**,
+>   `GET /me/stores` + tela **`/selecionar-loja`** (login: 1 loja entra direto, 2+ escolhe), chip da loja atual + "Trocar
+>   de loja" (só com 2+), troca limpa os caches da loja e é bloqueada com vendas offline pendentes, fila offline envia
+>   cada venda para a loja dela, outra aba recarrega na troca, cesta do servidor por loja. Validado local (403/409,
+>   isolamento de produtos e cesta, bloqueio da fila, 2 abas, revogação ⇒ volta ao seletor e entra na única loja) e em
+>   produção. **Dado de teste:** `owner_kg` ganhou vínculo **Gerente na Loja Demo** (`invitedByName` "Teste Fatia 2
+>   (Claude)") — ATIVO, para o E2E do Owner. Próxima: **Fatia 3** (RLS multi-loja, migration 2).
 > - **#10 Usuário multi-loja (ADR-014) — Fatia 1 FEITA:** migration **`0046_tenant_memberships` aprovada pelo Owner e
 >   aplicada** — tabela de vínculo usuário↔loja (papel por loja, `ACTIVE`/`PENDING`), backfill 10/10 conferido, RLS
 >   (loja do token ou os próprios vínculos) e **gatilho de espelho** `users → vínculo "de casa"` enquanto
 >   `users.tenantId/role` existirem (sai na Fatia 5). Gatilho testado numa transação desfeita (papel, desativar,
 >   nome não dispara, troca de loja, usuário novo, exclusão). Sem mudança de comportamento e sem deploy (só banco).
->   **Próxima: Fatia 2** — loja ativa por `x-active-tenant`, `GET /me` com as lojas, seletor no login e "trocar de
->   loja" no topo, caches offline por loja.
+>   Fatia 2 feita (acima).
 >
 > - **#9 Importar planilha** — **NO AR 2026-10-14 (API `fcca9ce2`, web `ece4829a`; deploy autorizado pelo Owner) e
 >   validada em produção** (Demo Mercardinho, `owner_kg`), além do teste com a API local. Ajuste pós-deploy: as

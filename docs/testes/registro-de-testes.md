@@ -6329,3 +6329,26 @@ Conferência: 10 usuários = 10 vínculos, os 10 batendo em loja/papel/ativo/sta
 não dispara ✅; troca de loja move o vínculo ✅; usuário novo ganha vínculo STOCK/ACTIVE ✅; exclusão apaga o vínculo
 (cascade) ✅; após o ROLLBACK: 10 vínculos, 2 caixas (igual ao antes) ✅. RLS `tenant_memberships_select_tenant_or_own`
 e gatilho ativos ✅. `migrate diff` pós-deploy = migration vazia ✅. `prisma generate` + `tsc` API/web ✅.
+
+## Multi-loja Fatia 2 — loja ativa, seletor e troca de loja (ADR-014) — 2026-10-14
+
+Dado de teste: vínculo **Gerente** do `owner_kg` na **Loja Demo** (além de Dono na Demo Mercardinho). Unitários: core
+`multiLoja.test.ts` (+5: 1 loja sem header, header escolhe, 2+ sem header ⇒ seletor, loja alheia/lixo/injeção ⇒ recusa,
+sem vínculo) — core 522, shared 140, API 7 ✅; `tsc` API/web ✅; `next build` ✅ (`/selecionar-loja` 3,72 kB).
+
+**API local + banco real (token do `owner_kg`):** `/me/stores` = Demo Mercardinho (OWNER) + Loja Demo (MANAGER) ✅;
+`/me` sem header ⇒ 409 `SELECT_STORE` ✅; com Loja Demo ⇒ papel MANAGER, 110 produtos ✅; com Mercadinho ⇒ OWNER, 17
+produtos ✅; Maria ConstruLar (não é membro) ⇒ 403 `STORE_FORBIDDEN` em `/me` e `/products` ✅; header lixo ⇒ 403 ✅.
+Cesta gravada na Loja Demo: lida na Loja Demo = 1 item, no Mercadinho = 0 ✅ (limpa depois).
+
+**Web local:** abrir `/products` sem loja ⇒ redireciona ao seletor com as 2 lojas ✅; escolher Loja Demo ⇒ catálogo de
+construção, chip "Loja Demo ⇄", botão "Importar planilha" (admin) ✅; venda falsa PENDENTE na fila ⇒ troca bloqueada
+com aviso, loja mantida ✅ (item removido; nunca chegou a ser enviado); troca para o Mercadinho ⇒ papel OWNER, catálogo
+de alimentos ✅; 2 abas: trocar numa recarrega a outra na loja nova ✅; vínculo da Loja Demo desativado com ela ativa ⇒
+403 ⇒ seletor ⇒ entra direto no Mercadinho (1 loja), topo sem chip (igual a antes) ✅.
+
+**Deploy:** API `e41cb88b` (anterior `38a04bb8`) — `/health` 200, `/me/stores` sem token 401, preflight libera
+`x-active-tenant` (a 1ª checagem pegou a versão antiga durante a propagação; 100% conferido em seguida); web `fee5d11e`
+(anterior `4e28ba69`) — smoke ✅, BUILD_ID = HTML ao vivo, `/selecionar-loja` 200.
+**Produção (`owner_kg`):** `/products` ⇒ seletor com as 2 lojas ✅ ⇒ Loja Demo (MANAGER, catálogo de construção, chip) ✅
+⇒ chip "Trocar de loja" ⇒ Demo Mercardinho ✅. Vínculo de teste mantido ATIVO para o E2E do Owner.

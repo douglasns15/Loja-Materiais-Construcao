@@ -3034,3 +3034,43 @@ export function scaleLabelLine(
   const quantity = label.grams / 1000;
   return { quantity, unitPrice: pricePerUnit, total: Number((quantity * pricePerUnit).toFixed(2)) };
 }
+
+// =============================================================================
+// Usuário multi-loja — loja ativa da requisição (ADR-014, Fatia 2)
+// =============================================================================
+
+/** Por que a loja ativa não pôde ser resolvida. */
+export type ActiveStoreFailure =
+  /** A pessoa não tem nenhum vínculo ativo — sem acesso ao sistema (403). */
+  | 'NO_ACCESS'
+  /** Pediu uma loja da qual não é membro (ou o vínculo foi revogado) — 403, a tela volta ao seletor. */
+  | 'NOT_MEMBER'
+  /** Tem 2+ lojas e não disse qual — 409, a tela mostra o seletor. */
+  | 'SELECT_STORE';
+
+/** Formato de UUID aceito no header `x-active-tenant` (qualquer outra coisa é tratada como "não é membro"). */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Resolve a loja ativa de uma requisição (ADR-014 §2). `memberships` = vínculos **utilizáveis** da pessoa
+ * (ACTIVE + isActive — o chamador já filtrou); `requested` = header `x-active-tenant` (ausente/vazio = não
+ * informado). Regras:
+ * - informou a loja ⇒ precisa ser um dos vínculos (senão `NOT_MEMBER`, nunca cai em outra loja "por perto");
+ * - não informou e tem **uma** loja ⇒ ela (retrocompatível: o app de hoje não manda o header);
+ * - não informou e tem **várias** ⇒ `SELECT_STORE`; nenhuma ⇒ `NO_ACCESS`.
+ * Pura e sem I/O — a API impõe; o RLS por loja vem na Fatia 3.
+ */
+export function resolveActiveStore<M extends { tenantId: string }>(
+  memberships: readonly M[],
+  requested: string | null | undefined,
+): { ok: true; membership: M } | { ok: false; reason: ActiveStoreFailure } {
+  const wanted = requested?.trim();
+  if (wanted) {
+    if (!UUID_RE.test(wanted)) return { ok: false, reason: 'NOT_MEMBER' };
+    const found = memberships.find((m) => m.tenantId.toLowerCase() === wanted.toLowerCase());
+    return found ? { ok: true, membership: found } : { ok: false, reason: 'NOT_MEMBER' };
+  }
+  if (memberships.length === 0) return { ok: false, reason: 'NO_ACCESS' };
+  if (memberships.length === 1) return { ok: true, membership: memberships[0]! };
+  return { ok: false, reason: 'SELECT_STORE' };
+}

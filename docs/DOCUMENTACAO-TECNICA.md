@@ -364,6 +364,7 @@ testável exaustivamente e compartilhada entre as duas apps.
 
 - **Base:** `https://nexoloja-api.imortal.workers.dev`. Todas as rotas de negócio ficam sob um grupo montado (ex.: `/orders`, `/cash-sessions`).
 - **Token:** `Authorization: Bearer <JWT>` do Supabase Auth. O middleware valida (via `jose`), extrai `tenant_id`/`role` das claims e injeta no contexto. **Nunca** se confia em `tenantId` vindo do corpo.
+- **Loja ativa (multi-loja, ADR-014 Fatia 2):** o `requireAuth` carrega, na MESMA consulta do usuário, os vínculos utilizáveis (`tenant_memberships` ACTIVE + `isActive`) e resolve a loja da requisição pelo header **`x-active-tenant`** (core `resolveActiveStore`): header = um dos vínculos ⇒ `tenantId`/`role`/`tenantActive` **desse vínculo** (papel por loja); sem header e 1 loja ⇒ ela (retrocompatível); sem header e 2+ ⇒ **409** `{ code: 'SELECT_STORE', error: 'Selecione a loja para continuar.' }`; loja que não é dele (ou revogada), ou valor que não é UUID ⇒ **403** `{ code: 'STORE_FORBIDDEN', error: 'Você não tem acesso a esta loja.' }`; nenhum vínculo ⇒ 403 "Usuário sem acesso a este sistema.". `requireIdentity` = só token + usuário ativo + vínculos, sem escolher loja (só `GET /me/stores`). O CORS libera o header `x-active-tenant`. O claim `tenant_id` do JWT (RLS do acesso direto) segue o vínculo "de casa" até a Fatia 3 — a web não lê tabelas direto do Supabase.
 - **Verificação do JWT** (`apps/api/src/lib/supabaseToken.ts`, usada por `requireAuth` e `requirePlatformAuth`): assinatura ES256 + emissor `<SUPABASE_URL>/auth/v1` + audiência `authenticated` + `sub`. As chaves públicas vêm **primeiro da var `SUPABASE_JWKS`** (`wrangler.toml`, cópia do `/auth/v1/.well-known/jwks.json` — chave pública, não é segredo), **sem rede**; token com `kid` fora dela (rotação de chave no Supabase) cai no **JWKS remoto** (reserva, com aviso no log — atualizar a var e redeployar). Token inválido/expirado/adulterado ⇒ **401** "Token inválido ou expirado."; falha ao **obter** as chaves (timeout/rede/resposta ruim) ⇒ **503** "Não foi possível validar o login agora. Tente de novo em instantes." (transitório: a web re-tenta leituras em 503). Motivo (2026-10-14): o download do JWKS a cada isolate novo levava ~1,2 s e, ao passar dos 5 s do `jose`, virava 401 com token válido logo após um deploy. Testes: `apps/api/src/lib/supabaseToken.test.ts` (7 casos; `npm test -w @nexoloja/api`).
 - **Guardas especiais:**
   - `requireActiveTenant` — bloqueia escrita em loja inativa/suspensa (ADR-009). Marcado com 🔒 abaixo.
@@ -533,9 +534,9 @@ testável exaustivamente e compartilhada entre as duas apps.
 
 | Método · Rota | O que faz |
 |---|---|
-| `GET /` | Carrega a cesta do usuário (entre dispositivos). |
-| `POST /` | Salva/substitui a cesta (rascunho; preços revalidados na venda). |
-| `DELETE /` | Limpa a cesta. |
+| `GET /` | Carrega a cesta do usuário (entre dispositivos). **Multi-loja:** a cesta é uma por usuário e pertence à loja em que foi gravada — cesta de OUTRA loja volta vazia (`items: []`, `updatedAt: null`). |
+| `POST /` | Salva/substitui a cesta (rascunho; preços revalidados na venda) — e a cesta passa a ser da loja ativa. |
+| `DELETE /` | Limpa a cesta (idem: fica da loja ativa). |
 
 **`/reports` — Relatórios**
 
@@ -568,7 +569,8 @@ Alertas CALCULADOS sob demanda (custo-zero: nada é gravado; a pendência some q
 | `GET /tenant` · `PATCH /tenant` 🔒 | Dados da loja / edição. Inclui taxas da maquininha (ADR-016) e `blindCashClose` (fechamento cego do caixa, por loja). |
 | `POST /tenant/logo` 🔒 · `DELETE /tenant/logo` 🔒 | Upload (URL assinada R2) / remoção do logo. |
 | `GET /tenant/delivery-settings` · `PUT /tenant/delivery-settings` 🔒 | Período de entregas (ADR-042): `{ slotMinutes, maxPerSlot, hours: { "0".."6": [{ start, end }] } }`. `GET` para qualquer usuário (coluna nula ⇒ padrão: 30 min, sem limite, sem restrição); `PUT` substitui o objeto inteiro — **Admin**. |
-| `GET /me` · `PATCH /me` | Perfil da sessão (+ memberships) / edição do próprio perfil. O `GET` traz `tenantActive`, `offlineSales` (ADR-011 §9) e `modules` — chaves dos módulos **ativos** da loja (ADR-039: `CONSTRUCTION_UNITS`, `SCALE_LABEL`, `OFFLINE_SALES`), para a web esconder o que o ramo não usa — e `scaleLabel` (ADR-040 §3): o formato da etiqueta de balança `{ pluDigits: 4\|5\|6, valueDigits: 5\|6, valueCheckDigit, value: 'PRICE'\|'WEIGHT' }` quando o `SCALE_LABEL` está ativo (padrão `2 CCCC 0 VVVVVV D` + `PRICE` se nunca configurado; configs antigas sem `valueDigits`/`valueCheckDigit` valem como 6/`false`), `null` desligado; vai no cache do `/me` para o PDV ler etiqueta offline. |
+| `GET /me/stores` | **Lojas da pessoa** para o seletor (ADR-014 Fatia 2) — `[{ tenantId, name, role, storeRole, tenantActive }]`. Só `requireIdentity` (funciona antes de escolher a loja). |
+| `GET /me` · `PATCH /me` | Perfil da sessão na **loja ativa** / edição do próprio perfil. `role`/`storeRole` = papel do **vínculo da loja ativa** (não mais `users.role`); o `GET` traz também `activeTenantId`, `tenantName` e `stores` (mesma forma do `/me/stores`). O `GET` traz `tenantActive`, `offlineSales` (ADR-011 §9) e `modules` — chaves dos módulos **ativos** da loja (ADR-039: `CONSTRUCTION_UNITS`, `SCALE_LABEL`, `OFFLINE_SALES`), para a web esconder o que o ramo não usa — e `scaleLabel` (ADR-040 §3): o formato da etiqueta de balança `{ pluDigits: 4\|5\|6, valueDigits: 5\|6, valueCheckDigit, value: 'PRICE'\|'WEIGHT' }` quando o `SCALE_LABEL` está ativo (padrão `2 CCCC 0 VVVVVV D` + `PRICE` se nunca configurado; configs antigas sem `valueDigits`/`valueCheckDigit` valem como 6/`false`), `null` desligado; vai no cache do `/me` para o PDV ler etiqueta offline. |
 | `GET /users` | Lista usuários da loja. |
 | `POST /users/invite` 🔒 · `PATCH /users/:id` 🔒 · `DELETE /users/:id` 🔒 | Convida / edita papel / remove usuário (RBAC, ADR-008). |
 
@@ -632,6 +634,7 @@ Alertas CALCULADOS sob demanda (custo-zero: nada é gravado; a pendência some q
 - **Cadastro em sequência (ADR-041 §A):** rota `/products/sequencia`; casa o código no cliente
   (`findProductByCode`: GTIN canônico → código interno) sobre o catálogo da loja e decide a contagem por
   `planOpeningCount` — sem rota própria (usa `POST /products` e `POST /stock/adjust`).
+- **Loja ativa / multi-loja (ADR-014 Fatia 2):** `lib/activeTenant.ts` (escolha em `localStorage` `nexoloja.activeTenant`, sem dependências) e `lib/activeStore.ts` (troca). `authHeaders` (`lib/api.ts`) manda `x-active-tenant` em toda chamada; resposta com `code` `SELECT_STORE`/`STORE_FORBIDDEN` ⇒ esquece a loja e vai para **`/selecionar-loja`** (fora do shell `(app)`). Login de usuário de loja ⇒ `/selecionar-loja`: 1 loja entra direto, 2+ escolhe (`GET /me/stores`). Trocar de loja = `clearStoreCaches()` (cache do `/me`, caixa e rascunhos do caixa, espelho do carrinho, rascunho de NF-e, catálogo offline no IndexedDB) + grava a escolha + recarrega o app; **bloqueada** com vendas offline pendentes. Cada item da fila offline guarda o `tenantId` da loja em que a venda foi feita e o `syncWorker` envia com essa loja (`apiPostForSync(path, body, tenantId)`). Outra aba que troca a loja dispara `storage` ⇒ esta aba recarrega (nunca grava na loja errada). Com 2+ lojas o topo mostra a loja atual (chip `⇄`) e o menu da conta tem "Trocar de loja"; com 1 loja nada muda. Logout limpa a loja ativa e os caches da loja.
 - **Importar planilha (ADR-041 §1–§6, Fatia 3):** rota `/products/importar` (só admin; botão em Produtos só para
   admin). Leitura **no navegador** (`apps/web/lib/planilha.ts`): `.xlsx` pela `read-excel-file@9.3.10`
   (`read-excel-file/browser`, importada sob demanda; só a 1ª aba), `.csv` por `parseCsv` (shared; separador `;`/`,`/
