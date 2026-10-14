@@ -178,3 +178,17 @@ O soluço acontecia **no meio do expediente, internet OK, ~3×/dia** — não er
 > **✅ E2E do Owner VALIDADO (2026-09-04):** vendas concluídas com sucesso no ambiente de testes — confirma o `getPrisma(c)` sob uso autenticado real (a rota da venda passa pelo `requireAuth` + handler compartilhando o mesmo client). **NO AR:** API `c918e8e4` + web `9b3c36ca`; commits `da6fa48` + `392d081` + `f1be37d` + `662ac7d` em `main` (push do Owner).
 >
 > **Limite honesto:** com (A) o churn caiu para **1 conexão por request** e o **throttle (C)** reduz a frequência da rajada; a **auto-recuperação da tela** faz o soluço que ainda escapar se curar sozinho em segundos (antes: minutos). Mas o **teto de conexões/CPU do free tier continua lá** — a solução definitiva segue sendo **Supabase Pro** (sem auto-pause, pool estável) + Workers **pago** (CPU 30 s vs. 10 ms) no lançamento.
+
+## Adendo (2026-10-14): **Workers Paid** — fim do teto de 10 ms de CPU
+
+Sob uso normal (Produtos e PDV, só pesquisando/salvando), o operador passou a ver "Não foi possível conectar ao servidor" com frequência. API e banco estavam saudáveis (`/health` 200 em ~0,2 s; Supabase com 20/60 conexões). O `wrangler tail` mostrou a causa: **"Worker exceeded CPU time limit"** (503 sem cabeçalho CORS → o navegador vê `TypeError` → a mensagem amigável de rede) e, por tabela, **"code had hung"** nas requisições vizinhas do mesmo isolate.
+
+- **Escala:** 9 de 24 requisições reais cortadas (+2 "hung"), em rotas **leves** — `/products/search`, `/categories`, `/alerts`. Não era mais uma rota pesada como em 2026-08-27.
+- **Piso de CPU acima do teto:** o `/db-check` (só `tenant.count()`) gasta **~15–22 ms aquecido** e >270 ms frio — é o custo fixo de instanciar o Prisma (motor WASM + schema, que cresceu com as migrations 0041–0044) a cada requisição. 3 de 12 chamadas ao `/db-check` foram cortadas. Antes a Cloudflare tolerava o excesso; passou a cortar com frequência.
+- **Por que não resolver por código:** ficar abaixo de 10 ms exigiria tirar o Prisma do caminho da requisição (reescrever as rotas em `pg` puro, inclusive a venda transacional, perdendo a tipagem do schema) ou trocar o motor (v7/`queryCompiler`, evitada de propósito). Reescrita grande e arriscada, sem garantia, e o problema voltaria a cada tabela nova. Reusar o `PrismaClient` entre requests segue **proibido** (adendo 2026-09-04).
+
+**Decisão do Owner:** assinar o **Cloudflare Workers Paid (~US$5/mês)** — teto de CPU **30 s** por requisição. É a "solução definitiva" já prevista nos adendos anteriores, antecipada (o Supabase Pro continua previsto para o lançamento). Exceção consciente ao princípio custo-zero, restrita à hospedagem dos Workers. **Sem mudança de código, schema ou contrato.**
+
+**Validação (2026-10-14):** depois da assinatura, **30/30** chamadas ao `/db-check` (20 sequenciais + 10 paralelas) e **130/130** requisições reais da loja OK, com CPU de até ~300 ms (`/products` 117 ms) — valores que antes seriam cortados.
+
+> As otimizações anteriores (`$queryRaw` no catálogo/busca, `getPrisma(c)` = 1 client por request, throttle do sino, auto-recuperação da tela) **continuam valendo**: reduzem custo e latência mesmo sem o teto. A leitura de planilha no navegador (ADR-041) também segue o melhor lugar para processamento pesado.

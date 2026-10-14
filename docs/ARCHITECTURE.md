@@ -173,6 +173,7 @@ Regras de modelagem para manter o banco enxuto dentro do free tier (500 MB). Sã
 
 1. **Free tier do Supabase pausa após ~1 semana de inatividade** e limita 500 MB. Mitigação: *cron* de keep-alive (ping diário) durante o desenvolvimento e **upgrade para o plano Pro (~US$25/mês) no lançamento** em produção — um PDV real não pode depender de um banco que pausa.
 2. **Limites diários de Hyperdrive no free tier** — validar contra o volume esperado de queries.
+3. ~~**Teto de 10 ms de CPU do Workers free**~~ — **resolvido em 2026-10-14** com a assinatura do **Workers Paid (~US$5/mês, teto de 30 s)**. O custo fixo do Prisma por requisição (~15–20 ms aquecido) já passava do teto grátis sozinho, e a Cloudflare passou a cortar com frequência (~1 em 3 requisições). Ver ADR-005, adendo 2026-10-14.
 
 ---
 

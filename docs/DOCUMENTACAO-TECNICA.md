@@ -127,7 +127,7 @@ Cada camada, a tecnologia escolhida e a justificativa. (Versões conforme os `pa
 | **Testes unitários** | Vitest | `^2.1.8` | Cobre os cálculos puros de `packages/core`. |
 | **Testes e2e** | Playwright | — | Fluxos ponta-a-ponta (planejado/faseado). |
 | **Monorepo / build** | Turborepo + npm workspaces | `^2.3.3` | Build incremental e código compartilhado. |
-| **Runtime de deploy** | Cloudflare Workers | — | Web (via OpenNext) e API (via Wrangler). |
+| **Runtime de deploy** | Cloudflare Workers (plano **Workers Paid** desde 2026-10-14) | — | Web (via OpenNext) e API (via Wrangler). Teto de CPU de 30 s por requisição — o free (10 ms) derrubava requisições comuns; ver ADR-005, adendo 2026-10-14. |
 | **Adaptador web→Workers** | `@opennextjs/cloudflare` | `^1.20.1` | Roda Next.js em Workers (não em Pages). |
 | **CLI de deploy** | Wrangler | `^4.107.0` | Publica os Workers e gera tipos. |
 | **Linguagem** | TypeScript | `^5.7.2` | Estrito, ponta a ponta (front, back, core, schemas). |

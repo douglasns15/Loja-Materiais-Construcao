@@ -3,6 +3,11 @@
 > Fonte de verdade do progresso do projeto. Atualizado a cada avanço.
 > Legenda: `[x]` concluído · `[ ]` pendente · 🟡 em andamento · ⏭️ adiado p/ fase futura
 >
+> **Incidente 2026-10-14 (resolvido):** "Não foi possível conectar ao servidor" em Produtos/PDV ao salvar/pesquisar.
+> Causa = teto de **10 ms de CPU do Workers free** (~37% das requisições cortadas, até `/categories` e `/db-check`; o
+> custo fixo do Prisma por requisição já passa de 10 ms). **Correção: Owner assinou o Workers Paid** (teto 30 s) —
+> pós-assinatura 130 requisições reais + 30 de stress, 0 falhas. Sem mudança de código. Ver ADR-005, adendo 2026-10-14.
+>
 > **Última atualização:** 2026-10-09 — **Carga do catálogo e balança: entregas #6, #7 e #8 do plano multirramo.**
 > Roteiro: [plano-implantacao-multirramo.md](plano-implantacao-multirramo.md). Como cada uma funciona (visão de quem
 > usa): [DOCUMENTACAO-FUNCIONAL.md](DOCUMENTACAO-FUNCIONAL.md) — **criada nesta data**.
