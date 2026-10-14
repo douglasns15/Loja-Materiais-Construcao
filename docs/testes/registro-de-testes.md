@@ -6423,3 +6423,6 @@ Super Usuário = `[]` + `is_platform_admin`; regressão B/C/D/E idênticas, A (t
 loja — esperado; **rollback restaurou `users.tenantId/role` 10/10 idênticos** ✅. Aplicada + client regenerado + API
 `c04e20f8` em seguida; `migrate diff` vazio ✅; regressão real = ensaio ✅; produção: `/me` OWNER no Mercadinho e MANAGER na
 Loja Demo, `/me/stores`, `/users`, `/products` (110 na Loja Demo), `PATCH /me` ✅.
+**Login real pós-0049 (2026-10-14 20:51, Owner logou o `owner_kg` em produção):** token novo com **só** `tenant_ids` =
+[Demo Mercardinho, Loja Demo] — sem `tenant_id`/`user_role` ✅; Demo Mercardinho como OWNER, chip no topo, 17 produtos ✅.
+**ADR-014 (multi-loja) concluída e validada.**

@@ -16,7 +16,7 @@
 >   por vínculo) → **`0049`** (hook só `tenant_ids`, sem `current_tenant_id()`, sem gatilho de espelho, sem
 >   `users.tenantId/role`, e-mail único) + API `c04e20f8` com o client novo. Ensaios em transação desfeita (inclusive do
 >   `rollback-0049.sql`: restaurou 10/10), regressão de isolamento real = ensaio, API em produção OK (papel por loja,
->   lojas, usuários, produtos, editar dados). `users` agora é só a identidade.
+>   lojas, usuários, produtos, editar dados) e **login real validado** (token só com `tenant_ids`). `users` agora é só a identidade.
 > - **#10 Usuário multi-loja (ADR-014) — Fatia 4 NO AR** (API `b4b93cbf`, web `8baaa080`; sem migration): convite a
 >   conta existente vira **pendente** com Aceitar/Recusar (faixa no topo + seletor, que não entra direto com convite);
 >   resposta do convite sempre igual (anti-enumeração); Configurações → Usuários por **vínculo** da loja (pendente só com
