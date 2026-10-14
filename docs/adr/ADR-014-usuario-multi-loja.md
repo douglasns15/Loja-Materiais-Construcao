@@ -8,7 +8,9 @@
   gatilho de espelho) e aplicada no Supabase; backfill 10/10 conferido; gatilho testado em transação desfeita. Sem
   mudança de comportamento (o app segue lendo `users`). **Fatia 2 CONCLUÍDA e NO AR 2026-10-14** (API `e41cb88b`, web
   `fee5d11e`; sem migration) — validada local e em produção com o `owner_kg` (Dono na Demo Mercardinho + Gerente na
-  Loja Demo, vínculo de teste).
+  Loja Demo, vínculo de teste). **Fatia 3 CONCLUÍDA 2026-10-14** — migration `0047_rls_multi_tenant` aprovada pelo
+  Owner e aplicada (hook com `tenant_ids`, `current_tenant_ids()`, 31 políticas `= ANY(...)`); ensaio em transação
+  desfeita + regressão de isolamento antes/depois idênticas onde deviam ser.
 - **Data:** 2026-07-17 (proposta) · 2026-09-30 (aceite)
 - **Contexto de fase:** Fase 3 (produção). Assenta sobre o RBAC da loja (ADR-008) e a plataforma/multi-loja
   do Super Usuário (ADR-009), **sem** se confundir com eles (ver "Não é isto" abaixo).
@@ -256,6 +258,12 @@ Migrations **aditivas** e faseadas (padrão do projeto: `migrate diff` + `migrat
    (a API já isola). Cache offline chaveado por loja.
 3. **Fatia 3 — RLS multi-loja (migration 2, Opção RLS-B).** Hook `tenant_ids` + políticas `= ANY(...)`. Testes de
    regressão de isolamento (membro vê suas lojas; não-membro é barrado; `anon` vazio).
+   **Feita 2026-10-14 (migration `0047`).** Decisões da implementação: o hook mantém `tenant_id`/`user_role` até a
+   Fatia 5 e lê os vínculos dentro de um bloco de exceção (falha ⇒ token sem a lista, login intacto);
+   `current_tenant_ids()` cai em `[tenant_id]` para tokens emitidos antes (transição sem deslogar ninguém); políticas
+   alteradas com `ALTER POLICY` nomeado (nunca sem política); forma `= ANY ((SELECT …)::uuid[])` (o ensaio mostrou que
+   sem o cast o Postgres lê como subconsulta e falha). Super Usuário sai com `tenant_ids: []` (não opera loja pelo
+   banco). Volta: `packages/db/scripts/rollback-0047.sql`.
 4. **Fatia 4 — Concessão/remoção de acesso "ambos" + consentimento.** Super Usuário concede; Admin convida
    existente com fluxo `PENDING → ACEITAR`, resposta genérica, anti-vazamento, auditoria. Inclui **revogar
    membership (sair de uma loja)** e a nova semântica de exclusão da seção 5 (identidade vs. vínculo).

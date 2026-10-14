@@ -6352,3 +6352,24 @@ de alimentos ✅; 2 abas: trocar numa recarrega a outra na loja nova ✅; víncu
 (anterior `4e28ba69`) — smoke ✅, BUILD_ID = HTML ao vivo, `/selecionar-loja` 200.
 **Produção (`owner_kg`):** `/products` ⇒ seletor com as 2 lojas ✅ ⇒ Loja Demo (MANAGER, catálogo de construção, chip) ✅
 ⇒ chip "Trocar de loja" ⇒ Demo Mercardinho ✅. Vínculo de teste mantido ATIVO para o E2E do Owner.
+
+## Multi-loja Fatia 3 — migration 0047, RLS com N lojas (ADR-014) — 2026-10-14
+
+Regressão de isolamento por SQL (role `authenticated`/`anon` + `request.jwt.claims`, sempre em transação com ROLLBACK),
+contando 8 tabelas (products, orders, customers, stock_movements, tenants, users, tenant_memberships, tenant_modules).
+Verdade por loja (sem RLS): Mercadinho 17 produtos / Loja Demo 119 / Maria 702.
+
+| Cenário | Antes (0046) | Depois (0047) |
+|---|---|---|
+| A — token antigo, só `tenant_id` = Mercadinho | 17 produtos, 1 loja | **igual** ✅ |
+| B — `tenant_ids` = [Mercadinho, Loja Demo] | 17 (só a de casa) | **136 produtos, 142 vendas, 2 lojas, 6 vínculos** ✅ |
+| C — `tenant_ids` = [Maria] | 702 | **igual** ✅ |
+| D — sem loja | 0 | 0 ✅ |
+| E — anon | 0 | 0 ✅ |
+
+**Ensaio** (migration executada dentro de transação + testes + ROLLBACK) antes de aplicar: o 1º ensaio **falhou** com
+`operator does not exist: uuid = uuid[]` (`= ANY ((SELECT …))` vira subconsulta) — corrigido para `::uuid[]`; 2º ensaio
+✅. Hook executado direto: owner_kg ⇒ `tenant_ids` com as 2 lojas; Maria ⇒ 1; Super Usuário ⇒ `[]` +
+`is_platform_admin`; id inexistente ⇒ `[]`. `supabase_auth_admin` com `SELECT` em `tenant_memberships` + política
+`auth_admin_read_memberships` ✅ (não deu para executar o hook COMO esse papel — o usuário do banco não pode `SET ROLE`
+para ele; a prova é o token real abaixo). `migrate deploy` ✅; regressão depois = ensaio ✅; `migrate diff` vazio ✅.

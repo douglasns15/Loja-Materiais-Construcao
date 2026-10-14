@@ -10,6 +10,14 @@
 >
 > **Última atualização:** 2026-10-14 — **#9 Importar planilha (ADR-041 Fatia 3) + início do #10 multi-loja.**
 >
+> - **#10 Usuário multi-loja (ADR-014) — Fatia 3 FEITA:** migration **`0047_rls_multi_tenant` aprovada pelo Owner e
+>   aplicada** — o token do login ganhou `tenant_ids` (lojas com vínculo ativo; o hook nunca quebra o login: falha na
+>   leitura ⇒ token como antes) e as **31 políticas** de leitura por loja passaram a "uma das lojas do token"
+>   (`current_tenant_ids()`, que cai na loja única para tokens antigos). Ensaio em transação desfeita pegou um erro de
+>   SQL antes de aplicar (corrigido); regressão de isolamento antes/depois: token antigo, 1 loja, sem loja e anônimo
+>   **idênticos**; token de 2 lojas vê as duas e nenhuma terceira. Sem deploy (só banco). Volta de emergência pronta
+>   (`packages/db/scripts/rollback-0047.sql`). **Próxima: Fatia 4** (convite com aceite + Super Usuário concede +
+>   sair de uma loja).
 > - **#10 Usuário multi-loja (ADR-014) — Fatia 2 NO AR** (API `e41cb88b`, web `fee5d11e`; sem migration): loja ativa
 >   por `x-active-tenant` conferida contra os vínculos (core `resolveActiveStore`, +5 testes), papel **por loja**,
 >   `GET /me/stores` + tela **`/selecionar-loja`** (login: 1 loja entra direto, 2+ escolhe), chip da loja atual + "Trocar
@@ -17,7 +25,7 @@
 >   cada venda para a loja dela, outra aba recarrega na troca, cesta do servidor por loja. Validado local (403/409,
 >   isolamento de produtos e cesta, bloqueio da fila, 2 abas, revogação ⇒ volta ao seletor e entra na única loja) e em
 >   produção. **Dado de teste:** `owner_kg` ganhou vínculo **Gerente na Loja Demo** (`invitedByName` "Teste Fatia 2
->   (Claude)") — ATIVO, para o E2E do Owner. Próxima: **Fatia 3** (RLS multi-loja, migration 2).
+>   (Claude)") — ATIVO, para o E2E do Owner. Fatia 3 feita (acima).
 > - **#10 Usuário multi-loja (ADR-014) — Fatia 1 FEITA:** migration **`0046_tenant_memberships` aprovada pelo Owner e
 >   aplicada** — tabela de vínculo usuário↔loja (papel por loja, `ACTIVE`/`PENDING`), backfill 10/10 conferido, RLS
 >   (loja do token ou os próprios vínculos) e **gatilho de espelho** `users → vínculo "de casa"` enquanto

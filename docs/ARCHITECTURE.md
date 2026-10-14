@@ -126,6 +126,19 @@ O isolamento entre lojas é garantido **no banco**, não só na aplicação — 
   ```
 
   Assim, mesmo que o cliente fale direto com o Postgres via `supabase-js`, é impossível ler/escrever dados de outro tenant.
+
+  **Desde a migration `0047` (multi-loja, ADR-014 Fatia 3)** o token carrega também `tenant_ids` (as lojas com vínculo
+  ativo) e as policies usam a lista — **convenção obrigatória para tabela nova**:
+
+  ```sql
+  CREATE POLICY "<tabela>_select_tenant" ON public.<tabela>
+    FOR SELECT TO authenticated
+    USING ("tenantId" = ANY ((SELECT public.current_tenant_ids())::uuid[]));
+  ```
+
+  `current_tenant_ids()` cai na loja única (`tenant_id`) quando o token não tem a lista. O `(SELECT …)::uuid[]` faz a
+  lista ser calculada uma vez por consulta (sem o cast, o Postgres trata como subconsulta e falha). A **loja ativa**
+  (uma só) é imposta pela API; o RLS garante "só as lojas da pessoa".
 - **API Hono:** valida o JWT em middleware, extrai `tenant_id`/`role` e injeta o contexto em toda operação Prisma; nunca confia em `tenantId` vindo do corpo da requisição.
 - **Papéis:** `OWNER`, `MANAGER`, `CASHIER`, `STOCK` controlam autorização fina (ex: só OWNER/MANAGER fecham caixa com divergência).
 - **Segredos:** chaves de service-role e do R2 ficam só nos Workers (variáveis de ambiente do Wrangler), nunca no cliente.
