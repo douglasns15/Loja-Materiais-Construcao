@@ -6310,3 +6310,13 @@ adulterado 401 em 23 ms, sem busca remota; nenhum aviso de JWKS no log.
 **Deploy (2026-10-14):** API `38a04bb8` (anterior `fcca9ce2`). **Validação em produção:** 1ª chamada `/me` logo após o
 deploy = **200 em 1,4 s** (antes: 401 em 5 s); mais 5 `/me` e `/products` 200; token adulterado 401 (96 ms); sem
 token 401. ✅
+
+## Cupom com etiqueta de balança (pendência da #8) — 2026-10-14
+
+Produção, `owner_kg`, PDV: etiqueta `2012300010007` + Leite Condensado no carrinho ⇒ prévia de **Orçamento** (mesmo
+`ReceiptPrint` da venda; nada gravado). `#print-area` (modelo 80 mm): "Teste sequencia granel (etiqueta) | 0,402 kg |
+R$ 24,90 | R$ 10,00" e "Leite Condensado Integral moça | 1 | R$ 9,49 | R$ 9,49", TOTAL R$ 19,49 ✅. Visual 80 mm (via a
+classe `rc-capture`, a mesma do comprovante de WhatsApp): **achado** — Unit. e Total grudados ("R$ 24,90R$ 10,00") e
+"0,402 kg" em 2 linhas. Corrigido no CSS (colunas numéricas sem quebra + respiro à esquerda); conferido no web de dev:
+"0,402 kg | R$ 24,90 | R$ 10,00" em uma linha, o nome quebra ✅. Carrinho de teste limpo.
+**Deploy:** web `4e28ba69` (anterior `ece4829a`) — smoke ✅. **Falta:** impressão física na térmica (Owner).

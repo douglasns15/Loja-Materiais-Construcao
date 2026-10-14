@@ -29,6 +29,10 @@
 >   públicas ficam na var `SUPABASE_JWKS` do `wrangler.toml` (verificação sem rede; remoto só como reserva para
 >   rotação de chave) e falha ao obter as chaves responde **503** (tente de novo), não 401. Primeiros testes da API
 >   (`supabaseToken.test.ts`, 7 casos de segurança). **NO AR** (API `38a04bb8`): 1ª chamada após o deploy = 200 em 1,4 s.
+> - **Cupom com etiqueta CONFERIDO** (pendência de 2026-10-09): prévia de orçamento em produção com a etiqueta
+>   `2012300010007` ⇒ "Teste sequencia granel (etiqueta) | 0,402 kg | R$ 24,90 | R$ 10,00" ✅. Achado no visual 80 mm:
+>   colunas Unit./Total grudavam ("R$ 24,90R$ 10,00") e "0,402 kg" quebrava — corrigido no CSS do cupom (vale para
+>   qualquer cupom; **NO AR**, web `4e28ba69`). Falta só o Owner imprimir uma vez na térmica real.
 > - **Ferramenta:** `apps/api/scripts/dev-local.mjs` + configuração **"api"** no `.claude/launch.json` sobem a API
 >   local (`wrangler dev` com a connection string do `.dev.vars`) — substitui o passo manual do item 5 abaixo.
 >
@@ -57,8 +61,8 @@
 >   §8.2, §9 leitura no PDV e etiqueta). Regra combinada com o Owner: toda entrega atualiza técnica **e** funcional.
 >
 > **ONDE PARAMOS / PRÓXIMOS PASSOS (2026-10-09, fim da sessão):**
-> 1. ~~Deploy do web com a opção C~~ feito (web `dbc04cb7`). Falta só, numa venda real com etiqueta, conferir o
->    **cupom impresso**: "(etiqueta)" no nome e coluna Unit. com o preço do cadastro (não foi testado).
+> 1. ~~Deploy do web com a opção C~~ feito (web `dbc04cb7`). ~~Conferir o **cupom impresso**~~ — conferido em
+>    2026-10-14 (ver bloco acima).
 > 2. **Próxima entrega: #9 planilha** — ADR-041 §1–§6 e Fatia 3: modelo NexoLoja para enviar ao cliente; leitura
 >    CSV/XLSX no navegador com `read-excel-file` (dependência já aprovada); pré-visualização novo/atualiza/erro;
 >    `POST /products/import` em lotes de ~100, idempotente (casa por `gtinKey` → código interno); "Estoque atual"

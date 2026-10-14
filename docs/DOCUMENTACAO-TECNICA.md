@@ -626,7 +626,9 @@ Alertas CALCULADOS sob demanda (custo-zero: nada é gravado; a pendência some q
   linha de etiqueta (`isLabelLine` = chave com `:LABEL:`) mostra o `salePrice` do cadastro (`shownUnitPrice`) + selo
   "🏷️ etiqueta"; o cupom recebe `ReceiptItem.displayUnitPrice` + `label` (coluna "Unit." e "(etiqueta)") e calcula o
   total pelo `unitPrice` gravado. O `OrderItem` não sabe que veio de etiqueta ⇒ reimpressão pelo Histórico mostra o
-  preço gravado (ajustado). Nenhuma mudança de contrato/API.
+  preço gravado (ajustado). Nenhuma mudança de contrato/API. Cupom 80 mm (`globals.css`, `#print-area .rc-table
+  .right`): colunas numéricas com `white-space: nowrap` + `padding-left: 6px` — quem quebra é o nome (antes
+  "R$ 24,90R$ 10,00" saía grudado; conferido em 2026-10-14).
 - **Cadastro em sequência (ADR-041 §A):** rota `/products/sequencia`; casa o código no cliente
   (`findProductByCode`: GTIN canônico → código interno) sobre o catálogo da loja e decide a contagem por
   `planOpeningCount` — sem rota própria (usa `POST /products` e `POST /stock/adjust`).
