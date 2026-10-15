@@ -1,5 +1,53 @@
 import { describe, expect, it } from 'vitest';
-import { findProductByCode, gtinKey, looksLikeProductCode, isValidGtin, normalizeGtin, normalizeNcm } from './catalog';
+import {
+  classifyCosmosFailure,
+  eanLookupIssueMessage,
+  eanLookupResultSchema,
+  findProductByCode,
+  gtinKey,
+  looksLikeProductCode,
+  isValidGtin,
+  normalizeGtin,
+  normalizeNcm,
+} from './catalog';
+
+// "Não encontrado" (404) × "serviço falhou" (token/limite/fora do ar) — a distinção que a UI mostra.
+describe('classifyCosmosFailure', () => {
+  it('404 é produto inexistente, não falha', () => {
+    expect(classifyCosmosFailure(404)).toBeNull();
+    expect(classifyCosmosFailure(404, 'Not Found')).toBeNull();
+  });
+
+  it('401/403 = acesso recusado (token/plano)', () => {
+    expect(classifyCosmosFailure(401, 'Token Inválido')).toBe('auth');
+    expect(classifyCosmosFailure(403)).toBe('auth');
+  });
+
+  it('429, ou recusa cuja mensagem fala de limite/cota, = limite do plano', () => {
+    expect(classifyCosmosFailure(429)).toBe('limit');
+    expect(classifyCosmosFailure(403, 'Limite de requisições excedido')).toBe('limit');
+    expect(classifyCosmosFailure(401, 'Daily quota exceeded')).toBe('limit');
+  });
+
+  it('5xx, 400 e afins = indisponível', () => {
+    expect(classifyCosmosFailure(500)).toBe('unavailable');
+    expect(classifyCosmosFailure(503, null)).toBe('unavailable');
+    expect(classifyCosmosFailure(400, 'Bad Request')).toBe('unavailable');
+  });
+
+  it('toda issue tem mensagem amigável', () => {
+    for (const i of ['auth', 'limit', 'unavailable'] as const) {
+      expect(eanLookupIssueMessage(i)).toMatch(/Cosmos/);
+    }
+  });
+
+  it('lookupIssue é opcional no contrato (respostas antigas continuam válidas)', () => {
+    const base = { found: false, catalog: null, source: null, existingProductId: null };
+    expect(eanLookupResultSchema.safeParse(base).success).toBe(true);
+    expect(eanLookupResultSchema.safeParse({ ...base, lookupIssue: 'limit' }).success).toBe(true);
+    expect(eanLookupResultSchema.safeParse({ ...base, lookupIssue: 'outro' }).success).toBe(false);
+  });
+});
 
 // Dígito verificador GS1 (mod-10). Amostras com check digit conferido à mão para EAN-8, UPC-A,
 // EAN-13 e GTIN-14 — cobre os quatro comprimentos aceitos.

@@ -465,7 +465,7 @@ testável exaustivamente e compartilhada entre as duas apps.
 
 | Método · Rota | O que faz |
 |---|---|
-| `GET /ean/:ean` | Resolve um EAN: acha produto existente da loja e/ou enriquece nome/marca do catálogo global. |
+| `GET /ean/:ean` | Resolve um EAN: acha produto existente da loja e/ou enriquece nome/marca do catálogo global. Ordem: cache global (`product_catalog_global`) → **Bluesoft Cosmos** (só com o secret `COSMOS_TOKEN`; headers `X-Cosmos-Token` + `User-Agent: Cosmos-API-Request`; timeout 4 s) → Open Food Facts. Resposta `EanLookupResult` (shared): `{ found, catalog, source, existingProductId, lookupIssue? }`. **`lookupIssue`** (desde 2026-10-15, opcional, retrocompatível) só vem com `found:false` quando a Cosmos **falhou** — o "não encontrado" não é confiável: `auth` (401/403 — token inválido/revogado ou plano encerrado), `limit` (429, ou recusa cuja `message` fala de limite/cota), `unavailable` (rede/timeout/5xx/corpo inválido). Classificação pura em `classifyCosmosFailure` e texto da UI em `eanLookupIssueMessage` (ambos em `packages/shared/src/catalog.ts`). 404 da Cosmos = produto inexistente, sem issue. Falha externa **nunca** vira erro HTTP (continua `200 ok:true`). Log do Worker em toda falha: `[cosmos] gtin=… status=… issue=… message="…" tokenLen=…` (tamanho do token, nunca o valor) — ver via `wrangler tail nexoloja-api` ou Workers Logs filtrando `[cosmos]`. Misses não são cacheados. Requer login (`requireAuth`). |
 
 **`/nfe` — Importação de XML de NF-e (ADR-025, Fatia 2)**
 

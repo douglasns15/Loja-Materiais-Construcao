@@ -1,8 +1,10 @@
 import { Hono } from 'hono';
 
 import {
+  type EanLookupIssue,
   type EanLookupResult,
   type ProductCatalog,
+  classifyCosmosFailure,
   isValidGtin,
   normalizeGtin,
   normalizeNcm,
@@ -20,7 +22,9 @@ import { requireAuth } from '../middleware/auth';
  * de rede reduz chamadas externas com o tempo (custo-zero).
  *
  * Resiliência (regra de ouro do Owner): falha de rede/timeout/limite da API externa NUNCA vira 500 —
- * cai como "não encontrado" e o operador cadastra à mão. Cada provider tem timeout curto para não
+ * cai como "não encontrado" e o operador cadastra à mão. Desde 2026-10-15 a resposta traz
+ * `lookupIssue` (auth/limit/unavailable) quando a Cosmos falhou, para a UI distinguir "produto não
+ * existe no catálogo" de "o serviço não respondeu". Cada provider tem timeout curto para não
  * segurar o Worker. A imagem é sempre HOTLINK (URL externa), nunca baixada para o R2.
  */
 
@@ -57,40 +61,72 @@ function orNull(v: unknown): string | null {
 }
 
 /**
+ * Resultado da Cosmos: a ficha (`data`), ou `null` + o motivo quando o serviço FALHOU (`issue`).
+ * `{ data: null, issue: null }` = a Cosmos respondeu "produto inexistente" (404) — caminho normal.
+ */
+type CosmosOutcome = { data: ExternalCatalog | null; issue: EanLookupIssue | null };
+
+/**
  * Bluesoft Cosmos — base BR ampla (inclui itens gerais, não só alimentos). Opcional: só é chamado
  * quando `COSMOS_TOKEN` está provisionado. Rate-limited no free tier; por isso é tentado 1º (melhor
  * cobertura p/ construção) e o resultado vai pro cache, evitando repetir a chamada.
  */
-async function fetchCosmos(ean: string, token: string): Promise<ExternalCatalog | null> {
+async function fetchCosmos(ean: string, token: string): Promise<CosmosOutcome> {
   // Defensivo: um secret provisionado por colagem interativa (`wrangler secret put`) costuma carregar
   // um espaço/quebra de linha invisível no fim — o header sairia sujo e a Cosmos responde 401. O
   // `.trim()` blinda contra isso (e contra futuras rotações do token).
   const cleanToken = token.trim();
   try {
     const res = await fetchWithTimeout(`https://api.cosmos.bluesoft.com.br/gtins/${ean}`, {
-      headers: { 'X-Cosmos-Token': cleanToken, 'Content-Type': 'application/json' },
+      // `User-Agent` é o que a documentação da Cosmos usa nos exemplos; o fetch do Worker não manda
+      // nenhum por padrão.
+      headers: {
+        'X-Cosmos-Token': cleanToken,
+        'Content-Type': 'application/json',
+        'User-Agent': 'Cosmos-API-Request',
+      },
     });
     if (!res.ok) {
-      // 404 = produto inexistente (normal). Outros status (401 token / 429 limite) são operacionalmente
-      // úteis: logamos status + TAMANHO do token (nunca o token) p/ inspeção via `wrangler tail`.
-      if (res.status !== 404) {
-        console.warn(`[cosmos] gtin=${ean} status=${res.status} tokenLen=${cleanToken.length}`);
+      // 404 = produto inexistente (normal). Os demais (401/403 token ou plano, 429 limite, 5xx) viram
+      // `issue` — a UI mostra "falha do serviço" em vez de "não encontrado" (que seria mentira: o
+      // produto pode existir lá). Logamos status + `message` da Cosmos + TAMANHO do token (NUNCA o
+      // token) p/ inspeção via `wrangler tail` / Workers Logs (filtrar por "[cosmos]").
+      const body = await res.text().catch(() => '');
+      let message: string | null = null;
+      try {
+        message = orNull((JSON.parse(body) as Record<string, unknown>).message);
+      } catch {
+        message = orNull(body.slice(0, 200));
       }
-      return null; // 404 (não achou) / 429 (limite) / 401 (token) → sem enriquecimento, sem erro
+      const issue = classifyCosmosFailure(res.status, message);
+      if (issue) {
+        console.warn(
+          `[cosmos] gtin=${ean} status=${res.status} issue=${issue} message=${JSON.stringify(message)} tokenLen=${cleanToken.length}`,
+        );
+      }
+      return { data: null, issue };
     }
     const j = (await res.json().catch(() => null)) as Record<string, unknown> | null;
-    if (!j) return null;
+    if (!j) {
+      console.warn(`[cosmos] gtin=${ean} status=${res.status} issue=unavailable message="corpo não-JSON"`);
+      return { data: null, issue: 'unavailable' };
+    }
     const brand = (j.brand as Record<string, unknown> | null) ?? null;
     const ncmObj = (j.ncm as Record<string, unknown> | null) ?? null;
     return {
-      officialName: orNull(j.description),
-      brand: orNull(brand?.name),
-      ncm: normalizeNcm(orNull(ncmObj?.code)),
-      imageUrl: orNull(j.thumbnail), // URL pública do CDN da Cosmos (hotlink)
-      source: 'cosmos',
+      data: {
+        officialName: orNull(j.description),
+        brand: orNull(brand?.name),
+        ncm: normalizeNcm(orNull(ncmObj?.code)),
+        imageUrl: orNull(j.thumbnail), // URL pública do CDN da Cosmos (hotlink)
+        source: 'cosmos',
+      },
+      issue: null,
     };
-  } catch {
-    return null; // rede/timeout: segue para o próximo provider
+  } catch (err) {
+    // rede/timeout: segue para o próximo provider, mas registra que a Cosmos não respondeu.
+    console.warn(`[cosmos] gtin=${ean} issue=unavailable erro=${String(err)}`);
+    return { data: null, issue: 'unavailable' };
   }
 }
 
@@ -120,13 +156,21 @@ async function fetchOpenFoodFacts(ean: string): Promise<ExternalCatalog | null> 
   }
 }
 
-/** Tenta as fontes externas na ordem (Cosmos → Open Food Facts). Primeira com dado vence. */
-async function fetchExternal(ean: string, env: Bindings): Promise<ExternalCatalog | null> {
+/**
+ * Tenta as fontes externas na ordem (Cosmos → Open Food Facts). Primeira com dado vence. Se nenhuma
+ * achar, devolve também o `issue` da Cosmos (quando ela falhou) — o "não encontrado" fica sob suspeita.
+ */
+async function fetchExternal(
+  ean: string,
+  env: Bindings,
+): Promise<{ data: ExternalCatalog | null; issue: EanLookupIssue | null }> {
+  let issue: EanLookupIssue | null = null;
   if (env.COSMOS_TOKEN) {
     const cosmos = await fetchCosmos(ean, env.COSMOS_TOKEN);
-    if (cosmos) return cosmos;
+    if (cosmos.data) return cosmos;
+    issue = cosmos.issue;
   }
-  return fetchOpenFoodFacts(ean);
+  return { data: await fetchOpenFoodFacts(ean), issue };
 }
 
 /** Serializa a linha do cache (Prisma) no shape público `ProductCatalog`. */
@@ -201,14 +245,16 @@ catalog.get('/ean/:ean', async (c) => {
       return c.json({ ok: true, data: result });
     }
 
-    // 2ª busca: fontes externas gratuitas. Falha/limite/timeout → "não encontrado" (sem erro).
-    const external = await fetchExternal(gtin, c.env);
+    // 2ª busca: fontes externas gratuitas. Falha/limite/timeout continua sem erro HTTP (o operador
+    // cadastra à mão), mas vem com `lookupIssue` para a UI não dizer "não existe" quando foi o serviço.
+    const { data: external, issue } = await fetchExternal(gtin, c.env);
     if (!external) {
       const result: EanLookupResult = {
         found: false,
         catalog: null,
         source: null,
         existingProductId,
+        lookupIssue: issue,
       };
       return c.json({ ok: true, data: result });
     }

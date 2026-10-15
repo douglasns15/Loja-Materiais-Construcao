@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import {
   closedUnitTerms,
+  eanLookupIssueMessage,
   isValidGtin,
   onlyDigits,
   formatWeight,
@@ -572,7 +573,12 @@ export function ProductDetail({
     try {
       const r = await apiGet<EanLookupResult>(`/catalog/ean/${digits}`);
       if (!r.found || !r.catalog) {
-        setSyncMsg('Sem ficha técnica nas fontes gratuitas para este código.');
+        // Falha do serviço (token/limite/fora do ar) ≠ produto inexistente no catálogo.
+        setSyncMsg(
+          r.lookupIssue
+            ? eanLookupIssueMessage(r.lookupIssue)
+            : 'Produto não encontrado no catálogo (Cosmos/Open Food Facts) para este código.',
+        );
         return;
       }
       const proposals: SyncProposal[] = [];

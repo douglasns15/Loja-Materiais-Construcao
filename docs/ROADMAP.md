@@ -9,6 +9,12 @@
 > pós-assinatura 130 requisições reais + 30 de stress, 0 falhas. Sem mudança de código. Ver ADR-005, adendo 2026-10-14.
 >
 > **ONDE PARAMOS / PRÓXIMOS PASSOS (2026-10-15):**
+> - **Cosmos "sempre sem ficha" — DIAGNOSTICADO:** a Cosmos responde **429 "Limite diário de consultas excedido"**
+>   (token válido; franquia reinicia à meia-noite BRT); o código engolia como "não encontrado". Última ficha Cosmos no
+>   cache: 05/10. **Fix no ar** (API `e1a51a0c`, web `9e1c2a0c`): `lookupIssue` (`auth`/`limit`/`unavailable`) no
+>   `GET /catalog/ean/:ean` + aviso na tela + log `[cosmos] … message=…`. **Pendente (Owner):** conferir no painel da
+>   conta Cosmos o consumo/plano (o app não gasta a franquia sozinho; suspeita: plano reduzido ou token usado em outro
+>   lugar) e confirmar a ficha voltando depois da meia-noite. Ver registro de testes "Integração.Cosmos … 2026-10-15".
 > - **Teclado em todas as telas (ADR-032, adendo) CONCLUÍDO e validado pelo Owner** — setas nas buscas, Esc fecha o
 >   pop-up de cima (inclusive a janela flutuante em uso), F8 = Confirmar/Salvar. **Versão web no ar: `eaac2530`**
 >   (API segue `c04e20f8`). Commits locais em `main` — **push do Owner**.

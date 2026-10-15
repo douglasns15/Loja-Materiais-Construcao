@@ -124,17 +124,58 @@ export const productCatalogSchema = z.object({
 export type ProductCatalog = z.infer<typeof productCatalogSchema>;
 
 /**
+ * Por que a fonte externa paga/limitada (Bluesoft Cosmos) NÃO conseguiu responder a uma consulta —
+ * distingue "o produto não existe no catálogo" (sem issue) de "o serviço falhou" (com issue):
+ * - `auth`: a Cosmos recusou o acesso (401/403 — token inválido, expirado/revogado ou plano encerrado).
+ * - `limit`: limite de consultas do plano atingido (429, ou recusa cuja mensagem fala de limite/cota).
+ * - `unavailable`: rede/timeout/5xx/resposta inesperada — serviço fora do ar ou lento.
+ */
+export const eanLookupIssueSchema = z.enum(['auth', 'limit', 'unavailable']);
+export type EanLookupIssue = z.infer<typeof eanLookupIssueSchema>;
+
+/**
+ * Classifica uma resposta NÃO-ok da Cosmos (status HTTP + `message` do corpo JSON, se houver).
+ * `404` é "produto inexistente" — o caminho normal, não é falha — e devolve `null`. Puro (testável).
+ */
+export function classifyCosmosFailure(status: number, message?: string | null): EanLookupIssue | null {
+  if (status === 404) return null;
+  const msg = (message ?? '').toLowerCase();
+  // A mensagem tem precedência: um 403 "limite de requisições excedido" é cota, não credencial.
+  if (status === 429 || /limit|cota|quota|excedid|exceed|too many/.test(msg)) return 'limit';
+  if (status === 401 || status === 403) return 'auth';
+  return 'unavailable';
+}
+
+/**
+ * Texto amigável (para o operador) de cada `EanLookupIssue` — o mesmo em todas as telas que
+ * consultam o EAN (Produtos, Sincronizar, Cadastro em sequência, Cadastrar agora do Caixa).
+ */
+export function eanLookupIssueMessage(issue: EanLookupIssue): string {
+  switch (issue) {
+    case 'limit':
+      return 'O Cosmos (catálogo de códigos de barras) atingiu o limite diário de consultas do plano. Preencha à mão — a consulta volta depois da meia-noite (horário de Brasília).';
+    case 'auth':
+      return 'O Cosmos recusou o acesso (token inválido, expirado ou plano encerrado). Avise o administrador e, por enquanto, preencha à mão.';
+    case 'unavailable':
+      return 'O Cosmos não respondeu agora (fora do ar ou lento). Tente de novo em instantes ou preencha à mão.';
+  }
+}
+
+/**
  * Resposta da busca inteligente de EAN (`GET /catalog/ean/:ean`).
  * - `found`: houve ficha técnica (do cache ou de fonte externa)?
  * - `catalog`: a ficha, quando encontrada.
  * - `source`: de onde veio ('cache' | 'off' | 'cosmos' | 'nfe' | 'manual' | null).
  * - `existingProductId`: se a PRÓPRIA loja já tem um produto com esse EAN, o id — para a UI
  *   avisar "já cadastrado" em vez de duplicar (o escopo do tenant é resolvido no servidor pelo JWT).
+ * - `lookupIssue`: só quando `found:false` E a Cosmos falhou — o "não encontrado" NÃO é confiável
+ *   (o produto pode existir lá). Ausente/`null` = a consulta rodou normalmente.
  */
 export const eanLookupResultSchema = z.object({
   found: z.boolean(),
   catalog: productCatalogSchema.nullable(),
   source: z.string().nullable(),
   existingProductId: z.string().uuid().nullable(),
+  lookupIssue: eanLookupIssueSchema.nullable().optional(),
 });
 export type EanLookupResult = z.infer<typeof eanLookupResultSchema>;

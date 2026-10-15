@@ -6426,3 +6426,40 @@ Loja Demo, `/me/stores`, `/users`, `/products` (110 na Loja Demo), `PATCH /me` �
 **Login real pós-0049 (2026-10-14 20:51, Owner logou o `owner_kg` em produção):** token novo com **só** `tenant_ids` =
 [Demo Mercardinho, Loja Demo] — sem `tenant_id`/`user_role` ✅; Demo Mercardinho como OWNER, chip no topo, 17 produtos ✅.
 **ADR-014 (multi-loja) concluída e validada.**
+
+## Integração.Cosmos — "sem informações no catálogo" sempre: era o LIMITE DIÁRIO (429) engolido — 2026-10-15
+
+**Sintoma (Owner).** Há vários dias, todo EAN novo em Produtos mostrava "sem ficha técnica nas fontes gratuitas",
+embora o site do Cosmos tivesse o produto.
+
+**Diagnóstico.**
+1. **Cache global** (`product_catalog_global`, só leitura): fichas `source=cosmos` gravadas quase todo dia (1–9/dia) de
+   01/09 a **05/10 12:54 UTC — e nenhuma depois**. Só `nfe`/`off` desde então.
+2. **Rede:** sonda temporária em `wrangler dev --remote` (edge da Cloudflare) chamando a Cosmos com token falso → `401
+   {"message":"Token Inválido"}` com e sem `User-Agent` ⇒ sem bloqueio de IP/WAF nem exigência de header.
+3. **Código:** `fetchCosmos` devolvia `null` para 401/403/429/timeout igual ao 404 ⇒ a UI dizia "sem ficha" para
+   qualquer falha. O `console.warn` existente não registrava a `message` da Cosmos.
+4. **Prova em produção (após o deploy do fix, `wrangler tail`):** EAN `7899932000232` bipado pelo Owner →
+   `[cosmos] gtin=7899932000232 status=429 issue=limit message="Limite diário de consultas excedido. Cada requisição à
+   API, incluindo cada página de um resultado paginado, é contabilizada como uma consulta. A franquia é reiniciada à
+   meia-noite, horário de Brasília." tokenLen=22`. **Token válido; a franquia diária estava esgotada** (17:40 BRT).
+   A tela mostrou o aviso novo de limite (print do Owner).
+5. **Consumo pelo app:** só o formulário de produto NOVO consulta (EAN válido, debounce 500 ms), + Sincronizar, Cadastro
+   em sequência e "Cadastrar agora"; nenhum cron/rota chama a Cosmos sozinha. Esgotar a franquia todo dia desde 05/10
+   aponta para fora do app (plano reduzido pela Bluesoft ou o mesmo token usado em outro lugar) — **conferir no painel da
+   conta Cosmos** (o site está atrás de verificação anti-robô; não acessível daqui).
+
+**Correção (código, sem migration).**
+- `packages/shared/src/catalog.ts`: `eanLookupIssueSchema` (`auth`/`limit`/`unavailable`), `classifyCosmosFailure`
+  (puro; 404 ⇒ null; 429 ou mensagem com limite/cota ⇒ `limit`; 401/403 ⇒ `auth`; resto ⇒ `unavailable`),
+  `eanLookupIssueMessage` (texto único das 4 telas) e `lookupIssue?` opcional em `EanLookupResult` (retrocompatível).
+  +6 testes Vitest.
+- `apps/api/src/routes/catalog.ts`: `fetchCosmos` devolve `{ data, issue }`; header `User-Agent: Cosmos-API-Request`;
+  log `[cosmos] gtin status issue message tokenLen` em toda falha (inclusive rede/timeout). Rota segue `200 ok:true`.
+- Web: card do Produtos (aviso âmbar com o motivo; falha da nossa API vira "não foi possível consultar"), Sincronizar
+  pelo EAN, Cadastro em sequência e "Cadastrar agora" distinguem "não encontrado no catálogo" de falha do Cosmos.
+
+**Gates:** shared 146 testes ✅; typecheck API e web 0 erros ✅. **NO AR:** API `e1a51a0c` (prisma generate antes;
+`/health` 200, `/catalog/ean` 401 sem login, secret `COSMOS_TOKEN` presente), web `59de2bc1` → `9e1c2a0c` (texto do limite com "meia-noite, horário de Brasília"; smoke pós-deploy ✅).
+Docs: técnica §8.2 (`GET /catalog/ean/:ean`) + funcional §5.
+**Pendente:** confirmar a volta da ficha após a meia-noite (BRT) e o consumo no painel da Cosmos.

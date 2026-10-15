@@ -1,7 +1,12 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { isValidGtin, onlyDigits, type EanLookupResult } from '@nexoloja/shared';
+import {
+  eanLookupIssueMessage,
+  isValidGtin,
+  onlyDigits,
+  type EanLookupResult,
+} from '@nexoloja/shared';
 import { apiGet } from '@/lib/api';
 
 /**
@@ -18,6 +23,8 @@ type LookupState = {
   result: EanLookupResult | null;
   /** Código consultado (dígitos) a que o `result` se refere — evita aplicar dado de um EAN antigo. */
   ean: string | null;
+  /** A própria chamada à NOSSA API falhou (rede/sessão/500) — diferente de "sem ficha". */
+  failed?: boolean;
 };
 
 const DEBOUNCE_MS = 500;
@@ -42,7 +49,7 @@ export function useEanLookup(rawEan: string): LookupState {
         })
         .catch(() => {
           // Resiliência (regra do Owner): falha externa não trava — apenas "sem ficha".
-          if (mySeq === seq.current) setState({ loading: false, result: null, ean: digits });
+          if (mySeq === seq.current) setState({ loading: false, result: null, ean: digits, failed: true });
         });
     }, DEBOUNCE_MS);
     return () => clearTimeout(t);
@@ -81,7 +88,15 @@ export function EanEnrichmentCard({
     );
   }
   const r = state.result;
-  if (!r) return null;
+  if (!r) {
+    if (!state.failed) return null;
+    return (
+      <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        Não foi possível consultar o código de barras agora (sem conexão com o servidor). Preencha os
+        dados manualmente ou tente de novo.
+      </p>
+    );
+  }
 
   return (
     <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
@@ -142,10 +157,14 @@ export function EanEnrichmentCard({
             )}
           </div>
         </div>
+      ) : r.lookupIssue ? (
+        // A Cosmos FALHOU (token/limite/fora do ar): não é "produto inexistente" — o operador precisa
+        // saber que o problema é do serviço, não do código.
+        <p className="text-xs text-amber-800">⚠️ {eanLookupIssueMessage(r.lookupIssue)}</p>
       ) : (
         <p className="text-xs text-gray-500">
-          Código válido, mas sem ficha técnica nas fontes gratuitas. Preencha os dados manualmente —
-          eles passam a alimentar o catálogo.
+          Produto não encontrado no catálogo (Cosmos/Open Food Facts) para este código. Preencha os
+          dados manualmente — eles passam a alimentar o catálogo.
         </p>
       )}
     </div>

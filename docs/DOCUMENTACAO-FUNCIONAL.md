@@ -24,8 +24,9 @@
    - 2.1 [Etiqueta de balança](#21-etiqueta-de-balança)
 3. [Usuário com mais de uma loja](#3-usuário-com-mais-de-uma-loja)
 4. [Teclado: setas, Esc e F8](#4-teclado-setas-esc-e-f8)
-5. [Pendências de cobertura](#pendências-de-cobertura)
-6. [Histórico deste documento](#histórico-deste-documento)
+5. [Ficha do produto pelo código de barras (Cosmos)](#5-ficha-do-produto-pelo-código-de-barras-cosmos)
+6. [Pendências de cobertura](#pendências-de-cobertura)
+7. [Histórico deste documento](#histórico-deste-documento)
 
 ---
 
@@ -78,7 +79,9 @@ próximo. Cadastro e contagem do estoque de abertura na mesma passada.
 - **Esc** pula o item sem gravar nada.
 - Se o leitor bipar **dentro do campo de preço ou de quantidade** por engano, o valor é recusado com aviso (um código
   de barras viraria um preço absurdo).
-- A ficha vem dos catálogos gratuitos (Cosmos/Open Food Facts); quando não existe, digita-se o nome.
+- A ficha vem dos catálogos gratuitos (Cosmos/Open Food Facts); quando não existe, digita-se o nome. Se o Cosmos
+  falhar (limite do plano, acesso recusado, fora do ar), a linha do item diz isso — ver
+  [§5](#5-ficha-do-produto-pelo-código-de-barras-cosmos).
 
 **Limitações**
 
@@ -433,6 +436,50 @@ O **F8** aperta o **botão principal** da janela aberta ou, sem janela, da tela:
 
 ---
 
+## 5. Ficha do produto pelo código de barras (Cosmos)
+
+**Para que serve:** ao cadastrar um produto novo, o sistema busca o **nome, a marca e a foto** pelo código de barras
+(EAN) e oferece preencher o cadastro — sem digitar. Decisão: [ADR-025](adr/ADR-025-catalogo-global-ean.md).
+
+**Onde aparece**
+
+- **Produtos → novo produto:** ao digitar ou bipar o código de barras, aparece o cartão da ficha com o botão
+  **"Preencher com esta ficha"**.
+- **Detalhe do produto → "🔄 Sincronizar dados pelo EAN":** compara o cadastro com a ficha e propõe as diferenças.
+- **Cadastro em sequência** ([§1.1](#11-cadastro-em-sequência)) e **Cadastrar agora** do caixa
+  ([§1.2](#12-cadastro-no-caixa-cadastrar-agora)): o nome já vem preenchido.
+
+**De onde vem a ficha:** primeiro do **catálogo da própria plataforma** (fichas já consultadas por qualquer loja —
+instantâneo); se não estiver lá, do **Bluesoft Cosmos** (base brasileira, plano gratuito com limite de consultas por
+dia); por último do **Open Food Facts** (só alimentos/bebidas/cosméticos). O que vem de fora fica guardado no
+catálogo, e a próxima consulta do mesmo código é instantânea e não gasta o limite.
+
+**O que cada mensagem quer dizer**
+
+| Mensagem | Significado | O que fazer |
+|---|---|---|
+| "Ficha encontrada" | Achou nome/marca/foto. | Confira e clique em **Preencher**. |
+| "Produto não encontrado no catálogo (Cosmos/Open Food Facts)…" | As fontes responderam e **não têm** esse código. | Preencha à mão — o cadastro passa a alimentar o catálogo. |
+| "O Cosmos … atingiu o limite diário de consultas do plano" | A **franquia diária** do plano gratuito acabou (toda consulta conta, inclusive de código que não existe lá). O produto pode existir no Cosmos. | Preencha à mão ou tente de novo depois da **meia-noite (horário de Brasília)**, quando a franquia reinicia. Se acontecer todo dia logo cedo, confira o consumo no painel da conta Cosmos (o token pode estar sendo usado em outro lugar, ou o plano pode ter mudado). |
+| "O Cosmos recusou o acesso (token inválido, expirado ou plano encerrado)" | A chave de acesso do NexoLoja ao Cosmos não vale mais. **Nenhum produto novo vai carregar ficha até resolver.** | Avise o administrador da plataforma (é preciso gerar um token novo no site do Cosmos e regravar no servidor). |
+| "O Cosmos não respondeu agora (fora do ar ou lento)" | Falha passageira do serviço. | Tente de novo em instantes. |
+| "Não foi possível consultar o código de barras agora (sem conexão com o servidor)" | A internet ou o servidor do NexoLoja falhou. | Confira a conexão e tente de novo. |
+
+**Regras**
+
+- Só consulta código de **fabricante** válido (dígito verificador conferido). Código interno não consulta nada.
+- A consulta **nunca trava o cadastro**: qualquer falha deixa preencher à mão e salvar normalmente.
+- O **Preencher** grava nome, marca e foto; a foto fica como link para a imagem da fonte (não ocupa espaço da loja).
+- Se a loja **já tem** um produto com aquele código, o cartão avisa e oferece **Abrir** (evita duplicar).
+
+**Limitações**
+
+- O plano gratuito do Cosmos tem limite diário de consultas; consultas repetidas do mesmo código não contam (vêm do
+  catálogo), mas cada código **novo** consulta.
+- Um código que "não foi encontrado" não fica guardado: se o produto entrar no Cosmos depois, a próxima consulta acha.
+
+---
+
 ## Pendências de cobertura
 
 Funcionalidades já em uso que ainda não estão descritas aqui (entram conforme forem tocadas): PDV (pagamentos,
@@ -455,3 +502,4 @@ painel da plataforma.
 | 2026-10-15 | Teclado (§4): setas nos resultados de busca, Esc fecha a janela de cima, F8 = Confirmar/Salvar em todas as telas. |
 | 2026-10-15 | Teclado: Esc fecha a janela flutuante em uso; Esc logo após abrir um pop-up pela lista fecha o pop-up (antes voltava à busca). |
 | 2026-10-15 | Teclado (§4) conferido pelo Owner em produção: setas, Esc e F8 funcionando em todas as telas testadas. |
+| 2026-10-15 | Ficha pelo código de barras (§5): a tela distingue "não encontrado no catálogo" de falha do Cosmos (limite do plano, acesso recusado, fora do ar) e de falha de conexão. |

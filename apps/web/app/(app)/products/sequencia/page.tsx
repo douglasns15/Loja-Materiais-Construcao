@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import {
+  eanLookupIssueMessage,
   findProductByCode,
   isValidGtin,
   onlyDigits,
@@ -531,9 +532,11 @@ export default function CadastroEmSequenciaPage() {
                           ? ' · consultando a ficha…'
                           : lookup?.found
                             ? ' · ficha encontrada'
-                            : isValidGtin(current.code)
-                              ? ' · sem ficha nas fontes gratuitas — digite o nome'
-                              : ' · código interno — digite o nome'}
+                            : lookup?.lookupIssue
+                              ? ` · ${eanLookupIssueMessage(lookup.lookupIssue)}`
+                              : isValidGtin(current.code)
+                                ? ' · não encontrado no catálogo — digite o nome'
+                                : ' · código interno — digite o nome'}
                       </p>
                     </>
                   )}

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
+  eanLookupIssueMessage,
   isValidGtin,
   onlyDigits,
   unitTypeLabels,
@@ -178,7 +179,9 @@ export function CashierQuickAddModal({
                 ? ' Consultando a ficha…'
                 : lookup?.found
                   ? ' Ficha encontrada — confira o nome e digite o preço.'
-                  : ' Digite o nome e o preço.'}
+                  : lookup?.lookupIssue
+                    ? ` ${eanLookupIssueMessage(lookup.lookupIssue)}`
+                    : ' Digite o nome e o preço.'}
             </p>
           </div>
 
