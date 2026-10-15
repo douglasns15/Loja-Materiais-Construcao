@@ -675,6 +675,10 @@ Alertas CALCULADOS sob demanda (custo-zero: nada é gravado; a pendência some q
     ignorado). Lista de seletor aberta (`ProductPicker`/`SupplierPicker`) consome o Esc antes. Registradas: os modais
     de `components/` e das telas, o painel do sino (`AlertsChip`), o menu lateral do celular, o painel de recebimento
     (Contas a Receber), a revisão do "Vender de novo" (PDV) e o painel de cancelar/devolver do Histórico.
+    O **painel flutuante** (ADR-031) entra como camada **não modal** (`useModalLayer(onClose, true, { modeless:
+    true })`): só conta como "a de cima" (Esc fecha / F8 confirma nele) quando o último clique/foco
+    (`pointerdown`/`focusin` em captura) foi dentro dele ou ele abriu depois disso; quem voltou a mexer na tela
+    de trás não fecha o painel. `topLayer()` decide isso para Esc, F8 e setas.
   - **F8 = Confirmar.** O comando `confirm` do motor (padrão `F8`; substitui o antigo `pdv-finalizar` — a sobrescrita
     antiga migra sozinha em `loadOverrides`) chama `runConfirm()`, que **clica** no `[data-confirm]` visível e
     habilitado da janela do topo; sem janela, no da tela. Clicar (e não chamar a função) respeita botão desabilitado
@@ -692,7 +696,9 @@ Alertas CALCULADOS sob demanda (custo-zero: nada é gravado; a pendência some q
     (botão principal de uma linha com vários). Chave por `useId` (+ `scoped(sub)` p/ seletor desenhado 2×). Itens =
     `[data-nav-item]` se houver, senão botões/links habilitados e visíveis. ↓ no campo foca o 1º; ↑/↓/Home/End
     andam; ↑ no 1º e Esc voltam ao campo; letra/Backspace voltam a escrever na busca; Enter escolhe (linha marcada
-    é clicada; se o item some, o foco volta ao campo). Realce único em `globals.css`
+    é clicada; se o item some, o foco volta ao campo). Campo/lista **atrás** da janela em vigor são ignorados
+    (`isBehindTopLayer`): o botão da lista que abriu o pop-up ("Ver / editar", "+ Cadastrar") fica com o foco, e
+    o Esc ali tem de fechar a janela, não voltar para a busca (achado do E2E 2026-10-15). Realce único em `globals.css`
     (`[data-nav-results] … :focus-visible`, índigo; em tabela a linha inteira via `tr:has(:focus-visible)`). Ligado
     em: PDV (produto e cliente), `ProductPicker` (Estoque, NF-e, Receita, Desmembramento), `SupplierPicker`,
     Produtos, Clientes, Fornecedores, Funcionários, Categorias, Estoque, Contas a Receber, Histórico de Vendas,

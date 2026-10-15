@@ -151,3 +151,8 @@ cobre isso sem reescrever cada lista.
 
 **Consequências.** ✅ Mesma regra em todas as telas; F8 seguro por construção. ⚠️ Toda janela/botão principal novo
 precisa de `useModalLayer` + `data-confirm` (convenção registrada na Documentação Técnica §9).
+
+**Ajuste pós-E2E (2026-10-15).** (a) O Esc logo após abrir um pop-up por um botão da lista de resultados voltava o
+foco à busca atrás (o botão continua focado e estava na lista) — campo/lista atrás da janela em vigor passam a ser
+ignorados pela navegação por setas. (b) O painel flutuante (ADR-031) entra na pilha como camada **não modal**: vale
+para Esc/F8 só enquanto é onde o usuário está (último clique/foco dentro dele, ou recém-aberto).

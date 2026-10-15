@@ -8,7 +8,8 @@ import { useCallback, useEffect, useId, useRef } from 'react';
  *
  *  1. **Esc fecha o pop-up de cima.** Cada janela (modal) se registra numa PILHA de camadas
  *     (`useModalLayer`); o Esc fecha só a do topo — com duas janelas empilhadas, fecha a de cima e a de
- *     baixo continua aberta. Um componente interno que trate o Esc antes (ex.: a lista de um seletor de
+ *     baixo continua aberta. O painel flutuante (ADR-031) entra como janela NÃO modal: fecha com Esc
+ *     quando é nele que o usuário está. Um componente interno que trate o Esc antes (ex.: a lista de um seletor de
  *     produto) chama `preventDefault()` e a janela não fecha.
  *  2. **F8 = Confirmar (botão principal).** O botão principal de cada tela/janela é marcado com
  *     `data-confirm`; o F8 (comando `confirm` do motor, rebindável) CLICA nele — na janela do topo, se
@@ -27,32 +28,73 @@ import { useCallback, useEffect, useId, useRef } from 'react';
 // 1) Pilha de camadas (janelas/pop-ups)
 // ---------------------------------------------------------------------------------------------------
 
-type Layer = { close: () => void; el: () => HTMLElement | null };
+type Layer = {
+  close: () => void;
+  el: () => HTMLElement | null;
+  /** Janela NÃO modal (painel flutuante, ADR-031): a tela atrás continua usável. */
+  modeless: boolean;
+  openedAt: number;
+};
 
 /** Janelas abertas, da mais antiga (fundo) para a mais recente (topo). */
 const layers: Layer[] = [];
 
 /**
+ * Último clique/foco do usuário (fase de captura). Um painel flutuante só "é o de cima" para o Esc/F8
+ * se a pessoa está nele — clicou/focou dentro dele ou acabou de abri-lo; quem voltou a mexer na tela de
+ * trás (ex.: na busca do PDV) não fecha o painel sem querer.
+ */
+let lastInteraction: { target: EventTarget | null; at: number } = { target: null, at: 0 };
+function trackInteraction(e: Event) {
+  lastInteraction = { target: e.target, at: performance.now() };
+}
+
+/**
+ * Janela em vigor para o teclado: a mais recente MODAL; um painel não modal só conta enquanto é onde o
+ * usuário está (ver `lastInteraction`). Sem nenhuma ⇒ `null` (vale a tela).
+ */
+function topLayer(): Layer | null {
+  for (let i = layers.length - 1; i >= 0; i--) {
+    const l = layers[i]!;
+    if (!l.modeless) return l;
+    const el = l.el();
+    const t = lastInteraction.target;
+    if (el && ((t instanceof Node && el.contains(t)) || l.openedAt > lastInteraction.at)) return l;
+  }
+  return null;
+}
+
+/**
  * Registra uma janela (pop-up/modal) na pilha enquanto `enabled` — o Esc fecha a do topo e o F8 clica
  * no `[data-confirm]` dela. Retorna um `ref` para pôr no elemento RAIZ da janela (o overlay): é nele
  * que o F8 procura o botão principal. O `onClose` mais recente é usado sem re-registrar (re-registrar
- * jogaria a janela de baixo para o topo).
+ * jogaria a janela de baixo para o topo). `modeless` = painel flutuante (ver `topLayer`).
  */
-export function useModalLayer(onClose: () => void, enabled = true): (el: HTMLElement | null) => void {
+export function useModalLayer(
+  onClose: () => void,
+  enabled = true,
+  opts?: { modeless?: boolean },
+): (el: HTMLElement | null) => void {
   const closeRef = useRef(onClose);
   const elRef = useRef<HTMLElement | null>(null);
+  const modeless = opts?.modeless ?? false;
   useEffect(() => {
     closeRef.current = onClose;
   }, [onClose]);
   useEffect(() => {
     if (!enabled) return;
-    const layer: Layer = { close: () => closeRef.current(), el: () => elRef.current };
+    const layer: Layer = {
+      close: () => closeRef.current(),
+      el: () => elRef.current,
+      modeless,
+      openedAt: performance.now(),
+    };
     layers.push(layer);
     return () => {
       const i = layers.indexOf(layer);
       if (i >= 0) layers.splice(i, 1);
     };
-  }, [enabled]);
+  }, [enabled, modeless]);
   return useCallback((el: HTMLElement | null) => {
     elRef.current = el;
   }, []);
@@ -72,7 +114,7 @@ function isActionable(el: HTMLElement): boolean {
  * botão principal habilitado.
  */
 export function runConfirm(): boolean {
-  const top = layers[layers.length - 1];
+  const top = topLayer();
   let scope: ParentNode = document;
   if (top) {
     const el = top.el();
@@ -140,6 +182,17 @@ function focusItem(el: HTMLElement) {
   el.scrollIntoView({ block: 'nearest' });
 }
 
+/**
+ * O foco ficou ATRÁS da janela aberta (ex.: no "Ver / editar" da lista que abriu o pop-up)? Então as
+ * setas/Esc não são da busca — o Esc deve fechar a janela. Lista portada no body (seletor dentro da
+ * janela) conta como dentro quando o campo dela está na janela.
+ */
+function isBehindTopLayer(t: HTMLElement, input: HTMLElement | null): boolean {
+  const el = topLayer()?.el();
+  if (!el) return false;
+  return !el.contains(t) && !(input && el.contains(input));
+}
+
 function onSearchNavKey(e: KeyboardEvent): boolean {
   const t = e.target;
   if (!(t instanceof HTMLElement)) return false;
@@ -147,7 +200,7 @@ function onSearchNavKey(e: KeyboardEvent): boolean {
   // No CAMPO: ↓ desce para o 1º resultado.
   const searchKey = t.getAttribute('data-nav-search');
   if (searchKey != null) {
-    if (e.key !== 'ArrowDown') return false;
+    if (e.key !== 'ArrowDown' || isBehindTopLayer(t, t)) return false;
     const first = navItems(searchKey)[0];
     if (!first) return false;
     e.preventDefault();
@@ -163,6 +216,7 @@ function onSearchNavKey(e: KeyboardEvent): boolean {
   const idx = items.indexOf(t);
   if (idx < 0) return false;
   const input = byAttr('data-nav-search', key);
+  if (isBehindTopLayer(t, input)) return false;
 
   switch (e.key) {
     case 'ArrowDown': {
@@ -219,7 +273,7 @@ function onGlobalKeyDown(e: KeyboardEvent) {
   if (e.defaultPrevented || e.isComposing || e.ctrlKey || e.altKey || e.metaKey) return;
   if (onSearchNavKey(e)) return;
   if (e.key === 'Escape') {
-    const top = layers[layers.length - 1];
+    const top = topLayer();
     if (!top || e.repeat) return; // segurar o Esc não fecha uma janela atrás da outra
     e.preventDefault();
     top.close();
@@ -230,7 +284,13 @@ function onGlobalKeyDown(e: KeyboardEvent) {
 export function KeyboardBehaviors() {
   useEffect(() => {
     window.addEventListener('keydown', onGlobalKeyDown);
-    return () => window.removeEventListener('keydown', onGlobalKeyDown);
+    window.addEventListener('pointerdown', trackInteraction, true);
+    window.addEventListener('focusin', trackInteraction, true);
+    return () => {
+      window.removeEventListener('keydown', onGlobalKeyDown);
+      window.removeEventListener('pointerdown', trackInteraction, true);
+      window.removeEventListener('focusin', trackInteraction, true);
+    };
   }, []);
   return null;
 }

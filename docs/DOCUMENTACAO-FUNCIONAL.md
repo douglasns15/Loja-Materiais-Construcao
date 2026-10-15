@@ -390,6 +390,9 @@ mais de uma forma de venda (barra × metro, embalagem × unidade), cada botão d
 - Qualquer janela aberta fecha com **Esc** — como clicar fora ou no ✕. Com **duas** abertas (ex.: cadastro rápido de
   cliente por cima da venda), fecha só a de cima.
 - Com a lista de um seletor de produto/fornecedor aberta, o primeiro Esc fecha só a lista.
+- **Janela flutuante** (ex.: Produtos aberta por cima do PDV): o Esc fecha a janela flutuante quando você está
+  nela — acabou de abrir ou clicou dentro dela. Se você voltou a clicar na tela de trás (ex.: na busca do PDV), o
+  Esc não fecha a janela flutuante. Com um pop-up aberto dentro dela, o Esc fecha primeiro o pop-up.
 - Também fecha o painel de pendências (sino), o menu lateral no celular/tablet com teclado e o painel de
   cancelar/devolver aberto num cartão do Histórico.
 
@@ -450,3 +453,4 @@ painel da plataforma.
 | 2026-10-14 | Multi-loja, Fatia 5: criar loja nova para quem já tem conta (vira Dono com o mesmo login). |
 | 2026-10-14 | Multi-loja, Fatia 4: convite com aceite, "Sair desta loja", Usuários por loja (pendente só com e-mail; remover da loja), Membros no painel da plataforma. |
 | 2026-10-15 | Teclado (§4): setas nos resultados de busca, Esc fecha a janela de cima, F8 = Confirmar/Salvar em todas as telas. |
+| 2026-10-15 | Teclado: Esc fecha a janela flutuante em uso; Esc logo após abrir um pop-up pela lista fecha o pop-up (antes voltava à busca). |

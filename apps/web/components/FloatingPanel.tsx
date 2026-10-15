@@ -7,6 +7,7 @@
 
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { FLOATABLE_SCREENS, type PanelGeometry, type ScreenKey } from '@/lib/floatingPanels';
+import { useModalLayer } from '@/lib/keyboard';
 
 const MIN_W = 340;
 const MIN_H = 220;
@@ -35,6 +36,9 @@ function clamp(geo: PanelGeometry): PanelGeometry {
 export function FloatingPanel({ screen, geometry, zIndex, onFocus, onClose, onCommit }: Props) {
   const { label, Component } = FLOATABLE_SCREENS[screen];
   const [geo, setGeo] = useState<PanelGeometry>(geometry);
+  // Esc fecha o painel quando é nele que o usuário está (clicou/focou dentro ou acabou de abrir); com
+  // um pop-up aberto por cima, o Esc fecha o pop-up primeiro. F8 confirma dentro dele (lib/keyboard.tsx).
+  const layerRef = useModalLayer(onClose, true, { modeless: true });
   // Estado do gesto em andamento (ref para não re-renderizar e não sofrer com closure velha).
   const gesture = useRef<
     | null
@@ -92,6 +96,7 @@ export function FloatingPanel({ screen, geometry, zIndex, onFocus, onClose, onCo
 
   return (
     <div
+      ref={layerRef}
       className="pointer-events-auto fixed flex flex-col overflow-hidden rounded-xl border border-gray-300 bg-white shadow-2xl ring-1 ring-black/5"
       style={{
         left: geo.x,
