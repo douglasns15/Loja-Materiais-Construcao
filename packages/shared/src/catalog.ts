@@ -147,6 +147,19 @@ export function classifyCosmosFailure(status: number, message?: string | null): 
 }
 
 /**
+ * Milissegundos de `now` até a próxima meia-noite no horário de Brasília (UTC−3, sem horário de verão
+ * desde 2019) — quando a franquia diária da Cosmos reinicia. Usado pelo "disjuntor" de limite da API:
+ * depois de um 429, não adianta chamar a Cosmos de novo antes disso. Puro (testável).
+ */
+export function msUntilBrasiliaMidnight(now: Date): number {
+  const BRT_OFFSET_MS = 3 * 60 * 60 * 1000;
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const brtMs = now.getTime() - BRT_OFFSET_MS; // "relógio de parede" de Brasília, em ms desde a época
+  const intoDay = ((brtMs % DAY_MS) + DAY_MS) % DAY_MS;
+  return DAY_MS - intoDay;
+}
+
+/**
  * Texto amigável (para o operador) de cada `EanLookupIssue` — o mesmo em todas as telas que
  * consultam o EAN (Produtos, Sincronizar, Cadastro em sequência, Cadastrar agora do Caixa).
  */

@@ -6,6 +6,7 @@ import {
   type ProductCatalog,
   classifyCosmosFailure,
   isValidGtin,
+  msUntilBrasiliaMidnight,
   normalizeGtin,
   normalizeNcm,
   onlyDigits,
@@ -61,6 +62,36 @@ function orNull(v: unknown): string | null {
 }
 
 /**
+ * Memória do ISOLATE (por instância do Worker; some quando o isolate recicla) para poupar a franquia da
+ * Cosmos — custo-zero, sem infra: a Cache API não funciona em `*.workers.dev` e KV/tabela seriam infra
+ * ou migration novas. Só strings/números (nunca objeto de I/O — ver lição do PrismaClient por request).
+ * - `cosmosLimitedUntil`: depois de um 429 ("limite diário"), a Cosmos não é chamada até a meia-noite
+ *   de Brasília (quando a franquia reinicia) — responde `issue: 'limit'` direto, sem ida à rede.
+ * - `cosmosMisses`: EANs que a Cosmos respondeu 404 nas últimas 24 h — re-bipar não gasta consulta.
+ */
+let cosmosLimitedUntil = 0;
+const cosmosMisses = new Map<string, number>();
+const COSMOS_MISS_TTL_MS = 24 * 60 * 60 * 1000;
+const COSMOS_MISS_MAX = 2000; // teto de memória: ao passar, esquece as mais antigas (ordem de inserção)
+
+function rememberCosmosMiss(ean: string): void {
+  cosmosMisses.delete(ean);
+  cosmosMisses.set(ean, Date.now() + COSMOS_MISS_TTL_MS);
+  if (cosmosMisses.size > COSMOS_MISS_MAX) {
+    const oldest = cosmosMisses.keys().next().value;
+    if (oldest !== undefined) cosmosMisses.delete(oldest);
+  }
+}
+
+function isRecentCosmosMiss(ean: string): boolean {
+  const until = cosmosMisses.get(ean);
+  if (until === undefined) return false;
+  if (until > Date.now()) return true;
+  cosmosMisses.delete(ean);
+  return false;
+}
+
+/**
  * Resultado da Cosmos: a ficha (`data`), ou `null` + o motivo quando o serviço FALHOU (`issue`).
  * `{ data: null, issue: null }` = a Cosmos respondeu "produto inexistente" (404) — caminho normal.
  */
@@ -104,6 +135,8 @@ async function fetchCosmos(ean: string, token: string): Promise<CosmosOutcome> {
           `[cosmos] gtin=${ean} status=${res.status} issue=${issue} message=${JSON.stringify(message)} tokenLen=${cleanToken.length}`,
         );
       }
+      if (issue === 'limit') cosmosLimitedUntil = Date.now() + msUntilBrasiliaMidnight(new Date());
+      if (res.status === 404) rememberCosmosMiss(ean);
       return { data: null, issue };
     }
     const j = (await res.json().catch(() => null)) as Record<string, unknown> | null;
@@ -166,9 +199,13 @@ async function fetchExternal(
 ): Promise<{ data: ExternalCatalog | null; issue: EanLookupIssue | null }> {
   let issue: EanLookupIssue | null = null;
   if (env.COSMOS_TOKEN) {
-    const cosmos = await fetchCosmos(ean, env.COSMOS_TOKEN);
-    if (cosmos.data) return cosmos;
-    issue = cosmos.issue;
+    if (Date.now() < cosmosLimitedUntil) {
+      issue = 'limit'; // disjuntor: franquia do dia já esgotada — nem chama
+    } else if (!isRecentCosmosMiss(ean)) {
+      const cosmos = await fetchCosmos(ean, env.COSMOS_TOKEN);
+      if (cosmos.data) return cosmos;
+      issue = cosmos.issue;
+    }
   }
   return { data: await fetchOpenFoodFacts(ean), issue };
 }

@@ -6463,3 +6463,27 @@ embora o site do Cosmos tivesse o produto.
 `/health` 200, `/catalog/ean` 401 sem login, secret `COSMOS_TOKEN` presente), web `59de2bc1` → `9e1c2a0c` (texto do limite com "meia-noite, horário de Brasília"; smoke pós-deploy ✅).
 Docs: técnica §8.2 (`GET /catalog/ean/:ean`) + funcional §5.
 **Pendente:** confirmar a volta da ficha após a meia-noite (BRT) e o consumo no painel da Cosmos.
+
+**Painel da Cosmos (Owner, mesmo dia):** "Meus planos" = "nenhum plano contratado"; a página **Plano de acesso a
+dados** hoje lista só planos pagos (Simple R$ 499,99/mês = 100 consultas/dia; Standard R$ 999,99 = 200; Pro R$ 1.999,99
+= 500). O "Grátis" visível é de **Visibilidade para Fornecedores** (vitrine de marca), não dá API. Conclusão provável:
+a franquia gratuita da API foi reduzida/zerada pela Bluesoft (~05/10) — a confirmar com a Bluesoft.
+
+### Fontes alternativas — cobertura medida em EANs reais (2026-10-15)
+
+Amostra do banco (só leitura): **103** EANs que a Cosmos já achou (gabarito) + **101** produtos com EAN sem ficha
+(de 383 com EAN; quase todos materiais de construção).
+
+| Fonte | Custo | Gabarito Cosmos | Sem ficha | Observação |
+|---|---|---|---|---|
+| Open Food Facts | grátis | 2/103 | 1/101 (**errado**: "Cerveja" para Cola PVC) | só alimentos; 47 respostas 429 no teste |
+| Open Products Facts | grátis | 1/103 | 1/101 | irrelevante p/ construção |
+| Open Beauty Facts | grátis | 0/103 | 0/101 | — |
+| UPCitemdb (trial) | grátis 100/dia | 0/30 | 0/30 | base americana |
+| Kodebar | grátis 50/dia por chave (beta); R$ 29/mês 500/dia | demo só cache: 0/4 | — | base própria ~70 mil itens; termos: "dividir conta entre empresas não relacionadas" proibido, plano Profissional (R$ 79) p/ softhouse multi-cliente; precisa conta p/ medir de verdade |
+| DotCompany | API **paga por uso** R$ 0,04/consulta (pré-pago, sem mensalidade; 200 créditos grátis no cadastro); demo 25/dia/IP | 1/2 (Neutrol, com foto+marca+NCM) | 0/1 | base 1,9 mi; amostra pequena — a demo do dia foi gasta por um script que estourou o tempo da ferramenta (respostas perdidas) |
+
+**Feito (código, sem migration):** disjuntor de limite + memória de 404 por isolate (ver técnica §8.2), `msUntilBrasiliaMidnight`
+(+3 testes). shared 149 testes ✅, typecheck API ✅. **NO AR:** API `34dcd66b` (`/health` 200).
+**Não feito:** nenhum provider novo — as gratuitas sem chave não cobrem construção; Kodebar/DotCompany exigem conta do
+Owner (e a DotCompany é paga, contra o "sem API paga" da ADR-025). Decisão do Owner pendente.

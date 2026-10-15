@@ -7,9 +7,24 @@ import {
   gtinKey,
   looksLikeProductCode,
   isValidGtin,
+  msUntilBrasiliaMidnight,
   normalizeGtin,
   normalizeNcm,
 } from './catalog';
+
+// A franquia da Cosmos reinicia à meia-noite de Brasília (UTC−3).
+describe('msUntilBrasiliaMidnight', () => {
+  const H = 60 * 60 * 1000;
+  it('17:40 BRT (20:40 UTC) ⇒ faltam 6h20', () => {
+    expect(msUntilBrasiliaMidnight(new Date('2026-10-15T20:40:00Z'))).toBe(6 * H + 20 * 60 * 1000);
+  });
+  it('22:00 BRT já é o dia seguinte em UTC (01:00Z) ⇒ faltam 2h', () => {
+    expect(msUntilBrasiliaMidnight(new Date('2026-10-16T01:00:00Z'))).toBe(2 * H);
+  });
+  it('exatamente meia-noite BRT (03:00Z) ⇒ dia inteiro pela frente', () => {
+    expect(msUntilBrasiliaMidnight(new Date('2026-10-16T03:00:00Z'))).toBe(24 * H);
+  });
+});
 
 // "Não encontrado" (404) × "serviço falhou" (token/limite/fora do ar) — a distinção que a UI mostra.
 describe('classifyCosmosFailure', () => {

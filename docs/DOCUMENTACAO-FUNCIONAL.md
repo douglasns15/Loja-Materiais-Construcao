@@ -477,6 +477,9 @@ catálogo, e a próxima consulta do mesmo código é instantânea e não gasta o
 - O plano gratuito do Cosmos tem limite diário de consultas; consultas repetidas do mesmo código não contam (vêm do
   catálogo), mas cada código **novo** consulta.
 - Um código que "não foi encontrado" não fica guardado: se o produto entrar no Cosmos depois, a próxima consulta acha.
+  Para poupar o limite, o mesmo código "não encontrado" pode não ser consultado de novo no Cosmos por até 24 horas.
+- Depois que o limite diário estoura, o sistema **não tenta o Cosmos de novo até a meia-noite** (horário de Brasília) e
+  já mostra o aviso de limite — a consulta fica mais rápida e não insiste à toa.
 
 ---
 
@@ -503,3 +506,4 @@ painel da plataforma.
 | 2026-10-15 | Teclado: Esc fecha a janela flutuante em uso; Esc logo após abrir um pop-up pela lista fecha o pop-up (antes voltava à busca). |
 | 2026-10-15 | Teclado (§4) conferido pelo Owner em produção: setas, Esc e F8 funcionando em todas as telas testadas. |
 | 2026-10-15 | Ficha pelo código de barras (§5): a tela distingue "não encontrado no catálogo" de falha do Cosmos (limite do plano, acesso recusado, fora do ar) e de falha de conexão. |
+| 2026-10-15 | Ficha pelo código de barras (§5): depois do limite diário o Cosmos só é tentado de novo após a meia-noite; código "não encontrado" não é reconsultado por 24 h. |

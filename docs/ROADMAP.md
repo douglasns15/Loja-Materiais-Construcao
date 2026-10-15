@@ -15,6 +15,10 @@
 >   `GET /catalog/ean/:ean` + aviso na tela + log `[cosmos] … message=…`. **Pendente (Owner):** conferir no painel da
 >   conta Cosmos o consumo/plano (o app não gasta a franquia sozinho; suspeita: plano reduzido ou token usado em outro
 >   lugar) e confirmar a ficha voltando depois da meia-noite. Ver registro de testes "Integração.Cosmos … 2026-10-15".
+>   **Painel Cosmos:** só planos pagos de API (R$ 499,99/mês p/ 100/dia) — franquia grátis provavelmente zerada.
+>   **Fontes alternativas medidas** (204 EANs reais): Open Food/Products/Beauty Facts e UPCitemdb ≈ 0% p/ construção;
+>   Kodebar (grátis 50/dia, base ~70 mil) e DotCompany (R$ 0,04/consulta, base 1,9 mi) exigem conta do Owner p/ medir.
+>   Disjuntor de limite + memória de 404 no ar (API `34dcd66b`). **Decisão do Owner:** qual fonte testar com conta.
 > - **Teclado em todas as telas (ADR-032, adendo) CONCLUÍDO e validado pelo Owner** — setas nas buscas, Esc fecha o
 >   pop-up de cima (inclusive a janela flutuante em uso), F8 = Confirmar/Salvar. **Versão web no ar: `eaac2530`**
 >   (API segue `c04e20f8`). Commits locais em `main` — **push do Owner**.
