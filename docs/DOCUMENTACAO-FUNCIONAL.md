@@ -454,3 +454,4 @@ painel da plataforma.
 | 2026-10-14 | Multi-loja, Fatia 4: convite com aceite, "Sair desta loja", Usuários por loja (pendente só com e-mail; remover da loja), Membros no painel da plataforma. |
 | 2026-10-15 | Teclado (§4): setas nos resultados de busca, Esc fecha a janela de cima, F8 = Confirmar/Salvar em todas as telas. |
 | 2026-10-15 | Teclado: Esc fecha a janela flutuante em uso; Esc logo após abrir um pop-up pela lista fecha o pop-up (antes voltava à busca). |
+| 2026-10-15 | Teclado (§4) conferido pelo Owner em produção: setas, Esc e F8 funcionando em todas as telas testadas. |

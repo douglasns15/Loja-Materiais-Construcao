@@ -667,7 +667,8 @@ Alertas CALCULADOS sob demanda (custo-zero: nada é gravado; a pendência some q
   casa por `event.code`; navegação `N`+letra, `F2` abre o PDV, `F9` foca a busca do PDV, `?` abre a ajuda; tudo
   rebindável em Configurações → Acessibilidade (`localStorage` `nexoloja:shortcuts` / `nexoloja:shortcuts-custom`);
   desktop-only (≥ 768 px); ignora letras dentro de campos (F-keys valem).
-- **Teclado — comportamentos globais (ADR-032, adendo 2026-10-15):** `apps/web/lib/keyboard.tsx`, um listener único
+- **Teclado — comportamentos globais (ADR-032, adendo 2026-10-15; no ar na web `eaac2530`, E2E do Owner validado):**
+  `apps/web/lib/keyboard.tsx`, um listener único
   instalado no layout raiz (`<KeyboardBehaviors />`, fase de bolha da `window`; vale também em `/plataforma`).
   Handlers dos componentes rodam antes e cancelam com `preventDefault()`.
   - **Esc fecha o pop-up de cima.** Toda janela chama `useModalLayer(onClose, enabled?)` e põe o `ref` retornado no
@@ -705,6 +706,8 @@ Alertas CALCULADOS sob demanda (custo-zero: nada é gravado; a pendência some q
     Orçamentos, Entregas, cliente do crédito na devolução, histórico de NF-e, Melhores clientes/Mais vendidos
     (Relatórios) e suporte da plataforma. Filtros que não listam opções (ex.: "Motivo" das movimentações) ficam fora.
   - Sem dependência nova, sem API/banco/migração.
+  - **Convenção para código novo:** todo pop-up usa `useModalLayer` (+ `ref` no overlay) e marca o botão principal
+    com `data-confirm`; toda busca com lista de resultados espalha `useSearchNav()` no campo e na lista.
 - **UX:** menos cliques, fontes legíveis, atalhos de teclado no desktop.
 
 ---

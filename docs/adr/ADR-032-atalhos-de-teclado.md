@@ -1,7 +1,7 @@
 # ADR-032: Atalhos de teclado (navegação + ações), configuráveis e cross-platform
 
-**Status:** **Aceito** — Fatias 1–4 implementadas, **NO AR e E2E do Owner VALIDADO** (2026-09-05, "validado com sucesso"; web Version `b938cc55`; commit `854bd5c`). Só `apps/web`; sem API/banco/migração/`core`/`shared`. Persistência em `localStorage` (custo-zero).
-**Data:** 2026-09-05
+**Status:** **Aceito** — Fatias 1–4 implementadas, **NO AR e E2E do Owner VALIDADO** (2026-09-05, "validado com sucesso"; web Version `b938cc55`; commit `854bd5c`). Só `apps/web`; sem API/banco/migração/`core`/`shared`. Persistência em `localStorage` (custo-zero). **Adendo 2026-10-15** (Esc fecha o pop-up de cima, F8 = Confirmar global, setas nas buscas): **NO AR e E2E do Owner VALIDADO** (web Version `eaac2530`; commits `9ce0c67` + `4abd33a`).
+**Data:** 2026-09-05 · adendo 2026-10-15
 **Deciders:** Owner do produto
 **Relacionados:** [ADR-005](ADR-005-stack-e-arquitetura.md) (custo-zero / só `apps/web`), [ADR-031](ADR-031-janela-flutuante-de-tela.md) (subsistema de UI no shell, desktop-first, prefs em `localStorage`), [ARCHITECTURE §7](../ARCHITECTURE.md) (persistência custo-zero). CLAUDE.md: diretriz de UX "atalhos de teclado no desktop".
 
@@ -156,3 +156,7 @@ precisa de `useModalLayer` + `data-confirm` (convenção registrada na Documenta
 foco à busca atrás (o botão continua focado e estava na lista) — campo/lista atrás da janela em vigor passam a ser
 ignorados pela navegação por setas. (b) O painel flutuante (ADR-031) entra na pilha como camada **não modal**: vale
 para Esc/F8 só enquanto é onde o usuário está (último clique/foco dentro dele, ou recém-aberto).
+
+**Status do adendo:** NO AR (web `eaac2530`) e **E2E do Owner VALIDADO** em 2026-10-15 — setas no PDV, F8 salvando
+cadastro em Produtos, Esc no pop-up aberto pela lista, no cadastro rápido de cliente sobre a venda e na janela
+flutuante.

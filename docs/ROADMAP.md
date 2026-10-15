@@ -8,7 +8,12 @@
 > custo fixo do Prisma por requisição já passa de 10 ms). **Correção: Owner assinou o Workers Paid** (teto 30 s) —
 > pós-assinatura 130 requisições reais + 30 de stress, 0 falhas. Sem mudança de código. Ver ADR-005, adendo 2026-10-14.
 >
-> **ONDE PARAMOS / PRÓXIMOS PASSOS (2026-10-14, fim da sessão):**
+> **ONDE PARAMOS / PRÓXIMOS PASSOS (2026-10-15):**
+> - **Teclado em todas as telas (ADR-032, adendo) CONCLUÍDO e validado pelo Owner** — setas nas buscas, Esc fecha o
+>   pop-up de cima (inclusive a janela flutuante em uso), F8 = Confirmar/Salvar. **Versão web no ar: `eaac2530`**
+>   (API segue `c04e20f8`). Commits locais em `main` — **push do Owner**.
+>
+> **Fim da sessão de 2026-10-14:**
 > - **Plano multirramo CONCLUÍDO (#1–#10).** Hoje: #9 Importar planilha + #10 Usuário multi-loja (ADR-014, Fatias 1–5,
 >   migrations `0046`–`0049`) + fix do 401 falso pós-deploy (JWKS local) + cupom 80 mm + layout do painel da plataforma.
 > - **Versões no ar:** API `c04e20f8`, web `86f735c2`. Working tree limpo; commits locais em `main` — **push do Owner**.
@@ -27,15 +32,17 @@
 >
 > **Última atualização:** 2026-10-15 — **Teclado: setas nas buscas, Esc fecha pop-ups, F8 = Confirmar (ADR-032, adendo).**
 >
-> - **Teclado em todas as telas (ADR-032, adendo 2026-10-15) — IMPLEMENTADO, só `apps/web`, sem migration/API:**
+> - **Teclado em todas as telas (ADR-032, adendo 2026-10-15) — CONCLUÍDO, NO AR e E2E do Owner VALIDADO (2026-10-15);
+>   só `apps/web`, sem migration/API:**
 >   `lib/keyboard.tsx` + `<KeyboardBehaviors />` no layout raiz. (1) **Setas** nos resultados de 25 buscas (PDV produto e
 >   cliente, `ProductPicker`/`SupplierPicker`, Produtos, Clientes, Fornecedores, Funcionários, Categorias, Estoque,
 >   Contas a Receber, Histórico, Orçamentos, Entregas, devolução, NF-e, Relatórios, suporte); (2) **Esc** fecha só a
 >   janela de cima (pilha `useModalLayer` em todos os modais + sino + menu do celular + painéis inline); (3) **F8 =
 >   Confirmar** global (comando `confirm` substitui `pdv-finalizar`, override migra) clicando o `[data-confirm]` da
 >   janela do topo ou da tela. Typecheck verde; setas validadas no navegador (lista de teste). **NO AR: web `eaac2530`
->   (smoke OK), commits `9ce0c67` + fix `4abd33a`. E2E do Owner: teste 1 (setas PDV) e 3 (F8 em Produtos) OK; Esc
->   corrigido (pop-up aberto pela lista + janela flutuante) — reteste do Owner + push PENDENTES.**
+>   (smoke OK), commits `9ce0c67` + fix `4abd33a`. E2E do Owner: setas no PDV e F8 em Produtos OK de primeira; o Esc
+>   teve 2 achados (pop-up aberto por botão da lista precisava de 2 Esc; janela flutuante não fechava) corrigidos em
+>   `4abd33a` e **revalidados pelo Owner — "tudo funcionou perfeitamente"**. Pendente só o push do Owner.**
 >
 > - **#10 Usuário multi-loja (ADR-014) — CONCLUÍDO (Fatia 5 feita):** migrations **`0048`** (colunas legadas opcionais,
 >   gatilho ignora usuário sem loja, RLS de `users` por vínculo ACEITO) → API `590296e3` (não lê/grava mais
