@@ -6487,7 +6487,8 @@ Amostra do banco (só leitura): **103** EANs que a Cosmos já achou (gabarito) +
 (+3 testes). shared 149 testes ✅, typecheck API ✅. **NO AR:** API `34dcd66b` (`/health` 200).
 **Não feito:** nenhum provider novo — as gratuitas sem chave não cobrem construção; a Kodebar, medida com a conta
 grátis do Owner (chave só em `apps/api/.dev.vars`, nunca no Worker), também não (3/47). Sobra a DotCompany (paga por
-consulta, contra o "sem API paga" da ADR-025) ou o plano pago da Cosmos — decisão do Owner. Enquanto isso, o catálogo
+consulta, contra o "sem API paga" da ADR-025) ou o plano pago da Cosmos. **Decisão do Owner (2026-10-15): seguir sem
+fonte externa nova por enquanto.** O catálogo
 cresce pela importação de NF-e (melhor fonte p/ construção, ADR-025) e pelos cadastros manuais.
 **Teste da Cosmos grátis:** 1ª consulta do dia logo cedo — se vier ficha, a franquia existe e algo a consome; se vier
 "limite diário", a franquia grátis acabou.
