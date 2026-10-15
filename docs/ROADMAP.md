@@ -33,8 +33,9 @@
 >   Contas a Receber, Histórico, Orçamentos, Entregas, devolução, NF-e, Relatórios, suporte); (2) **Esc** fecha só a
 >   janela de cima (pilha `useModalLayer` em todos os modais + sino + menu do celular + painéis inline); (3) **F8 =
 >   Confirmar** global (comando `confirm` substitui `pdv-finalizar`, override migra) clicando o `[data-confirm]` da
->   janela do topo ou da tela. Typecheck verde; setas validadas no navegador (lista de teste). **NO AR: web `610ce45f`
->   (smoke OK), commit `9ce0c67`. Pendentes: E2E do Owner (Esc/F8 nas telas logadas) + push do Owner.**
+>   janela do topo ou da tela. Typecheck verde; setas validadas no navegador (lista de teste). **NO AR: web `eaac2530`
+>   (smoke OK), commits `9ce0c67` + fix `4abd33a`. E2E do Owner: teste 1 (setas PDV) e 3 (F8 em Produtos) OK; Esc
+>   corrigido (pop-up aberto pela lista + janela flutuante) — reteste do Owner + push PENDENTES.**
 >
 > - **#10 Usuário multi-loja (ADR-014) — CONCLUÍDO (Fatia 5 feita):** migrations **`0048`** (colunas legadas opcionais,
 >   gatilho ignora usuário sem loja, RLS de `users` por vínculo ACEITO) → API `590296e3` (não lê/grava mais
