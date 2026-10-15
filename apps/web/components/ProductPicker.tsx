@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { productMatchesQuery } from '@nexoloja/core';
 import { useAnchoredDropdown } from '@/lib/useAnchoredDropdown';
+import { useSearchNav } from '@/lib/keyboard';
 
 /**
  * Seletor de produto com **busca**, no mesmo formato do PDV (Nova Venda) — substitui o
@@ -48,6 +49,8 @@ export function ProductPicker<P extends PickerProduct>({
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  // ↓ no campo desce pelos resultados; ↑/↓ andam; Enter escolhe (lib/keyboard.tsx).
+  const nav = useSearchNav();
 
   const selected = products.find((p) => p.id === value) ?? null;
 
@@ -74,6 +77,8 @@ export function ProductPicker<P extends PickerProduct>({
     }
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') {
+        // Fecha só a lista — a janela onde o seletor está (se houver) continua aberta.
+        e.preventDefault();
         setOpen(false);
         setQuery('');
       }
@@ -132,6 +137,7 @@ export function ProductPicker<P extends PickerProduct>({
         onFocus={() => setOpen(true)}
         className="w-full rounded-lg border border-gray-300 px-3 py-2 disabled:opacity-60"
         aria-label="Buscar produto"
+        {...nav.input}
       />
       {showList &&
         menuStyle &&
@@ -139,6 +145,7 @@ export function ProductPicker<P extends PickerProduct>({
         createPortal(
           <ul
             ref={listRef}
+            {...nav.results}
             style={menuStyle}
             className="divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg"
           >

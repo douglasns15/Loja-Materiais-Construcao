@@ -23,6 +23,7 @@ import { OfflineNotice } from '@/components/OfflineNotice';
 import { MoneyInput } from '@/components/MoneyInput';
 import { CustomerAccountModal } from '@/components/CustomerAccountModal';
 import { DebtDetailModal } from '@/components/DebtDetailModal';
+import { useModalLayer, useSearchNav } from '@/lib/keyboard';
 
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -45,6 +46,8 @@ function isCardMethod(m: PaymentMethod): boolean {
 export default function ContasAReceberPage() {
   const [tab, setTab] = useState<Tab>('open');
   const [search, setSearch] = useState('');
+  // Setas nos resultados da busca (cartões das contas/dívidas) — lib/keyboard.tsx.
+  const nav = useSearchNav();
   const [error, setError] = useState<string | null>(null);
   // Falha na CARGA de uma aba (≠ erro de recebimento/ação): liga a auto-recuperação (ADR-005).
   const [loadFailed, setLoadFailed] = useState(false);
@@ -67,6 +70,8 @@ export default function ContasAReceberPage() {
 
   // ---- Painel de recebimento (abate a conta/dívida inteira, FIFO) ----
   const [acctSelected, setAcctSelected] = useState<CustomerAccountRow | null>(null);
+  // Esc fecha / F8 confirma o painel de recebimento (pilha de janelas — lib/keyboard.tsx).
+  const acctLayerRef = useModalLayer(() => setAcctSelected(null), acctSelected != null);
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState<PaymentMethod>('CASH');
   const [busy, setBusy] = useState(false);
@@ -238,6 +243,7 @@ export default function ContasAReceberPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Buscar cliente…"
+          {...nav.input}
           className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 sm:max-w-xs"
         />
       </div>
@@ -262,11 +268,12 @@ export default function ContasAReceberPage() {
         </div>
       )}
 
-      {tab === 'open' ? renderOpen() : renderPaid()}
+      <div {...nav.results}>{tab === 'open' ? renderOpen() : renderPaid()}</div>
 
       {/* Painel de recebimento da dívida inteira (FIFO — ADR-022/026). */}
       {acctSelected && (
         <div
+          ref={acctLayerRef}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
           onClick={() => setAcctSelected(null)}
         >
@@ -338,6 +345,7 @@ export default function ContasAReceberPage() {
               </button>
               <button
                 type="submit"
+                data-confirm
                 disabled={busy}
                 className="rounded-lg bg-emerald-600 py-2 font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60"
               >

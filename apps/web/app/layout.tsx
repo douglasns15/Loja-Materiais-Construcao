@@ -2,6 +2,7 @@ import './globals.css';
 import type { Metadata, Viewport } from 'next';
 import { RegisterSW } from './RegisterSW';
 import { InstallPrompt } from './InstallPrompt';
+import { KeyboardBehaviors } from '@/lib/keyboard';
 
 // Renderização DINÂMICA (por requisição) em todo o app. Sem isto, o Next prerenderiza as páginas
 // como estáticas e o OpenNext as serve com `Cache-Control: s-maxage=31536000` (1 ANO) guardado no
@@ -46,6 +47,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {children}
         <RegisterSW />
         <InstallPrompt />
+        {/* Esc fecha o pop-up de cima + setas nos resultados de busca (ADR-032, adendo 2026-10-15). */}
+        <KeyboardBehaviors />
       </body>
     </html>
   );

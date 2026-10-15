@@ -5,6 +5,7 @@ import { closedUnitTerms, formatWeight, unitTypeLabels, type UnitType } from '@n
 import { approxPieces, isClosedPrimary, isWeighedUnit, splitWholeAndRemainder } from '@nexoloja/core';
 import { apiGet } from '@/lib/api';
 import { useModule } from '@/lib/useModule';
+import { useModalLayer } from '@/lib/keyboard';
 
 /**
  * Painel de **detalhe de estoque** de um produto (melhoria da tela de Estoque).
@@ -130,13 +131,7 @@ export function StockDetail({
   }, [product.id]);
 
   // Esc fecha o painel (atalho de teclado no desktop — CLAUDE.md → menos cliques).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  const layerRef = useModalLayer(onClose);
 
   // Filtros aplicados no cliente sobre o histórico já carregado (tipo, motivo, período).
   const filtered = useMemo(() => {
@@ -177,6 +172,7 @@ export function StockDetail({
 
   return (
     <div
+      ref={layerRef}
       className="fixed inset-0 z-40 flex items-end justify-center bg-black/30 p-0 sm:items-center sm:p-4"
       onClick={onClose}
     >

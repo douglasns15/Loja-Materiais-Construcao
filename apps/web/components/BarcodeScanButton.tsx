@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useModalLayer } from '@/lib/keyboard';
 
 /**
  * Botão + modal de leitura de código de barras pela CÂMERA (celular/tablet). Reutilizável em
@@ -51,6 +52,8 @@ export function BarcodeScanButton({ onScan, label = 'Escanear', className }: Pro
     setOpen(false);
     setError(null);
   }, [stop]);
+  // Esc fecha a câmera (pilha de janelas — lib/keyboard.tsx).
+  const layerRef = useModalLayer(close, open);
 
   /** Emite o código e fecha (uma leitura por abertura — evita adicionar o mesmo item em loop). */
   const handleResult = useCallback(
@@ -161,6 +164,7 @@ export function BarcodeScanButton({ onScan, label = 'Escanear', className }: Pro
 
       {open && (
         <div
+          ref={layerRef}
           className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/80 p-4"
           role="dialog"
           aria-modal="true"

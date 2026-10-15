@@ -13,6 +13,7 @@ import { CLOSED_PRIMARY_UNITS } from '@nexoloja/core';
 import { apiGet, apiPost } from '@/lib/api';
 import { useModule } from '@/lib/useModule';
 import { MoneyInput } from '@/components/MoneyInput';
+import { useModalLayer } from '@/lib/keyboard';
 
 /**
  * "Cadastrar agora" do PDV (ADR-041 §B) — a cauda longa do catálogo se resolve sozinha no caixa.
@@ -91,13 +92,7 @@ export function CashierQuickAddModal({
   }, [looking]);
 
   // Esc fecha (volta para a venda sem cadastrar).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  const layerRef = useModalLayer(onClose);
 
   // Já existe na loja, mas não está no catálogo do caixa (inativo ou criado agora por outra pessoa).
   const alreadyExists = !!lookup?.existingProductId;
@@ -150,7 +145,7 @@ export function CashierQuickAddModal({
   const photo = lookup?.catalog?.imageUrl ?? null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+    <div ref={layerRef} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <form
         onSubmit={onSubmit}
         onClick={(e) => e.stopPropagation()}
@@ -252,6 +247,7 @@ export function CashierQuickAddModal({
           </button>
           {!alreadyExists && (
             <button
+              data-confirm
               type="submit"
               disabled={saving || looking}
               className="rounded-lg bg-emerald-600 px-4 py-2 font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"

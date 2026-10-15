@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { STORE_ROLE_LABELS, type StoreRole } from '@nexoloja/shared';
 import { apiDelete, apiGet, apiPost } from '@/lib/api';
+import { useModalLayer } from '@/lib/keyboard';
 
 /**
  * Membros de uma loja no painel da PLATAFORMA (ADR-014 §4, Fatia 4) — o Super Usuário vê quem tem acesso, concede
@@ -28,6 +29,8 @@ export function TenantMembersModal({
   tenant: { id: string; name: string };
   onClose: () => void;
 }) {
+  // Esc fecha / F8 confirma nesta janela (pilha de camadas — lib/keyboard.tsx).
+  const layerRef = useModalLayer(onClose);
   const [members, setMembers] = useState<Member[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState('');
@@ -80,7 +83,7 @@ export function TenantMembersModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+    <div ref={layerRef} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div
         className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
@@ -173,6 +176,7 @@ export function TenantMembersModal({
               ))}
             </select>
             <button
+              data-confirm
               type="submit"
               disabled={busy}
               className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"

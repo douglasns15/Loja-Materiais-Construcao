@@ -21,6 +21,7 @@ import { ReturnItemsModal } from '@/components/ReturnItemsModal';
 import { writeReorderPayload, REORDER_APPLIED_SIGNAL, type ReorderPayloadItem } from '@/lib/reorder';
 import { writeExchangePayload } from '@/lib/exchange';
 import { shareReceiptImage, shareReceiptPdf } from '@/lib/receiptShare';
+import { useModalLayer, useSearchNav } from '@/lib/keyboard';
 
 type OrderItem = {
   id: string;
@@ -175,6 +176,8 @@ export default function VendasPage() {
   const [searchType, setSearchType] = useState<SearchType>('code');
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState<Search | null>(null);
+  // Setas nos resultados da busca: ↓ desce pelos cartões das vendas (lib/keyboard.tsx).
+  const nav = useSearchNav();
   // Faixa de inteligência (KPIs do período). Só aparece na lista por período — durante uma busca
   // (que varre todo o histórico) fica oculta, pois os números seriam de um recorte diferente.
   const [report, setReport] = useState<SalesReport | null>(null);
@@ -474,6 +477,8 @@ export default function VendasPage() {
     setReason('');
     setError(null);
   }
+  // Esc fecha / F8 confirma o painel de cancelar/devolver aberto num cartão (lib/keyboard.tsx).
+  const actionLayerRef = useModalLayer(fecharAcao, action != null);
 
   async function confirmarAcao() {
     if (!action) return;
@@ -654,6 +659,7 @@ export default function VendasPage() {
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               placeholder={SEARCH_PLACEHOLDERS[searchType]}
+              {...nav.input}
               className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
             />
             <button
@@ -706,7 +712,7 @@ export default function VendasPage() {
       {info && <p className="mb-4 rounded-lg bg-gray-100 px-3 py-2 text-sm">{info}</p>}
       {shareErr && <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 ring-1 ring-red-200">{shareErr}</p>}
 
-      <div className="space-y-3">
+      <div className="space-y-3" {...nav.results}>
         {orders.length === 0 ? (
           <div className="rounded-2xl border border-gray-200 bg-white p-6 text-center text-gray-500 shadow-md">
             {search
@@ -737,6 +743,7 @@ export default function VendasPage() {
             return (
               <div
                 key={o.id}
+                {...nav.item}
                 onClick={selectMode ? () => toggleSelect(o.id) : undefined}
                 className={`relative rounded-2xl border bg-white p-4 shadow-md transition ${
                   selectMode ? 'cursor-pointer pl-12' : 'hover:shadow-lg'
@@ -921,6 +928,7 @@ export default function VendasPage() {
                     o cartão inteiro vira alvo de seleção. */}
                 {selectMode ? null : editing ? (
                   <div
+                    ref={actionLayerRef}
                     className={`mt-3 space-y-2 rounded-lg p-3 ring-1 ${
                       action?.mode === 'cancel'
                         ? 'bg-red-50 ring-red-200'
@@ -957,6 +965,7 @@ export default function VendasPage() {
                       </button>
                       <button
                         onClick={confirmarAcao}
+                        data-confirm
                         disabled={busy}
                         className={`rounded-lg py-2 text-sm font-medium text-white disabled:opacity-60 ${
                           action?.mode === 'cancel'

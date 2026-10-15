@@ -19,6 +19,7 @@ import { printArea } from '@/lib/print';
 import { shareReceiptImage, shareReceiptPdf } from '@/lib/receiptShare';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { ReceiptPrint, type Store } from '@/components/ReceiptPrint';
+import { useModalLayer, useSearchNav } from '@/lib/keyboard';
 
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -67,6 +68,8 @@ export default function OrcamentosPage() {
   // Filtros aplicados (o que a lista está mostrando).
   const [codeInput, setCodeInput] = useState('');
   const [codeSearch, setCodeSearch] = useState('');
+  // Setas nos resultados: ↓ de qualquer campo da busca desce pelos orçamentos (lib/keyboard.tsx).
+  const nav = useSearchNav();
   const [qInput, setQInput] = useState('');
   const [qSearch, setQSearch] = useState('');
   const [status, setStatus] = useState('');
@@ -161,6 +164,7 @@ export default function OrcamentosPage() {
               value={codeInput}
               onChange={(e) => setCodeInput(e.target.value)}
               placeholder="Ex.: O-000045 ou 45"
+              {...nav.input}
               className="rounded-lg border border-gray-300 px-2 py-1 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
             />
           </label>
@@ -171,6 +175,7 @@ export default function OrcamentosPage() {
               value={qInput}
               onChange={(e) => setQInput(e.target.value)}
               placeholder="Nome do cliente"
+              {...nav.input}
               className="rounded-lg border border-gray-300 px-2 py-1 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
             />
           </label>
@@ -217,7 +222,7 @@ export default function OrcamentosPage() {
           Nenhum orçamento encontrado.
         </p>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-2" {...nav.results}>
           {rows.map((r) => (
             <button
               key={r.id}
@@ -293,6 +298,8 @@ function QuoteDetailModal({
   onClose: () => void;
   onChanged: () => void;
 }) {
+  // Esc fecha / F8 confirma nesta janela (pilha de camadas — lib/keyboard.tsx).
+  const layerRef = useModalLayer(onClose);
   const router = useRouter();
   const [detail, setDetail] = useState<QuoteDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -401,6 +408,7 @@ function QuoteDetailModal({
 
   return (
     <div
+      ref={layerRef}
       className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/30 p-4"
       onClick={onClose}
     >
@@ -537,6 +545,7 @@ function QuoteDetailModal({
                   </label>
                   <div className="sm:col-span-2">
                     <button
+                      data-confirm
                       onClick={() =>
                         patch({
                           validUntil: validUntil || null,

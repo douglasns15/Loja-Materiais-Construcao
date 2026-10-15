@@ -12,10 +12,12 @@ import {
 } from 'react';
 import { useRouter } from 'next/navigation';
 import { ShortcutsHelp } from '@/components/ShortcutsHelp';
+import { runConfirm } from '@/lib/keyboard';
 
 /**
  * Motor de ATALHOS DE TECLADO do NexoLoja (ADR-032). Cobre navegação por sequência `N`+letra, a tecla
- * rápida `F2` (PDV), as ações quentes do PDV (F8/F9, registradas pelas telas), a ajuda `?` e a
+ * rápida `F2` (PDV), as ações quentes do PDV (F9, registrada pela tela), o F8 "Confirmar" global
+ * (adendo 2026-10-15, `lib/keyboard.tsx`), a ajuda `?` e a
  * customização (Configurações → Acessibilidade). Desktop-only e custo-zero (só `apps/web` +
  * `localStorage`).
  *
@@ -51,7 +53,7 @@ export type ShortcutCommand = {
 
 /**
  * Catálogo dos atalhos padrão (ADR-032 §2). Navegação por `N`+letra (letras desempatadas para os nomes
- * que colidem na inicial em PT), F2 = abrir PDV, F8/F9 = ações do PDV, `?` = ajuda.
+ * que colidem na inicial em PT), F2 = abrir PDV, F8 = confirmar (global), F9 = ação do PDV, `?` = ajuda.
  */
 export const SHORTCUT_CATALOG: ShortcutCommand[] = [
   { id: 'open-pdv', label: 'Abrir PDV (Nova Venda)', group: 'Navegação', defaultBinding: 'F2', href: '/venda' },
@@ -69,10 +71,22 @@ export const SHORTCUT_CATALOG: ShortcutCommand[] = [
   { id: 'nav-relatorios', label: 'Relatórios', group: 'Navegação', defaultBinding: 'KeyN,KeyD', href: '/relatorios' },
   { id: 'nav-configuracoes', label: 'Configurações', group: 'Navegação', defaultBinding: 'KeyN,KeyS', href: '/configuracoes' },
   // Ações do PDV — registradas pela tela de Nova Venda; só disparam quando ela está montada.
-  { id: 'pdv-finalizar', label: 'Finalizar venda (revisão)', group: 'PDV', defaultBinding: 'F8' },
+  // (O antigo `pdv-finalizar` virou o `confirm` global abaixo — adendo 2026-10-15.)
   { id: 'pdv-focar-busca', label: 'Focar busca de produto', group: 'PDV', defaultBinding: 'F9' },
   // Geral.
+  // F8 = CONFIRMAR em qualquer tela/janela: clica no botão principal (`data-confirm`) — no PDV é o
+  // "Concluir venda" (e o "Confirmar venda" na revisão); num cadastro, o "Salvar". Ver `lib/keyboard.tsx`.
+  { id: 'confirm', label: 'Confirmar / Salvar (botão principal da tela ou janela)', group: 'Geral', defaultBinding: 'F8' },
   { id: 'show-help', label: 'Mostrar os atalhos', group: 'Geral', defaultBinding: 'Shift+Slash' },
+];
+
+/**
+ * Teclas FIXAS (não editáveis — convenção universal), mostradas na ajuda e em Acessibilidade. Quem as
+ * executa é `lib/keyboard.tsx` (adendo 2026-10-15), não este motor.
+ */
+export const FIXED_KEYS: { keys: string; label: string }[] = [
+  { keys: 'Esc', label: 'Fechar a janela (pop-up) aberta — com duas abertas, fecha a de cima' },
+  { keys: '↓ ↑ e Enter', label: 'Andar pelos resultados de uma busca e escolher (↑ no 1º volta ao campo)' },
 ];
 
 /** Telas de navegação oferecidas ao criar um atalho customizado (Configurações → Acessibilidade). */
@@ -90,7 +104,12 @@ function loadOverrides(): Record<string, string> {
   try {
     const raw = localStorage.getItem(OVERRIDES_KEY);
     const parsed = raw ? (JSON.parse(raw) as Record<string, string>) : {};
-    return parsed && typeof parsed === 'object' ? parsed : {};
+    if (!parsed || typeof parsed !== 'object') return {};
+    // Migração (adendo 2026-10-15): quem rebindou o antigo "Finalizar venda" leva a tecla para o
+    // "Confirmar" global, que o substituiu.
+    if (parsed['pdv-finalizar'] && !parsed['confirm']) parsed['confirm'] = parsed['pdv-finalizar'];
+    delete parsed['pdv-finalizar'];
+    return parsed;
   } catch {
     return {};
   }
@@ -329,6 +348,10 @@ export function ShortcutsProvider({ children }: { children: ReactNode }) {
       }
       if (cmd.href) {
         router.push(cmd.href);
+        return;
+      }
+      if (cmd.id === 'confirm') {
+        runConfirm();
         return;
       }
       actionsRef.current.get(cmd.id)?.();

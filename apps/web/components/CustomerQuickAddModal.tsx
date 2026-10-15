@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { createCustomerSchema, formatCpfCnpj, formatPhoneBr } from '@nexoloja/shared';
 import { apiPost } from '@/lib/api';
 import { MaskedInput } from '@/components/MaskedInput';
+import { useModalLayer } from '@/lib/keyboard';
 
 /** Cliente recém-criado devolvido ao chamador (o PDV já o seleciona). `address`/`phone` voltam para a
  *  etapa de agendamento já preencher o endereço da entrega (ADR-042). */
@@ -26,6 +27,8 @@ export function CustomerQuickAddModal({
   onClose: () => void;
   onCreated: (customer: CreatedCustomer) => void;
 }) {
+  // Esc fecha / F8 confirma nesta janela (pilha de camadas — lib/keyboard.tsx).
+  const layerRef = useModalLayer(onClose);
   const [form, setForm] = useState({
     name: initialName,
     cpfCnpj: '',
@@ -68,7 +71,7 @@ export function CustomerQuickAddModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+    <div ref={layerRef} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div
         className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
@@ -181,6 +184,7 @@ export function CustomerQuickAddModal({
               Cancelar
             </button>
             <button
+              data-confirm
               type="submit"
               disabled={saving}
               className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"

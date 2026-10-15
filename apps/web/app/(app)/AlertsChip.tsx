@@ -11,6 +11,7 @@ import {
 import { apiGet } from '@/lib/api';
 import { downloadCsv, csvNumber, toCsv } from '@/lib/csv';
 import { AlertDetailModal } from '@/components/AlertDetailModal';
+import { useModalLayer } from '@/lib/keyboard';
 
 /**
  * Sino da **Central de pendências** (ADR-029), ao lado da cesta no topo. Alertas CALCULADOS sob
@@ -96,22 +97,19 @@ export function AlertsChip() {
     setSnoozed(loadSnoozed());
   }, []);
 
-  // Fecha o painel ao clicar fora ou apertar Esc.
+  // Fecha o painel ao clicar fora ou apertar Esc. O Esc vem da pilha de janelas (lib/keyboard.tsx):
+  // com o detalhe de um alerta aberto por cima, o Esc fecha só o detalhe.
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
       if (panelRef.current && !panelRef.current.contains(e.target as Node)) setOpen(false);
     };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
     document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
     return () => {
       document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
     };
   }, [open]);
+  useModalLayer(() => setOpen(false), open);
 
   /** Grava o novo mapa de silenciados (estado + localStorage). */
   const persistSnoozed = useCallback((next: Record<string, number>) => {

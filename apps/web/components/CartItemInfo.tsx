@@ -1,6 +1,5 @@
 'use client';
 
-import { useEffect } from 'react';
 import {
   PAYMENT_METHOD_LABELS,
   unitTypeLabels,
@@ -9,6 +8,7 @@ import {
   type UnitType,
 } from '@nexoloja/shared';
 import { cardFeePercentFor, netMarginPercent } from '@nexoloja/core';
+import { useModalLayer } from '@/lib/keyboard';
 
 /**
  * Modal de **informações do item** da cesta (ADR-021, pedido do Owner: um "i" por linha do
@@ -63,13 +63,7 @@ export function CartItemInfo({
   onClose: () => void;
 }) {
   // Fecha no Esc (padrão dos modais do app).
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
-    }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  const layerRef = useModalLayer(onClose);
 
   // Margem REAL: líquida da taxa da maquininha da forma PRINCIPAL (ADR-016). Mesma lógica do
   // tooltip do PDV — no par/unidade fechada o custo já é por unidade vendida; na embalagem o
@@ -106,6 +100,7 @@ export function CartItemInfo({
 
   return (
     <div
+      ref={layerRef}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
       onClick={onClose}
       role="dialog"

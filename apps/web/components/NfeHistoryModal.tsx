@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { apiGet } from '@/lib/api';
+import { useModalLayer, useSearchNav } from '@/lib/keyboard';
 
 /**
  * Histórico de importações de NF-e (tela Estoque). Lista as importações mais recentes — uma por
@@ -48,6 +49,10 @@ function formatDateTime(iso: string): string {
 const qtyLabel = (v: string) => Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 4 });
 
 export function NfeHistoryModal({ onClose }: { onClose: () => void }) {
+  // Esc fecha / F8 confirma nesta janela (pilha de camadas — lib/keyboard.tsx).
+  const layerRef = useModalLayer(onClose);
+  // Setas: ↓ da busca desce pelas notas importadas; Enter abre/fecha os itens (lib/keyboard.tsx).
+  const nav = useSearchNav();
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -104,6 +109,7 @@ export function NfeHistoryModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div
+      ref={layerRef}
       className="fixed inset-0 z-40 flex items-end justify-center bg-black/30 p-0 sm:items-center sm:p-4"
       onClick={onClose}
     >
@@ -154,6 +160,7 @@ export function NfeHistoryModal({ onClose }: { onClose: () => void }) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar por nota, fornecedor ou arquivo…"
+            {...nav.input}
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
             aria-label="Buscar importações"
           />
@@ -172,7 +179,7 @@ export function NfeHistoryModal({ onClose }: { onClose: () => void }) {
             </p>
           )}
 
-          <ul className="space-y-2">
+          <ul className="space-y-2" {...nav.results}>
             {rows.map((r) => {
               const isOpen = expanded === r.accessKey;
               const detail = details[r.accessKey];

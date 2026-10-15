@@ -8,6 +8,7 @@ import {
   isModifierKey,
   NAV_TARGETS,
   SHORTCUT_CATALOG,
+  FIXED_KEYS,
   type ShortcutCommand,
 } from '@/lib/shortcuts';
 
@@ -150,6 +151,8 @@ export function AccessibilitySection() {
   const groups: { title: string; items: ShortcutCommand[] }[] = [
     { title: 'Navegação', items: editable.filter((c) => c.group === 'Navegação') },
     { title: 'PDV', items: editable.filter((c) => c.group === 'PDV') },
+    // "Confirmar / Salvar" (F8 global — adendo 2026-10-15) também é editável.
+    { title: 'Geral', items: editable.filter((c) => c.group === 'Geral') },
   ].filter((g) => g.items.length > 0);
 
   return (
@@ -159,7 +162,8 @@ export function AccessibilitySection() {
           <h2 className="text-lg font-semibold">Acessibilidade · Atalhos de teclado</h2>
           <p className="mt-1 text-sm text-gray-600">
             Para navegar, aperte <kbd className="rounded bg-gray-100 px-1 font-bold">N</kbd> e depois a
-            letra da tela; as F-keys disparam ações do PDV. Pressione{' '}
+            letra da tela; <kbd className="rounded bg-gray-100 px-1 font-bold">F8</kbd> confirma/salva o botão
+            principal da tela ou da janela aberta e as demais F-keys disparam ações do PDV. Pressione{' '}
             <kbd className="rounded bg-gray-100 px-1 font-bold">?</kbd> em qualquer tela para ver a lista.
             Vale no computador (teclado físico).
           </p>
@@ -214,6 +218,19 @@ export function AccessibilitySection() {
           </ul>
         </div>
       ))}
+
+      {/* Teclas fixas (Esc e setas) — convenção universal, sem edição. */}
+      <div className="mt-5">
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-indigo-700">Sempre ativos (fixos)</p>
+        <ul className="divide-y divide-gray-100 rounded-xl border border-gray-100">
+          {FIXED_KEYS.map((f) => (
+            <li key={f.keys} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
+              <span className="min-w-0 flex-1 text-sm text-gray-700">{f.label}</span>
+              <kbd className="shrink-0 rounded bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-800">{f.keys}</kbd>
+            </li>
+          ))}
+        </ul>
+      </div>
 
       {/* Meus atalhos (customizados) */}
       <div className="mt-6">

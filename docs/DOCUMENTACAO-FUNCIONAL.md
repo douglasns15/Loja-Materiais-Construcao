@@ -10,7 +10,7 @@
 > **Cobertura:** começa pelas entregas de 2026-10-09 (carga do catálogo e balança). As funcionalidades anteriores
 > entram aqui conforme forem tocadas — ver [Pendências de cobertura](#pendências-de-cobertura).
 >
-> **Última atualização:** 2026-10-14.
+> **Última atualização:** 2026-10-15.
 
 ---
 
@@ -23,8 +23,9 @@
 2. [Venda por peso e balança](#2-venda-por-peso-e-balança)
    - 2.1 [Etiqueta de balança](#21-etiqueta-de-balança)
 3. [Usuário com mais de uma loja](#3-usuário-com-mais-de-uma-loja)
-4. [Pendências de cobertura](#pendências-de-cobertura)
-5. [Histórico deste documento](#histórico-deste-documento)
+4. [Teclado: setas, Esc e F8](#4-teclado-setas-esc-e-f8)
+5. [Pendências de cobertura](#pendências-de-cobertura)
+6. [Histórico deste documento](#histórico-deste-documento)
 
 ---
 
@@ -366,12 +367,75 @@ sempre.
 
 ---
 
+## 4. Teclado: setas, Esc e F8
+
+**Para que serve:** usar o sistema no computador sem tirar a mão do teclado — buscar e escolher um item, fechar uma
+janela e confirmar/salvar, com as mesmas teclas em todas as telas. Decisão: [ADR-032](adr/ADR-032-atalhos-de-teclado.md)
+(adendo 2026-10-15). Os demais atalhos (`N` + letra para navegar, `F2`, `F9`) seguem como antes — veja com **`?`**.
+
+**Setas nos resultados de uma busca**
+
+1. Digite na busca (ex.: no PDV, "cimento").
+2. Aperte **↓**: o primeiro resultado fica realçado em azul. **↓ / ↑** andam pela lista (produto sem estoque é pulado).
+3. **Enter** escolhe — no PDV, o produto entra no carrinho e o cursor volta para a busca, pronto para o próximo.
+4. **↑** no primeiro resultado (ou **Esc**) volta para o campo; começar a digitar também volta a escrever na busca.
+
+Vale em: PDV (produto e cliente), todo campo "Buscar produto" de Estoque, NF-e, Receita e Desmembramento, busca de
+fornecedor, Produtos, Clientes, Fornecedores, Funcionários, Categorias, Estoque, Contas a Receber, Histórico de Vendas,
+Orçamentos, Entregas, cliente do crédito na devolução, histórico de NF-e e os rankings de Relatórios. Num produto com
+mais de uma forma de venda (barra × metro, embalagem × unidade), cada botão da linha é uma parada da seta.
+
+**Esc fecha a janela (pop-up)**
+
+- Qualquer janela aberta fecha com **Esc** — como clicar fora ou no ✕. Com **duas** abertas (ex.: cadastro rápido de
+  cliente por cima da venda), fecha só a de cima.
+- Com a lista de um seletor de produto/fornecedor aberta, o primeiro Esc fecha só a lista.
+- Também fecha o painel de pendências (sino), o menu lateral no celular/tablet com teclado e o painel de
+  cancelar/devolver aberto num cartão do Histórico.
+
+**F8 = Confirmar / Salvar**
+
+O **F8** aperta o **botão principal** da janela aberta ou, sem janela, da tela:
+
+| Onde | O que o F8 faz |
+|---|---|
+| PDV | "Concluir venda" (abre a revisão) e, na revisão, "Confirmar venda" — F8, F8 fecha a venda |
+| Produtos / Clientes / Fornecedores / Funcionários / Categorias | Salva o novo cadastro ("Adicionar …") |
+| Janela de cadastro ou edição (produto, categoria, fornecedor, cliente…) | "Salvar" / "Cadastrar" |
+| Estoque | "Registrar entrada" ou "Registrar ajuste" — o do formulário em que o cursor está |
+| Caixa | "Abrir caixa" / "Fechar caixa" |
+| Sangria/suprimento, contador de cédulas, NF-e, devolução, perda, receber dívida | O botão de confirmar da janela |
+
+**Regras**
+
+- O F8 só faz o que o clique faria: se o botão está **apagado** (ex.: venda sem pagamento suficiente, campo
+  obrigatório vazio), nada acontece — e a validação do formulário aparece como no clique.
+- Numa janela **só de consulta** (detalhe de venda, de cliente, de alerta) o F8 não faz nada — nunca aperta um botão
+  da tela que está por trás.
+- "Salvar observação" e o "Salvar" do estoque mínimo de uma linha de Produtos só respondem ao F8 com o cursor
+  naquele campo.
+
+**Configuração**
+
+- A tecla do **Confirmar** pode ser trocada em **Configurações → Acessibilidade** (grupo "Geral"). Quem já tinha
+  trocado a tecla do antigo "Finalizar venda" leva a mesma tecla para o Confirmar. **Esc** e **setas** são fixos.
+- A ajuda **`?`** lista tudo, inclusive as teclas fixas ("Sempre ativos").
+
+**Limitações (por enquanto)**
+
+- F8 e os demais atalhos de função valem no computador (tela ≥ 768 px); Esc e setas valem em qualquer tela com
+  teclado.
+- Em muitos MacBooks as teclas F pedem `fn` (ou o ajuste do sistema) — dá para trocar o Confirmar por outra tecla.
+- Filtros que não listam opções (ex.: "Motivo" nas movimentações de estoque) não têm navegação por seta.
+
+---
+
 ## Pendências de cobertura
 
 Funcionalidades já em uso que ainda não estão descritas aqui (entram conforme forem tocadas): PDV (pagamentos,
 fiado, crédito da loja, troca/devolução), Caixa, Estoque e importação de NF-e, Entregas e agenda, Produção com ficha
-técnica, Relatórios, Central de Alertas, Clientes/Fornecedores/Funcionários/Categorias, Atalhos de teclado, painel da
-plataforma.
+técnica, Relatórios, Central de Alertas, Clientes/Fornecedores/Funcionários/Categorias, atalhos de navegação (`N` + letra),
+painel da plataforma.
 
 ## Histórico deste documento
 
@@ -385,3 +449,4 @@ plataforma.
 | 2026-10-14 | Usuário com mais de uma loja (multi-loja, Fatia 2): escolha da loja no login e "Trocar de loja". |
 | 2026-10-14 | Multi-loja, Fatia 5: criar loja nova para quem já tem conta (vira Dono com o mesmo login). |
 | 2026-10-14 | Multi-loja, Fatia 4: convite com aceite, "Sair desta loja", Usuários por loja (pendente só com e-mail; remover da loja), Membros no painel da plataforma. |
+| 2026-10-15 | Teclado (§4): setas nos resultados de busca, Esc fecha a janela de cima, F8 = Confirmar/Salvar em todas as telas. |

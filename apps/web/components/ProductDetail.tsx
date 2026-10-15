@@ -33,6 +33,7 @@ import { MoneyInput } from '@/components/MoneyInput';
 import { RecipeSection } from '@/components/RecipeSection';
 import { PricingEsteira } from '@/components/PricingEsteira';
 import { BarcodeScanButton } from '@/components/BarcodeScanButton';
+import { useModalLayer } from '@/lib/keyboard';
 
 /**
  * Painel de **visualizar / editar** o cadastro de um produto (fatia EP).
@@ -391,13 +392,7 @@ export function ProductDetail({
   }, [product]);
 
   // Esc fecha o painel (atalho de teclado no desktop, CLAUDE.md → menos cliques).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  const layerRef = useModalLayer(onClose);
 
   const patch = editing ? buildPatch(product, form) : {};
   const changed = Object.keys(patch).length > 0;
@@ -660,6 +655,7 @@ export function ProductDetail({
 
   return (
     <div
+      ref={layerRef}
       className="fixed inset-0 z-40 flex items-end justify-center bg-black/30 p-0 sm:items-center sm:p-4"
       onClick={onClose}
     >
@@ -1580,6 +1576,7 @@ export function ProductDetail({
                 Descartar
               </button>
               <button
+                data-confirm
                 type="submit"
                 disabled={!changed || saving}
                 className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-700 disabled:opacity-40 disabled:shadow-none"

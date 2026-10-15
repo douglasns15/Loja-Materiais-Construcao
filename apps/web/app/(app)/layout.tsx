@@ -26,6 +26,7 @@ import { CartChip } from './CartChip';
 import { FloatingLauncher } from '@/components/FloatingLauncher';
 import { FloatingPanelHost } from '@/components/FloatingPanelHost';
 import { OfflineNav } from './OfflineNav';
+import { useModalLayer } from '@/lib/keyboard';
 
 // Ícones do menu (SVG inline no mesmo estilo do resto do arquivo: viewBox 0 0 24 24, traço
 // currentColor, largura 2, cantos redondos). Ficam inline de propósito — evita nova dependência
@@ -320,6 +321,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [profileOpen, setProfileOpen] = useState(false);
   // Gaveta no celular/tablet (overlay). No desktop a barra é fixa ou vira trilho retrátil.
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // Esc fecha o menu lateral no celular/tablet com teclado (pilha de janelas — lib/keyboard.tsx).
+  useModalLayer(() => setDrawerOpen(false), drawerOpen);
   // Desktop: barra FIXA (empurra o conteúdo) x RETRÁTIL (trilho de ícones). Default = fixa.
   const [pinned, setPinned] = useState(true);
   // Desktop retrátil: `true` enquanto o mouse/foco está sobre o trilho (expande o flyout).

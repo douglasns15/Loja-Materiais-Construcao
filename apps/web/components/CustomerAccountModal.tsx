@@ -17,6 +17,7 @@ import { apiGet, apiPatch } from '@/lib/api';
 import { printArea } from '@/lib/print';
 import { CustomerAccountPrint } from '@/components/ReceivablePrint';
 import type { Store } from '@/components/ReceiptPrint';
+import { useModalLayer } from '@/lib/keyboard';
 
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -84,6 +85,8 @@ export function CustomerAccountModal({
   onReceive?: (a: CustomerAccountRow) => void;
   reloadSignal?: number;
 }) {
+  // Esc fecha / F8 confirma nesta janela (pilha de camadas — lib/keyboard.tsx).
+  const layerRef = useModalLayer(onClose);
   const [detail, setDetail] = useState<CustomerAccountDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -226,6 +229,7 @@ export function CustomerAccountModal({
 
   return (
     <div
+      ref={layerRef}
       className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/30 p-4"
       onClick={onClose}
     >
@@ -336,7 +340,7 @@ export function CustomerAccountModal({
             </div>
 
             {/* Observação do cliente: uma só nota, compartilhada por todas as vendas dele. */}
-            <div>
+            <div data-confirm-scope>
               <h3 className="mb-1 text-sm font-semibold">Observações</h3>
               <textarea
                 value={notes}
@@ -351,6 +355,7 @@ export function CustomerAccountModal({
               />
               <div className="mt-1 flex items-center gap-3">
                 <button
+                  data-confirm="scoped"
                   type="button"
                   onClick={saveNotes}
                   disabled={!notesChanged || savingNotes}

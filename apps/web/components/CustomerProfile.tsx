@@ -13,6 +13,7 @@ import {
 import { apiGet, apiPatch } from '@/lib/api';
 import { MaskedInput } from '@/components/MaskedInput';
 import { ReceivableDetailModal } from '@/components/ReceivableDetailModal';
+import { useModalLayer } from '@/lib/keyboard';
 
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -53,6 +54,8 @@ export function CustomerProfile({
   onClose: () => void;
   onSaved?: () => void;
 }) {
+  // Esc fecha / F8 confirma nesta janela (pilha de camadas — lib/keyboard.tsx).
+  const layerRef = useModalLayer(onClose);
   const [customer, setCustomer] = useState<FullCustomer | null>(null);
   const [history, setHistory] = useState<CustomerHistory | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
@@ -166,6 +169,7 @@ export function CustomerProfile({
 
   return (
     <div
+      ref={layerRef}
       className="fixed inset-0 z-30 flex items-start justify-center overflow-y-auto bg-black/30 p-4"
       onClick={onClose}
     >
@@ -217,6 +221,7 @@ export function CustomerProfile({
             </div>
             <div className="flex items-center gap-3">
               <button
+                data-confirm
                 type="button"
                 onClick={save}
                 disabled={!changed || saving || !form.name.trim()}

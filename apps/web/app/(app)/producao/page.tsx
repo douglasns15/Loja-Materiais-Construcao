@@ -22,6 +22,7 @@ import { useReloadOnReconnect } from '@/lib/useReloadOnReconnect';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { BreakdownForm } from '@/components/BreakdownForm';
 import { fmtQty, parseQty, unitShort } from '@/components/RecipeSection';
+import { useModalLayer } from '@/lib/keyboard';
 
 /**
  * Produção (ADR-043): escolhe o produto pronto (os que têm ficha técnica), informa quanto produziu
@@ -483,6 +484,7 @@ export default function ProducaoPage() {
                     />
                     <div className="flex justify-end">
                       <button
+                        data-confirm
                         type="button"
                         onClick={register}
                         disabled={busy || !canSubmit}
@@ -721,13 +723,7 @@ function LossModal({
   const [error, setError] = useState<string | null>(null);
 
   // Esc fecha (atalho de teclado no desktop — CLAUDE.md → menos cliques).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  const layerRef = useModalLayer(onClose);
 
   function onPieces(v: string) {
     setPieces(v);
@@ -765,7 +761,7 @@ function LossModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-0 sm:items-center sm:p-4" onClick={onClose}>
+    <div ref={layerRef} className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-0 sm:items-center sm:p-4" onClick={onClose}>
       <div
         role="dialog"
         aria-label="Registrar perda"
@@ -839,6 +835,7 @@ function LossModal({
             Cancelar
           </button>
           <button
+            data-confirm
             type="button"
             onClick={confirm}
             disabled={busy}

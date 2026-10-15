@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { PAYMENT_METHOD_LABELS, formatCnpj } from '@nexoloja/shared';
 import { apiGetWithToken, apiPostWithToken } from '@/lib/api';
 import { clearSupportSession, loadSupportSession } from '@/lib/support';
+import { useSearchNav } from '@/lib/keyboard';
 
 // --- Tipos das respostas (read-only) -----------------------------------------------------------
 
@@ -589,6 +590,8 @@ function ProdutosTab({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
+  // Setas: ↓ da busca desce pelos produtos (botão de movimentações) — lib/keyboard.tsx.
+  const nav = useSearchNav();
   const [lowOnly, setLowOnly] = useState(false);
 
   const [openId, setOpenId] = useState<string | null>(null);
@@ -644,6 +647,7 @@ function ProdutosTab({
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <input
           placeholder="Buscar por nome ou SKU"
+          {...nav.input}
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && load()}
@@ -695,7 +699,7 @@ function ProdutosTab({
                 <th className="px-3 py-2 text-right">Movim.</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody {...nav.results}>
               {products.map((p) => (
                 <Fragment key={p.id}>
                   <tr className="border-t border-gray-100">

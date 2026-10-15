@@ -9,6 +9,7 @@ import { useOnline } from '@/lib/useOnline';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { CategoryFormModal } from '@/components/CategoryFormModal';
 import { buildCategoryOptions, type Category } from '@/lib/categories';
+import { useSearchNav } from '@/lib/keyboard';
 
 export default function CategoriesPage() {
   const online = useOnline();
@@ -20,6 +21,8 @@ export default function CategoriesPage() {
   const [parentId, setParentId] = useState('');
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
+  // Setas nos resultados da busca + F8 no "Adicionar" (lib/keyboard.tsx).
+  const nav = useSearchNav();
   // Categoria aberta para editar (clicar no nome) — nome + pai + remover.
   const [editId, setEditId] = useState<string | null>(null);
 
@@ -124,6 +127,7 @@ export default function CategoriesPage() {
         </select>
         <button
           type="submit"
+          data-confirm
           disabled={saving}
           className="rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-500 py-2 font-medium text-white shadow-sm hover:from-indigo-700 hover:to-indigo-600 disabled:opacity-60"
         >
@@ -136,6 +140,7 @@ export default function CategoriesPage() {
         <input
           type="search"
           placeholder="Buscar categoria…"
+          {...nav.input}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
@@ -152,7 +157,7 @@ export default function CategoriesPage() {
               <th className="px-4 py-2">Categoria</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody {...nav.results}>
             {filtered.length === 0 ? (
               <tr>
                 <td className="px-4 py-6 text-center text-gray-500">

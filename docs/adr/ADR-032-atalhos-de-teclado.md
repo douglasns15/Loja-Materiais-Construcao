@@ -118,3 +118,36 @@ migração + aprovação (regra 1).
 4. ✅ **Configurações → Acessibilidade**: ver/editar/restaurar/adicionar/remover, com detecção de conflito.
 
 **Backlog:** expor a edição ao operador (a tela é admin-only); sincronizar atalhos entre dispositivos (banco + migração).
+
+**Adendo 2026-10-15:** Esc fecha o pop-up de cima, F8 vira o "Confirmar" global e setas nas buscas — ver o fim deste documento.
+
+## Adendo 2026-10-15 — Esc, F8 "Confirmar" e setas nas buscas (pedido do Owner)
+
+**Contexto.** O Owner pediu três convenções em todas as telas: (1) descer pelas opções de qualquer busca com as setas
+(o PDV não deixava); (2) **Esc** para sair de pop-ups; (3) tornar o **F8** o botão oficial de **Confirmar** — no PDV
+já concluía a venda; num cadastro (ex.: novo produto) deve salvar.
+
+**Decisão.** Novo módulo `apps/web/lib/keyboard.tsx` (só `apps/web`, sem dependência, sem API/banco), com UM listener
+global no layout raiz (`<KeyboardBehaviors />`, bolha da `window` — os componentes tratam antes e cancelam com
+`preventDefault()`):
+
+1. **Pilha de janelas (`useModalLayer`).** Cada pop-up se registra ao abrir; o Esc fecha só o do topo. Substitui os
+   listeners de Esc avulsos (que fechavam duas janelas empilhadas de uma vez). Seletores com lista aberta consomem o
+   Esc antes. Esc e setas são **fixos** (convenção universal) e valem fora do desktop também.
+2. **F8 = Confirmar.** O comando `pdv-finalizar` vira o comando **global `confirm`** (grupo Geral, padrão `F8`,
+   rebindável; a sobrescrita antiga migra). Ele **clica** no botão marcado `data-confirm` — da janela do topo, ou da
+   tela se não houver janela. Clicar em vez de chamar a função garante que o F8 nunca faz o que o mouse não faria
+   (botão desabilitado, validação do form). Janela sem botão principal ⇒ F8 não faz nada (não vaza para a tela de
+   baixo). Com vários candidatos vence o do `form`/`[data-confirm-scope]` com o foco; `data-confirm="scoped"` marca
+   botões secundários que só valem com o foco no bloco.
+3. **Setas (`useSearchNav`).** O campo e a lista de resultados são ligados por atributos com chave `useId`; ↓ desce
+   ao 1º resultado (foco real, realce índigo único em `globals.css`), ↑/↓ andam, Enter escolhe, ↑ no 1º/Esc voltam
+   ao campo e digitar volta à busca.
+
+**Alternativas.** *Escutar Esc em cada modal* (como já era) — preterida: não sabe qual janela está por cima.
+*`onConfirm` como função em cada tela* — preterida: ignoraria o botão desabilitado/validação. *`aria-activedescendant`
+mantendo o foco no campo* — preterida: as linhas do PDV têm mais de um botão (barra × metro); o foco real nos botões
+cobre isso sem reescrever cada lista.
+
+**Consequências.** ✅ Mesma regra em todas as telas; F8 seguro por construção. ⚠️ Toda janela/botão principal novo
+precisa de `useModalLayer` + `data-confirm` (convenção registrada na Documentação Técnica §9).

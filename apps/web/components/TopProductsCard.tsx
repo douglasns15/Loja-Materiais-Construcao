@@ -5,6 +5,7 @@ import type { TopProductRow } from '@nexoloja/shared';
 import { apiGet } from '@/lib/api';
 import { formatQtyUnit } from '@/lib/qtyUnit';
 import { ProductDetailModal } from './ProductDetailModal';
+import { useSearchNav } from '@/lib/keyboard';
 
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -43,6 +44,8 @@ export function TopProductsCard({
   const defaultOrder: OrderBy = byQty ? 'quantidade' : 'faturamento';
   const [open, setOpen] = useState(true);
   const [q, setQ] = useState('');
+  // Setas: ↓ da busca desce pelo ranking; Enter abre o detalhe (lib/keyboard.tsx).
+  const nav = useSearchNav();
   const [debouncedQ, setDebouncedQ] = useState('');
   const [orderBy, setOrderBy] = useState<OrderBy>(defaultOrder);
   const [rows, setRows] = useState<TopProductRow[]>([]);
@@ -126,6 +129,7 @@ export function TopProductsCard({
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Buscar produto…"
+              {...nav.input}
               className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none"
             />
             {!byQty && (
@@ -153,7 +157,7 @@ export function TopProductsCard({
               {debouncedQ ? 'Nenhum produto encontrado.' : 'Nenhuma venda no período.'}
             </p>
           ) : (
-            <ul className="space-y-1.5">
+            <ul className="space-y-1.5" {...nav.results}>
               {displayRows.map((r, idx) => (
                 <li key={r.productId}>
                   <button

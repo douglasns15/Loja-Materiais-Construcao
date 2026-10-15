@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { normalizeSearchText } from '@nexoloja/core';
 import { formatCnpj } from '@nexoloja/shared';
 import { useAnchoredDropdown } from '@/lib/useAnchoredDropdown';
+import { useSearchNav } from '@/lib/keyboard';
 
 /**
  * Seletor de fornecedor com **busca**, no MESMO formato do seletor de produto (`ProductPicker`) —
@@ -39,6 +40,8 @@ export function SupplierPicker<S extends PickerSupplier>({
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  // ↓ no campo desce pelos resultados; ↑/↓ andam; Enter escolhe (lib/keyboard.tsx).
+  const nav = useSearchNav();
 
   const selected = suppliers.find((s) => s.id === value) ?? null;
 
@@ -55,6 +58,8 @@ export function SupplierPicker<S extends PickerSupplier>({
     }
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') {
+        // Com a lista à mostra, o Esc fecha só ela — a janela do cadastro continua aberta.
+        if (listRef.current) e.preventDefault();
         setOpen(false);
         setQuery('');
       }
@@ -126,6 +131,7 @@ export function SupplierPicker<S extends PickerSupplier>({
         onFocus={() => setOpen(true)}
         className="w-full rounded-lg border border-gray-300 px-3 py-2 disabled:opacity-60"
         aria-label="Buscar fornecedor"
+        {...nav.input}
       />
       {showList &&
         menuStyle &&
@@ -133,6 +139,7 @@ export function SupplierPicker<S extends PickerSupplier>({
         createPortal(
           <ul
             ref={listRef}
+            {...nav.results}
             style={menuStyle}
             className="divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg"
           >

@@ -4,6 +4,7 @@ import { type ReactNode, useEffect, useState } from 'react';
 import type { TopCustomerRow } from '@nexoloja/shared';
 import { apiGet } from '@/lib/api';
 import { CustomerDetailModal } from './CustomerDetailModal';
+import { useSearchNav } from '@/lib/keyboard';
 
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -34,6 +35,8 @@ export function TopCustomersCard({
 }) {
   const [open, setOpen] = useState(true);
   const [q, setQ] = useState('');
+  // Setas: ↓ da busca desce pelo ranking; Enter abre o detalhe (lib/keyboard.tsx).
+  const nav = useSearchNav();
   const [debouncedQ, setDebouncedQ] = useState('');
   const [orderBy, setOrderBy] = useState<OrderBy>('faturamento');
   const [rows, setRows] = useState<TopCustomerRow[]>([]);
@@ -115,6 +118,7 @@ export function TopCustomersCard({
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Buscar cliente…"
+              {...nav.input}
               className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none"
             />
             <div className="inline-flex gap-0.5 rounded-xl bg-gray-100 p-1">
@@ -140,7 +144,7 @@ export function TopCustomersCard({
               {debouncedQ ? 'Nenhum cliente encontrado.' : 'Nenhuma compra de cliente no período.'}
             </p>
           ) : (
-            <ul className="space-y-1.5">
+            <ul className="space-y-1.5" {...nav.results}>
               {displayRows.map((r, idx) => (
                 <li key={r.customerId}>
                   <button

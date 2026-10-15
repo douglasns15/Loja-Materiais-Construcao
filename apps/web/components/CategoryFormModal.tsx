@@ -8,6 +8,7 @@ import {
   descendantsAndSelf,
   type Category,
 } from '@/lib/categories';
+import { useModalLayer } from '@/lib/keyboard';
 
 const inputClass =
   'mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100';
@@ -32,6 +33,8 @@ export function CategoryFormModal({
   onSaved: (category: Category) => void;
   onDeleted?: () => void;
 }) {
+  // Esc fecha / F8 confirma nesta janela (pilha de camadas — lib/keyboard.tsx).
+  const layerRef = useModalLayer(onClose);
   const isEdit = !!categoryId;
   const [name, setName] = useState('');
   const [parentId, setParentId] = useState('');
@@ -148,7 +151,7 @@ export function CategoryFormModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+    <div ref={layerRef} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div
         className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
@@ -286,6 +289,7 @@ export function CategoryFormModal({
                   <span />
                 )}
                 <button
+                  data-confirm
                   type="submit"
                   disabled={saving || removing}
                   className="rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-500 px-4 py-2 text-sm font-medium text-white shadow-sm hover:from-indigo-700 hover:to-indigo-600 disabled:opacity-50"

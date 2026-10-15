@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { formatOrderNumber, paymentMethodLabel } from '@nexoloja/shared';
 import { groupPairedItems } from '@nexoloja/core';
 import { apiGet } from '@/lib/api';
+import { useModalLayer } from '@/lib/keyboard';
 
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -66,13 +67,7 @@ export function OrderSummaryModal({ code, onClose }: { code: string; onClose: ()
   }, [code]);
 
   // Fecha no Esc (o clique fora já fecha pelo overlay).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  const layerRef = useModalLayer(onClose);
 
   const cancelled = order?.status === 'CANCELLED';
   const returned = order?.status === 'RETURNED';
@@ -80,6 +75,7 @@ export function OrderSummaryModal({ code, onClose }: { code: string; onClose: ()
 
   return (
     <div
+      ref={layerRef}
       className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/30 p-4"
       onClick={onClose}
     >

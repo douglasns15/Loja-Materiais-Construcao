@@ -37,6 +37,7 @@ import { SupplierFormModal } from '@/components/SupplierFormModal';
 import { SupplierPicker } from '@/components/SupplierPicker';
 import { NfeImportModal } from '@/components/NfeImportModal';
 import { NfeHistoryModal } from '@/components/NfeHistoryModal';
+import { useSearchNav } from '@/lib/keyboard';
 
 // `GET /products` devolve a linha completa do produto; o detalhe de estoque (StockDetail)
 // usa esses campos extras (custo/venda, peso, descrição…), então o tipo espelha o StockProduct.
@@ -199,6 +200,8 @@ export default function EstoquePage() {
   // "Estoque atual": busca (nome/apelido/fabricante/SKU), filtro "só baixo/zerado" e ordenação por
   // qualquer coluna — para achar o produto sem rolar a página inteira.
   const [stockSearch, setStockSearch] = useState('');
+  // Setas nos resultados da busca do estoque (lib/keyboard.tsx).
+  const stockNav = useSearchNav();
   const [lowOnly, setLowOnly] = useState(false);
   // Ordem inicial: mais recentemente atualizados no topo (os "20 mais recentes" + Mostrar mais).
   const [sort, setSort] = useState<SortState>({ key: 'recent', dir: 'desc' });
@@ -820,6 +823,7 @@ export default function EstoquePage() {
           <div className="border-t border-gray-200 bg-gray-50 p-4">
           <button
             type="submit"
+            data-confirm
             disabled={savingEntry}
             className="w-full rounded-lg bg-emerald-600 py-2.5 font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60 disabled:shadow-none"
           >
@@ -871,6 +875,7 @@ export default function EstoquePage() {
           <div className="border-t border-gray-200 bg-gray-50 p-4">
           <button
             type="submit"
+            data-confirm
             disabled={savingAdjust}
             className="w-full rounded-lg border border-gray-300 py-2.5 font-semibold text-gray-700 hover:bg-gray-100 disabled:opacity-60"
           >
@@ -900,6 +905,7 @@ export default function EstoquePage() {
               <input
                 value={stockSearch}
                 onChange={(e) => setStockSearch(e.target.value)}
+                {...stockNav.input}
                 placeholder="Buscar produto ou SKU…"
                 className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-900"
               />
@@ -952,7 +958,7 @@ export default function EstoquePage() {
               ))}
             </tr>
           </thead>
-          <tbody>
+          <tbody {...stockNav.results}>
             {products.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-4 py-6 text-center text-gray-500">

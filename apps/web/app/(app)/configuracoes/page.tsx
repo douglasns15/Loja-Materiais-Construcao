@@ -420,6 +420,7 @@ export default function ConfiguracoesPage() {
 
           <div className="flex items-center gap-3">
             <button
+              data-confirm
               type="submit"
               disabled={savingData || !dataChanged}
               className="rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-500 px-4 py-2 text-sm font-medium text-white shadow-sm hover:from-indigo-700 hover:to-indigo-600 disabled:opacity-50"

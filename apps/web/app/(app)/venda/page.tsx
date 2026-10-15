@@ -64,6 +64,7 @@ import {
 import { takeReorderPayload, REORDER_SIGNAL, signalReorderApplied } from '@/lib/reorder';
 import { takeExchangePayload, type ExchangePayload } from '@/lib/exchange';
 import { useShortcuts } from '@/lib/shortcuts';
+import { useModalLayer, useSearchNav } from '@/lib/keyboard';
 import { apiGet, apiPatch, apiPost } from '@/lib/api';
 import { cacheCashSession, readCachedCashSession } from '@/lib/cashSessionCache';
 import { cacheProducts, readCachedProducts } from '@/lib/catalog';
@@ -585,6 +586,9 @@ export default function VendaPage() {
   // das ações do PDV no motor global.
   const { registerAction } = useShortcuts();
   const productSearchRef = useRef<HTMLInputElement>(null);
+  // Setas nos resultados (adendo 2026-10-15): ↓ da busca de produto/cliente desce pelas opções.
+  const productNav = useSearchNav();
+  const customerNav = useSearchNav();
   // Venda a prazo (ADR-019): valor deixado a prazo, cliente devedor e vencimento opcional.
   // `creditInput` vazio/0 = venda à vista comum (nenhuma regressão). Online-only nesta fatia.
   // `showCredit` mantém a opção ESCONDIDA por padrão (PDV limpo) — só aparece quando o operador
@@ -991,6 +995,8 @@ export default function VendaPage() {
     setReorderPairs([]);
     setReorderPairReview([]);
   }
+  // Esc fecha / F8 adiciona ao carrinho na revisão do reorder (pilha de janelas — lib/keyboard.tsx).
+  const reorderLayerRef = useModalLayer(closeReorder, reorderPlan != null);
 
   /** Abre o diálogo de impressão. O PDF sai nomeado pelo código do documento (venda V-000128 /
    *  orçamento O-000045) em vez do genérico "NexoLoja.pdf". Ver lib/print.ts. */
@@ -1791,12 +1797,10 @@ export default function VendaPage() {
   }
 
   // Atalhos do PDV (ADR-032, Fatia 3): F8 = finalizar (abre a revisão), F9 = focar a busca de
-  // produto. `onConcluir` fecha sobre o estado do carrinho a cada render; guardo a versão atual num
-  // ref e registro um wrapper estável (o motor só dispara quando o PDV está montado).
-  const onConcluirRef = useRef(onConcluir);
-  onConcluirRef.current = onConcluir;
+  // produto. Desde o adendo 2026-10-15 o F8 é o "Confirmar" GLOBAL: clica no botão marcado com
+  // `data-confirm` ("Concluir venda" no carrinho, "Confirmar venda" na revisão) — respeitando o botão
+  // desabilitado. Aqui só fica o F9 (o motor só dispara quando o PDV está montado).
   useEffect(() => {
-    const offFinalizar = registerAction('pdv-finalizar', () => onConcluirRef.current());
     const offBusca = registerAction('pdv-focar-busca', () => {
       const el = productSearchRef.current;
       if (el) {
@@ -1805,7 +1809,6 @@ export default function VendaPage() {
       }
     });
     return () => {
-      offFinalizar();
       offBusca();
     };
   }, [registerAction]);
@@ -2294,6 +2297,7 @@ export default function VendaPage() {
    *  futura (opcional). Os dois recursos compartilham o cliente do pedido, então usam o MESMO
    *  estado. `accent` casa a cor da borda com o bloco (âmbar no fiado, índigo na retirada). */
   function renderCustomerPicker(accent: string) {
+    const nav = customerNav.scoped(accent);
     return customerId ? (
       <div className="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-sm ring-1 ring-gray-200">
         <span className="min-w-0 truncate">
@@ -2324,7 +2328,10 @@ export default function VendaPage() {
           onChange={(e) => setCustomerQuery(e.target.value)}
           placeholder="Buscar cliente por nome…"
           className={`w-full rounded-lg border ${accent} bg-white px-3 py-2 text-sm`}
+          {...nav.input}
         />
+        {/* Resultados + "Cadastrar" num bloco só: ↓ do campo desce pelos dois (lib/keyboard.tsx). */}
+        <div {...nav.results}>
         {customerOptions.length > 0 && (
           <ul className="mt-1 max-h-40 overflow-y-auto rounded-lg border border-gray-200 bg-white text-sm shadow-sm">
             {customerOptions.map((o) => (
@@ -2355,6 +2362,7 @@ export default function VendaPage() {
             + Cadastrar “{customerQuery.trim()}”
           </button>
         )}
+        </div>
       </div>
     );
   }
@@ -2435,6 +2443,7 @@ export default function VendaPage() {
             <button
               onClick={onConfirmar}
               disabled={busy}
+              data-confirm
               className="rounded-lg bg-green-600 py-2 font-medium text-white hover:bg-green-700 disabled:opacity-60"
             >
               {busy ? 'Confirmando…' : 'Confirmar venda'}
@@ -2748,6 +2757,7 @@ export default function VendaPage() {
               onKeyDown={onProductSearchKeyDown}
               className="min-w-[12rem] flex-1 rounded-lg border border-gray-300 px-3 py-2"
               aria-label="Buscar produto"
+              {...productNav.input}
             />
             <BarcodeScanButton onScan={addByScan} label="Escanear produto" />
           </div>
@@ -2770,7 +2780,7 @@ export default function VendaPage() {
             carrinho com a quantidade informada. Sem busca, a área fica limpa com uma dica — o foco é
             o carrinho. Estoque zerado fica desabilitado. */}
         {productSearch.trim() ? (
-        <ul className="mt-3 max-h-[28rem] divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-200">
+        <ul {...productNav.results} className="mt-3 max-h-[28rem] divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-200">
           {filteredProducts.length === 0 ? (
             <li className="px-3 py-6 text-center text-sm text-gray-500">
               {productSearch ? 'Nenhum produto encontrado.' : 'Nenhum produto cadastrado.'}
@@ -3692,6 +3702,7 @@ export default function VendaPage() {
           <div className="mt-4 grid grid-cols-2 gap-2">
             <button
               onClick={onConcluir}
+              data-confirm
               disabled={
                 cart.length === 0 ||
                 discountTooHigh ||
@@ -3765,7 +3776,7 @@ export default function VendaPage() {
           somar ao carrinho — nada entra cru (decisão do Owner). O core já decidiu quantidades e
           estoque; aqui é só transparência + confirmação. */}
       {reorderPlan && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <div ref={reorderLayerRef} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
             <h2 className="bg-gradient-to-r from-indigo-700 to-indigo-500 bg-clip-text text-lg font-bold text-transparent">
               Vender de novo
@@ -3878,6 +3889,7 @@ export default function VendaPage() {
               {reorderPlan.lineCount + reorderPairs.length > 0 && (
                 <button
                   onClick={() => applyReorder(reorderPlan)}
+                  data-confirm
                   className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800"
                 >
                   Adicionar ao carrinho ({reorderPlan.lineCount + reorderPairs.length})

@@ -25,7 +25,16 @@
 > 4. **Planilha — Fatia 4 (De-Para editável + perfis lembrados)** — **ADIADA pelo Owner**; volta para discussão quando
 >    aparecer o primeiro cliente com exportação de outro sistema (ver ADR-041, Fatia 4).
 >
-> **Última atualização:** 2026-10-14 — **#9 Importar planilha (ADR-041 Fatia 3) + #10 multi-loja concluído (ADR-014).**
+> **Última atualização:** 2026-10-15 — **Teclado: setas nas buscas, Esc fecha pop-ups, F8 = Confirmar (ADR-032, adendo).**
+>
+> - **Teclado em todas as telas (ADR-032, adendo 2026-10-15) — IMPLEMENTADO, só `apps/web`, sem migration/API:**
+>   `lib/keyboard.tsx` + `<KeyboardBehaviors />` no layout raiz. (1) **Setas** nos resultados de 25 buscas (PDV produto e
+>   cliente, `ProductPicker`/`SupplierPicker`, Produtos, Clientes, Fornecedores, Funcionários, Categorias, Estoque,
+>   Contas a Receber, Histórico, Orçamentos, Entregas, devolução, NF-e, Relatórios, suporte); (2) **Esc** fecha só a
+>   janela de cima (pilha `useModalLayer` em todos os modais + sino + menu do celular + painéis inline); (3) **F8 =
+>   Confirmar** global (comando `confirm` substitui `pdv-finalizar`, override migra) clicando o `[data-confirm]` da
+>   janela do topo ou da tela. Typecheck verde; setas validadas no navegador (lista de teste). **Pendentes: deploy do
+>   web + E2E do Owner (Esc/F8 nas telas logadas) + commit/push.**
 >
 > - **#10 Usuário multi-loja (ADR-014) — CONCLUÍDO (Fatia 5 feita):** migrations **`0048`** (colunas legadas opcionais,
 >   gatilho ignora usuário sem loja, RLS de `users` por vínculo ACEITO) → API `590296e3` (não lê/grava mais

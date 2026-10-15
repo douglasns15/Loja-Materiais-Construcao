@@ -5,7 +5,7 @@
 > e diagramas de arquitetura.
 >
 > **Produto:** ERP/PDV multi-tenant, modular e custo-zero (PWA única para Web/Android/iOS).
-> **Última atualização:** 2026-10-14 · **Fontes:** `docs/ARCHITECTURE.md`, `docs/adr/` (ADR-001…043), código do monorepo.
+> **Última atualização:** 2026-10-15 · **Fontes:** `docs/ARCHITECTURE.md`, `docs/adr/` (ADR-001…043), código do monorepo.
 > **Par funcional:** [`docs/DOCUMENTACAO-FUNCIONAL.md`](DOCUMENTACAO-FUNCIONAL.md) — o "como funciona / como configurar" de
 > cada funcionalidade, do ponto de vista de quem usa. Toda mudança de comportamento atualiza os dois.
 
@@ -663,6 +663,42 @@ Alertas CALCULADOS sob demanda (custo-zero: nada é gravado; a pendência some q
   modelo-produtos-nexoloja.xlsx`, gerado sem dependência por `node apps/web/scripts/gerar-modelo-planilha.mjs`
   (ZIP + XML à mão; colunas espelham `IMPORT_FIELD_LABELS`; códigos formatados como texto; listas em Unidade e S/N;
   aba "Instruções").
+- **Teclado — atalhos (ADR-032):** motor em `apps/web/lib/shortcuts.tsx` (`ShortcutsProvider` no shell `(app)`):
+  casa por `event.code`; navegação `N`+letra, `F2` abre o PDV, `F9` foca a busca do PDV, `?` abre a ajuda; tudo
+  rebindável em Configurações → Acessibilidade (`localStorage` `nexoloja:shortcuts` / `nexoloja:shortcuts-custom`);
+  desktop-only (≥ 768 px); ignora letras dentro de campos (F-keys valem).
+- **Teclado — comportamentos globais (ADR-032, adendo 2026-10-15):** `apps/web/lib/keyboard.tsx`, um listener único
+  instalado no layout raiz (`<KeyboardBehaviors />`, fase de bolha da `window`; vale também em `/plataforma`).
+  Handlers dos componentes rodam antes e cancelam com `preventDefault()`.
+  - **Esc fecha o pop-up de cima.** Toda janela chama `useModalLayer(onClose, enabled?)` e põe o `ref` retornado no
+    overlay. Pilha por ordem de abertura; o Esc fecha só o topo (segurar o Esc não fecha em cascata — `e.repeat`
+    ignorado). Lista de seletor aberta (`ProductPicker`/`SupplierPicker`) consome o Esc antes. Registradas: os modais
+    de `components/` e das telas, o painel do sino (`AlertsChip`), o menu lateral do celular, o painel de recebimento
+    (Contas a Receber), a revisão do "Vender de novo" (PDV) e o painel de cancelar/devolver do Histórico.
+  - **F8 = Confirmar.** O comando `confirm` do motor (padrão `F8`; substitui o antigo `pdv-finalizar` — a sobrescrita
+    antiga migra sozinha em `loadOverrides`) chama `runConfirm()`, que **clica** no `[data-confirm]` visível e
+    habilitado da janela do topo; sem janela, no da tela. Clicar (e não chamar a função) respeita botão desabilitado
+    e validação do `<form>`. Janela aberta sem `[data-confirm]` ⇒ o F8 não faz nada (nunca "vaza" para a tela de
+    baixo). Vários candidatos ⇒ vence o do `form`/`[data-confirm-scope]` que contém o foco; senão o 1º do DOM.
+    `data-confirm="scoped"` = botão secundário que só vale com o foco no bloco dele ("Salvar observação", estoque
+    mínimo da linha em Produtos, edição inline de Funcionários). Botões marcados: PDV ("Concluir venda" → "Confirmar
+    venda" na revisão; "Adicionar ao carrinho" do reorder), cadastros das telas (Produtos, Clientes, Fornecedores,
+    Funcionários, Categorias), Estoque (entrada/ajuste), Caixa (abrir/fechar), Produção, Configurações (dados da
+    loja), Contas a Receber (receber), Histórico (confirmar cancelamento/devolução) e o principal de cada janela de
+    cadastro/confirmação (categoria, fornecedor, cliente rápido, cadastro no caixa, sangria/suprimento, contador de
+    cédulas, NF-e, devolução, perda, período de entrega, membros, perfil, orçamento, produto).
+  - **Setas nos resultados de busca.** `useSearchNav()` devolve `input` (espalhado no campo, `data-nav-search`),
+    `results` (contêiner, `data-nav-results`), `item` (linha não-botão, `data-nav-item` + `tabIndex=-1`) e `primary`
+    (botão principal de uma linha com vários). Chave por `useId` (+ `scoped(sub)` p/ seletor desenhado 2×). Itens =
+    `[data-nav-item]` se houver, senão botões/links habilitados e visíveis. ↓ no campo foca o 1º; ↑/↓/Home/End
+    andam; ↑ no 1º e Esc voltam ao campo; letra/Backspace voltam a escrever na busca; Enter escolhe (linha marcada
+    é clicada; se o item some, o foco volta ao campo). Realce único em `globals.css`
+    (`[data-nav-results] … :focus-visible`, índigo; em tabela a linha inteira via `tr:has(:focus-visible)`). Ligado
+    em: PDV (produto e cliente), `ProductPicker` (Estoque, NF-e, Receita, Desmembramento), `SupplierPicker`,
+    Produtos, Clientes, Fornecedores, Funcionários, Categorias, Estoque, Contas a Receber, Histórico de Vendas,
+    Orçamentos, Entregas, cliente do crédito na devolução, histórico de NF-e, Melhores clientes/Mais vendidos
+    (Relatórios) e suporte da plataforma. Filtros que não listam opções (ex.: "Motivo" das movimentações) ficam fora.
+  - Sem dependência nova, sem API/banco/migração.
 - **UX:** menos cliques, fontes legíveis, atalhos de teclado no desktop.
 
 ---

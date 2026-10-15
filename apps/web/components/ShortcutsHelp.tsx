@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect } from 'react';
 import Link from 'next/link';
-import { useShortcuts, humanizeBinding, type ShortcutCommand } from '@/lib/shortcuts';
+import { useShortcuts, humanizeBinding, FIXED_KEYS, type ShortcutCommand } from '@/lib/shortcuts';
+import { useModalLayer } from '@/lib/keyboard';
 
 /**
  * Overlay de AJUDA dos atalhos (ADR-032, Fatia 2). Aberto por `?` (Shift+/) — a tabela dos atalhos em
@@ -12,13 +12,7 @@ import { useShortcuts, humanizeBinding, type ShortcutCommand } from '@/lib/short
 export function ShortcutsHelp({ onClose }: { onClose: () => void }) {
   const { catalog, customs } = useShortcuts();
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  const layerRef = useModalLayer(onClose);
 
   const all: ShortcutCommand[] = [...catalog, ...customs];
   const groups: { title: string; items: ShortcutCommand[] }[] = [
@@ -29,6 +23,7 @@ export function ShortcutsHelp({ onClose }: { onClose: () => void }) {
 
   return (
     <div
+      ref={layerRef}
       className="fixed inset-0 z-[95] flex items-start justify-center overflow-y-auto overscroll-contain bg-black/40 p-4"
       onClick={onClose}
     >
@@ -67,6 +62,20 @@ export function ShortcutsHelp({ onClose }: { onClose: () => void }) {
               </ul>
             </div>
           ))}
+          {/* Teclas fixas (Esc e setas — lib/keyboard.tsx), sem edição. */}
+          <div className="mt-4">
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-indigo-700">Sempre ativos</p>
+            <ul className="divide-y divide-gray-100 rounded-xl border border-gray-100">
+              {FIXED_KEYS.map((f) => (
+                <li key={f.keys} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                  <span className="min-w-0 text-gray-700">{f.label}</span>
+                  <kbd className="shrink-0 rounded bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-800">
+                    {f.keys}
+                  </kbd>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
 
         <div className="flex items-center justify-between border-t border-gray-100 px-4 py-3">

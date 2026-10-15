@@ -17,6 +17,7 @@ import { printArea } from '@/lib/print';
 import { ReceivablePrint } from '@/components/ReceivablePrint';
 import { ReceivablePaymentPrint } from '@/components/ReceivablePaymentPrint';
 import type { Store } from '@/components/ReceiptPrint';
+import { useModalLayer } from '@/lib/keyboard';
 
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -38,6 +39,8 @@ export function ReceivableDetailModal({
   onReceive?: (r: ReceivableRow) => void;
   reloadSignal?: number;
 }) {
+  // Esc fecha / F8 confirma nesta janela (pilha de camadas — lib/keyboard.tsx).
+  const layerRef = useModalLayer(onClose);
   const [detail, setDetail] = useState<ReceivableDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -130,6 +133,7 @@ export function ReceivableDetailModal({
 
   return (
     <div
+      ref={layerRef}
       className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/30 p-4"
       onClick={onClose}
     >
@@ -319,7 +323,7 @@ export function ReceivableDetailModal({
             )}
 
             {/* Observação do CLIENTE (compartilhada por todas as vendas dele — ADR-022). */}
-            <div>
+            <div data-confirm-scope>
               <h3 className="mb-1 text-sm font-semibold">Observações</h3>
               <textarea
                 value={notes}
@@ -334,6 +338,7 @@ export function ReceivableDetailModal({
               />
               <div className="mt-1 flex items-center gap-3">
                 <button
+                  data-confirm="scoped"
                   type="button"
                   onClick={saveNotes}
                   disabled={!notesChanged || savingNotes}

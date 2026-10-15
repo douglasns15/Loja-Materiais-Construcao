@@ -22,6 +22,7 @@ import { DeliveryAgenda } from '@/components/DeliveryAgenda';
 import { DeliverySettingsModal } from '@/components/DeliverySettingsModal';
 import { useMe } from '@/lib/useMe';
 import { ReceiptPrint, type Store } from '@/components/ReceiptPrint';
+import { useSearchNav } from '@/lib/keyboard';
 
 /** Comprovante CONSOLIDADO de uma conta (ADR-028): dados já montados para o ReceiptPrint. */
 type AccountPrintJob = {
@@ -273,6 +274,8 @@ export default function EntregasPage() {
   const [searchType, setSearchType] = useState<'code' | 'customer'>('code');
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState<{ type: 'code' | 'customer'; term: string } | null>(null);
+  // Setas nos resultados: ↓ da busca desce pelos cartões das entregas (lib/keyboard.tsx).
+  const nav = useSearchNav();
   const [detailId, setDetailId] = useState<string | null>(null);
   // Contas recolhidas (por id). Default: expandidas — o operador vê o extrato de cara.
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -539,6 +542,7 @@ export default function EntregasPage() {
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder={searchType === 'code' ? 'Ex.: E-0001, V-000128 ou 128' : 'Ex.: João Silva'}
+            {...nav.input}
             className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
           />
           <button
@@ -580,7 +584,7 @@ export default function EntregasPage() {
         </p>
       ) : (
         <>
-          <div className="space-y-3">
+          <div className="space-y-3" {...nav.results}>
             {cards.map((card) =>
               card.kind === 'account' ? (
                 <AccountCard

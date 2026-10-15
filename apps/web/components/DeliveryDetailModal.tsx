@@ -26,6 +26,7 @@ import {
   todayLocal,
   type ScheduleValue,
 } from '@/components/ScheduleStep';
+import { useModalLayer } from '@/lib/keyboard';
 
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -86,6 +87,8 @@ export function DeliveryDetailModal({
   onClose: () => void;
   onDelivered: () => void;
 }) {
+  // Esc fecha / F8 confirma nesta janela (pilha de camadas — lib/keyboard.tsx).
+  const layerRef = useModalLayer(onClose);
   const [detail, setDetail] = useState<DeliveryDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -308,6 +311,7 @@ export function DeliveryDetailModal({
   return (
     <>
     <div
+      ref={layerRef}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
       onClick={onClose}
     >
@@ -554,7 +558,7 @@ export function DeliveryDetailModal({
 
             {/* Observação livre do pedido (editável) — informações gerais p/ quem separa/entrega
                 (ex.: "quem retira não é quem comprou"). Distinta da observação por retirada (log). */}
-            <div className="mb-4">
+            <div data-confirm-scope className="mb-4">
               <label htmlFor="ordernote" className="mb-1 block text-sm font-semibold text-gray-700">
                 Observações do pedido
               </label>
@@ -573,6 +577,7 @@ export function DeliveryDetailModal({
               <div className="mt-1 flex items-center justify-end gap-2">
                 {noteSaved && <span className="text-xs text-green-700">Salvo ✓</span>}
                 <button
+                  data-confirm="scoped"
                   type="button"
                   onClick={saveNote}
                   disabled={savingNote || (orderNote.trim() === (detail.notes ?? '').trim())}

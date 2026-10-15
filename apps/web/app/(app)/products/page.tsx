@@ -28,6 +28,7 @@ import { MoneyInput } from '@/components/MoneyInput';
 import { PricingEsteira } from '@/components/PricingEsteira';
 import { ProductDetail, type CardFees, type ProductFull } from '@/components/ProductDetail';
 import { buildCategoryOptions, type Category } from '@/lib/categories';
+import { useSearchNav } from '@/lib/keyboard';
 
 /**
  * A lista usa o cadastro **completo** (`ProductFull`) porque a linha abre o painel de
@@ -159,6 +160,8 @@ export default function ProductsPage() {
 
   // Busca NO SERVIDOR (nome/popular/fabricante/SKU): `search` é o campo; a query dispara com debounce.
   const [search, setSearch] = useState('');
+  // Setas nos resultados da busca (param no nome de cada produto) — lib/keyboard.tsx.
+  const nav = useSearchNav();
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   // Catálogo COMPLETO — carregado sob demanda (lazy) só quando scan/par/detalhe precisa varrer tudo
@@ -1125,6 +1128,7 @@ export default function ProductsPage() {
         <div className="border-t border-gray-200 bg-gray-50 p-4">
           <button
             type="submit"
+            data-confirm
             disabled={saving}
             className="w-full rounded-lg bg-emerald-600 py-2.5 font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60 disabled:shadow-none"
           >
@@ -1140,6 +1144,7 @@ export default function ProductsPage() {
         <input
           type="search"
           placeholder="Buscar ou escanear (nome, popular, fabricante ou SKU)…"
+          {...nav.input}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           onKeyDown={onSearchKeyDown}
@@ -1164,7 +1169,7 @@ export default function ProductsPage() {
               <th className="px-4 py-2 text-right">Cadastro</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody {...nav.results}>
             {products.length === 0 ? (
               <tr>
                 <td colSpan={9} className="px-4 py-6 text-center text-gray-500">
@@ -1192,6 +1197,7 @@ export default function ProductsPage() {
                       <button
                         type="button"
                         onClick={() => openDetail(p.id)}
+                        {...nav.primary}
                         className={`text-left font-medium hover:text-blue-700 hover:underline ${
                           p.isActive ? 'text-gray-900' : 'text-gray-500'
                         }`}
@@ -1217,7 +1223,8 @@ export default function ProductsPage() {
                       {byLine(p.updatedByName, p.updatedAt)}
                     </td>
                     <td className="px-4 py-2">
-                      <div className="flex items-center justify-end gap-1">
+                      {/* F8 com o foco no campo salva o estoque mínimo desta linha (`data-confirm-scope`). */}
+                      <div className="flex items-center justify-end gap-1" data-confirm-scope>
                         <input
                           type="number"
                           step="1"
@@ -1232,6 +1239,7 @@ export default function ProductsPage() {
                         <button
                           type="button"
                           onClick={() => saveMin(p)}
+                          data-confirm="scoped"
                           disabled={!changed || savingMinId === p.id}
                           className="rounded bg-indigo-600 px-2 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-30"
                         >

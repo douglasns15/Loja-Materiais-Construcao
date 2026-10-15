@@ -8,6 +8,7 @@ import {
 } from '@nexoloja/shared';
 import { deliverySlots } from '@nexoloja/core';
 import { apiGet, apiPut } from '@/lib/api';
+import { useModalLayer } from '@/lib/keyboard';
 
 /**
  * Período de entregas (ADR-042), editado na tela Entregas (Admin): tamanho da faixa, limite de
@@ -21,6 +22,8 @@ type DayKey = (typeof DAY_KEYS)[number];
 type Range = { start: string; end: string };
 
 export function DeliverySettingsModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  // Esc fecha / F8 confirma nesta janela (pilha de camadas — lib/keyboard.tsx).
+  const layerRef = useModalLayer(onClose);
   const [settings, setSettings] = useState<DeliverySettings>(DEFAULT_DELIVERY_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -77,7 +80,7 @@ export function DeliverySettingsModal({ onClose, onSaved }: { onClose: () => voi
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4" onClick={onClose}>
+    <div ref={layerRef} className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4" onClick={onClose}>
       <div
         role="dialog"
         aria-label="Período de entregas"
@@ -239,6 +242,7 @@ export function DeliverySettingsModal({ onClose, onSaved }: { onClose: () => voi
             Cancelar
           </button>
           <button
+            data-confirm
             type="button"
             onClick={save}
             disabled={saving || loading}

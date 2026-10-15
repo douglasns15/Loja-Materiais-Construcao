@@ -22,6 +22,7 @@ import {
 } from '@nexoloja/core';
 import { apiGet, apiPost } from '@/lib/api';
 import { CustomerQuickAddModal } from '@/components/CustomerQuickAddModal';
+import { useModalLayer, useSearchNav } from '@/lib/keyboard';
 
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -97,6 +98,10 @@ export function ReturnItemsModal({
     items: { orderItemId: string; quantity: number; condition?: ReturnItemCondition }[];
   }) => void;
 }) {
+  // Esc fecha / F8 confirma nesta janela (pilha de camadas — lib/keyboard.tsx).
+  const layerRef = useModalLayer(onClose);
+  // Setas na busca do cliente do crédito (lib/keyboard.tsx).
+  const pickNav = useSearchNav();
   const [intent, setIntent] = useState<Intent>('REFUND');
   // Quantidade a devolver por item (string do input, na unidade vendida).
   const [qty, setQty] = useState<Record<string, string>>({});
@@ -359,6 +364,7 @@ export function ReturnItemsModal({
   return (
     <>
     <div
+      ref={layerRef}
       className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/30 p-4"
       onClick={onClose}
     >
@@ -572,7 +578,10 @@ export function ReturnItemsModal({
                   onChange={(e) => setPickQuery(e.target.value)}
                   placeholder="Buscar cliente por nome…"
                   className="w-full rounded-lg border border-green-300 bg-white px-3 py-2 text-sm"
+                  {...pickNav.input}
                 />
+                {/* Resultados + "Cadastrar" num bloco só: ↓ do campo desce pelos dois (lib/keyboard.tsx). */}
+                <div {...pickNav.results}>
                 {pickOptions.length > 0 && (
                   <ul className="mt-1 max-h-40 overflow-y-auto rounded-lg border border-gray-200 bg-white text-sm shadow-sm">
                     {pickOptions.map((o) => (
@@ -602,6 +611,7 @@ export function ReturnItemsModal({
                     + Cadastrar “{pickQuery.trim()}”
                   </button>
                 )}
+                </div>
                 <p className="mt-1 text-xs text-green-800">
                   O cliente escolhido recebe o crédito e passa a ficar vinculado a esta venda.
                 </p>
@@ -646,6 +656,7 @@ export function ReturnItemsModal({
             Fechar
           </button>
           <button
+            data-confirm
             type="button"
             onClick={confirmar}
             disabled={busy || preview.chosen.length === 0}

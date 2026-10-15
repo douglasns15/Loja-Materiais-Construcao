@@ -23,6 +23,7 @@ import { clearNfeDraft, readNfeDraft, saveNfeDraft } from '@/lib/nfeDraft';
 import { useModule } from '@/lib/useModule';
 import { ProductPicker } from '@/components/ProductPicker';
 import { MoneyInput } from '@/components/MoneyInput';
+import { useModalLayer } from '@/lib/keyboard';
 
 /**
  * Importação de XML de NF-e — tela De-Para (ADR-025, Fatia 2). Lê o XML no navegador (`parseNfeXml`,
@@ -195,6 +196,8 @@ export function NfeImportModal({
   /** Chamado após a importação para a tela recarregar catálogo/movimentações. */
   onImported: () => Promise<void> | void;
 }) {
+  // Esc fecha / F8 confirma nesta janela (pilha de camadas — lib/keyboard.tsx).
+  const layerRef = useModalLayer(onClose);
   // Ramo (ADR-039 F2): sem o módulo de obra, os seletores de unidade escondem milheiro/saco/barra…
   // (preservando a unidade que a nota/produto já trouxe).
   const construction = useModule('CONSTRUCTION_UNITS');
@@ -452,6 +455,7 @@ export function NfeImportModal({
 
   return (
     <div
+      ref={layerRef}
       className="fixed inset-0 z-40 flex items-end justify-center bg-black/30 p-0 sm:items-center sm:p-4"
       onClick={onClose}
     >
@@ -823,6 +827,7 @@ export function NfeImportModal({
               <div className="flex items-center gap-3">
                 <span className="text-xs text-gray-500">{selectedCount} marcado(s)</span>
                 <button
+                  data-confirm
                   type="button"
                   onClick={onConfirm}
                   disabled={saving || selectedCount === 0}

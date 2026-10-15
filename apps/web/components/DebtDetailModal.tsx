@@ -9,6 +9,7 @@ import {
   type PaymentMethod,
 } from '@nexoloja/shared';
 import { apiGet } from '@/lib/api';
+import { useModalLayer } from '@/lib/keyboard';
 
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -27,6 +28,8 @@ const saleCode = (n: number | null, id: string) => formatOrderNumber(n) || `#${i
  * cronológico (vendas com itens, recebimentos e devoluções). Reúsa `GET /receivables/debts/:id`.
  */
 export function DebtDetailModal({ debtId, onClose }: { debtId: string; onClose: () => void }) {
+  // Esc fecha / F8 confirma nesta janela (pilha de camadas — lib/keyboard.tsx).
+  const layerRef = useModalLayer(onClose);
   const [detail, setDetail] = useState<DebtDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -77,6 +80,7 @@ export function DebtDetailModal({ debtId, onClose }: { debtId: string; onClose: 
 
   return (
     <div
+      ref={layerRef}
       className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/30 p-4"
       onClick={onClose}
     >

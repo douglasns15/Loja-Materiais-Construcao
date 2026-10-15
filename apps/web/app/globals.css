@@ -2,6 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Setas nos resultados de busca (ADR-032, adendo 2026-10-15 — lib/keyboard.tsx): o item focado pelo
+   teclado ganha o mesmo realce índigo em todas as listas, para o operador ver onde está. */
+[data-nav-results] :is(button, a, [data-nav-item]):focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: -2px;
+  background-color: #eef2ff;
+}
+/* Em tabelas, a LINHA inteira acompanha o realce do botão focado (ex.: nome do cliente). */
+[data-nav-results] tr:has(:focus-visible) {
+  background-color: #eef2ff;
+}
+
 /* =========================================================================
    Impressão de comprovante / orçamento
    Na tela o #print-area fica oculto; na impressão ele é o único conteúdo.

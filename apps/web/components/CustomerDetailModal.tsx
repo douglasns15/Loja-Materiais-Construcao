@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import type { CustomerProductRow, TopCustomerRow } from '@nexoloja/shared';
 import { apiGet } from '@/lib/api';
 import { formatQtyUnit } from '@/lib/qtyUnit';
+import { useModalLayer } from '@/lib/keyboard';
 
 const BRL = (v: string | number) =>
   Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -47,19 +48,14 @@ export function CustomerDetailModal({
     };
   }, [customer.customerId, from, to]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  const layerRef = useModalLayer(onClose);
 
   const ticket = customer.salesCount > 0 ? customer.revenue / customer.salesCount : 0;
   const partial = customer.costCoverage < 0.999;
 
   return (
     <div
+      ref={layerRef}
       className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/30 p-4"
       onClick={onClose}
     >

@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { BRL_BILL_VALUES, BRL_COIN_VALUES, sumCashCount } from '@nexoloja/core';
 import { readCashDraft, saveCashDraft, type CashMode } from '@/lib/cashDrafts';
+import { useModalLayer } from '@/lib/keyboard';
 
 /**
  * **Contador de cédulas e moedas** (contador de gaveta) — pedido do Owner.
@@ -91,13 +92,7 @@ export function CashCounter({
   );
 
   // Esc fecha (atalho de teclado no desktop — CLAUDE.md → menos cliques).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  const layerRef = useModalLayer(onClose);
 
   const numericCounts = useMemo(() => {
     const out: Record<number, number> = {};
@@ -125,6 +120,7 @@ export function CashCounter({
 
   return (
     <div
+      ref={layerRef}
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-0 sm:items-center sm:p-4"
       onClick={onClose}
     >
@@ -179,6 +175,7 @@ export function CashCounter({
             Limpar
           </button>
           <button
+            data-confirm
             type="button"
             onClick={() => {
               onConfirm(total);

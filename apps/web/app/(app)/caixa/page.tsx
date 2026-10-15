@@ -617,6 +617,7 @@ export default function CaixaPage() {
             )}
 
             <button
+              data-confirm
               type="submit"
               disabled={busy}
               className="w-full rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-500 py-2 font-medium text-white shadow-sm hover:from-indigo-700 hover:to-indigo-600 disabled:opacity-60"
@@ -702,6 +703,7 @@ export default function CaixaPage() {
               className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 disabled:bg-gray-100"
             />
             <button
+              data-confirm
               type="submit"
               disabled={busy || !online}
               className="w-full rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-500 py-2 font-medium text-white shadow-sm hover:from-indigo-700 hover:to-indigo-600 disabled:opacity-60"

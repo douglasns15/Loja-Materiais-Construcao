@@ -8,6 +8,7 @@ import { useOnline } from '@/lib/useOnline';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { MaskedInput } from '@/components/MaskedInput';
 import { CustomerProfile } from '@/components/CustomerProfile';
+import { useSearchNav } from '@/lib/keyboard';
 
 type Customer = {
   id: string;
@@ -49,6 +50,8 @@ export default function CustomersPage() {
   const [saving, setSaving] = useState(false);
   // Busca no servidor: `search` é o que está no campo; a query dispara com debounce.
   const [search, setSearch] = useState('');
+  // Setas nos resultados da busca + F8 no "Adicionar" (lib/keyboard.tsx).
+  const nav = useSearchNav();
   // Perfil do cliente aberto (clicar no nome) — dados + observações + histórico.
   const [profileId, setProfileId] = useState<string | null>(null);
 
@@ -194,6 +197,7 @@ export default function CustomersPage() {
         />
         <button
           type="submit"
+          data-confirm
           disabled={saving}
           className="rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-500 py-2 font-medium text-white shadow-sm hover:from-indigo-700 hover:to-indigo-600 disabled:opacity-60 sm:col-span-4"
         >
@@ -206,6 +210,7 @@ export default function CustomersPage() {
         <input
           type="search"
           placeholder="Buscar cliente (nome, CPF/CNPJ, telefone ou e-mail)…"
+          {...nav.input}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
@@ -226,7 +231,7 @@ export default function CustomersPage() {
               <th className="px-4 py-2">Última alteração</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody {...nav.results}>
             {customers.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-6 text-center text-gray-500">

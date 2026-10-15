@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { cashMovementSchema, type CashMovementInput } from '@nexoloja/shared';
 import { MoneyInput } from '@/components/MoneyInput';
+import { useModalLayer } from '@/lib/keyboard';
 
 /**
  * **Movimentação de Caixa** (Suprimento / Sangria) — entrada/saída manual de dinheiro.
@@ -34,13 +35,7 @@ export function CashMovementModal({
   const [error, setError] = useState<string | null>(null);
 
   // Esc fecha (atalho de teclado no desktop — CLAUDE.md → menos cliques).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  const layerRef = useModalLayer(onClose);
 
   const isSupply = kind === 'SUPPLY';
 
@@ -70,6 +65,7 @@ export function CashMovementModal({
 
   return (
     <div
+      ref={layerRef}
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-0 sm:items-center sm:p-4"
       onClick={onClose}
     >
@@ -145,6 +141,7 @@ export function CashMovementModal({
         {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 
         <button
+          data-confirm
           type="button"
           onClick={confirm}
           disabled={busy}

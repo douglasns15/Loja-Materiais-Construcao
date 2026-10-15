@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { createSupplierSchema, formatCnpj, formatPhoneBr, updateSupplierSchema } from '@nexoloja/shared';
 import { apiDelete, apiGet, apiPatch, apiPost } from '@/lib/api';
 import { MaskedInput } from '@/components/MaskedInput';
+import { useModalLayer } from '@/lib/keyboard';
 
 /** Fornecedor como devolvido pela API (`/suppliers`). */
 export type Supplier = {
@@ -54,6 +55,8 @@ export function SupplierFormModal({
   onSaved: (supplier: Supplier) => void;
   onDeleted?: () => void;
 }) {
+  // Esc fecha / F8 confirma nesta janela (pilha de camadas — lib/keyboard.tsx).
+  const layerRef = useModalLayer(onClose);
   const isEdit = !!supplierId;
   const [form, setForm] = useState<Form>(EMPTY);
   const [loading, setLoading] = useState(isEdit);
@@ -127,7 +130,7 @@ export function SupplierFormModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+    <div ref={layerRef} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div
         className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
@@ -248,6 +251,7 @@ export function SupplierFormModal({
                 <span />
               )}
               <button
+                data-confirm
                 type="submit"
                 disabled={saving || removing}
                 className="rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-500 px-4 py-2 text-sm font-medium text-white shadow-sm hover:from-indigo-700 hover:to-indigo-600 disabled:opacity-50"

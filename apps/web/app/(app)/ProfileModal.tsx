@@ -5,6 +5,7 @@ import { formatPhoneBr, onlyDigits } from '@nexoloja/shared';
 import { apiPatch } from '@/lib/api';
 import { supabase } from '@/lib/supabase';
 import type { Me } from '@/lib/useMe';
+import { useModalLayer } from '@/lib/keyboard';
 
 /**
  * Painel "Meus dados": o próprio usuário edita nome/telefone (via `PATCH /me`) e troca a
@@ -20,6 +21,8 @@ export function ProfileModal({
   onClose: () => void;
   onUpdated: (me: Me) => void;
 }) {
+  // Esc fecha / F8 confirma nesta janela (pilha de camadas — lib/keyboard.tsx).
+  const layerRef = useModalLayer(onClose);
   // --- Dados pessoais ---
   const [name, setName] = useState(me.name);
   const [phone, setPhone] = useState(formatPhoneBr(me.phone));
@@ -100,6 +103,7 @@ export function ProfileModal({
 
   return (
     <div
+      ref={layerRef}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
       onClick={onClose}
     >
@@ -156,6 +160,7 @@ export function ProfileModal({
           </div>
           <div className="flex items-center gap-3">
             <button
+              data-confirm
               type="submit"
               disabled={savingData}
               className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
@@ -215,6 +220,7 @@ export function ProfileModal({
           </div>
           <div className="flex items-center gap-3">
             <button
+              data-confirm
               type="submit"
               disabled={savingPwd || !current || !next || !confirm}
               className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"

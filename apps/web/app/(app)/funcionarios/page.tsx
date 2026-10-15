@@ -16,6 +16,7 @@ import { useReloadOnReconnect } from '@/lib/useReloadOnReconnect';
 import { useOnline } from '@/lib/useOnline';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { MaskedInput } from '@/components/MaskedInput';
+import { useSearchNav } from '@/lib/keyboard';
 
 /**
  * Funcionários (ADR-042) — cadastro simples, SEM login, para indicar o ENTREGADOR de cada entrega
@@ -37,6 +38,8 @@ export default function EmployeesPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
+  // Setas nos resultados da busca + F8 no "Adicionar" (lib/keyboard.tsx).
+  const nav = useSearchNav();
   // Linha em edição (na própria tabela) e linha com a exclusão aguardando confirmação.
   const [editId, setEditId] = useState<string | null>(null);
   const [edit, setEdit] = useState(EMPTY_FORM);
@@ -208,6 +211,7 @@ export default function EmployeesPage() {
           </select>
           <button
             type="submit"
+            data-confirm
             disabled={saving}
             className="rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-500 py-2 font-medium text-white shadow-sm hover:from-indigo-700 hover:to-indigo-600 disabled:opacity-60 sm:col-span-6"
           >
@@ -220,6 +224,7 @@ export default function EmployeesPage() {
         <input
           type="search"
           placeholder="Buscar funcionário (nome, telefone ou e-mail)…"
+          {...nav.input}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className={`w-full ${inputCls}`}
@@ -241,7 +246,7 @@ export default function EmployeesPage() {
               {isAdmin && <th className="px-4 py-2 text-right">Ações</th>}
             </tr>
           </thead>
-          <tbody>
+          <tbody {...nav.results}>
             {filtered.length === 0 ? (
               <tr>
                 <td colSpan={isAdmin ? 6 : 5} className="px-4 py-6 text-center text-gray-500">
@@ -251,7 +256,7 @@ export default function EmployeesPage() {
             ) : (
               filtered.map((r) =>
                 editId === r.id ? (
-                  <tr key={r.id} className="border-t border-gray-100 bg-indigo-50/40">
+                  <tr key={r.id} className="border-t border-gray-100 bg-indigo-50/40" data-confirm-scope>
                     <td className="px-4 py-2">
                       <input
                         id={`emp-edit-name-${r.id}`}
@@ -304,6 +309,7 @@ export default function EmployeesPage() {
                       <button
                         type="button"
                         onClick={() => saveEdit(r.id)}
+                        data-confirm="scoped"
                         className="rounded-lg bg-indigo-600 px-3 py-1 text-xs font-semibold text-white hover:bg-indigo-700"
                       >
                         Salvar

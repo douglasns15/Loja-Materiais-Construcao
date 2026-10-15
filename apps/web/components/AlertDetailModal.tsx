@@ -10,6 +10,7 @@ import {
   type AlertSummary,
 } from '@nexoloja/shared';
 import { apiGet } from '@/lib/api';
+import { useModalLayer } from '@/lib/keyboard';
 
 const BRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -42,13 +43,7 @@ export function AlertDetailModal({
   const [error, setError] = useState<string | null>(null);
 
   // Fecha no Esc.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  const layerRef = useModalLayer(onClose);
 
   const loadProductPage = useCallback(
     async (after: string | null) => {
@@ -99,6 +94,7 @@ export function AlertDetailModal({
 
   return (
     <div
+      ref={layerRef}
       className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto overscroll-contain bg-black/30 p-4"
       onClick={onClose}
     >
