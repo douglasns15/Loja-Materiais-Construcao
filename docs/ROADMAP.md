@@ -17,8 +17,9 @@
 >   lugar) e confirmar a ficha voltando depois da meia-noite. Ver registro de testes "Integração.Cosmos … 2026-10-15".
 >   **Painel Cosmos:** só planos pagos de API (R$ 499,99/mês p/ 100/dia) — franquia grátis provavelmente zerada.
 >   **Fontes alternativas medidas** (204 EANs reais): Open Food/Products/Beauty Facts e UPCitemdb ≈ 0% p/ construção;
->   Kodebar (grátis 50/dia, base ~70 mil) e DotCompany (R$ 0,04/consulta, base 1,9 mi) exigem conta do Owner p/ medir.
->   Disjuntor de limite + memória de 404 no ar (API `34dcd66b`). **Decisão do Owner:** qual fonte testar com conta.
+>   Kodebar medida com conta grátis: 3/47 (~4%) — **não integrada**. Resta DotCompany (R$ 0,04/consulta, base 1,9 mi,
+>   paga) ou plano pago da Cosmos — decisão do Owner. Disjuntor de limite + memória de 404 no ar (API `34dcd66b`).
+>   **Próximo teste:** 1ª consulta Cosmos do dia logo cedo (confirma se a franquia grátis ainda existe).
 > - **Teclado em todas as telas (ADR-032, adendo) CONCLUÍDO e validado pelo Owner** — setas nas buscas, Esc fecha o
 >   pop-up de cima (inclusive a janela flutuante em uso), F8 = Confirmar/Salvar. **Versão web no ar: `eaac2530`**
 >   (API segue `c04e20f8`). Commits locais em `main` — **push do Owner**.

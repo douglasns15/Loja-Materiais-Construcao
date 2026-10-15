@@ -6480,10 +6480,14 @@ Amostra do banco (só leitura): **103** EANs que a Cosmos já achou (gabarito) +
 | Open Products Facts | grátis | 1/103 | 1/101 | irrelevante p/ construção |
 | Open Beauty Facts | grátis | 0/103 | 0/101 | — |
 | UPCitemdb (trial) | grátis 100/dia | 0/30 | 0/30 | base americana |
-| Kodebar | grátis 50/dia por chave (beta); R$ 29/mês 500/dia | demo só cache: 0/4 | — | base própria ~70 mil itens; termos: "dividir conta entre empresas não relacionadas" proibido, plano Profissional (R$ 79) p/ softhouse multi-cliente; precisa conta p/ medir de verdade |
+| Kodebar (API com chave, conta grátis do Owner) | grátis 50/dia por chave (beta); R$ 29/mês 500/dia | **1/25** (só leite em pó; Neutrol, Tek-Bond, Steck, Adelbras, Krona, Tatu = 404) | **2/22** ("Engate rapido", "Lampada led 15w… kian" — sem marca/foto) | base própria ~70 mil itens; ~3 s por consulta; limite de rajada (429 após ~6 seguidas); termos: "dividir conta entre empresas não relacionadas" proibido, plano Profissional (R$ 79) p/ softhouse multi-cliente. **Não integrada** (~4% p/ construção) |
 | DotCompany | API **paga por uso** R$ 0,04/consulta (pré-pago, sem mensalidade; 200 créditos grátis no cadastro); demo 25/dia/IP | 1/2 (Neutrol, com foto+marca+NCM) | 0/1 | base 1,9 mi; amostra pequena — a demo do dia foi gasta por um script que estourou o tempo da ferramenta (respostas perdidas) |
 
 **Feito (código, sem migration):** disjuntor de limite + memória de 404 por isolate (ver técnica §8.2), `msUntilBrasiliaMidnight`
 (+3 testes). shared 149 testes ✅, typecheck API ✅. **NO AR:** API `34dcd66b` (`/health` 200).
-**Não feito:** nenhum provider novo — as gratuitas sem chave não cobrem construção; Kodebar/DotCompany exigem conta do
-Owner (e a DotCompany é paga, contra o "sem API paga" da ADR-025). Decisão do Owner pendente.
+**Não feito:** nenhum provider novo — as gratuitas sem chave não cobrem construção; a Kodebar, medida com a conta
+grátis do Owner (chave só em `apps/api/.dev.vars`, nunca no Worker), também não (3/47). Sobra a DotCompany (paga por
+consulta, contra o "sem API paga" da ADR-025) ou o plano pago da Cosmos — decisão do Owner. Enquanto isso, o catálogo
+cresce pela importação de NF-e (melhor fonte p/ construção, ADR-025) e pelos cadastros manuais.
+**Teste da Cosmos grátis:** 1ª consulta do dia logo cedo — se vier ficha, a franquia existe e algo a consome; se vier
+"limite diário", a franquia grátis acabou.
