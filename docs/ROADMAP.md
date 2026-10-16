@@ -8,12 +8,14 @@
 > custo fixo do Prisma por requisição já passa de 10 ms). **Correção: Owner assinou o Workers Paid** (teto 30 s) —
 > pós-assinatura 130 requisições reais + 30 de stress, 0 falhas. Sem mudança de código. Ver ADR-005, adendo 2026-10-14.
 >
-> **ONDE PARAMOS (2026-10-16, tarde) — Receber conta igual ao PDV (web + API, sem migration):**
+> **ONDE PARAMOS (2026-10-16, tarde) — Receber conta igual ao PDV (web + API, sem migration) — CONCLUÍDO e E2E do Owner
+> VALIDADO (2026-10-16):**
 > - Contas a Receber → Receber: **Dinheiro entregue → Troco/Falta** (core `cashReceiptChange`; troco só na tela) e
 >   **acréscimo do cartão CALCULADO** (core `receiptCardSurcharge`: FIFO do servidor + taxa por venda, líquida de devolução,
 >   por unidade-base; parcial = proporcional; campo editável + "recalcular"). API: itens do `GET /receivables/accounts/:id`
 >   ganham `baseQuantity`/`returnedBaseQty` (aditivo). Core 543/543 (+17), typecheck web/api/shared, testes API verdes.
->   **NO AR: API `8fcccd71`, web `81ce9ea4`** (smoke OK; commit `bfaa0e3`). **Pendentes: E2E do Owner + push.**
+>   **NO AR: API `8fcccd71`, web `81ce9ea4`** (smoke OK; commit `bfaa0e3`). **E2E do Owner VALIDADO** (troco no dinheiro;
+>   acréscimo do cartão total e parcial proporcional — regra aprovada). Pendente só o push do Owner.
 >
 > **ONDE PARAMOS (2026-10-16) — Impressão: quitação + iPhone (só `apps/web`, sem API/migration) — CONCLUÍDO e E2E do
 > Owner VALIDADO (2026-10-16, web `ae03c904`):**
@@ -67,7 +69,7 @@
 > 4. **Planilha — Fatia 4 (De-Para editável + perfis lembrados)** — **ADIADA pelo Owner**; volta para discussão quando
 >    aparecer o primeiro cliente com exportação de outro sistema (ver ADR-041, Fatia 4).
 >
-> **Última atualização:** 2026-10-16 — **Impressão: comprovante de quitação + impressão nativa no iPhone (app instalado) — validados.**
+> **Última atualização:** 2026-10-16 — **Receber conta igual ao PDV (troco + acréscimo do cartão) e impressão (quitação + iPhone nativo) — validados.**
 >
 > - **Teclado em todas as telas (ADR-032, adendo 2026-10-15) — CONCLUÍDO, NO AR e E2E do Owner VALIDADO (2026-10-15);
 >   só `apps/web`, sem migration/API:**

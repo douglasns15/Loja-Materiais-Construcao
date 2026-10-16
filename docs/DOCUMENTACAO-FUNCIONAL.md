@@ -608,3 +608,4 @@ painel da plataforma.
 | 2026-10-16 | Resumos de contas em aberto (de uma venda e do cliente) também dizem "Conta" no papel ("RESUMO DA CONTA", "Vendas em aberto"). |
 | 2026-10-16 | Impressão (§6) conferida pelo Owner no iPhone (app instalado): "Imprimir" abre a impressão do iOS; comprovante de quitação e resumos com "Conta". |
 | 2026-10-16 | Receber conta (§7): troco no dinheiro e acréscimo do cartão calculado como no PDV (proporcional no parcial). |
+| 2026-10-16 | Receber conta (§7) conferido pelo Owner em produção: troco e acréscimo (total e parcial proporcional) funcionando; regra do parcial aprovada. |

@@ -745,7 +745,7 @@ Alertas CALCULADOS sob demanda (custo-zero: nada é gravado; a pendência some q
     rateia o valor pelas vendas em aberto no **mesmo FIFO do servidor** (`distributeAccountPayment`, ordem
     `createdAt, id`) e aplica a cada parte a taxa da venda `receivableSurchargeRate` = Σ(acréscimo/unidade-base ×
     quantidade que ficou) ÷ Σ(valor da mercadoria que ficou), "ficou" = vendido − devolvido. Quitar tudo = acréscimo
-    cheio do que está em aberto; parcial = proporcional (aviso na tela). Campo segue **editável** (`surchargeTouched`
+    cheio do que está em aberto; parcial = proporcional (aviso na tela; regra aprovada pelo Owner no E2E de 2026-10-16). Campo segue **editável** (`surchargeTouched`
     + "recalcular"). Antes (C.3) era digitado à mão com "usar sug." (que ignorava rolo/pacote e devolução).
   - Testes: `packages/core/src/recebimento-conta.test.ts` (17). Sem migration.
 - **UX:** menos cliques, fontes legíveis, atalhos de teclado no desktop.
