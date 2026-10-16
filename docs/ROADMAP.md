@@ -18,6 +18,7 @@
 > - **Ajuste do Owner (mesmo dia):** no iPhone "Imprimir" deve abrir a impressão NATIVA (PDF é escolha dele) →
 >   `window.print()` agora sai no mesmo toque (`flushSync` + logo pré-aquecida); PDF + compartilhar só se o iOS não
 >   abrir em 2 s. Comprovante de quitação diz "Conta" (código segue `D-`). Validado antes: Caixa/Histórico/Contas OK.
+>   **NO AR: web `b6e90b86`** (commit `7d43db0`). **Pendente: E2E do Owner no iPhone + push.**
 > - Typecheck + `next build` verdes. **NO AR (1ª versão): web `54c98598`** (smoke OK; API segue `c04e20f8`), commit `9f6b013`.
 >   **Pendentes (Owner): E2E no iPhone (app instalado) + push.**
 >
