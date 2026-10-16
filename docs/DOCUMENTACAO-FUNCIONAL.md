@@ -510,7 +510,8 @@ marca **CONTA QUITADA**; as vendas a prazo que formavam a conta (código, data, 
 - Disponível para qualquer dívida da aba Quitadas, inclusive as quitadas antes desta melhoria.
 - Pode ser reimpresso quantas vezes quiser; não altera nada na dívida.
 - Documento sem valor fiscal (como os demais comprovantes).
-- Dívida **em aberto** continua com o "Imprimir resumo" (o que o cliente ainda deve).
+- Dívida **em aberto** continua com o "Imprimir resumo" (o que o cliente ainda deve). Ali também o papel usa
+  **Conta**: "RESUMO DA CONTA" (de uma venda ou do cliente inteiro), "Vendas em aberto" e a coluna "Venda".
 
 ### 6.2 Imprimir pelo iPhone/iPad (app instalado)
 
@@ -564,3 +565,4 @@ painel da plataforma.
 | 2026-10-15 | Ficha pelo código de barras (§5): depois do limite diário o Cosmos só é tentado de novo após a meia-noite; código "não encontrado" não é reconsultado por 24 h. |
 | 2026-10-16 | Impressão (§6): comprovante de dívida quitada (aba Quitadas) e impressão pelo iPhone/iPad com o app instalado (PDF + tela de compartilhar → Imprimir). |
 | 2026-10-16 | Impressão (§6): no iPhone/iPad (app instalado) "Imprimir" abre a impressão do iOS; o PDF + compartilhar virou só plano B. Comprovante de quitação diz "Conta" em vez de "Dívida". |
+| 2026-10-16 | Resumos de contas em aberto (de uma venda e do cliente) também dizem "Conta" no papel ("RESUMO DA CONTA", "Vendas em aberto"). |

@@ -93,7 +93,7 @@ export function ReceivableDetailModal({
     // Garante o #print-area do RESUMO montado (não um recibo de parcela) antes de imprimir — na hora
     // (`flushSync`), para o diálogo abrir no mesmo toque (iPhone com o app instalado — lib/print.ts).
     flushSync(() => setPrintPayment(null));
-    const fileName = formatOrderNumber(detail.orderNumber) || 'Divida';
+    const fileName = formatOrderNumber(detail.orderNumber) || 'Conta';
     void printArea({ model: printModel, logoUrl: store?.logoUrl, fileName });
   }
 

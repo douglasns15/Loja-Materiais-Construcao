@@ -734,7 +734,8 @@ Alertas CALCULADOS sob demanda (custo-zero: nada é gravado; a pendência some q
     aberta/quitada em, Original/Recebido/Devolvido, SALDO, "CONTA QUITADA", vendas (código/data/valor a prazo),
     recebimentos (data · forma · valor, cronológicos) e devoluções que abateram (`abatedAmount > 0`). Seletor 80mm/A4;
     PDF `D-0001.pdf`. No papel a palavra é **"Conta"** ("Conta D-0001", "CONTA QUITADA", rodapé "quitação de
-    conta") — decisão do Owner; o código segue `D-000X`. Sem API/banco/migração.
+    conta") — decisão do Owner; o código segue `D-000X`. Idem nos resumos de conta em aberto: `ReceivablePrint`
+    ("RESUMO DA CONTA") e `CustomerAccountPrint` ("Vendas em aberto", coluna "Venda"). Sem API/banco/migração.
 - **UX:** menos cliques, fontes legíveis, atalhos de teclado no desktop.
 
 ---

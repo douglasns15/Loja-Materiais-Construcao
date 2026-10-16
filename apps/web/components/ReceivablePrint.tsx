@@ -34,8 +34,9 @@ function StoreHeader({ store }: { store: Store | null }) {
 }
 
 /**
- * Documento imprimível do RESUMO DE UMA DÍVIDA (conta a receber — ADR-019/022). Espelha o
- * `ReceiptPrint`: fica oculto na tela e só aparece na impressão (regras `@media print` em
+ * Documento imprimível do RESUMO DE UMA DÍVIDA (conta a receber — ADR-019/022). No PAPEL a palavra é
+ * "Conta" ("RESUMO DA CONTA"), não "Dívida" — decisão do Owner 2026-10-16, como no comprovante de
+ * quitação. Espelha o `ReceiptPrint`: fica oculto na tela e só aparece na impressão (regras `@media print` em
  * globals.css, reusa as classes `rc-*`), funcionando em 80mm e A4. Cabeçalho da loja + código da
  * venda de origem (V-000128) + situação (original/recebido/devolvido/saldo) + itens + recebimentos.
  * O nome do PDF (V-000128.pdf) é definido por quem chama `printArea` (ver lib/print.ts).
@@ -47,7 +48,7 @@ export function ReceivablePrint({ store, detail }: { store: Store | null; detail
     <div id="print-area" data-model="80mm">
       <StoreHeader store={store} />
 
-      <div className="rc-title">RESUMO DA DÍVIDA</div>
+      <div className="rc-title">RESUMO DA CONTA</div>
       {code ? <div className="rc-code">Venda {code}</div> : null}
       <div className="rc-date">
         {detail.customerName ?? 'Cliente'} ·{' '}
@@ -180,7 +181,7 @@ export function CustomerAccountPrint({
       </div>
       <div className="rc-pay">
         <div>
-          <span>Dívidas em aberto</span>
+          <span>Vendas em aberto</span>
           <span>{detail.openCount}</span>
         </div>
         {detail.creditBalance > 0 ? (
@@ -196,7 +197,7 @@ export function CustomerAccountPrint({
         <table className="rc-table">
           <thead>
             <tr>
-              <th>Dívida</th>
+              <th>Venda</th>
               <th className="right">Data</th>
               <th className="right">Saldo</th>
             </tr>
