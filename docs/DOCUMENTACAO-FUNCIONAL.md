@@ -10,7 +10,7 @@
 > **Cobertura:** começa pelas entregas de 2026-10-09 (carga do catálogo e balança). As funcionalidades anteriores
 > entram aqui conforme forem tocadas — ver [Pendências de cobertura](#pendências-de-cobertura).
 >
-> **Última atualização:** 2026-10-15.
+> **Última atualização:** 2026-10-16.
 
 ---
 
@@ -25,8 +25,11 @@
 3. [Usuário com mais de uma loja](#3-usuário-com-mais-de-uma-loja)
 4. [Teclado: setas, Esc e F8](#4-teclado-setas-esc-e-f8)
 5. [Ficha do produto pelo código de barras (Cosmos)](#5-ficha-do-produto-pelo-código-de-barras-cosmos)
-6. [Pendências de cobertura](#pendências-de-cobertura)
-7. [Histórico deste documento](#histórico-deste-documento)
+6. [Impressão de comprovantes](#6-impressão-de-comprovantes)
+   - 6.1 [Comprovante de dívida quitada](#61-comprovante-de-dívida-quitada)
+   - 6.2 [Imprimir pelo iPhone/iPad (app instalado)](#62-imprimir-pelo-iphoneipad-app-instalado)
+7. [Pendências de cobertura](#pendências-de-cobertura)
+8. [Histórico deste documento](#histórico-deste-documento)
 
 ---
 
@@ -483,6 +486,54 @@ catálogo, e a próxima consulta do mesmo código é instantânea e não gasta o
 
 ---
 
+## 6. Impressão de comprovantes
+
+Todos os documentos (cupom de venda, orçamento, fechamento de caixa, movimentação do caixa, resumo de dívida,
+recibo de recebimento, entrega e comprovante de quitação) saem em **80mm** (impressora térmica) ou **A4**, escolhido
+no seletor "Imprimir:" ao lado do botão. No computador e no Android abre a janela de impressão do navegador, onde
+também dá para **Salvar como PDF** — o arquivo já vem com o nome do documento (ex.: `V-000128.pdf`, `D-0001.pdf`).
+
+### 6.1 Comprovante de dívida quitada
+
+**Para que serve:** entregar ao cliente a prova de que a dívida foi paga.
+
+**Onde fica:** **Contas a Receber → aba Quitadas →** toque na dívida (ex.: `D-0003`) **→ Imprimir comprovante**.
+
+**O que sai no papel:** dados da loja, "COMPROVANTE DE QUITAÇÃO", código da dívida, nome do cliente e data/hora da
+quitação; quando foi aberta; valores **Original**, **Recebido** e **Devolvido** (se houve); **Saldo R$ 0,00** e a
+marca **DÍVIDA QUITADA**; as vendas a prazo que formavam a dívida (código, data, valor); todos os **recebimentos**
+(data, forma de pagamento, valor) e as **devoluções** que abateram a dívida.
+
+**Regras e limitações**
+
+- Disponível para qualquer dívida da aba Quitadas, inclusive as quitadas antes desta melhoria.
+- Pode ser reimpresso quantas vezes quiser; não altera nada na dívida.
+- Documento sem valor fiscal (como os demais comprovantes).
+- Dívida **em aberto** continua com o "Imprimir resumo" (o que o cliente ainda deve).
+
+### 6.2 Imprimir pelo iPhone/iPad (app instalado)
+
+**Por que é diferente:** com o NexoLoja **instalado na tela de início** do iPhone/iPad, o iOS não abre a janela de
+impressão do navegador — antes o botão "não fazia nada". Agora, nesse caso, o sistema monta o comprovante em **PDF** e
+abre a **tela de compartilhar do iOS**.
+
+**Passo a passo**
+
+1. Toque em **Imprimir** (no PDV, Histórico de Vendas, Caixa, Orçamentos, Entregas ou Contas a Receber), como sempre.
+2. Aguarde um instante — aparece a tela de compartilhar com o arquivo (ex.: `V-000128.pdf`).
+3. Escolha **Imprimir** (impressora AirPrint) — ou **Salvar em Arquivos**, WhatsApp, e-mail etc.
+
+**Limitações**
+
+- Vale só para o app instalado no iPhone/iPad. Pelo **Safari**, no computador e no Android a impressão continua
+  abrindo a janela normal do navegador.
+- A impressora precisa ser compatível com **AirPrint** (ou ter app próprio que apareça na tela de compartilhar).
+- **Relatórios** (a tela inteira) não imprimem pelo app instalado do iPhone: aparece um aviso para abrir pelo Safari
+  ou pelo computador, ou usar **Exportar CSV**.
+- Se fechar a tela de compartilhar, nada é impresso — é só tocar em Imprimir de novo.
+
+---
+
 ## Pendências de cobertura
 
 Funcionalidades já em uso que ainda não estão descritas aqui (entram conforme forem tocadas): PDV (pagamentos,
@@ -507,3 +558,4 @@ painel da plataforma.
 | 2026-10-15 | Teclado (§4) conferido pelo Owner em produção: setas, Esc e F8 funcionando em todas as telas testadas. |
 | 2026-10-15 | Ficha pelo código de barras (§5): a tela distingue "não encontrado no catálogo" de falha do Cosmos (limite do plano, acesso recusado, fora do ar) e de falha de conexão. |
 | 2026-10-15 | Ficha pelo código de barras (§5): depois do limite diário o Cosmos só é tentado de novo após a meia-noite; código "não encontrado" não é reconsultado por 24 h. |
+| 2026-10-16 | Impressão (§6): comprovante de dívida quitada (aba Quitadas) e impressão pelo iPhone/iPad com o app instalado (PDF + tela de compartilhar → Imprimir). |

@@ -5,7 +5,7 @@
 > e diagramas de arquitetura.
 >
 > **Produto:** ERP/PDV multi-tenant, modular e custo-zero (PWA única para Web/Android/iOS).
-> **Última atualização:** 2026-10-15 · **Fontes:** `docs/ARCHITECTURE.md`, `docs/adr/` (ADR-001…043), código do monorepo.
+> **Última atualização:** 2026-10-16 · **Fontes:** `docs/ARCHITECTURE.md`, `docs/adr/` (ADR-001…043), código do monorepo.
 > **Par funcional:** [`docs/DOCUMENTACAO-FUNCIONAL.md`](DOCUMENTACAO-FUNCIONAL.md) — o "como funciona / como configurar" de
 > cada funcionalidade, do ponto de vista de quem usa. Toda mudança de comportamento atualiza os dois.
 
@@ -505,7 +505,7 @@ testável exaustivamente e compartilhada entre as duas apps.
 | `GET /accounts/:customerId` | Extrato da conta (dívida aberta) de um cliente; inclui `debtId`/`debtNumber`/`debtOpenedAt` (ADR-026). |
 | `POST /accounts/:customerId/receive` 🔒 | Recebe pagamento **FIFO** distribuído nas dívidas abertas (um `CashMovement` pelo total). Ao zerar, fecha a **dívida** (ADR-026: `PAID`+`closedAt`). |
 | `GET /debts` | Lista de **dívidas** por status (ADR-026) — default `paid` (aba **Quitadas**), paginada por `closedAt`. Cada linha: `debtNumber`, cliente, `originalTotal`, `salesCount`, `openedAt`/`closedAt`. |
-| `GET /debts/:id` | Extrato de **uma dívida** pelo id (ADR-026): cabeçalho (código/status/datas), resumo (original/recebido/devolvido/saldo) e as vendas a prazo com itens + recebimentos + devoluções. Usado no detalhe da aba Quitadas. |
+| `GET /debts/:id` | Extrato de **uma dívida** pelo id (ADR-026): cabeçalho (código/status/datas), resumo (original/recebido/devolvido/saldo) e as vendas a prazo com itens + recebimentos + devoluções. Usado no detalhe da aba Quitadas e no **comprovante de quitação** (`DebtPaidPrint`). |
 | `GET /:id` | Detalhe de uma dívida. |
 | `PATCH /:id` 🔒 | Edita a dívida (ex.: notas, vencimento). |
 | `POST /:id/receive` 🔒 | Recebe pagamento de **uma** dívida específica. Ao quitar o último recebível, fecha a **dívida** (ADR-026). |
@@ -708,6 +708,26 @@ Alertas CALCULADOS sob demanda (custo-zero: nada é gravado; a pendência some q
   - Sem dependência nova, sem API/banco/migração.
   - **Convenção para código novo:** todo pop-up usa `useModalLayer` (+ `ref` no overlay) e marca o botão principal
     com `data-confirm`; toda busca com lista de resultados espalha `useSearchNav()` no campo e na lista.
+- **Impressão de comprovantes (`lib/print.ts`, 2026-10-16).** Toda impressão de documento passa por
+  `printArea({ model, logoUrl, fileName })`: marca o `#print-area` com `data-model` (80mm/A4), injeta o `@page`,
+  pré-carrega a logo e chama `window.print()` (PDF nomeado pelo código via `document.title`).
+  - **iPhone/iPad com o app instalado** (`isIosStandalone()`: UA iPhone/iPad/iPod ou `MacIntel` com toque, e
+    `navigator.standalone` / `display-mode: standalone`): o iOS **ignora** `window.print()` nesse modo (sintoma do
+    Owner: "nada acontece"; no Safari e no Android abre normal). Ali `printArea` desvia para `printViaIosShare`: clona o
+    `#print-area` num invólucro fora da tela (`.rc-capture-host` + `.rc-capture`, mesma técnica do comprovante no
+    WhatsApp), fotografa num PDF (`shareReceiptPdf`, `lib/receiptShare.ts` — html-to-image + jsPDF sob demanda) e abre
+    o Web Share só com o arquivo (`text` agora é opcional). A folha do iOS oferece **Imprimir** (AirPrint), Salvar em
+    Arquivos etc. Largura da captura: 302 px (80mm) ou **794 px** (A4, regra `#print-area.rc-capture[data-model='A4']`,
+    padding 40 px, fonte 13 px). Cancelar a folha (`AbortError`) é silencioso; outra falha loga e avisa "Toque em
+    Imprimir de novo". Vale para todas as telas que imprimem (PDV, Histórico, Caixa, Orçamentos, Entregas, Contas a
+    Receber) sem mudar nenhuma delas.
+  - **Relatórios** imprimem a tela inteira (`body.print-report`), não um cupom — no app instalado do iOS mostram um
+    aviso orientando a usar o Safari/computador ou "Exportar CSV" (não viram PDF por foto).
+  - **Comprovante de quitação** (aba Quitadas de Contas a Receber): `DebtPaidPrint` (`components/ReceivablePrint.tsx`)
+    montado no `DebtDetailModal` a partir do `GET /receivables/debts/:id` já existente — loja, `D-000X`, cliente,
+    aberta/quitada em, Original/Recebido/Devolvido, SALDO, "DÍVIDA QUITADA", vendas (código/data/valor a prazo),
+    recebimentos (data · forma · valor, cronológicos) e devoluções que abateram (`abatedAmount > 0`). Seletor 80mm/A4;
+    PDF `D-0001.pdf`. Sem API/banco/migração.
 - **UX:** menos cliques, fontes legíveis, atalhos de teclado no desktop.
 
 ---

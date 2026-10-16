@@ -8,6 +8,15 @@
 > custo fixo do Prisma por requisição já passa de 10 ms). **Correção: Owner assinou o Workers Paid** (teto 30 s) —
 > pós-assinatura 130 requisições reais + 30 de stress, 0 falhas. Sem mudança de código. Ver ADR-005, adendo 2026-10-14.
 >
+> **ONDE PARAMOS (2026-10-16) — Impressão: quitação + iPhone (só `apps/web`, sem API/migration):**
+> - **Comprovante de dívida quitada:** Contas a Receber → Quitadas → dívida → **Imprimir comprovante** (80mm/A4, PDF
+>   `D-0001.pdf`) — `DebtPaidPrint` no `DebtDetailModal`, sobre o `GET /receivables/debts/:id` existente.
+> - **Impressão no iPhone com o app instalado** ("nada acontece" — Caixa e Histórico; Android OK): o iOS ignora
+>   `window.print()` no modo standalone. `printArea` agora detecta (`isIosStandalone`) e gera o **PDF + tela de
+>   compartilhar** (Imprimir/AirPrint, Arquivos) com o mesmo motor do comprovante no WhatsApp — vale para todas as telas
+>   que imprimem. Relatórios no app do iPhone mostram aviso (usar Safari/computador/CSV).
+> - Typecheck + `next build` verdes. **Deploy da web, E2E no iPhone do Owner e push: PENDENTES.**
+>
 > **ONDE PARAMOS / PRÓXIMOS PASSOS (2026-10-15):**
 > - **Cosmos "sempre sem ficha" — DIAGNOSTICADO:** a Cosmos responde **429 "Limite diário de consultas excedido"**
 >   (token válido; franquia reinicia à meia-noite BRT); o código engolia como "não encontrado". Última ficha Cosmos no

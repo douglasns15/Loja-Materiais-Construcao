@@ -17,6 +17,7 @@ import { useReloadOnReconnect } from '@/lib/useReloadOnReconnect';
 import { useOnline } from '@/lib/useOnline';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { csvNumber, downloadCsv, toCsv } from '@/lib/csv';
+import { isIosStandalone } from '@/lib/print';
 import { formatQtyUnit } from '@/lib/qtyUnit';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { CashMovementsList } from '@/components/CashMovementsList';
@@ -428,6 +429,14 @@ export default function RelatoriosPage() {
    * o usuário escolhe "Salvar como PDF" na caixa de impressão do navegador.
    */
   const handlePrint = useCallback(() => {
+    // iPhone/iPad com o app instalado: o iOS ignora `window.print()` (lib/print.ts). O relatório é a
+    // tela inteira (não um cupom), então não vira PDF por foto — orienta a abrir pelo Safari.
+    if (isIosStandalone()) {
+      window.alert(
+        'No app instalado do iPhone/iPad o iOS não abre a impressão do relatório. Abra o sistema pelo Safari (ou no computador) para imprimir ou salvar em PDF. Use "Exportar CSV" para levar os dados.',
+      );
+      return;
+    }
     document.body.classList.add('print-report');
     const cleanup = () => {
       document.body.classList.remove('print-report');

@@ -3,11 +3,13 @@
 import {
   formatCnpj,
   formatDateBr,
+  formatDebtNumber,
   formatOrderNumber,
   formatPhoneBr,
   PAYMENT_METHOD_LABELS,
   RECEIVABLE_STATUS_LABELS,
   type CustomerAccountDetail,
+  type DebtDetail,
   type PaymentMethod,
   type ReceivableDetail,
 } from '@nexoloja/shared';
@@ -240,6 +242,121 @@ export function CustomerAccountPrint({
 
       <footer className="rc-foot">
         Resumo da conta do cliente — documento sem valor fiscal.
+      </footer>
+    </div>
+  );
+}
+
+/**
+ * Documento imprimível do COMPROVANTE DE QUITAÇÃO de uma dívida (aba **Quitadas** — ADR-026). É o
+ * papel que o cliente leva como prova de que a dívida `D-000X` foi paga: cabeçalho da loja + código
+ * da dívida + abertura/quitação + resumo (original/recebido/devolvido/saldo zerado) + as vendas que a
+ * compunham + todos os recebimentos (data, forma, valor) + as devoluções que abateram. Mesmas
+ * classes `rc-*` e modelos 80mm/A4 dos outros comprovantes. O PDF sai como "D-0001.pdf" (nome dado
+ * por quem chama `printArea` — `DebtDetailModal`).
+ */
+export function DebtPaidPrint({ store, detail }: { store: Store | null; detail: DebtDetail }) {
+  const payments = detail.receivables
+    .flatMap((r) => r.payments)
+    .sort((a, b) => new Date(a.paidAt).getTime() - new Date(b.paidAt).getTime());
+  const returns = (detail.returns ?? []).filter((rt) => Number(rt.abatedAmount) > 0);
+  return (
+    <div id="print-area" data-model="80mm">
+      <StoreHeader store={store} />
+
+      <div className="rc-title">COMPROVANTE DE QUITAÇÃO</div>
+      <div className="rc-code">Dívida {formatDebtNumber(detail.debtNumber)}</div>
+      <div className="rc-date">
+        {detail.customerName ?? 'Cliente'}
+        {detail.closedAt ? ` · quitada em ${new Date(detail.closedAt).toLocaleString('pt-BR')}` : ''}
+      </div>
+
+      <div className="rc-pay">
+        <div>
+          <span>Aberta em</span>
+          <span>{new Date(detail.openedAt).toLocaleDateString('pt-BR')}</span>
+        </div>
+        <div>
+          <span>Original</span>
+          <span>{BRL(detail.originalTotal)}</span>
+        </div>
+        <div>
+          <span>Recebido</span>
+          <span>{BRL(detail.settledTotal)}</span>
+        </div>
+        {detail.returnedTotal > 0 ? (
+          <div>
+            <span>Devolvido</span>
+            <span>{BRL(detail.returnedTotal)}</span>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="rc-total">
+        <span>SALDO</span>
+        <span>{BRL(detail.balance)}</span>
+      </div>
+      <div className="rc-code">DÍVIDA QUITADA</div>
+
+      {/* Vendas a prazo que compunham a dívida (código + data + valor a prazo). */}
+      {detail.receivables.length > 0 ? (
+        <table className="rc-table">
+          <thead>
+            <tr>
+              <th>Venda</th>
+              <th className="right">Data</th>
+              <th className="right">Valor</th>
+            </tr>
+          </thead>
+          <tbody>
+            {detail.receivables.map((r) => (
+              <tr key={r.id}>
+                <td>{formatOrderNumber(r.orderNumber) || '—'}</td>
+                <td className="right">{new Date(r.createdAt).toLocaleDateString('pt-BR')}</td>
+                <td className="right">{BRL(r.originalAmount)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : null}
+
+      {/* Recebimentos (data + forma + valor), do mais antigo ao mais novo. */}
+      {payments.length > 0 ? (
+        <div className="rc-pay">
+          <div>
+            <span style={{ fontWeight: 700 }}>Recebimentos</span>
+            <span />
+          </div>
+          {payments.map((p) => (
+            <div key={p.id}>
+              <span>
+                {new Date(p.paidAt).toLocaleDateString('pt-BR')} ·{' '}
+                {PAYMENT_METHOD_LABELS[p.method as PaymentMethod] ?? p.method}
+              </span>
+              <span>{BRL(p.amount)}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {/* Devoluções que abateram a dívida. */}
+      {returns.length > 0 ? (
+        <div className="rc-pay">
+          <div>
+            <span style={{ fontWeight: 700 }}>Devoluções</span>
+            <span />
+          </div>
+          {returns.map((rt) => (
+            <div key={rt.id}>
+              <span>{new Date(rt.createdAt).toLocaleDateString('pt-BR')}</span>
+              <span>− {BRL(rt.abatedAmount)}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      <footer className="rc-foot">
+        Comprovante de quitação de dívida — documento sem valor fiscal.
       </footer>
     </div>
   );

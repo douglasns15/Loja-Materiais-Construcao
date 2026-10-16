@@ -9,6 +9,9 @@ import {
   type PaymentMethod,
 } from '@nexoloja/shared';
 import { apiGet } from '@/lib/api';
+import { printArea } from '@/lib/print';
+import { DebtPaidPrint } from '@/components/ReceivablePrint';
+import type { Store } from '@/components/ReceiptPrint';
 import { useModalLayer } from '@/lib/keyboard';
 
 const BRL = (v: string | number) =>
@@ -26,12 +29,32 @@ const saleCode = (n: number | null, id: string) => formatOrderNumber(n) || `#${i
  * Detalhe (só leitura) de UMA dívida do cliente pelo id (ADR-026) — usado na aba **Quitadas**.
  * Cabeçalho com o código `D-000X` + status, resumo (original/recebido/devolvido/saldo) e o extrato
  * cronológico (vendas com itens, recebimentos e devoluções). Reúsa `GET /receivables/debts/:id`.
+ * "Imprimir comprovante" gera o COMPROVANTE DE QUITAÇÃO (80mm/A4, PDF "D-0001.pdf") — `DebtPaidPrint`.
  */
 export function DebtDetailModal({ debtId, onClose }: { debtId: string; onClose: () => void }) {
   // Esc fecha / F8 confirma nesta janela (pilha de camadas — lib/keyboard.tsx).
   const layerRef = useModalLayer(onClose);
   const [detail, setDetail] = useState<DebtDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Impressão do comprovante de quitação: identidade da loja (cabeçalho) + modelo do papel.
+  const [store, setStore] = useState<Store | null>(null);
+  const [printModel, setPrintModel] = useState<'80mm' | 'A4'>('80mm');
+
+  // Identidade da loja para o cabeçalho da impressão (uma vez).
+  useEffect(() => {
+    apiGet<Store>('/tenant').then(setStore).catch(() => {});
+  }, []);
+
+  /** Abre o diálogo de impressão do comprovante de quitação. O PDF é nomeado pelo código (D-0001). */
+  async function imprimir() {
+    if (!detail) return;
+    await printArea({
+      model: printModel,
+      logoUrl: store?.logoUrl,
+      fileName: formatDebtNumber(detail.debtNumber),
+    });
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -134,6 +157,26 @@ export function DebtDetailModal({ debtId, onClose }: { debtId: string; onClose: 
               ))}
             </div>
 
+            {/* Comprovante de quitação — PDF nomeado pelo código da dívida ("D-0001.pdf"). */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm text-gray-600">Imprimir:</span>
+              <select
+                value={printModel}
+                onChange={(e) => setPrintModel(e.target.value as '80mm' | 'A4')}
+                className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
+              >
+                <option value="80mm">80mm</option>
+                <option value="A4">A4</option>
+              </select>
+              <button
+                type="button"
+                onClick={imprimir}
+                className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
+              >
+                Imprimir comprovante
+              </button>
+            </div>
+
             {/* Extrato. */}
             <div>
               <h3 className="mb-2 text-sm font-semibold">Extrato da dívida</h3>
@@ -196,6 +239,9 @@ export function DebtDetailModal({ debtId, onClose }: { debtId: string; onClose: 
                 ))}
               </ul>
             </div>
+
+            {/* Comprovante de quitação imprimível (oculto na tela; só aparece na impressão). */}
+            <DebtPaidPrint store={store} detail={detail} />
           </>
         )}
       </div>

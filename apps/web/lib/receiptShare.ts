@@ -22,7 +22,9 @@ type ShotOptions = {
  * Imagem × PDF: a imagem aparece INLINE no WhatsApp (o cliente vê na hora); o PDF vira anexo de
  * documento (mais formal, melhor p/ imprimir/arquivar — típico de orçamento).
  */
-type ShareOpts = { fileName: string; text: string; title: string };
+// `text` é opcional: na impressão pelo iPhone (lib/print.ts) vai só o arquivo — o operador toca
+// em "Imprimir" na folha de compartilhar do iOS, sem legenda junto.
+type ShareOpts = { fileName: string; text?: string; title: string };
 
 /** Envia o comprovante como IMAGEM (PNG). */
 export async function shareReceiptImage(node: HTMLElement, opts: ShareOpts): Promise<void> {
@@ -46,7 +48,7 @@ export async function shareReceiptPdf(node: HTMLElement, opts: ShareOpts): Promi
 async function shareFile(file: File, opts: ShareOpts): Promise<void> {
   const nav = navigator as Navigator & { canShare?: (data: ShareData) => boolean };
   if (nav.canShare && nav.canShare({ files: [file] })) {
-    await nav.share({ files: [file], title: opts.title, text: opts.text });
+    await nav.share({ files: [file], title: opts.title, ...(opts.text ? { text: opts.text } : {}) });
     return;
   }
   const url = URL.createObjectURL(file);
