@@ -13,10 +13,12 @@ import {
   type CustomerAccountsResponse,
   type DebtListRow,
   type DebtsPage,
+  type AccountReceivableDetail,
   type PaymentMethod,
   type ReceivableItem,
   type ReceiveAccountResult,
 } from '@nexoloja/shared';
+import { cashReceiptChange, receiptCardSurcharge, surchargePerBaseUnit } from '@nexoloja/core';
 import { apiGet, apiPost } from '@/lib/api';
 import { useReloadOnReconnect } from '@/lib/useReloadOnReconnect';
 import { OfflineNotice } from '@/components/OfflineNotice';
@@ -75,9 +77,15 @@ export default function ContasAReceberPage() {
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState<PaymentMethod>('CASH');
   const [busy, setBusy] = useState(false);
-  // Acréscimo de cartão ao receber (ADR-022, Fatia C.3): itens da dívida (p/ o aviso) + valor MANUAL.
-  const [debtItems, setDebtItems] = useState<ReceivableItem[]>([]);
+  // Acréscimo de cartão ao receber (ADR-022, Fatia C.3 → calculado como no PDV, 2026-10-16): as vendas
+  // em aberto da conta, na ordem do FIFO do servidor, com os itens. O valor é CALCULADO
+  // (`receiptCardSurcharge`, core); o operador ainda pode ajustar (`surchargeTouched`).
+  const [acctReceivables, setAcctReceivables] = useState<AccountReceivableDetail[]>([]);
   const [surchargeInput, setSurchargeInput] = useState('');
+  const [surchargeTouched, setSurchargeTouched] = useState(false);
+  // Dinheiro: quanto o cliente ENTREGOU (opcional) → troco, igual ao PDV. Só informativo: no caixa
+  // entra o valor recebido (o troco volta ao cliente).
+  const [cashGiven, setCashGiven] = useState('');
 
   const loadAccounts = useCallback(async () => {
     try {
@@ -152,25 +160,66 @@ export default function ContasAReceberPage() {
 
   const totalOwed = useMemo(() => accounts.reduce((acc, a) => acc + a.totalBalance, 0), [accounts]);
 
+  // Acréscimo de cartão CALCULADO para o valor digitado (igual ao PDV): rateia o recebido pelas vendas
+  // no mesmo FIFO do servidor e aplica o acréscimo proporcional de cada uma. 0 fora do cartão.
+  const calcSurcharge = useMemo(() => {
+    if (!isCardMethod(method)) return 0;
+    return receiptCardSurcharge(
+      Math.max(0, Number(amount) || 0),
+      acctReceivables.map((r) => ({
+        id: r.id,
+        balance: r.balance,
+        items: r.items.map((it) => ({
+          total: Number(it.total),
+          baseQuantity: Number(it.baseQuantity ?? it.quantity),
+          returnedBaseQty: Number(it.returnedBaseQty ?? 0),
+          surchargePerBase: surchargePerBaseUnit(
+            { surchargeDebit: Number(it.surchargeDebit ?? 0), surchargeCredit: Number(it.surchargeCredit ?? 0) },
+            method === 'DEBIT_CARD' ? 'DEBIT_CARD' : 'CREDIT_CARD',
+          ),
+        })),
+      })),
+    );
+  }, [method, amount, acctReceivables]);
+  // O que vai ser cobrado de acréscimo: o calculado, ou o ajuste do operador.
+  const surchargeValue = isCardMethod(method)
+    ? surchargeTouched
+      ? Math.max(0, Number(surchargeInput) || 0)
+      : calcSurcharge
+    : 0;
+  // Troco / falta no dinheiro (core — mesma conta do PDV, em centavos).
+  const cashStatus = cashReceiptChange(Math.max(0, Number(amount) || 0), Number(cashGiven) || 0);
+
   function openReceiveAccount(a: CustomerAccountRow) {
     setAcctSelected(a);
     setAmount(String(a.totalBalance));
     setMethod('CASH');
     setSurchargeInput('');
-    setDebtItems([]);
+    setSurchargeTouched(false);
+    setCashGiven('');
+    setAcctReceivables([]);
     setError(null);
     setInfo(null);
-    // Itens de TODAS as dívidas em aberto da conta — p/ o aviso de acréscimo por cartão (C.3).
+    // Vendas em aberto da conta, com itens — base do acréscimo de cartão calculado. Mesma ordem do FIFO
+    // do servidor (mais antiga primeiro: createdAt, id); quitadas (saldo 0) ficam de fora.
     apiGet<CustomerAccountDetail>(`/receivables/accounts/${a.customerId}`)
-      .then((d) => setDebtItems(d.receivables.flatMap((r) => r.items)))
-      .catch(() => setDebtItems([]));
+      .then((d) =>
+        setAcctReceivables(
+          d.receivables
+            .filter((r) => r.balance > 0)
+            .sort((x, y) =>
+              x.createdAt === y.createdAt ? x.id.localeCompare(y.id) : x.createdAt < y.createdAt ? -1 : 1,
+            ),
+        ),
+      )
+      .catch(() => setAcctReceivables([]));
   }
 
   async function onReceiveAccount(e: React.FormEvent) {
     e.preventDefault();
     if (!acctSelected) return;
     setError(null);
-    const surcharge = isCardMethod(method) ? Math.max(0, Number(surchargeInput) || 0) : 0;
+    const surcharge = Number(surchargeValue.toFixed(2));
     const parsed = receiveReceivableSchema.safeParse({
       amount: Number(amount),
       method,
@@ -184,13 +233,23 @@ export default function ContasAReceberPage() {
       setError(`O valor não pode passar do saldo da dívida (${BRL(acctSelected.totalBalance)}).`);
       return;
     }
+    // Dinheiro: o que o cliente entregou não pode ser menos que o valor a receber (receber menos =
+    // diminuir o "Valor a receber").
+    if (method === 'CASH' && cashStatus.short > 0) {
+      setError(`O dinheiro entregue é menor que o valor a receber (faltam ${BRL(cashStatus.short)}).`);
+      return;
+    }
+    const change = method === 'CASH' ? cashStatus.change : 0;
     setBusy(true);
     try {
       const res = await apiPost<ReceiveAccountResult>(
         `/receivables/accounts/${acctSelected.customerId}/receive`,
         parsed.data,
       );
-      const cashNote = method === 'CASH' ? ' O valor entrou no caixa como suprimento.' : '';
+      const cashNote =
+        method === 'CASH'
+          ? ` O valor entrou no caixa como suprimento.${change > 0 ? ` Troco: ${BRL(change)}.` : ''}`
+          : '';
       setInfo(
         res.accountCleared
           ? `Dívida de ${acctSelected.customerName ?? 'cliente'} quitada. ✅${cashNote}`
@@ -333,6 +392,7 @@ export default function ContasAReceberPage() {
               )}
             </div>
 
+            {renderCashBlock()}
             {renderSurchargeBlock()}
 
             <div className="grid grid-cols-2 gap-2">
@@ -375,17 +435,61 @@ export default function ContasAReceberPage() {
   // Render helpers (fecham sobre o estado do componente)
   // -------------------------------------------------------------------------
 
-  /** Bloco de acréscimo de cartão (ADR-022, Fatia C.3): só com forma de cartão E item da dívida com
-   *  acréscimo naquela forma; valor MANUAL. Fecha sobre `method`/`debtItems`/`surchargeInput`/`amount`. */
+  /** Dinheiro (igual ao PDV): campo "Dinheiro entregue" (opcional) + Troco / Falta. O troco é só
+   *  informativo — no caixa entra o "Valor a receber". Fecha sobre `method`/`cashGiven`/`cashStatus`. */
+  function renderCashBlock() {
+    if (method !== 'CASH') return null;
+    return (
+      <div className="space-y-2">
+        <div>
+          <label htmlFor="acct-entregue" className="mb-1 block text-sm text-gray-600">
+            Dinheiro entregue <span className="text-gray-400">(para calcular o troco)</span>
+          </label>
+          <MoneyInput
+            id="acct-entregue"
+            value={cashGiven}
+            onChange={setCashGiven}
+            placeholder="0,00"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+          />
+        </div>
+        {Number(cashGiven) > 0 && (
+          <div className="rounded-lg bg-gray-50 px-3 py-2 ring-1 ring-gray-200">
+            {cashStatus.short > 0 ? (
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-red-800">Falta</span>
+                <span className="text-lg font-bold text-red-700">{BRL(cashStatus.short)}</span>
+              </div>
+            ) : cashStatus.change > 0 ? (
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-green-800">Troco</span>
+                <span className="text-2xl font-bold text-green-700">{BRL(cashStatus.change)}</span>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-700">Valor exato</span>
+                <span className="text-lg font-bold text-gray-900">sem troco</span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  /** Bloco de acréscimo de cartão (ADR-022, Fatia C.3 → calculado como no PDV, 2026-10-16): só com
+   *  forma de cartão E item em aberto com acréscimo naquela forma. O valor sai CALCULADO
+   *  (`calcSurcharge`: proporcional ao recebido, pelo FIFO do servidor); o operador pode ajustar e
+   *  voltar ao calculado. Fecha sobre `method`/`acctReceivables`/`surcharge*`/`amount`. */
   function renderSurchargeBlock() {
     if (!isCardMethod(method)) return null;
     const perUnit = (it: ReceivableItem) =>
       Number((method === 'DEBIT_CARD' ? it.surchargeDebit : it.surchargeCredit) ?? 0);
-    const items = debtItems.filter((it) => perUnit(it) > 0);
+    const items = acctReceivables.flatMap((r) => r.items).filter((it) => perUnit(it) > 0);
     if (items.length === 0) return null;
     const label = method === 'DEBIT_CARD' ? 'débito' : 'crédito';
-    const suggested = Number(items.reduce((s, it) => s + perUnit(it) * Number(it.quantity), 0).toFixed(2));
-    const surcharge = Math.max(0, Number(surchargeInput) || 0);
+    const fullBalance = acctSelected?.totalBalance ?? 0;
+    const partial = (Number(amount) || 0) + 0.005 < fullBalance;
     return (
       <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
         <p className="text-xs font-medium text-amber-900">Acréscimo no {label} (cadastro do produto):</p>
@@ -396,6 +500,11 @@ export default function ContasAReceberPage() {
             </li>
           ))}
         </ul>
+        {partial && (
+          <p className="text-[11px] text-amber-800">
+            Recebimento parcial: o acréscimo é proporcional ao valor recebido.
+          </p>
+        )}
         <div className="flex items-center justify-between gap-2">
           <label htmlFor="surcharge" className="text-sm text-amber-900">
             Acréscimo a cobrar
@@ -403,25 +512,33 @@ export default function ContasAReceberPage() {
           <div className="flex items-center gap-1">
             <MoneyInput
               id="surcharge"
-              value={surchargeInput}
-              onChange={setSurchargeInput}
+              value={surchargeTouched ? surchargeInput : String(calcSurcharge)}
+              onChange={(v) => {
+                setSurchargeTouched(true);
+                setSurchargeInput(v);
+              }}
               placeholder="0,00"
               className="w-28 rounded-lg border border-amber-300 bg-white px-2 py-1 text-right"
             />
-            <button
-              type="button"
-              onClick={() => setSurchargeInput(String(suggested))}
-              className="shrink-0 rounded-lg px-2 py-1 text-xs font-medium text-indigo-600 hover:underline"
-              title={`Sugerido: ${BRL(suggested)}`}
-            >
-              usar sug.
-            </button>
+            {surchargeTouched && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSurchargeTouched(false);
+                  setSurchargeInput('');
+                }}
+                className="shrink-0 rounded-lg px-2 py-1 text-xs font-medium text-indigo-600 hover:underline"
+                title={`Calculado: ${BRL(calcSurcharge)}`}
+              >
+                recalcular
+              </button>
+            )}
           </div>
         </div>
         <div className="flex items-center justify-between rounded-lg bg-white px-3 py-1.5 text-sm ring-1 ring-amber-200">
-          <span className="text-gray-600">Total a receber</span>
+          <span className="text-gray-600">Total a cobrar no cartão</span>
           <span className="font-semibold tabular-nums">
-            {BRL(Math.max(0, Number(amount) || 0) + surcharge)}
+            {BRL(Math.max(0, Number(amount) || 0) + surchargeValue)}
           </span>
         </div>
       </div>

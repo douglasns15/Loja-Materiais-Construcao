@@ -378,8 +378,9 @@ receivables.post('/accounts/:customerId/receive', requireActiveTenant, async (c)
     return c.json({ ok: false, error: 'Dados do recebimento inválidos.' }, 400);
   }
   const { amount, method, reference } = parsed.data;
-  // Acréscimo de cartão (ADR-022, Fatia C.3): valor MANUAL digitado pelo operador, só no cartão.
-  // Na conta (FIFO), é um valor único da forma escolhida — anexa ao 1º recebimento do rateio (o
+  // Acréscimo de cartão (ADR-022, Fatia C.3): valor vindo da tela, só no cartão. Desde 2026-10-16 a
+  // tela o CALCULA como no PDV (`receiptCardSurcharge`, core — proporcional ao recebido, pelo mesmo
+  // FIFO daqui) e o operador ainda pode ajustar; o servidor grava o que vier. Na conta (FIFO), é um valor único da forma escolhida — anexa ao 1º recebimento do rateio (o
   // relatório soma por forma, então tanto faz em qual linha fica). Receita a mais, não abate a dívida.
   const isCard = method === 'DEBIT_CARD' || method === 'CREDIT_CARD';
   const surcharge = isCard ? Number((parsed.data.surcharge ?? 0).toFixed(2)) : 0;
@@ -614,15 +615,17 @@ receivables.get('/accounts/:customerId', async (c) => {
       createdAt: r.createdAt,
       orderTotal: r.order?.total ?? null,
       // A venda no extrato mostra os itens ORIGINAIS (a devolução é evento próprio); os campos
-      // base/devolvido só alimentam o resumo consolidado abaixo. Achata o acréscimo do produto p/ o
-      // aviso ao receber a conta por cartão (ADR-022, Fatia C.3).
-      items: (r.order?.items ?? []).map(
-        ({ baseQuantity: _b, returnedBaseQty: _r, product, ...rest }) => ({
-          ...rest,
-          surchargeDebit: String(product?.surchargeDebit ?? 0),
-          surchargeCredit: String(product?.surchargeCredit ?? 0),
-        }),
-      ),
+      // base/devolvido alimentam o resumo consolidado abaixo. Achata o acréscimo do produto p/ o
+      // aviso ao receber a conta por cartão (ADR-022, Fatia C.3). `baseQuantity`/`returnedBaseQty`
+      // também vão ao cliente (2026-10-16): o acréscimo é por UNIDADE-BASE, e a tela o calcula como
+      // no PDV (`receiptCardSurcharge`, core) — rolo/pacote multiplica certo, devolvido sai da conta.
+      items: (r.order?.items ?? []).map(({ baseQuantity, returnedBaseQty, product, ...rest }) => ({
+        ...rest,
+        baseQuantity: String(baseQuantity ?? rest.quantity), // legado sem base = fator 1
+        returnedBaseQty: String(returnedBaseQty ?? 0),
+        surchargeDebit: String(product?.surchargeDebit ?? 0),
+        surchargeCredit: String(product?.surchargeCredit ?? 0),
+      })),
       payments: r.payments,
     }));
 

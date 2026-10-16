@@ -339,6 +339,83 @@ export function distributeAccountPayment(
 }
 
 // ---------------------------------------------------------------------------
+// Recebimento da conta: acréscimo de cartão e troco (igual ao PDV — 2026-10-16)
+// ---------------------------------------------------------------------------
+
+/** Um item de uma venda a prazo, para o acréscimo de cartão ao receber (ADR-016 × ADR-022). */
+export interface ReceiptSurchargeItem {
+  /** Valor da linha na venda (R$, já com desconto da linha). */
+  total: number;
+  /** Quantidade vendida na UNIDADE-BASE (o acréscimo é cadastrado por unidade-base). */
+  baseQuantity: number;
+  /** Quanto dessa linha já voltou em devolução, na unidade-base. */
+  returnedBaseQty?: number;
+  /** Acréscimo do produto por unidade-base NA FORMA escolhida (`surchargePerBaseUnit`). */
+  surchargePerBase: number;
+}
+
+/** Uma venda a prazo em aberto + seus itens (para o rateio do acréscimo no recebimento). */
+export interface ReceiptSurchargeReceivable extends AccountReceivable {
+  items: ReceiptSurchargeItem[];
+}
+
+/**
+ * Quanto de acréscimo de cartão cada R$ 1 da venda carrega: Σ (acréscimo/unidade-base × quantidade
+ * que ficou) ÷ Σ (valor da mercadoria que ficou). "Que ficou" = vendido − devolvido. É a mesma conta
+ * do PDV (o cartão sobe o preço do item com acréscimo), expressa como fração do valor — assim vale
+ * para qualquer parte da venda, inclusive quando parte foi paga à vista ou devolvida. Sem item com
+ * acréscimo (ou sem mercadoria) ⇒ 0.
+ */
+export function receivableSurchargeRate(items: ReceiptSurchargeItem[]): number {
+  let surcharge = 0;
+  let value = 0;
+  for (const it of items) {
+    const base = Number(it.baseQuantity) || 0;
+    if (!(base > 0)) continue;
+    const kept = Math.max(0, base - Math.max(0, Number(it.returnedBaseQty) || 0));
+    if (kept <= 0) continue;
+    surcharge += Math.max(0, Number(it.surchargePerBase) || 0) * kept;
+    value += (Number(it.total) || 0) * (kept / base);
+  }
+  if (!(value > 0) || !(surcharge > 0)) return 0;
+  return surcharge / value;
+}
+
+/**
+ * Acréscimo de cartão ao RECEBER a conta (débito/crédito), calculado como no PDV. O valor recebido
+ * é rateado entre as vendas pelo MESMO FIFO do servidor (`distributeAccountPayment`, da mais antiga
+ * para a mais nova) e cada parte leva o acréscimo proporcional da sua venda
+ * (`receivableSurchargeRate`). Quitar tudo ⇒ o acréscimo cheio do que ainda está em aberto; receber
+ * metade ⇒ metade. É receita a mais: não abate a dívida (ADR-022 C.3). Arredonda ao centavo.
+ * Receba as vendas já na ordem do FIFO (createdAt, id).
+ */
+export function receiptCardSurcharge(amount: number, receivables: ReceiptSurchargeReceivable[]): number {
+  if (!(amount > 0)) return 0;
+  const byId = new Map(receivables.map((r) => [r.id, r]));
+  let total = 0;
+  for (const alloc of distributeAccountPayment(amount, receivables)) {
+    const r = byId.get(alloc.receivableId);
+    if (!r) continue;
+    total += alloc.amount * receivableSurchargeRate(r.items);
+  }
+  return Number((Math.round(total * 100) / 100).toFixed(2));
+}
+
+/**
+ * Troco de um recebimento em DINHEIRO (igual ao PDV): o operador informa quanto o cliente entregou;
+ * `change` = entregue − devido (≥ 0) e `short` = quanto falta quando entregou menos. Entregue vazio/0
+ * ⇒ assume o valor exato (sem troco, sem falta). O troco é só informativo: no caixa entra o valor
+ * devido (o troco volta para o cliente). Aritmética em centavos.
+ */
+export function cashReceiptChange(due: number, given: number | null | undefined): { change: number; short: number } {
+  const dueC = toCents(Math.max(0, due || 0));
+  const g = Number(given);
+  if (!(g > 0)) return { change: 0, short: 0 };
+  const diff = toCents(g) - dueC;
+  return diff >= 0 ? { change: diff / 100, short: 0 } : { change: 0, short: -diff / 100 };
+}
+
+// ---------------------------------------------------------------------------
 // Dívida do cliente como entidade — conta-corrente "D-0001" (ADR-026)
 // ---------------------------------------------------------------------------
 

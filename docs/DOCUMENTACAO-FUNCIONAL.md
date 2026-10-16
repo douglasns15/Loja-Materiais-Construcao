@@ -28,8 +28,9 @@
 6. [Impressão de comprovantes](#6-impressão-de-comprovantes)
    - 6.1 [Comprovante de dívida quitada](#61-comprovante-de-dívida-quitada)
    - 6.2 [Imprimir pelo iPhone/iPad (app instalado)](#62-imprimir-pelo-iphoneipad-app-instalado)
-7. [Pendências de cobertura](#pendências-de-cobertura)
-8. [Histórico deste documento](#histórico-deste-documento)
+7. [Receber conta: troco e acréscimo do cartão](#7-receber-conta-troco-e-acréscimo-do-cartão)
+8. [Pendências de cobertura](#pendências-de-cobertura)
+9. [Histórico deste documento](#histórico-deste-documento)
 
 ---
 
@@ -539,6 +540,45 @@ ficar sem resposta. Se acontecer com frequência em alguma tela, avise o suporte
 
 ---
 
+## 7. Receber conta: troco e acréscimo do cartão
+
+**Para que serve:** receber o fiado com as mesmas contas do PDV — troco no dinheiro e preço de cartão nos produtos
+que têm acréscimo.
+
+**Onde fica:** **Contas a Receber → Em aberto → Receber** (no cartão do cliente ou dentro do extrato).
+
+**Dinheiro — passo a passo**
+
+1. Confira o **Valor a receber** (vem o saldo todo; mude para receber só uma parte).
+2. Em **Forma de pagamento**, deixe **Dinheiro**.
+3. Em **Dinheiro entregue**, digite quanto o cliente deu (opcional). Aparece o **Troco** — ou **Falta**, se deu menos.
+4. Toque em **Receber**. A mensagem confirma o recebimento e repete o troco.
+
+Regras: no caixa entra o **valor recebido** (o troco volta para o cliente). Se o dinheiro entregue for menor que o valor a
+receber, o sistema não deixa concluir — diminua o "Valor a receber" para registrar um pagamento parcial. Precisa de
+caixa aberto.
+
+**Cartão de débito ou crédito — passo a passo**
+
+1. Escolha **Cartão de débito** ou **Cartão de crédito**.
+2. Se algum produto da conta tem acréscimo nessa forma (cadastro do produto), aparece o quadro amarelo com os itens e o
+   **Acréscimo a cobrar já calculado**, e o **Total a cobrar no cartão** (valor + acréscimo) — é o que passa na maquininha.
+3. Toque em **Receber**.
+
+Regras:
+
+- **Quitar a conta toda:** o acréscimo é o mesmo que o PDV cobraria pelos itens que ainda estão em aberto (rolo/pacote
+  contam pela unidade, itens devolvidos saem da conta).
+- **Receber só uma parte:** o acréscimo é **proporcional** ao valor recebido, começando pela venda mais antiga (a mesma
+  ordem em que o sistema abate a conta). A tela avisa "Recebimento parcial".
+- O acréscimo **não abate a dívida**: é receita a mais da forma de pagamento (aparece nos relatórios junto da forma).
+- Dá para **ajustar** o acréscimo à mão; **recalcular** volta para o valor calculado.
+- PIX e dinheiro não têm acréscimo.
+
+**Limitações:** o troco não fica gravado (não aparece em reimpressões).
+
+---
+
 ## Pendências de cobertura
 
 Funcionalidades já em uso que ainda não estão descritas aqui (entram conforme forem tocadas): PDV (pagamentos,
@@ -567,3 +607,4 @@ painel da plataforma.
 | 2026-10-16 | Impressão (§6): no iPhone/iPad (app instalado) "Imprimir" abre a impressão do iOS; o PDF + compartilhar virou só plano B. Comprovante de quitação diz "Conta" em vez de "Dívida". |
 | 2026-10-16 | Resumos de contas em aberto (de uma venda e do cliente) também dizem "Conta" no papel ("RESUMO DA CONTA", "Vendas em aberto"). |
 | 2026-10-16 | Impressão (§6) conferida pelo Owner no iPhone (app instalado): "Imprimir" abre a impressão do iOS; comprovante de quitação e resumos com "Conta". |
+| 2026-10-16 | Receber conta (§7): troco no dinheiro e acréscimo do cartão calculado como no PDV (proporcional no parcial). |

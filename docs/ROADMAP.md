@@ -8,6 +8,12 @@
 > custo fixo do Prisma por requisição já passa de 10 ms). **Correção: Owner assinou o Workers Paid** (teto 30 s) —
 > pós-assinatura 130 requisições reais + 30 de stress, 0 falhas. Sem mudança de código. Ver ADR-005, adendo 2026-10-14.
 >
+> **ONDE PARAMOS (2026-10-16, tarde) — Receber conta igual ao PDV (web + API, sem migration):**
+> - Contas a Receber → Receber: **Dinheiro entregue → Troco/Falta** (core `cashReceiptChange`; troco só na tela) e
+>   **acréscimo do cartão CALCULADO** (core `receiptCardSurcharge`: FIFO do servidor + taxa por venda, líquida de devolução,
+>   por unidade-base; parcial = proporcional; campo editável + "recalcular"). API: itens do `GET /receivables/accounts/:id`
+>   ganham `baseQuantity`/`returnedBaseQty` (aditivo). Core 543/543 (+17), typecheck web/api/shared, testes API verdes.
+>
 > **ONDE PARAMOS (2026-10-16) — Impressão: quitação + iPhone (só `apps/web`, sem API/migration) — CONCLUÍDO e E2E do
 > Owner VALIDADO (2026-10-16, web `ae03c904`):**
 > - **Comprovante de dívida quitada:** Contas a Receber → Quitadas → dívida → **Imprimir comprovante** (80mm/A4, PDF

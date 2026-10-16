@@ -278,6 +278,11 @@ export type ReceivableItem = {
    * crédito (ADR-022, Fatia C.3). Presente só no detalhe da dívida; ausente no extrato consolidado. */
   surchargeDebit?: string;
   surchargeCredit?: string;
+  /** Quantidade vendida e já devolvida na UNIDADE-BASE (só no extrato da conta — `GET
+   * /receivables/accounts/:customerId`). Base do acréscimo de cartão calculado ao receber (o
+   * acréscimo é por unidade-base — `receiptCardSurcharge`, core). */
+  baseQuantity?: string;
+  returnedBaseQty?: string;
 };
 
 /** Detalhe de uma conta a receber (`GET /receivables/:id`): a conta + os itens da venda de

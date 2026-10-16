@@ -502,8 +502,8 @@ testável exaustivamente e compartilhada entre as duas apps.
 |---|---|
 | `GET /` | Lista dívidas (contas a receber). |
 | `GET /accounts` | Saldo devedor **consolidado por cliente** (1 linha por pessoa) — aba **Em aberto**. Cada linha inclui `debtId`/`debtNumber` da dívida ABERTA do cliente (ADR-026, código `D-000X`). |
-| `GET /accounts/:customerId` | Extrato da conta (dívida aberta) de um cliente; inclui `debtId`/`debtNumber`/`debtOpenedAt` (ADR-026). |
-| `POST /accounts/:customerId/receive` 🔒 | Recebe pagamento **FIFO** distribuído nas dívidas abertas (um `CashMovement` pelo total). Ao zerar, fecha a **dívida** (ADR-026: `PAID`+`closedAt`). |
+| `GET /accounts/:customerId` | Extrato da conta (dívida aberta) de um cliente; inclui `debtId`/`debtNumber`/`debtOpenedAt` (ADR-026). Cada item das vendas traz `surchargeDebit`/`surchargeCredit` e, desde 2026-10-16, `baseQuantity`/`returnedBaseQty` (unidade-base; legado sem base = `quantity`) — base do acréscimo de cartão calculado na tela ao receber. |
+| `POST /accounts/:customerId/receive` 🔒 | Recebe pagamento **FIFO** distribuído nas dívidas abertas (um `CashMovement` pelo total). Ao zerar, fecha a **dívida** (ADR-026: `PAID`+`closedAt`). `surcharge` (só cartão) é gravado como veio — a tela o calcula (`receiptCardSurcharge`) e o operador pode ajustar; receita a mais, não abate. Troco do dinheiro não trafega (só tela). |
 | `GET /debts` | Lista de **dívidas** por status (ADR-026) — default `paid` (aba **Quitadas**), paginada por `closedAt`. Cada linha: `debtNumber`, cliente, `originalTotal`, `salesCount`, `openedAt`/`closedAt`. |
 | `GET /debts/:id` | Extrato de **uma dívida** pelo id (ADR-026): cabeçalho (código/status/datas), resumo (original/recebido/devolvido/saldo) e as vendas a prazo com itens + recebimentos + devoluções. Usado no detalhe da aba Quitadas e no **comprovante de quitação** (`DebtPaidPrint`). |
 | `GET /:id` | Detalhe de uma dívida. |
@@ -737,6 +737,17 @@ Alertas CALCULADOS sob demanda (custo-zero: nada é gravado; a pendência some q
     PDF `D-0001.pdf`. No papel a palavra é **"Conta"** ("Conta D-0001", "CONTA QUITADA", rodapé "quitação de
     conta") — decisão do Owner; o código segue `D-000X`. Idem nos resumos de conta em aberto: `ReceivablePrint`
     ("RESUMO DA CONTA") e `CustomerAccountPrint` ("Vendas em aberto", coluna "Venda"). Sem API/banco/migração.
+- **Receber conta igual ao PDV (Contas a Receber, 2026-10-16).** No painel "Receber de …":
+  - **Dinheiro:** campo opcional "Dinheiro entregue" → `cashReceiptChange(devido, entregue)` (core, centavos) mostra
+    **Troco** / **Falta** / "Valor exato". Falta bloqueia o Receber (receber menos = baixar o "Valor a receber"). O troco
+    não vai à API nem ao caixa (o Suprimento é o valor recebido); aparece na mensagem de sucesso.
+  - **Cartão (débito/crédito):** o acréscimo (ADR-016) sai **calculado** — `receiptCardSurcharge(valor, vendas)` (core):
+    rateia o valor pelas vendas em aberto no **mesmo FIFO do servidor** (`distributeAccountPayment`, ordem
+    `createdAt, id`) e aplica a cada parte a taxa da venda `receivableSurchargeRate` = Σ(acréscimo/unidade-base ×
+    quantidade que ficou) ÷ Σ(valor da mercadoria que ficou), "ficou" = vendido − devolvido. Quitar tudo = acréscimo
+    cheio do que está em aberto; parcial = proporcional (aviso na tela). Campo segue **editável** (`surchargeTouched`
+    + "recalcular"). Antes (C.3) era digitado à mão com "usar sug." (que ignorava rolo/pacote e devolução).
+  - Testes: `packages/core/src/recebimento-conta.test.ts` (17). Sem migration.
 - **UX:** menos cliques, fontes legíveis, atalhos de teclado no desktop.
 
 ---
