@@ -15,7 +15,8 @@
 >   `window.print()` no modo standalone. `printArea` agora detecta (`isIosStandalone`) e gera o **PDF + tela de
 >   compartilhar** (Imprimir/AirPrint, Arquivos) com o mesmo motor do comprovante no WhatsApp — vale para todas as telas
 >   que imprimem. Relatórios no app do iPhone mostram aviso (usar Safari/computador/CSV).
-> - Typecheck + `next build` verdes. **Deploy da web, E2E no iPhone do Owner e push: PENDENTES.**
+> - Typecheck + `next build` verdes. **NO AR: web `54c98598`** (smoke OK; API segue `c04e20f8`), commit `9f6b013`.
+>   **Pendentes (Owner): E2E no iPhone (app instalado) + push.**
 >
 > **ONDE PARAMOS / PRÓXIMOS PASSOS (2026-10-15):**
 > - **Cosmos "sempre sem ficha" — DIAGNOSTICADO:** a Cosmos responde **429 "Limite diário de consultas excedido"**
