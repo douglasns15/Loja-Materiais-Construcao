@@ -13,6 +13,7 @@
 >   **acréscimo do cartão CALCULADO** (core `receiptCardSurcharge`: FIFO do servidor + taxa por venda, líquida de devolução,
 >   por unidade-base; parcial = proporcional; campo editável + "recalcular"). API: itens do `GET /receivables/accounts/:id`
 >   ganham `baseQuantity`/`returnedBaseQty` (aditivo). Core 543/543 (+17), typecheck web/api/shared, testes API verdes.
+>   **NO AR: API `8fcccd71`, web `81ce9ea4`** (smoke OK; commit `bfaa0e3`). **Pendentes: E2E do Owner + push.**
 >
 > **ONDE PARAMOS (2026-10-16) — Impressão: quitação + iPhone (só `apps/web`, sem API/migration) — CONCLUÍDO e E2E do
 > Owner VALIDADO (2026-10-16, web `ae03c904`):**
