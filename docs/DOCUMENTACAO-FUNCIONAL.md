@@ -566,3 +566,4 @@ painel da plataforma.
 | 2026-10-16 | Impressão (§6): comprovante de dívida quitada (aba Quitadas) e impressão pelo iPhone/iPad com o app instalado (PDF + tela de compartilhar → Imprimir). |
 | 2026-10-16 | Impressão (§6): no iPhone/iPad (app instalado) "Imprimir" abre a impressão do iOS; o PDF + compartilhar virou só plano B. Comprovante de quitação diz "Conta" em vez de "Dívida". |
 | 2026-10-16 | Resumos de contas em aberto (de uma venda e do cliente) também dizem "Conta" no papel ("RESUMO DA CONTA", "Vendas em aberto"). |
+| 2026-10-16 | Impressão (§6) conferida pelo Owner no iPhone (app instalado): "Imprimir" abre a impressão do iOS; comprovante de quitação e resumos com "Conta". |

@@ -719,7 +719,8 @@ Alertas CALCULADOS sob demanda (custo-zero: nada é gravado; a pendência some q
     detalhes antes de imprimir.
   - **iPhone/iPad com o app instalado** (`isIosStandalone()`: UA iPhone/iPad/iPod ou `MacIntel` com toque, e
     `navigator.standalone` / `display-mode: standalone`). Sintoma do Owner: "nada acontece" (Android e Safari OK);
-    causa provável = `window.print()` chamado depois de esperas (logo, rAF, rede), fora do toque. **Decisão do Owner
+    causa = `window.print()` chamado depois de esperas (logo, rAF, rede), fora do toque — **confirmada no E2E do Owner
+    (2026-10-16)**: com a chamada no mesmo toque, a impressão nativa abre no app instalado. **Decisão do Owner
     (2026-10-16): "Imprimir" abre a impressão NATIVA** (impressora do celular ou "Salvar em PDF" lá dentro, por escolha
     do operador); o PDF direto já tem botão próprio. `printIosWithFallback` chama `window.print()` e espera 2 s por
     `beforeprint`/`afterprint`; **só se nenhum chegar** cai no plano B `printViaIosShare`: clona o `#print-area` num

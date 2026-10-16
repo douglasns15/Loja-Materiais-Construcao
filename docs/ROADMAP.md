@@ -8,7 +8,8 @@
 > custo fixo do Prisma por requisição já passa de 10 ms). **Correção: Owner assinou o Workers Paid** (teto 30 s) —
 > pós-assinatura 130 requisições reais + 30 de stress, 0 falhas. Sem mudança de código. Ver ADR-005, adendo 2026-10-14.
 >
-> **ONDE PARAMOS (2026-10-16) — Impressão: quitação + iPhone (só `apps/web`, sem API/migration):**
+> **ONDE PARAMOS (2026-10-16) — Impressão: quitação + iPhone (só `apps/web`, sem API/migration) — CONCLUÍDO e E2E do
+> Owner VALIDADO (2026-10-16, web `ae03c904`):**
 > - **Comprovante de dívida quitada:** Contas a Receber → Quitadas → dívida → **Imprimir comprovante** (80mm/A4, PDF
 >   `D-0001.pdf`) — `DebtPaidPrint` no `DebtDetailModal`, sobre o `GET /receivables/debts/:id` existente.
 > - **Impressão no iPhone com o app instalado** ("nada acontece" — Caixa e Histórico; Android OK): o iOS ignora
@@ -19,9 +20,10 @@
 >   `window.print()` agora sai no mesmo toque (`flushSync` + logo pré-aquecida); PDF + compartilhar só se o iOS não
 >   abrir em 2 s. Comprovante de quitação diz "Conta" (código segue `D-`). Validado antes: Caixa/Histórico/Contas OK.
 >   Resumos de conta em aberto também dizem "Conta" no papel. **NO AR: web `ae03c904`** (commits `7d43db0` + `785875a`).
->   **Pendente: E2E do Owner no iPhone + push.**
+>   **E2E do Owner VALIDADO no iPhone (app instalado): "Imprimir" abre a impressão nativa; comprovantes com "Conta".**
+>   Pendente só o push do Owner.
 > - Typecheck + `next build` verdes. **NO AR (1ª versão): web `54c98598`** (smoke OK; API segue `c04e20f8`), commit `9f6b013`.
->   **Pendentes (Owner): E2E no iPhone (app instalado) + push.**
+>   (1ª versão substituída pela v2 acima.)
 >
 > **ONDE PARAMOS / PRÓXIMOS PASSOS (2026-10-15):**
 > - **Cosmos "sempre sem ficha" — DIAGNOSTICADO:** a Cosmos responde **429 "Limite diário de consultas excedido"**
@@ -58,7 +60,7 @@
 > 4. **Planilha — Fatia 4 (De-Para editável + perfis lembrados)** — **ADIADA pelo Owner**; volta para discussão quando
 >    aparecer o primeiro cliente com exportação de outro sistema (ver ADR-041, Fatia 4).
 >
-> **Última atualização:** 2026-10-15 — **Teclado: setas nas buscas, Esc fecha pop-ups, F8 = Confirmar (ADR-032, adendo).**
+> **Última atualização:** 2026-10-16 — **Impressão: comprovante de quitação + impressão nativa no iPhone (app instalado) — validados.**
 >
 > - **Teclado em todas as telas (ADR-032, adendo 2026-10-15) — CONCLUÍDO, NO AR e E2E do Owner VALIDADO (2026-10-15);
 >   só `apps/web`, sem migration/API:**
