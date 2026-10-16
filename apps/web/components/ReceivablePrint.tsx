@@ -252,8 +252,9 @@ export function CustomerAccountPrint({
  * papel que o cliente leva como prova de que a dívida `D-000X` foi paga: cabeçalho da loja + código
  * da dívida + abertura/quitação + resumo (original/recebido/devolvido/saldo zerado) + as vendas que a
  * compunham + todos os recebimentos (data, forma, valor) + as devoluções que abateram. Mesmas
- * classes `rc-*` e modelos 80mm/A4 dos outros comprovantes. O PDF sai como "D-0001.pdf" (nome dado
- * por quem chama `printArea` — `DebtDetailModal`).
+ * classes `rc-*` e modelos 80mm/A4 dos outros comprovantes. No PAPEL a palavra é "Conta" (não
+ * "Dívida" — decisão do Owner 2026-10-16, mais educado para o cliente); o código segue `D-000X`.
+ * O PDF sai como "D-0001.pdf" (nome dado por quem chama `printArea` — `DebtDetailModal`).
  */
 export function DebtPaidPrint({ store, detail }: { store: Store | null; detail: DebtDetail }) {
   const payments = detail.receivables
@@ -265,7 +266,7 @@ export function DebtPaidPrint({ store, detail }: { store: Store | null; detail: 
       <StoreHeader store={store} />
 
       <div className="rc-title">COMPROVANTE DE QUITAÇÃO</div>
-      <div className="rc-code">Dívida {formatDebtNumber(detail.debtNumber)}</div>
+      <div className="rc-code">Conta {formatDebtNumber(detail.debtNumber)}</div>
       <div className="rc-date">
         {detail.customerName ?? 'Cliente'}
         {detail.closedAt ? ` · quitada em ${new Date(detail.closedAt).toLocaleString('pt-BR')}` : ''}
@@ -296,9 +297,9 @@ export function DebtPaidPrint({ store, detail }: { store: Store | null; detail: 
         <span>SALDO</span>
         <span>{BRL(detail.balance)}</span>
       </div>
-      <div className="rc-code">DÍVIDA QUITADA</div>
+      <div className="rc-code">CONTA QUITADA</div>
 
-      {/* Vendas a prazo que compunham a dívida (código + data + valor a prazo). */}
+      {/* Vendas a prazo que compunham a conta (código + data + valor a prazo). */}
       {detail.receivables.length > 0 ? (
         <table className="rc-table">
           <thead>
@@ -339,7 +340,7 @@ export function DebtPaidPrint({ store, detail }: { store: Store | null; detail: 
         </div>
       ) : null}
 
-      {/* Devoluções que abateram a dívida. */}
+      {/* Devoluções que abateram a conta. */}
       {returns.length > 0 ? (
         <div className="rc-pay">
           <div>
@@ -356,7 +357,7 @@ export function DebtPaidPrint({ store, detail }: { store: Store | null; detail: 
       ) : null}
 
       <footer className="rc-foot">
-        Comprovante de quitação de dívida — documento sem valor fiscal.
+        Comprovante de quitação de conta — documento sem valor fiscal.
       </footer>
     </div>
   );

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { flushSync } from 'react-dom';
 import {
   formatDateBr,
   formatOrderNumber,
@@ -89,26 +90,19 @@ export function ReceivableDetailModal({
   /** Abre o diálogo de impressão do RESUMO da dívida. O PDF sai nomeado pelo código (V-000128). */
   function imprimir() {
     if (!detail) return;
-    // Garante o #print-area do RESUMO montado (não um recibo de parcela) antes de imprimir.
-    setPrintPayment(null);
+    // Garante o #print-area do RESUMO montado (não um recibo de parcela) antes de imprimir — na hora
+    // (`flushSync`), para o diálogo abrir no mesmo toque (iPhone com o app instalado — lib/print.ts).
+    flushSync(() => setPrintPayment(null));
     const fileName = formatOrderNumber(detail.orderNumber) || 'Divida';
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        void printArea({ model: printModel, logoUrl: store?.logoUrl, fileName });
-      }),
-    );
+    void printArea({ model: printModel, logoUrl: store?.logoUrl, fileName });
   }
 
   /** Imprime o RECIBO de um recebimento específico (a parcela que o cliente leva ao pagar). */
   function imprimirPagamento(p: ReceivablePaymentRow) {
     if (!detail) return;
-    setPrintPayment(p);
+    flushSync(() => setPrintPayment(p));
     const code = formatOrderNumber(detail.orderNumber) || 'Recibo';
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        void printArea({ model: printModel, logoUrl: store?.logoUrl, fileName: `Recibo-${code}` });
-      }),
-    );
+    void printArea({ model: printModel, logoUrl: store?.logoUrl, fileName: `Recibo-${code}` });
   }
 
   async function saveNotes() {

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import {
   openCashSessionSchema,
   closeCashSessionSchema,
@@ -19,7 +20,7 @@ import { MoneyInput } from '@/components/MoneyInput';
 import { CashCounter } from '@/components/CashCounter';
 import { CashMovementModal } from '@/components/CashMovementModal';
 import { CashMovementsList } from '@/components/CashMovementsList';
-import { printArea } from '@/lib/print';
+import { printArea, warmImage } from '@/lib/print';
 import { type Store } from '@/components/ReceiptPrint';
 import { CashClosePrint, type CashCloseReceiptData, type CashCloseMovement } from '@/components/CashClosePrint';
 import { CashMovementPrint, type CashMovementReceiptData } from '@/components/CashMovementPrint';
@@ -184,6 +185,7 @@ export default function CaixaPage() {
     apiGet<Store & { blindCashClose?: boolean }>('/tenant')
       .then((t) => {
         setStore(t);
+        warmImage(t?.logoUrl); // logo já baixada → "Imprimir" sai no mesmo toque (lib/print.ts)
         setBlindClose(!!t?.blindCashClose);
       })
       .catch(() => {});
@@ -197,20 +199,35 @@ export default function CaixaPage() {
         `/reports/cash-sessions?breakdown=1&from=${day}&to=${day}`,
       );
       setTodaySessions(rows);
+      // Já traz as movimentações de cada caixa de hoje (poucos por dia): assim o "Comprovante" imprime
+      // no MESMO toque, sem esperar a rede — o iPhone com o app instalado exige (lib/print.ts).
+      for (const r of rows) void loadSessionMovements(r.id).catch(() => {});
     } catch {
       setTodaySessions([]);
     }
   }
 
-  // Monta um comprovante no #print-area e abre o diálogo de impressão. Dois `requestAnimationFrame`
-  // garantem que o React já pintou o #print-area escolhido antes de `window.print()` capturar a página.
+  // Movimentações (suprimento/sangria/devolução) de um caixa, por id — lembradas para a reimpressão.
+  const sessionMovementsRef = useRef(new Map<string, CashCloseMovement[]>());
+  async function loadSessionMovements(sessionId: string): Promise<CashCloseMovement[]> {
+    const rows = await apiGet<CashMovementRow[]>(`/cash-sessions/movements?sessionId=${sessionId}`);
+    const movements = rows.map((m) => ({
+      kind: m.kind,
+      type: m.type,
+      amount: Number(m.amount),
+      reason: m.reason,
+      at: m.createdAt,
+    }));
+    sessionMovementsRef.current.set(sessionId, movements);
+    return movements;
+  }
+
+  // Monta um comprovante no #print-area e abre o diálogo de impressão. `flushSync` aplica o
+  // #print-area escolhido (e os dados setados antes) NA HORA, para o `window.print()` sair no mesmo
+  // toque — antes eram dois `requestAnimationFrame`, e o iPhone (app instalado) perdia o toque.
   function doPrint(kind: 'close' | 'movement', fileName: string) {
-    setPrintKind(kind);
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        void printArea({ model: '80mm', logoUrl: store?.logoUrl, fileName });
-      }),
-    );
+    flushSync(() => setPrintKind(kind));
+    void printArea({ model: '80mm', logoUrl: store?.logoUrl, fileName });
   }
 
   // Imprime um comprovante de fechamento (recém-feito ou reimpressão de um caixa de hoje).
@@ -244,18 +261,17 @@ export default function CaixaPage() {
   // comprovante do topo montado no fechamento — sair e voltar à tela não perde essa visão. Se a busca
   // das movimentações falhar, degrada para o resumo sem itemização (não trava a impressão).
   async function printCloseFromHistory(s: CashSessionReport, fileName: string) {
+    // Já carregadas junto com a lista (`loadTodaySessions`) → imprime no mesmo toque, sem rede.
+    const cached = sessionMovementsRef.current.get(s.id);
+    if (cached) {
+      printClose({ ...receiptFromReport(s), movements: cached }, fileName);
+      return;
+    }
     setPrintingSessionId(s.id);
     try {
       let movements: CashCloseMovement[] = [];
       try {
-        const rows = await apiGet<CashMovementRow[]>(`/cash-sessions/movements?sessionId=${s.id}`);
-        movements = rows.map((m) => ({
-          kind: m.kind,
-          type: m.type,
-          amount: Number(m.amount),
-          reason: m.reason,
-          at: m.createdAt,
-        }));
+        movements = await loadSessionMovements(s.id);
       } catch {
         movements = [];
       }

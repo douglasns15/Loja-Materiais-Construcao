@@ -499,9 +499,10 @@ também dá para **Salvar como PDF** — o arquivo já vem com o nome do documen
 
 **Onde fica:** **Contas a Receber → aba Quitadas →** toque na dívida (ex.: `D-0003`) **→ Imprimir comprovante**.
 
-**O que sai no papel:** dados da loja, "COMPROVANTE DE QUITAÇÃO", código da dívida, nome do cliente e data/hora da
+**O que sai no papel:** dados da loja, "COMPROVANTE DE QUITAÇÃO", "Conta D-0001" (no papel a palavra é **Conta**,
+não "Dívida" — mais educado para o cliente; o código continua com **D**), nome do cliente e data/hora da
 quitação; quando foi aberta; valores **Original**, **Recebido** e **Devolvido** (se houve); **Saldo R$ 0,00** e a
-marca **DÍVIDA QUITADA**; as vendas a prazo que formavam a dívida (código, data, valor); todos os **recebimentos**
+marca **CONTA QUITADA**; as vendas a prazo que formavam a conta (código, data, valor); todos os **recebimentos**
 (data, forma de pagamento, valor) e as **devoluções** que abateram a dívida.
 
 **Regras e limitações**
@@ -513,24 +514,27 @@ marca **DÍVIDA QUITADA**; as vendas a prazo que formavam a dívida (código, da
 
 ### 6.2 Imprimir pelo iPhone/iPad (app instalado)
 
-**Por que é diferente:** com o NexoLoja **instalado na tela de início** do iPhone/iPad, o iOS não abre a janela de
-impressão do navegador — antes o botão "não fazia nada". Agora, nesse caso, o sistema monta o comprovante em **PDF** e
-abre a **tela de compartilhar do iOS**.
+**Como funciona:** com o NexoLoja **instalado na tela de início** do iPhone/iPad, **Imprimir** abre a **tela de
+impressão do iOS** — lá você escolhe a impressora configurada no celular ou, se preferir, gera o PDF pela própria tela
+de impressão. Para mandar o PDF direto (WhatsApp etc.) continuam os botões próprios de imagem/PDF.
 
 **Passo a passo**
 
-1. Toque em **Imprimir** (no PDV, Histórico de Vendas, Caixa, Orçamentos, Entregas ou Contas a Receber), como sempre.
-2. Aguarde um instante — aparece a tela de compartilhar com o arquivo (ex.: `V-000128.pdf`).
-3. Escolha **Imprimir** (impressora AirPrint) — ou **Salvar em Arquivos**, WhatsApp, e-mail etc.
+1. Toque em **Imprimir** (no PDV, Histórico de Vendas, Caixa, Orçamentos, Entregas ou Contas a Receber).
+2. Na tela de impressão do iOS, escolha a **impressora** (AirPrint) e toque em **Imprimir** — ou use as opções da
+   própria tela para salvar/compartilhar o PDF.
+
+**Se a tela de impressão não abrir:** em cerca de 2 segundos o sistema abre, no lugar, a **tela de compartilhar** com o
+PDF do comprovante (ex.: `V-000128.pdf`) — ali também tem **Imprimir**. Isso é só um plano B, para o botão nunca
+ficar sem resposta. Se acontecer com frequência em alguma tela, avise o suporte dizendo qual.
 
 **Limitações**
 
-- Vale só para o app instalado no iPhone/iPad. Pelo **Safari**, no computador e no Android a impressão continua
-  abrindo a janela normal do navegador.
-- A impressora precisa ser compatível com **AirPrint** (ou ter app próprio que apareça na tela de compartilhar).
+- A impressora precisa ser compatível com **AirPrint** (ou ter app próprio que apareça no iOS).
 - **Relatórios** (a tela inteira) não imprimem pelo app instalado do iPhone: aparece um aviso para abrir pelo Safari
   ou pelo computador, ou usar **Exportar CSV**.
-- Se fechar a tela de compartilhar, nada é impresso — é só tocar em Imprimir de novo.
+- Em **Entregas → imprimir a conta inteira**, o sistema junta as vendas antes de imprimir; nesse caso pode cair no
+  plano B (tela de compartilhar).
 
 ---
 
@@ -559,3 +563,4 @@ painel da plataforma.
 | 2026-10-15 | Ficha pelo código de barras (§5): a tela distingue "não encontrado no catálogo" de falha do Cosmos (limite do plano, acesso recusado, fora do ar) e de falha de conexão. |
 | 2026-10-15 | Ficha pelo código de barras (§5): depois do limite diário o Cosmos só é tentado de novo após a meia-noite; código "não encontrado" não é reconsultado por 24 h. |
 | 2026-10-16 | Impressão (§6): comprovante de dívida quitada (aba Quitadas) e impressão pelo iPhone/iPad com o app instalado (PDF + tela de compartilhar → Imprimir). |
+| 2026-10-16 | Impressão (§6): no iPhone/iPad (app instalado) "Imprimir" abre a impressão do iOS; o PDF + compartilhar virou só plano B. Comprovante de quitação diz "Conta" em vez de "Dívida". |

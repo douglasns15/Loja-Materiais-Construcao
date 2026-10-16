@@ -13,6 +13,16 @@
  * cache) ANTES de abrir o diálogo, com teto de tempo para nunca travar a impressão caso
  * a rede falhe ou a imagem não carregue.
  */
+/** URLs de imagem (a logo) já baixadas nesta aba — com elas a impressão sai no MESMO toque (ver
+ *  `printArea`), sem esperar nada antes do `window.print()`. */
+const readyImages = new Set<string>();
+
+/** Pré-aquece a logo assim que a tela conhece a loja (telas que montam o comprovante só na hora de
+ *  imprimir — Caixa, Histórico). Assim o primeiro "Imprimir" já não precisa esperar o download. */
+export function warmImage(url: string | null | undefined): void {
+  if (url && !readyImages.has(url)) void ensureImageLoaded(url);
+}
+
 export function ensureImageLoaded(url: string | null | undefined, timeoutMs = 2500): Promise<void> {
   if (!url) return Promise.resolve();
   return new Promise<void>((resolve) => {
@@ -25,11 +35,17 @@ export function ensureImageLoaded(url: string | null | undefined, timeoutMs = 25
     };
     const timer = setTimeout(finish, timeoutMs);
     const img = new Image();
-    img.onload = finish;
+    img.onload = () => {
+      readyImages.add(url);
+      finish();
+    };
     img.onerror = finish; // falhou: imprime mesmo assim (sem travar por causa da logo)
     img.src = url;
     // Se já estava no cache, `complete` pode ficar true sem disparar `onload`.
-    if (img.complete) finish();
+    if (img.complete) {
+      if (img.naturalWidth > 0) readyImages.add(url);
+      finish();
+    }
   });
 }
 
@@ -48,9 +64,10 @@ export function safeFileName(name: string | null | undefined): string | null {
 }
 
 /**
- * iPhone/iPad rodando o app INSTALADO na tela de início (modo standalone do PWA). Nesse modo o iOS
- * IGNORA `window.print()` — o botão "não faz nada" (confirmado pelo Owner em 2026-10-16; no Safari e
- * no Android a impressão abre normal). iPadOS se apresenta como "MacIntel" — o toque o denuncia.
+ * iPhone/iPad rodando o app INSTALADO na tela de início (modo standalone do PWA). Sintoma do Owner
+ * (2026-10-16): "Imprimir" não fazia nada no Caixa/Histórico (Android OK). Suspeita principal: o iOS
+ * só abre a impressão se `window.print()` vier DENTRO do toque — e o fluxo antigo esperava a logo/
+ * rede antes (o "toque" expirava). iPadOS se apresenta como "MacIntel" — o toque o denuncia.
  */
 export function isIosStandalone(): boolean {
   if (typeof window === 'undefined') return false;
@@ -62,12 +79,12 @@ export function isIosStandalone(): boolean {
 }
 
 /**
- * Impressão no iPhone/iPad com o app instalado (ver `isIosStandalone`): em vez do `window.print()`
- * (ignorado ali), fotografa o comprovante num PDF e abre a folha de COMPARTILHAR do iOS — que tem
- * "Imprimir" (AirPrint), "Salvar em Arquivos", WhatsApp etc. Reusa o mesmo motor do comprovante no
- * WhatsApp (`shareReceiptPdf`, já validado no iPhone). Fotografa um CLONE do `#print-area` num
- * invólucro fora da tela (`.rc-capture-host` + `.rc-capture`, globals.css), na largura do modelo
- * (80mm ou A4), e o remove depois — o original continua oculto e intocado.
+ * Plano B do iPhone/iPad com o app instalado — SÓ quando a impressão nativa não abriu (ver
+ * `printIosWithFallback`): fotografa o comprovante num PDF e abre a folha de COMPARTILHAR do iOS (que
+ * tem "Imprimir"/AirPrint, "Salvar em Arquivos" etc.). Mesmo motor do comprovante no WhatsApp
+ * (`shareReceiptPdf`). Fotografa um CLONE do `#print-area` num invólucro fora da tela
+ * (`.rc-capture-host` + `.rc-capture`, globals.css), na largura do modelo (80mm ou A4), e o remove
+ * depois — o original continua oculto e intocado.
  */
 async function printViaIosShare(area: HTMLElement, fileName: string): Promise<void> {
   const host = document.createElement('div');
@@ -90,11 +107,75 @@ async function printViaIosShare(area: HTMLElement, fileName: string): Promise<vo
 }
 
 /**
+ * Abre o diálogo NATIVO de impressão (onde o operador escolhe a impressora ou "Salvar como PDF").
+ * Com `fileName`, troca o `document.title` ANTES e restaura DEPOIS (via `afterprint`, com teto de
+ * segurança) — o PDF sai como "V-000128.pdf" em vez do genérico "NexoLoja.pdf".
+ */
+function nativePrint(fileName: string | null): void {
+  if (!fileName) {
+    window.print();
+    return;
+  }
+  const previousTitle = document.title;
+  document.title = fileName;
+  let restored = false;
+  const restore = () => {
+    if (restored) return;
+    restored = true;
+    document.title = previousTitle;
+    window.removeEventListener('afterprint', restore);
+  };
+  window.addEventListener('afterprint', restore);
+  // Rede de segurança: alguns navegadores não disparam `afterprint` de forma confiável.
+  setTimeout(restore, 60000);
+  window.print();
+}
+
+/**
+ * iPhone/iPad com o app instalado: tenta SEMPRE a impressão nativa primeiro (decisão do Owner
+ * 2026-10-16 — "Imprimir" abre a impressão; o PDF é escolha dele lá dentro, e já existe botão próprio
+ * de PDF). Se em 2 s o iOS não sinalizar que abriu (`beforeprint`/`afterprint`), cai no plano B (PDF +
+ * compartilhar) para o botão nunca ficar mudo.
+ */
+async function printIosWithFallback(area: HTMLElement, fileName: string | null): Promise<void> {
+  let opened = false;
+  const mark = () => {
+    opened = true;
+  };
+  window.addEventListener('beforeprint', mark);
+  window.addEventListener('afterprint', mark);
+  try {
+    nativePrint(fileName);
+    await new Promise((r) => setTimeout(r, 2000));
+  } finally {
+    window.removeEventListener('beforeprint', mark);
+    window.removeEventListener('afterprint', mark);
+  }
+  if (opened) return;
+  console.warn('[print] o iOS não abriu a impressão nativa — plano B: PDF + compartilhar');
+  await printViaIosShare(area, fileName ?? 'comprovante');
+}
+
+/** A logo já está baixada (nesta aba ou no cache em memória)? Então dá para imprimir sem esperar. */
+function logoReady(url: string | null | undefined): boolean {
+  if (!url || readyImages.has(url)) return true;
+  const probe = new Image();
+  probe.src = url;
+  if (probe.complete && probe.naturalWidth > 0) {
+    readyImages.add(url);
+    return true;
+  }
+  return false;
+}
+
+/**
  * Fluxo único de impressão do `#print-area` (comprovante, orçamento ou resumo de dívida). Centraliza
  * o que as telas repetiam: define o modelo (80mm/A4) + injeta a regra `@page`, pré-carrega a logo
- * (ver `ensureImageLoaded`) e abre o diálogo. Novidade: quando `fileName` é dado, troca o
- * `document.title` ANTES de imprimir e restaura DEPOIS (via `afterprint`, com teto de segurança) —
- * assim o PDF sai como "V-000128.pdf"/"O-000045.pdf" em vez do genérico "NexoLoja.pdf".
+ * (ver `ensureImageLoaded`) e abre o diálogo (PDF nomeado pelo código — ver `nativePrint`).
+ *
+ * TOQUE DO USUÁRIO: quando a logo já está baixada, tudo até o `window.print()` roda SÍNCRONO — quem
+ * chama deve montar o `#print-area` com `flushSync` (não `requestAnimationFrame`/`await`) para a
+ * impressão sair no mesmo toque. O iPhone com o app instalado exige isso (ver `isIosStandalone`).
  */
 export async function printArea(opts: {
   model: '80mm' | 'A4';
@@ -113,30 +194,14 @@ export async function printArea(opts: {
     opts.model === '80mm'
       ? '@media print { @page { size: 80mm auto; margin: 4mm; } }'
       : '@media print { @page { size: A4; margin: 14mm; } }';
-  // Garante a logo baixada antes de imprimir (some do papel se trocada agora). Ver acima.
-  await ensureImageLoaded(opts.logoUrl);
+  // Garante a logo baixada antes de imprimir (some do papel se trocada agora). Ver acima. Só espera
+  // quando precisa — esperar faz o iPhone (app instalado) perder o toque.
+  if (!logoReady(opts.logoUrl)) await ensureImageLoaded(opts.logoUrl);
 
   const clean = safeFileName(opts.fileName);
-  // iPhone/iPad com o app instalado: o iOS ignora `window.print()` → PDF + folha de compartilhar.
   if (area && isIosStandalone()) {
-    await printViaIosShare(area, clean ?? 'comprovante');
+    await printIosWithFallback(area, clean);
     return;
   }
-  if (!clean) {
-    window.print();
-    return;
-  }
-  const previousTitle = document.title;
-  document.title = clean;
-  let restored = false;
-  const restore = () => {
-    if (restored) return;
-    restored = true;
-    document.title = previousTitle;
-    window.removeEventListener('afterprint', restore);
-  };
-  window.addEventListener('afterprint', restore);
-  // Rede de segurança: alguns navegadores não disparam `afterprint` de forma confiável.
-  setTimeout(restore, 60000);
-  window.print();
+  nativePrint(clean);
 }

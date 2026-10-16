@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import Link from 'next/link';
 import {
   PAYMENT_METHOD_LABELS,
@@ -74,7 +75,7 @@ import { useMe } from '@/lib/useMe';
 import { useScaleLabelLayout } from '@/lib/useModule';
 import { useOnline } from '@/lib/useOnline';
 import { useCart } from '@/lib/cartStore';
-import { printArea } from '@/lib/print';
+import { printArea, warmImage } from '@/lib/print';
 import { ReceiptPrint, type Store } from '@/components/ReceiptPrint';
 import { CartItemInfo } from '@/components/CartItemInfo';
 import { StoreDisabledNotice } from '@/components/StoreDisabledNotice';
@@ -686,6 +687,7 @@ export default function VendaPage() {
       apiGet<Store & StoreCardFees>('/tenant')
         .then((s) => {
           setStore(s);
+          warmImage(s.logoUrl); // logo já baixada → "Imprimir" sai no mesmo toque (lib/print.ts)
           setCardFees({
             cardFeeDebitPercent:
               s.cardFeeDebitPercent == null ? null : Number(s.cardFeeDebitPercent),
@@ -1001,10 +1003,10 @@ export default function VendaPage() {
   /** Abre o diálogo de impressão. O PDF sai nomeado pelo código do documento (venda V-000128 /
    *  orçamento O-000045) em vez do genérico "NexoLoja.pdf". Ver lib/print.ts. */
   async function imprimir(pickup = false) {
-    // Liga/desliga a faixa "FALTA RETIRAR" antes de abrir o diálogo e deixa o React aplicar a mudança
-    // ao #print-area (rAF) — assim o cupom impresso reflete o modo escolhido (retirada × normal).
-    setPrintPickup(pickup);
-    await new Promise((r) => requestAnimationFrame(() => r(null)));
+    // Liga/desliga a faixa "FALTA RETIRAR" antes de abrir o diálogo e aplica a mudança ao #print-area NA
+    // HORA (`flushSync`) — o cupom impresso reflete o modo escolhido (retirada × normal) e o diálogo
+    // abre no mesmo toque (antes era um rAF; o iPhone com o app instalado perdia o toque — lib/print.ts).
+    flushSync(() => setPrintPickup(pickup));
     const fileName =
       view?.kind === 'quote'
         ? formatQuoteNumber(view.quoteNumber)

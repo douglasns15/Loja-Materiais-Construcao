@@ -15,7 +15,10 @@
 >   `window.print()` no modo standalone. `printArea` agora detecta (`isIosStandalone`) e gera o **PDF + tela de
 >   compartilhar** (Imprimir/AirPrint, Arquivos) com o mesmo motor do comprovante no WhatsApp — vale para todas as telas
 >   que imprimem. Relatórios no app do iPhone mostram aviso (usar Safari/computador/CSV).
-> - Typecheck + `next build` verdes. **NO AR: web `54c98598`** (smoke OK; API segue `c04e20f8`), commit `9f6b013`.
+> - **Ajuste do Owner (mesmo dia):** no iPhone "Imprimir" deve abrir a impressão NATIVA (PDF é escolha dele) →
+>   `window.print()` agora sai no mesmo toque (`flushSync` + logo pré-aquecida); PDF + compartilhar só se o iOS não
+>   abrir em 2 s. Comprovante de quitação diz "Conta" (código segue `D-`). Validado antes: Caixa/Histórico/Contas OK.
+> - Typecheck + `next build` verdes. **NO AR (1ª versão): web `54c98598`** (smoke OK; API segue `c04e20f8`), commit `9f6b013`.
 >   **Pendentes (Owner): E2E no iPhone (app instalado) + push.**
 >
 > **ONDE PARAMOS / PRÓXIMOS PASSOS (2026-10-15):**

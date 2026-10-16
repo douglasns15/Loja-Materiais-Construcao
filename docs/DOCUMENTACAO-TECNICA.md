@@ -711,23 +711,30 @@ Alertas CALCULADOS sob demanda (custo-zero: nada é gravado; a pendência some q
 - **Impressão de comprovantes (`lib/print.ts`, 2026-10-16).** Toda impressão de documento passa por
   `printArea({ model, logoUrl, fileName })`: marca o `#print-area` com `data-model` (80mm/A4), injeta o `@page`,
   pré-carrega a logo e chama `window.print()` (PDF nomeado pelo código via `document.title`).
+  - **No mesmo toque.** Quando a logo já está baixada (`readyImages`, aquecida por `warmImage` assim que a tela
+    conhece a loja, ou `logoReady` no cache), tudo até o `window.print()` roda **síncrono**. As telas montam o
+    `#print-area` com `flushSync` (não `requestAnimationFrame`/efeito) e chamam `printArea` dentro do clique: Caixa
+    (`doPrint`; as movimentações dos caixas de hoje vêm junto com a lista, em `sessionMovementsRef`), Histórico
+    (`reimprimir`), PDV (`imprimir`), Contas a Receber (resumo/recibo). Entregas (conta consolidada) ainda busca os
+    detalhes antes de imprimir.
   - **iPhone/iPad com o app instalado** (`isIosStandalone()`: UA iPhone/iPad/iPod ou `MacIntel` com toque, e
-    `navigator.standalone` / `display-mode: standalone`): o iOS **ignora** `window.print()` nesse modo (sintoma do
-    Owner: "nada acontece"; no Safari e no Android abre normal). Ali `printArea` desvia para `printViaIosShare`: clona o
-    `#print-area` num invólucro fora da tela (`.rc-capture-host` + `.rc-capture`, mesma técnica do comprovante no
-    WhatsApp), fotografa num PDF (`shareReceiptPdf`, `lib/receiptShare.ts` — html-to-image + jsPDF sob demanda) e abre
-    o Web Share só com o arquivo (`text` agora é opcional). A folha do iOS oferece **Imprimir** (AirPrint), Salvar em
-    Arquivos etc. Largura da captura: 302 px (80mm) ou **794 px** (A4, regra `#print-area.rc-capture[data-model='A4']`,
-    padding 40 px, fonte 13 px). Cancelar a folha (`AbortError`) é silencioso; outra falha loga e avisa "Toque em
-    Imprimir de novo". Vale para todas as telas que imprimem (PDV, Histórico, Caixa, Orçamentos, Entregas, Contas a
-    Receber) sem mudar nenhuma delas.
+    `navigator.standalone` / `display-mode: standalone`). Sintoma do Owner: "nada acontece" (Android e Safari OK);
+    causa provável = `window.print()` chamado depois de esperas (logo, rAF, rede), fora do toque. **Decisão do Owner
+    (2026-10-16): "Imprimir" abre a impressão NATIVA** (impressora do celular ou "Salvar em PDF" lá dentro, por escolha
+    do operador); o PDF direto já tem botão próprio. `printIosWithFallback` chama `window.print()` e espera 2 s por
+    `beforeprint`/`afterprint`; **só se nenhum chegar** cai no plano B `printViaIosShare`: clona o `#print-area` num
+    invólucro fora da tela (`.rc-capture-host` + `.rc-capture`), fotografa num PDF (`shareReceiptPdf`,
+    `lib/receiptShare.ts`) e abre o Web Share só com o arquivo (`text` opcional) — a folha do iOS também tem
+    **Imprimir**. Largura da captura: 302 px (80mm) ou **794 px** (A4, `#print-area.rc-capture[data-model='A4']`).
+    Cancelar a folha (`AbortError`) é silencioso; outra falha loga e avisa "Toque em Imprimir de novo".
   - **Relatórios** imprimem a tela inteira (`body.print-report`), não um cupom — no app instalado do iOS mostram um
     aviso orientando a usar o Safari/computador ou "Exportar CSV" (não viram PDF por foto).
   - **Comprovante de quitação** (aba Quitadas de Contas a Receber): `DebtPaidPrint` (`components/ReceivablePrint.tsx`)
     montado no `DebtDetailModal` a partir do `GET /receivables/debts/:id` já existente — loja, `D-000X`, cliente,
-    aberta/quitada em, Original/Recebido/Devolvido, SALDO, "DÍVIDA QUITADA", vendas (código/data/valor a prazo),
+    aberta/quitada em, Original/Recebido/Devolvido, SALDO, "CONTA QUITADA", vendas (código/data/valor a prazo),
     recebimentos (data · forma · valor, cronológicos) e devoluções que abateram (`abatedAmount > 0`). Seletor 80mm/A4;
-    PDF `D-0001.pdf`. Sem API/banco/migração.
+    PDF `D-0001.pdf`. No papel a palavra é **"Conta"** ("Conta D-0001", "CONTA QUITADA", rodapé "quitação de
+    conta") — decisão do Owner; o código segue `D-000X`. Sem API/banco/migração.
 - **UX:** menos cliques, fontes legíveis, atalhos de teclado no desktop.
 
 ---

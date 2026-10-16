@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -13,7 +14,7 @@ import { groupPairedItems, calcVariation } from '@nexoloja/core';
 import { apiGet, apiPost } from '@/lib/api';
 import { useReloadOnReconnect } from '@/lib/useReloadOnReconnect';
 import { useOnline } from '@/lib/useOnline';
-import { printArea } from '@/lib/print';
+import { printArea, warmImage } from '@/lib/print';
 import { PeriodFilter, defaultRange } from '@/components/PeriodFilter';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { ReceiptPrint, type Store } from '@/components/ReceiptPrint';
@@ -367,7 +368,12 @@ export default function VendasPage() {
   // fechar sempre sobre os loaders/filtros atuais — o hook lê a versão mais recente via ref.
   async function reloadInitial() {
     try {
-      apiGet<Store>('/tenant').then(setStore).catch(() => {});
+      apiGet<Store>('/tenant')
+        .then((t) => {
+          setStore(t);
+          warmImage(t?.logoUrl); // logo já baixada → "Imprimir" sai no mesmo toque (lib/print.ts)
+        })
+        .catch(() => {});
       const session = await apiGet<{ id: string } | null>('/cash-sessions/current');
       setOpenSessionId(session?.id ?? null);
       // `?codigo=V-000123` (vindo do "Voltou / não entregue" das Entregas): abre já buscando a venda,
@@ -405,21 +411,17 @@ export default function VendasPage() {
 
   /** Abre o diálogo de impressão. O PDF sai nomeado pelo código da venda (V-000128) em vez do
    *  genérico "NexoLoja.pdf". Ver lib/print.ts. */
-  async function imprimir() {
-    const fileName = printJob ? formatOrderNumber(printJob.order.orderNumber) : null;
-    await printArea({ model: printModel, logoUrl: store?.logoUrl, fileName });
+  async function imprimir(order: Order) {
+    await printArea({ model: printModel, logoUrl: store?.logoUrl, fileName: formatOrderNumber(order.orderNumber) });
   }
 
-  /** Reimprime o comprovante de uma venda já registrada. */
+  /** Reimprime o comprovante de uma venda já registrada. `flushSync` monta o ReceiptPrint do job NA
+   *  HORA e o diálogo abre no mesmo toque (antes era um efeito depois do render — o iPhone com o app
+   *  instalado perdia o toque; ver lib/print.ts). */
   function reimprimir(order: Order) {
-    setPrintJob({ order, key: Date.now() });
+    flushSync(() => setPrintJob({ order, key: Date.now() }));
+    void imprimir(order);
   }
-
-  // Após o ReceiptPrint do job entrar no DOM, dispara o diálogo de impressão.
-  useEffect(() => {
-    if (printJob) imprimir();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [printJob]);
 
   /** Compartilha o comprovante (imagem ou PDF): monta o cupom fora da tela e o efeito abaixo captura. */
   function enviarComprovante(order: Order, kind: 'image' | 'pdf') {
