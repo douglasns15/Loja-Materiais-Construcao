@@ -29,6 +29,7 @@ import {
 } from '@nexoloja/shared';
 import { type Env, getConnectionString, getPrisma, getTenantId } from '../lib/request';
 import { requireActiveTenant, requireAdmin, requireAuth } from '../middleware/auth';
+import { recordPriceHistory } from '../lib/priceHistory';
 
 /**
  * Produção com ficha técnica (ADR-043). Duas coisas moram aqui:
@@ -455,6 +456,19 @@ productions.post('/', requireActiveTenant, async (c) => {
         // Último custo + o mesmo aviso da Entrada de estoque: o custo mudou, o preço não — "confira o preço".
         data: { stockQty: { increment: body.quantity }, ...outputCost },
       });
+      // Histórico de custo/preço (2026-10-16): o custo do pronto pela ficha técnica ("último custo").
+      if ('costPrice' in outputCost) {
+        await recordPriceHistory(tx, {
+          tenantId,
+          productId: output.id,
+          userId,
+          userName,
+          source: 'PRODUCTION',
+          before: { costPrice: Number(output.costPrice), salePrice: null },
+          after: { costPrice: (outputCost as { costPrice?: number }).costPrice },
+          detail: code,
+        });
+      }
       lines.push({
         tenantId,
         productId: output.id,
@@ -828,10 +842,24 @@ productions.post('/breakdown', requireActiveTenant, async (c) => {
             registeredByName: userName,
           },
         });
+        const cutCost = lastCostData(p, share.unitCost, share.totalCost > 0);
         await tx.product.update({
           where: { id: p.id },
-          data: { stockQty: { increment: ct.quantity }, ...lastCostData(p, share.unitCost, share.totalCost > 0) },
+          data: { stockQty: { increment: ct.quantity }, ...cutCost },
         });
+        // Histórico de custo/preço (2026-10-16): o custo do corte saído do desmembramento.
+        if ('costPrice' in cutCost) {
+          await recordPriceHistory(tx, {
+            tenantId,
+            productId: p.id,
+            userId,
+            userName,
+            source: 'DISASSEMBLY',
+            before: { costPrice: Number(p.costPrice), salePrice: null },
+            after: { costPrice: (cutCost as { costPrice?: number }).costPrice },
+            detail: code,
+          });
+        }
         lines.push({
           tenantId,
           productId: p.id,

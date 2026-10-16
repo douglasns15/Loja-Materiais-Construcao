@@ -34,6 +34,7 @@ import { MoneyInput } from '@/components/MoneyInput';
 import { RecipeSection } from '@/components/RecipeSection';
 import { PricingEsteira } from '@/components/PricingEsteira';
 import { BarcodeScanButton } from '@/components/BarcodeScanButton';
+import { PriceHistorySection } from '@/components/PriceHistorySection';
 import { useModalLayer } from '@/lib/keyboard';
 
 /**
@@ -1123,6 +1124,10 @@ export function ProductDetail({
                 </div>
               </div>
             )}
+
+            {/* Histórico de custo e preço (2026-10-16) — no fim do produto: cada mudança com o "de → para",
+                quem fez e por onde. Recarrega quando o produto é salvo (`updatedAt` muda). */}
+            <PriceHistorySection productId={product.id} reloadKey={String(product.updatedAt ?? '')} />
           </>
         ) : (
           <form

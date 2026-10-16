@@ -3198,3 +3198,58 @@ export function membershipChangeBlocked(
   if (targetRole === 'OWNER') return 'OWNER';
   return null;
 }
+
+// =============================================================================
+// HISTÓRICO DE CUSTO E PREÇO DO PRODUTO (2026-10-16)
+// =============================================================================
+
+/** Custo e preço de um produto num instante (números — o Decimal do Prisma chega como string/Decimal). */
+export interface PriceCostSnapshot {
+  costPrice: number | string | null | undefined;
+  salePrice: number | string | null | undefined;
+}
+
+/** O "de → para" de uma alteração. Campo que não mudou fica `null` nos dois lados. */
+export interface PriceCostChange {
+  costBefore: number | null;
+  costAfter: number | null;
+  priceBefore: number | null;
+  priceAfter: number | null;
+}
+
+/** Normaliza para 4 casas (a precisão de `costPrice`/`salePrice` no banco: Decimal(12,4)). */
+function money4(v: number | string | null | undefined): number | null {
+  if (v == null || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? Number(n.toFixed(4)) : null;
+}
+
+/**
+ * Compara custo/preço ANTES × DEPOIS e devolve o "de → para" — ou `null` quando nada mudou (então
+ * não se grava linha no histórico). `before = null` é o CADASTRO: o produto nasce com os valores de
+ * `after` (os dois entram, com "de" vazio). Em `after`, campo ausente/nulo = "não mexeu" (patch
+ * parcial, planilha com célula vazia). Compara na precisão do banco (4 casas), então reenviar o mesmo
+ * valor (ex.: "37" × 37.0000) não gera linha.
+ */
+export function diffPriceCost(
+  before: PriceCostSnapshot | null,
+  after: Partial<PriceCostSnapshot>,
+): PriceCostChange | null {
+  const costAfter = money4(after.costPrice);
+  const priceAfter = money4(after.salePrice);
+  if (before == null) {
+    if (costAfter == null && priceAfter == null) return null;
+    return { costBefore: null, costAfter, priceBefore: null, priceAfter };
+  }
+  const costBefore = money4(before.costPrice);
+  const priceBefore = money4(before.salePrice);
+  const costChanged = costAfter != null && costAfter !== costBefore;
+  const priceChanged = priceAfter != null && priceAfter !== priceBefore;
+  if (!costChanged && !priceChanged) return null;
+  return {
+    costBefore: costChanged ? costBefore : null,
+    costAfter: costChanged ? costAfter : null,
+    priceBefore: priceChanged ? priceBefore : null,
+    priceAfter: priceChanged ? priceAfter : null,
+  };
+}

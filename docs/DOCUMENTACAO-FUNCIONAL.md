@@ -29,8 +29,9 @@
    - 6.1 [Comprovante de dívida quitada](#61-comprovante-de-dívida-quitada)
    - 6.2 [Imprimir pelo iPhone/iPad (app instalado)](#62-imprimir-pelo-iphoneipad-app-instalado)
 7. [Receber conta: troco e acréscimo do cartão](#7-receber-conta-troco-e-acréscimo-do-cartão)
-8. [Pendências de cobertura](#pendências-de-cobertura)
-9. [Histórico deste documento](#histórico-deste-documento)
+8. [Histórico de custo e preço do produto](#8-histórico-de-custo-e-preço-do-produto)
+9. [Pendências de cobertura](#pendências-de-cobertura)
+10. [Histórico deste documento](#histórico-deste-documento)
 
 ---
 
@@ -579,6 +580,37 @@ Regras:
 
 ---
 
+## 8. Histórico de custo e preço do produto
+
+**Para que serve:** ver quando o custo e o preço de venda de um produto mudaram, de quanto para quanto, quem mudou e
+por onde — para acompanhar aumentos de fornecedor e conferir reajustes.
+
+**Onde fica:** **Produtos →** abra o produto **→** no fim da ficha, **"Histórico de custo e preço"**.
+
+**O que cada linha mostra**
+
+- **Data e hora** da mudança e **quem fez**.
+- **Por onde foi feito** (etiqueta azul): Cadastro do produto · Tela de Produtos · Entrada de estoque · Importação de
+  NF-e · Importação de planilha · Produção · Desmembramento. Quando há, vem junto a referência (ex.: "Compra NF 12345",
+  nome da planilha, código da produção).
+- **Custo** e/ou **Preço**: o valor antigo (riscado) → o novo, com a variação em % (**vermelho** = subiu, **verde** =
+  caiu). Só aparece o que mudou. No cadastro aparece "Custo inicial" / "Preço inicial".
+
+**Regras**
+
+- Entra uma linha **toda vez** que o custo ou o preço muda — pela tela de Produtos, numa entrada de estoque com custo
+  novo, ao importar NF-e ou planilha, numa produção ou desmembramento.
+- Salvar o produto **sem mudar** custo nem preço não gera linha.
+- A mais recente fica em cima; aparecem 8 e o botão **Ver tudo** mostra o resto.
+- Só leitura: o histórico não pode ser editado nem apagado.
+
+**Limitações**
+
+- O histórico começa a contar a partir desta versão (16/10/2026): mudanças feitas antes não aparecem.
+- Precisa de internet para carregar.
+
+---
+
 ## Pendências de cobertura
 
 Funcionalidades já em uso que ainda não estão descritas aqui (entram conforme forem tocadas): PDV (pagamentos,
@@ -609,3 +641,4 @@ painel da plataforma.
 | 2026-10-16 | Impressão (§6) conferida pelo Owner no iPhone (app instalado): "Imprimir" abre a impressão do iOS; comprovante de quitação e resumos com "Conta". |
 | 2026-10-16 | Receber conta (§7): troco no dinheiro e acréscimo do cartão calculado como no PDV (proporcional no parcial). |
 | 2026-10-16 | Receber conta (§7) conferido pelo Owner em produção: troco e acréscimo (total e parcial proporcional) funcionando; regra do parcial aprovada. |
+| 2026-10-16 | Histórico de custo e preço do produto (§8): de → para, data/hora, quem e por onde, no fim da ficha do produto. |

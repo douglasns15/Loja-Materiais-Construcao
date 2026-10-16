@@ -4,6 +4,7 @@ import { applyStockMovement, calcInventoryAdjustment, tracksStock } from '@nexol
 import { createStockMovementSchema, inventoryAdjustmentSchema } from '@nexoloja/shared';
 import { type Env, getConnectionString, getPrisma, getTenantId } from '../lib/request';
 import { requireActiveTenant, requireAuth } from '../middleware/auth';
+import { recordPriceHistory } from '../lib/priceHistory';
 
 const stock = new Hono<Env>();
 stock.use('*', requireAuth);
@@ -214,6 +215,19 @@ stock.post('/movements', requireActiveTenant, async (c) => {
           ...(costChanges ? { priceReviewPendingAt: new Date() } : {}),
         },
       });
+      // Histórico de custo/preço (2026-10-16): entrada com custo novo ⇒ linha "de → para".
+      if (mov.type === 'INCOME' && mov.newCostPrice != null) {
+        await recordPriceHistory(tx, {
+          tenantId,
+          productId: mov.productId,
+          userId: c.get('userId'),
+          userName: c.get('userName'),
+          source: 'STOCK_ENTRY',
+          before: { costPrice: product.costPrice.toString(), salePrice: null },
+          after: { costPrice: mov.newCostPrice },
+          detail: mov.reason ?? null,
+        });
+      }
       return movement;
     });
 

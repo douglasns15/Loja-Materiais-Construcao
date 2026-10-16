@@ -6,6 +6,8 @@ import {
   importNameKey,
   isAdminRole,
   planProductImport,
+  PRICE_HISTORY_ACTION,
+  type PriceHistoryEntry,
   productImportBatchSchema,
   updateProductSchema,
   type ImportCategory,
@@ -14,6 +16,7 @@ import {
 } from '@nexoloja/shared';
 import { type Env, getConnectionString, getPrisma, getTenantId } from '../lib/request';
 import { requireActiveTenant, requireAdmin, requireAuth } from '../middleware/auth';
+import { priceHistoryEvent, recordPriceHistory } from '../lib/priceHistory';
 
 /**
  * Escapa os curingas do `LIKE`/`ILIKE` (`%`, `_`, `\`) para que o token seja tratado como
@@ -307,6 +310,16 @@ products.post('/', async (c) => {
       updatedByName: userName,
     };
 
+    // Histórico de custo/preço (2026-10-16): o cadastro é a 1ª linha (custo e preço iniciais).
+    const createHistory = {
+      tenantId,
+      userId,
+      userName,
+      source: 'PRODUCT_CREATE' as const,
+      before: null,
+      after: { costPrice: productData.costPrice, salePrice: productData.salePrice },
+    };
+
     let created;
     // ADR-040 §2: produto SEM controle de estoque nasce sem saldo — `initialStock` é ignorado.
     if (productData.trackStock !== false && initialStock && initialStock > 0) {
@@ -317,6 +330,7 @@ products.post('/', async (c) => {
         const p = await tx.product.create({
           data: { ...productData, tenantId, stockQty: initialStock, ...authorship },
         });
+        await recordPriceHistory(tx, { ...createHistory, productId: p.id });
         await tx.stockMovement.create({
           data: {
             tenantId,
@@ -333,8 +347,10 @@ products.post('/', async (c) => {
         return p;
       });
     } else {
-      created = await prisma.product.create({
-        data: { ...productData, tenantId, ...authorship },
+      created = await prisma.$transaction(async (tx) => {
+        const p = await tx.product.create({ data: { ...productData, tenantId, ...authorship } });
+        await recordPriceHistory(tx, { ...createHistory, productId: p.id });
+        return p;
       });
     }
     return c.json({ ok: true, data: withMargin(created) }, 201);
@@ -480,6 +496,25 @@ products.post('/import', requireAdmin, requireActiveTenant, async (c) => {
         }
       }
       if (creates.length) await tx.product.createMany({ data: creates });
+      // Histórico de custo/preço (2026-10-16): uma linha por produto novo (valores iniciais) e por
+      // produto existente cujo custo/preço a planilha mudou — gravadas juntas no fim do lote.
+      const historyBase = {
+        tenantId,
+        userId,
+        userName,
+        source: 'SPREADSHEET' as const,
+        detail: batch.fileName ?? null,
+      };
+      const priceEvents: Prisma.AuditEventCreateManyInput[] = [];
+      for (const cr of creates) {
+        const ev = priceHistoryEvent({
+          ...historyBase,
+          productId: cr.id!,
+          before: null,
+          after: { costPrice: Number(cr.costPrice ?? 0), salePrice: Number(cr.salePrice) },
+        });
+        if (ev) priceEvents.push(ev);
+      }
 
       // --- Produtos existentes ---
       // Saldo relido com trava de linha só para quem terá ajuste: uma venda entre a leitura acima e a
@@ -526,6 +561,13 @@ products.post('/import', requireAdmin, requireActiveTenant, async (c) => {
         }
         const categoryId = patch.category ? await ensureCategory(patch.category) : null;
         const review = row.salePrice != null ? 1 : patch.costPrice !== undefined ? 2 : 0;
+        const ev = priceHistoryEvent({
+          ...historyBase,
+          productId: item.product.id,
+          before: { costPrice: item.product.costPrice, salePrice: item.product.salePrice },
+          after: { costPrice: patch.costPrice, salePrice: patch.salePrice },
+        });
+        if (ev) priceEvents.push(ev);
         updateRows.push(Prisma.sql`(
           ${item.product.id}::uuid, ${patch.name ?? null}::text, ${patch.sku ?? null}::text, ${patch.ean ?? null}::text,
           ${patch.popularName ?? null}::text, ${patch.manufacturer ?? null}::text, ${patch.description ?? null}::text,
@@ -561,6 +603,7 @@ products.post('/import', requireAdmin, requireActiveTenant, async (c) => {
         `);
       }
       if (movements.length) await tx.stockMovement.createMany({ data: movements });
+      if (priceEvents.length) await tx.auditEvent.createMany({ data: priceEvents });
 
       // --- Auditoria: um evento por importação, somado lote a lote ---
       const results: ImportLineResult[] = plan.map((i) =>
@@ -628,6 +671,48 @@ products.post('/import', requireAdmin, requireActiveTenant, async (c) => {
   }
 });
 
+/**
+ * Histórico de custo e preço de um produto (2026-10-16): as linhas "de → para" gravadas a cada
+ * alteração (ver lib/priceHistory.ts), da mais recente para a mais antiga, teto de 200. Só leitura;
+ * lê o `AuditEvent` pelo índice (tenantId, entity, entityId).
+ */
+products.get('/:id/price-history', async (c) => {
+  const tenantId = getTenantId(c);
+  if (!tenantId) {
+    return c.json({ ok: false, error: 'Header x-tenant-id ausente ou inválido.' }, 400);
+  }
+  const id = c.req.param('id');
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return c.json({ ok: false, error: 'Produto inválido.' }, 400);
+  try {
+    const prisma = getPrisma(c);
+    const rows = await prisma.auditEvent.findMany({
+      where: { tenantId, entity: 'Product', entityId: id, action: PRICE_HISTORY_ACTION },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+      select: { id: true, createdAt: true, meta: true },
+    });
+    const num = (v: unknown) => (v == null ? null : Number(v));
+    const data: PriceHistoryEntry[] = rows.map((r) => {
+      const m = (r.meta ?? {}) as Record<string, unknown>;
+      return {
+        id: r.id,
+        at: r.createdAt.toISOString(),
+        byName: (m.byName as string | null) ?? null,
+        source: String(m.source ?? ''),
+        costBefore: num(m.costBefore),
+        costAfter: num(m.costAfter),
+        priceBefore: num(m.priceBefore),
+        priceAfter: num(m.priceAfter),
+        detail: (m.detail as string | null) ?? null,
+      };
+    });
+    return c.json({ ok: true, data });
+  } catch (err) {
+    console.error('GET /products/:id/price-history falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao carregar o histórico de custo e preço.' }, 500);
+  }
+});
+
 /** Atualiza um produto (parcial). */
 products.patch('/:id', async (c) => {
   const tenantId = getTenantId(c);
@@ -683,17 +768,40 @@ products.patch('/:id', async (c) => {
         );
       }
     }
+    // Histórico de custo/preço (2026-10-16): mexeu em custo ou preço ⇒ lê o "antes" e grava a linha
+    // na MESMA transação do update.
+    const touchesPrice = patchData.costPrice !== undefined || patchData.salePrice !== undefined;
     // updateMany garante o escopo do tenant (proteção antes do RLS da Fase 2).
-    const result = await prisma.product.updateMany({
-      where: { id, tenantId, deletedAt: null },
-      // Autoria (ADR-010): registra quem alterou por último + snapshot do nome.
-      data: {
-        ...patchData,
-        ...(dismissPriceReview ? { priceReviewPendingAt: null } : {}),
-        ...(markReviewed ? { pendingReview: false } : {}),
-        updatedById: c.get('userId'),
-        updatedByName: c.get('userName'),
-      },
+    const result = await prisma.$transaction(async (tx) => {
+      const before = touchesPrice
+        ? await tx.product.findFirst({
+            where: { id, tenantId, deletedAt: null },
+            select: { costPrice: true, salePrice: true },
+          })
+        : null;
+      const r = await tx.product.updateMany({
+        where: { id, tenantId, deletedAt: null },
+        // Autoria (ADR-010): registra quem alterou por último + snapshot do nome.
+        data: {
+          ...patchData,
+          ...(dismissPriceReview ? { priceReviewPendingAt: null } : {}),
+          ...(markReviewed ? { pendingReview: false } : {}),
+          updatedById: c.get('userId'),
+          updatedByName: c.get('userName'),
+        },
+      });
+      if (r.count > 0 && before) {
+        await recordPriceHistory(tx, {
+          tenantId,
+          productId: id,
+          userId: c.get('userId'),
+          userName: c.get('userName'),
+          source: 'PRODUCT_EDIT',
+          before: { costPrice: before.costPrice.toString(), salePrice: before.salePrice.toString() },
+          after: { costPrice: patchData.costPrice, salePrice: patchData.salePrice },
+        });
+      }
+      return r;
     });
     if (result.count === 0) {
       return c.json({ ok: false, error: 'Produto não encontrado.' }, 404);

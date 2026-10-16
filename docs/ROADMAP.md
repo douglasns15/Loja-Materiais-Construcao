@@ -8,6 +8,13 @@
 > custo fixo do Prisma por requisição já passa de 10 ms). **Correção: Owner assinou o Workers Paid** (teto 30 s) —
 > pós-assinatura 130 requisições reais + 30 de stress, 0 falhas. Sem mudança de código. Ver ADR-005, adendo 2026-10-14.
 >
+> **ONDE PARAMOS (2026-10-16, noite) — Histórico de custo e preço do produto (web + API, SEM migration):**
+> - Produtos → abrir produto → fim da ficha: **"Histórico de custo e preço"** (de → para, %, data/hora, quem, por onde).
+> - Gravado no `AuditEvent` existente (`action = PRICE_COST_CHANGE`) na mesma transação da mudança, nas 7 portas:
+>   cadastro, edição, planilha, entrada de estoque, NF-e, produção, desmembramento (`lib/priceHistory.ts` + core
+>   `diffPriceCost`). Rota nova `GET /products/:id/price-history`. Core 551 (+8), shared 149, API 7, typecheck verde.
+>   Começa a contar a partir do deploy (sem retroativo).
+>
 > **ONDE PARAMOS (2026-10-16, tarde) — Receber conta igual ao PDV (web + API, sem migration) — CONCLUÍDO e E2E do Owner
 > VALIDADO (2026-10-16):**
 > - Contas a Receber → Receber: **Dinheiro entregue → Troco/Falta** (core `cashReceiptChange`; troco só na tela) e

@@ -10,6 +10,7 @@ import {
 } from '@nexoloja/shared';
 import { type Env, getConnectionString, getPrisma, getTenantId } from '../lib/request';
 import { requireActiveTenant, requireAuth } from '../middleware/auth';
+import { recordPriceHistory } from '../lib/priceHistory';
 
 /**
  * Importação de XML de NF-e (ADR-025, Fatia 2). O XML é lido no NAVEGADOR (DOMParser) e a tela
@@ -146,12 +147,23 @@ nfe.post('/entry', requireActiveTenant, async (c) => {
               select: { id: true },
             });
             pid = created.id;
+            // Histórico de custo/preço (2026-10-16): cadastro pela nota = 1ª linha (valores iniciais).
+            await recordPriceHistory(tx, {
+              tenantId,
+              productId: pid,
+              userId,
+              userName,
+              source: 'NFE_IMPORT',
+              before: null,
+              after: { costPrice: item.newCostPrice ?? 0, salePrice: np.salePrice },
+              detail: reason,
+            });
           } else {
             // Produto EXISTENTE: soma a entrada ao saldo e, se o operador informou um custo novo,
             // grava "último custo" + aviso de revisão de preço (a margem mudou, o preço não).
             const existing = await tx.product.findFirst({
               where: { id: item.productId, tenantId, deletedAt: null },
-              select: { id: true, stockQty: true, costPrice: true, ean: true, trackStock: true },
+              select: { id: true, stockQty: true, costPrice: true, salePrice: true, ean: true, trackStock: true },
             });
             if (!existing) throw new Error('PRODUCT_NOT_FOUND');
             tracked = tracksStock(existing);
@@ -194,6 +206,17 @@ nfe.post('/entry', requireActiveTenant, async (c) => {
               },
             });
             pid = existing.id;
+            // Histórico de custo/preço (2026-10-16): custo e/ou preço informados ao casar o item.
+            await recordPriceHistory(tx, {
+              tenantId,
+              productId: pid,
+              userId,
+              userName,
+              source: 'NFE_IMPORT',
+              before: { costPrice: existing.costPrice.toString(), salePrice: existing.salePrice.toString() },
+              after: { costPrice: item.newCostPrice, salePrice: item.newSalePrice },
+              detail: reason,
+            });
           }
 
           // Entrada de estoque (ADR-001) — mesma transação, custo unitário da nota.
