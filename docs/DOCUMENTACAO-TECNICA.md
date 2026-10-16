@@ -760,7 +760,9 @@ Alertas CALCULADOS sob demanda (custo-zero: nada é gravado; a pendência some q
   NF …"), `PRODUCTION` e `DISASSEMBLY` (último custo do pronto/cortes; `detail` = código `P-…`). Tela:
   `PriceHistorySection` no fim do `ProductDetail` (modo leitura) — lista mais recente primeiro, 8 linhas + "Ver tudo",
   variação % (alta em vermelho, queda em verde), recarrega quando o produto salva (`updatedAt`). Alterações anteriores
-  a esta versão não têm registro. Testes: `packages/core/src/historicoPreco.test.ts` (8).
+  a esta versão não têm registro. Testes: `packages/core/src/historicoPreco.test.ts` (8). **E2E do Owner VALIDADO
+  (2026-10-16, Loja Demo)** — XML de teste em `docs/testes/nfe-teste-anel-borracha-100mm.xml` (NF-e fictícia; a chave é
+  única por nota, então reimportar exige gerar outra).
 - **UX:** menos cliques, fontes legíveis, atalhos de teclado no desktop.
 
 ---

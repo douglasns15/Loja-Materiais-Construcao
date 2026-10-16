@@ -8,13 +8,20 @@
 > custo fixo do Prisma por requisição já passa de 10 ms). **Correção: Owner assinou o Workers Paid** (teto 30 s) —
 > pós-assinatura 130 requisições reais + 30 de stress, 0 falhas. Sem mudança de código. Ver ADR-005, adendo 2026-10-14.
 >
-> **ONDE PARAMOS (2026-10-16, noite) — Histórico de custo e preço do produto (web + API, SEM migration):**
+> **ONDE PARAMOS (2026-10-16, noite) — Histórico de custo e preço do produto (web + API, SEM migration) — CONCLUÍDO e
+> E2E do Owner VALIDADO (2026-10-16):**
 > - Produtos → abrir produto → fim da ficha: **"Histórico de custo e preço"** (de → para, %, data/hora, quem, por onde).
 > - Gravado no `AuditEvent` existente (`action = PRICE_COST_CHANGE`) na mesma transação da mudança, nas 7 portas:
 >   cadastro, edição, planilha, entrada de estoque, NF-e, produção, desmembramento (`lib/priceHistory.ts` + core
 >   `diffPriceCost`). Rota nova `GET /products/:id/price-history`. Core 551 (+8), shared 149, API 7, typecheck verde.
 >   Começa a contar a partir do deploy (sem retroativo).
->   **NO AR: API `5d9cef56`, web `138f0868`** (smoke OK; commit `a3c620d`). **Pendentes: E2E do Owner + push.**
+>   **NO AR: API `5d9cef56`, web `138f0868`** (smoke OK; commit `a3c620d`). **E2E do Owner VALIDADO na Loja Demo:** linhas
+>   de Tela de Produtos, Entrada de estoque (com motivo) e Importação de NF-e ("Compra NF 9001", custo e preço) com
+>   variação %. XML de teste: `docs/testes/nfe-teste-anel-borracha-100mm.xml` (chave fictícia — reimportar exige chave nova).
+>   Pendente só o push do Owner.
+>
+> **PRÓXIMA SESSÃO:** Owner escolhe o próximo ponto (NFC-e na branch `feat/nfe-emissao` só com sinal dele, item do
+> PRODUCT-ROADMAP ou nova melhoria). Pendências antigas seguem no bloco "OBSERVAÇÕES PARA O FUTURO" abaixo.
 >
 > **ONDE PARAMOS (2026-10-16, tarde) — Receber conta igual ao PDV (web + API, sem migration) — CONCLUÍDO e E2E do Owner
 > VALIDADO (2026-10-16):**
@@ -77,7 +84,7 @@
 > 4. **Planilha — Fatia 4 (De-Para editável + perfis lembrados)** — **ADIADA pelo Owner**; volta para discussão quando
 >    aparecer o primeiro cliente com exportação de outro sistema (ver ADR-041, Fatia 4).
 >
-> **Última atualização:** 2026-10-16 — **Receber conta igual ao PDV (troco + acréscimo do cartão) e impressão (quitação + iPhone nativo) — validados.**
+> **Última atualização:** 2026-10-16 — **Histórico de custo e preço do produto; Receber conta igual ao PDV; impressão (quitação + iPhone nativo) — todos validados.**
 >
 > - **Teclado em todas as telas (ADR-032, adendo 2026-10-15) — CONCLUÍDO, NO AR e E2E do Owner VALIDADO (2026-10-15);
 >   só `apps/web`, sem migration/API:**

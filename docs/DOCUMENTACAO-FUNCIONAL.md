@@ -10,7 +10,7 @@
 > **Cobertura:** começa pelas entregas de 2026-10-09 (carga do catálogo e balança). As funcionalidades anteriores
 > entram aqui conforme forem tocadas — ver [Pendências de cobertura](#pendências-de-cobertura).
 >
-> **Última atualização:** 2026-10-16.
+> **Última atualização:** 2026-10-16 (noite).
 
 ---
 
@@ -642,3 +642,4 @@ painel da plataforma.
 | 2026-10-16 | Receber conta (§7): troco no dinheiro e acréscimo do cartão calculado como no PDV (proporcional no parcial). |
 | 2026-10-16 | Receber conta (§7) conferido pelo Owner em produção: troco e acréscimo (total e parcial proporcional) funcionando; regra do parcial aprovada. |
 | 2026-10-16 | Histórico de custo e preço do produto (§8): de → para, data/hora, quem e por onde, no fim da ficha do produto. |
+| 2026-10-16 | Histórico de custo e preço (§8) conferido pelo Owner na Loja Demo: Tela de Produtos, Entrada de estoque e Importação de NF-e registrando certo. |
