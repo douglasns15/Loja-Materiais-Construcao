@@ -14,6 +14,7 @@
 >   cadastro, edição, planilha, entrada de estoque, NF-e, produção, desmembramento (`lib/priceHistory.ts` + core
 >   `diffPriceCost`). Rota nova `GET /products/:id/price-history`. Core 551 (+8), shared 149, API 7, typecheck verde.
 >   Começa a contar a partir do deploy (sem retroativo).
+>   **NO AR: API `5d9cef56`, web `138f0868`** (smoke OK; commit `a3c620d`). **Pendentes: E2E do Owner + push.**
 >
 > **ONDE PARAMOS (2026-10-16, tarde) — Receber conta igual ao PDV (web + API, sem migration) — CONCLUÍDO e E2E do Owner
 > VALIDADO (2026-10-16):**
