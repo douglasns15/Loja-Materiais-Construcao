@@ -30,9 +30,9 @@
         "--config",
         "apps/web/wrangler.jsonc",
         "--port",
-        "8788"
+        "3000"
       ],
-      "port": 8788
+      "port": 3000
     }
   ]
 }

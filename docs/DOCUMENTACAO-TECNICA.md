@@ -892,9 +892,11 @@ O isolamento entre lojas é garantido **no banco**, não só na aplicação — 
 - **CI/CD:** GitHub Actions roda `turbo run lint test`, depois aplica migrações e publica os dois Workers. (Desde o
   Next 16 o web não tem tarefa `lint`; use `npm run typecheck -w @nexoloja/web`.)
 - **Pré-visualizar o build de produção localmente:** `npx opennextjs-cloudflare build` em `apps/web` e depois a
-  configuração `web-build` do `.claude/launch.json` (`wrangler dev` do worker gerado em `http://localhost:8788`). O
-  smoke roda contra ele com `node scripts/verify-deploy.mjs http://localhost:8788`. A API de produção não libera CORS
-  para essa porta, então ali só dá para conferir HTML/CSS/SW, não telas logadas.
+  configuração `web-build` do `.claude/launch.json` (`wrangler dev` do worker gerado em `http://localhost:3000`). A
+  porta 3000 é a que o CORS da API de produção libera, então dá para **logar e testar o build de produção antes do
+  deploy** (dados reais — use a Loja Demo). Não rode junto com o `next dev` (mesma porta). O smoke roda contra ele com
+  `node scripts/verify-deploy.mjs http://localhost:3000`. Os atalhos de teclado só armam se a janela tiver ≥768 px no
+  carregamento da página.
 
 ### Riscos operacionais conhecidos
 

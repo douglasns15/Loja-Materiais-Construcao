@@ -16,8 +16,11 @@
 > - Gates: typecheck web/API verde; core 551, shared 153, API 7; `opennextjs-cloudflare build` **sem a flag** (Turbopack);
 >   worker local: PDV/Estoque/Produtos/Login 200 + `no-store`, CSS 200 com `.flex{` (agora em `/_next/static/chunks/`),
 >   smoke local OK, SW ativo; dry-run da API OK.
-> - **Próximo passo (Owner):** merge + `npm install` + `npm run deploy` do web (sem flag) e deploy da API quando quiser
->   (o wrangler mudou, o código da API não); E2E logado em PDV, Estoque e Produtos. Push do Owner.
+> - **Merge na `main` feito** (fast-forward `c8464d1`). **Teste logado do build novo na Loja Demo (localhost:3000) OK:**
+>   Produtos, Estoque (entrada via F8, 135 → 136), PDV (F9, adicionar/remover), janela flutuante, atalhos e todas as
+>   telas do menu — com estilo e sem erro no console. Falta: concluir venda + comprovante.
+> - **Próximo passo (Owner):** `npm install` na pasta principal + `npm run deploy` do web (sem flag); deploy da API
+>   quando quiser (o wrangler mudou, o código não); E2E da venda com comprovante. Push do Owner.
 >
 > **ONDE PARAMOS (2026-10-21) — Preço de venda na Entrada de estoque (web + API, SEM migration) — CONCLUÍDO e
 > E2E do Owner VALIDADO (2026-10-21):**
