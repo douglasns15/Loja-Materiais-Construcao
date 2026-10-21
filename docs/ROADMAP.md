@@ -25,7 +25,7 @@
 >   `/products`, `/caixa` 200; CSS 52 KB com `.flex{`); **API `f441a291`** (wrangler 4.151.3; `prisma generate` + schema
 >   embutido conferido; `/health` 200, `/db-check` 200, rota protegida 401) com escrita validada: venda de teste
 >   **V-000135** (1× Anel, dinheiro) → `POST /orders - Ok` no `wrangler tail`. Rollback: web `bc65f1c6`, API `84accd25`.
-> - **Pendente (Owner):** imprimir um comprovante de verdade em produção + push.
+> - **Impressão real de comprovante em produção VALIDADA pelo Owner (2026-10-21).** Pendente só o push do Owner.
 >
 > **ONDE PARAMOS (2026-10-21) — Preço de venda na Entrada de estoque (web + API, SEM migration) — CONCLUÍDO e
 > E2E do Owner VALIDADO (2026-10-21):**
