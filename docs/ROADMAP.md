@@ -18,9 +18,10 @@
 >   smoke local OK, SW ativo; dry-run da API OK.
 > - **Merge na `main` feito** (fast-forward `c8464d1`). **Teste logado do build novo na Loja Demo (localhost:3000) OK:**
 >   Produtos, Estoque (entrada via F8, 135 → 136), PDV (F9, adicionar/remover), janela flutuante, atalhos e todas as
->   telas do menu — com estilo e sem erro no console. Falta: concluir venda + comprovante.
+>   telas do menu — com estilo e sem erro no console. **Venda de teste V-000134** (1× Anel, dinheiro R$ 5,00, troco
+>   R$ 1,90) concluída com F8 + comprovante 80mm conferido; estoque 136 → 135.
 > - **Próximo passo (Owner):** `npm install` na pasta principal + `npm run deploy` do web (sem flag); deploy da API
->   quando quiser (o wrangler mudou, o código não); E2E da venda com comprovante. Push do Owner.
+>   quando quiser (o wrangler mudou, o código não); conferir em produção e imprimir de verdade um comprovante. Push do Owner.
 >
 > **ONDE PARAMOS (2026-10-21) — Preço de venda na Entrada de estoque (web + API, SEM migration) — CONCLUÍDO e
 > E2E do Owner VALIDADO (2026-10-21):**
