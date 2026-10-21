@@ -676,3 +676,4 @@ painel da plataforma.
 | 2026-10-16 | Histórico de custo e preço do produto (§8): de → para, data/hora, quem e por onde, no fim da ficha do produto. |
 | 2026-10-16 | Histórico de custo e preço (§8) conferido pelo Owner na Loja Demo: Tela de Produtos, Entrada de estoque e Importação de NF-e registrando certo. |
 | 2026-10-21 | Entrada de estoque (§9): campo opcional de preço de venda (vazio não muda), com preço atual e margem, igual à importação de NF-e. |
+| 2026-10-21 | Entrada de estoque com preço de venda (§9) conferida pelo Owner em produção. |

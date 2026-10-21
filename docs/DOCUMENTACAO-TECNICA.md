@@ -756,7 +756,7 @@ Alertas CALCULADOS sob demanda (custo-zero: nada é gravado; a pendência some q
   (core `calcMarginPercent` com custo digitado ou do cadastro × preço digitado ou do cadastro). Só envia `newSalePrice`
   ao `POST /stock/movements` quando > 0 e diferente do preço atual (4 casas); o custo segue com o `window.confirm` de
   sempre. Contrato: `createStockMovementSchema.newSalePrice` (shared, `z.number().positive().optional()`). Testes:
-  `packages/shared/src/stock.test.ts` (4). Sem migration. No ar: API `84accd25`, web `bc65f1c6` (2026-10-21).
+  `packages/shared/src/stock.test.ts` (4). Sem migration. No ar: API `84accd25`, web `bc65f1c6` (2026-10-21). **E2E do Owner VALIDADO (2026-10-21).**
 - **Histórico de custo e preço do produto (2026-10-16).** Sem tabela nova: cada mudança de `costPrice`/`salePrice` vira
   um `AuditEvent` (`entity = 'Product'`, `entityId = productId`, `action = PRICE_COST_CHANGE`; `meta = { source,
   byName, costBefore, costAfter, priceBefore, priceAfter, detail? }`), gravado **na mesma transação** da alteração por

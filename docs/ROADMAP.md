@@ -8,8 +8,8 @@
 > custo fixo do Prisma por requisição já passa de 10 ms). **Correção: Owner assinou o Workers Paid** (teto 30 s) —
 > pós-assinatura 130 requisições reais + 30 de stress, 0 falhas. Sem mudança de código. Ver ADR-005, adendo 2026-10-14.
 >
-> **ONDE PARAMOS (2026-10-21) — Preço de venda na Entrada de estoque (web + API, SEM migration) — NO AR;
-> E2E do Owner PENDENTE:**
+> **ONDE PARAMOS (2026-10-21) — Preço de venda na Entrada de estoque (web + API, SEM migration) — CONCLUÍDO e
+> E2E do Owner VALIDADO (2026-10-21):**
 > - Estoque → "Entrada de estoque": campo **"Preço de venda — vazio: não muda"** (igual ao da importação de NF-e), com
 >   "Atual: R$ …" + margem resultante. Preço por unidade de venda (barra/rolo/pacote, kg/L ou unidade).
 > - API `POST /stock/movements` aceita `newSalePrice` (shared `createStockMovementSchema`): grava o `salePrice` na mesma
@@ -17,8 +17,8 @@
 >   shared 153 (+4 em `stock.test.ts`), typecheck web/api verde.
 >   **NO AR: API `84accd25`, web `bc65f1c6`** (smoke OK: /health 200, rota exige token, CSS íntegro, bundle com o
 >   campo; commit `8e965dd`). **Atenção:** o OpenNext passou a recusar o Next 15.5.19 (fim do suporte do Next 15) — o
->   web foi publicado com `--dangerouslyUseUnsupportedNextVersion` (mesma versão já em produção). Pendentes: E2E do
->   Owner (entrada com preço novo → produto, aviso de revisão e histórico) e push do Owner.
+>   web foi publicado com `--dangerouslyUseUnsupportedNextVersion` (mesma versão já em produção). **E2E do Owner
+>   VALIDADO (2026-10-21)** em produção. Pendente só o push do Owner.
 >
 > **ONDE PARAMOS (2026-10-16, noite) — Histórico de custo e preço do produto (web + API, SEM migration) — CONCLUÍDO e
 > E2E do Owner VALIDADO (2026-10-16):**

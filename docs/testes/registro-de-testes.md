@@ -6492,3 +6492,18 @@ fonte externa nova por enquanto.** O catálogo
 cresce pela importação de NF-e (melhor fonte p/ construção, ADR-025) e pelos cadastros manuais.
 **Teste da Cosmos grátis:** 1ª consulta do dia logo cedo — se vier ficha, a franquia existe e algo a consome; se vier
 "limite diário", a franquia grátis acabou.
+
+## Preço de venda na Entrada de estoque — 2026-10-21
+
+Estoque → "Entrada de estoque" ganhou "Preço de venda — vazio: não muda" (igual à importação de NF-e), com preço
+atual e margem; `POST /stock/movements` aceita `newSalePrice` (grava o preço, limpa o aviso de revisão, histórico
+`STOCK_ENTRY`). Sem migration. Commit `8e965dd`.
+
+| O que foi testado | Método | Resultado |
+|---|---|---|
+| `createStockMovementSchema.newSalePrice` (aceita com/sem custo, recusa 0 e negativo, entrada simples segue válida) | Vitest `packages/shared/src/stock.test.ts` (4) | ✅ shared 153/153 |
+| Regressão do core | `npm run test` | ✅ core 551/551 |
+| Typecheck | `tsc --noEmit` em `apps/api` e `apps/web` | ✅ |
+| Deploy API | `prisma generate` + `npm run deploy` → `84accd25`; `/health` 200; rota sem token 401 | ✅ |
+| Deploy web | OpenNext (com `--dangerouslyUseUnsupportedNextVersion`, Next 15 fora do suporte) → `bc65f1c6`; CSS ~52 KB com `.flex{`; bundle com o campo | ✅ |
+| E2E do Owner em produção: entrada com preço novo → preço do produto, aviso "confira o preço" e Histórico de custo e preço | Manual (Owner) | ✅ VALIDADO 2026-10-21 |
