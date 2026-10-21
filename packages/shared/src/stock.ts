@@ -23,6 +23,11 @@ export const createStockMovementSchema = z.object({
   /// envia (confirmação do operador); vazio ⇒ o custo do cadastro fica intocado. Diferente de
   /// `unitCost`, que é por unidade-BASE (ex.: por metro na barra/rolo) e vive só no StockMovement.
   newCostPrice: z.number().positive().optional(),
+  /// Novo PREÇO DE VENDA do cadastro (`Product.salePrice`), por unidade de venda — reajuste opcional
+  /// no ato da entrada, igual ao "Preço de venda — vazio: não muda" da importação de NF-e. Só em
+  /// entrada (INCOME); quando informado, a margem foi revisada agora ⇒ o servidor limpa o aviso
+  /// `priceReviewPendingAt`. Vazio ⇒ o preço do cadastro fica intocado.
+  newSalePrice: z.number().positive().optional(),
   supplierId: z.string().uuid().optional(),
   reason: z.string().max(150).optional(),
 });

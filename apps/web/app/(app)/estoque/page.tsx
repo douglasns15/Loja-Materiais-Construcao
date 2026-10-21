@@ -11,6 +11,7 @@ import {
 } from '@nexoloja/shared';
 import {
   approxPieces,
+  calcMarginPercent,
   isClosedPrimary,
   isLowStock,
   isWeighedUnit,
@@ -229,6 +230,8 @@ export default function EstoquePage() {
     productId: '',
     quantity: '',
     unitCost: '',
+    // Reajuste opcional do preço de venda do cadastro (vazio = não muda), como na importação de NF-e.
+    salePrice: '',
     supplierId: '',
     reason: '',
   });
@@ -494,12 +497,23 @@ export default function EstoquePage() {
       }
     }
 
+    // Preço de venda por UNIDADE DE VENDA (= `Product.salePrice`), sem conversão. Só envia quando
+    // muda de fato — repetir o preço atual não grava histórico nem mexe no aviso de revisão.
+    const typedSale = Number(entry.salePrice);
+    const newSalePrice =
+      typedSale > 0 &&
+      entryProduct &&
+      Number(typedSale.toFixed(4)) !== Number(Number(entryProduct.salePrice).toFixed(4))
+        ? typedSale
+        : undefined;
+
     const parsed = createStockMovementSchema.safeParse({
       productId: entry.productId,
       type: 'INCOME',
       quantity: qtyMeters,
       unitCost: unitCostMeters,
       newCostPrice,
+      newSalePrice,
       supplierId: entry.supplierId || undefined,
       reason: reason || undefined,
     });
@@ -511,12 +525,13 @@ export default function EstoquePage() {
     setSavingEntry(true);
     try {
       await apiPost('/stock/movements', parsed.data);
-      setEntry({ productId: '', quantity: '', unitCost: '', supplierId: '', reason: '' });
+      setEntry({ productId: '', quantity: '', unitCost: '', salePrice: '', supplierId: '', reason: '' });
       setPieces([]);
       setPieceDraft('');
+      const updated = [newCostPrice != null && 'custo', newSalePrice != null && 'preço de venda'].filter(Boolean);
       setNotice(
-        newCostPrice != null
-          ? 'Entrada de estoque registrada. Custo do produto atualizado.'
+        updated.length
+          ? `Entrada de estoque registrada. ${updated.join(' e ').replace(/^./, (ch) => ch.toUpperCase())} do produto atualizado${updated.length > 1 ? 's' : ''}.`
           : 'Entrada de estoque registrada.',
       );
       await Promise.all([loadCatalog(), loadMovements()]);
@@ -803,6 +818,34 @@ export default function EstoquePage() {
               onChange={(v) => setEntry({ ...entry, unitCost: v })}
               className="rounded-lg border border-gray-300 px-3 py-2"
             />
+            {/* Reajuste OPCIONAL do preço de venda (em função do novo custo) — mesmo campo da
+                importação de NF-e: vazio não muda; mostra o preço atual e a margem resultante. */}
+            <label className="block text-xs text-gray-600 sm:col-span-2">
+              {entryClosed
+                ? `Preço de venda por ${unitWord(entryProduct)}`
+                : entryWeighed
+                  ? `Preço de venda por ${entryWeighedAbbr}`
+                  : 'Preço de venda'}{' '}
+              — vazio: não muda
+              <div className="mt-1 grid grid-cols-1 items-center gap-x-3 gap-y-1 sm:grid-cols-2">
+                <MoneyInput
+                  value={entry.salePrice}
+                  onChange={(v) => setEntry({ ...entry, salePrice: v })}
+                  className="rounded-lg border border-gray-300 px-3 py-2 text-base text-gray-900"
+                  aria-label="Novo preço de venda"
+                />
+                {entryProduct && (
+                  <span className="text-[11px] text-gray-500">
+                    Atual: {BRL(entryProduct.salePrice)}
+                    {(() => {
+                      const cost = Number(entry.unitCost) > 0 ? Number(entry.unitCost) : Number(entryProduct.costPrice);
+                      const price = Number(entry.salePrice) > 0 ? Number(entry.salePrice) : Number(entryProduct.salePrice);
+                      return cost > 0 && price > 0 ? ` · margem ${calcMarginPercent(cost, price).toLocaleString('pt-BR')}%` : '';
+                    })()}
+                  </span>
+                )}
+              </div>
+            </label>
             {/* Fornecedor: mesmo padrão de busca do Produto (SupplierPicker). Opcional; o rodapé
                 "+ Cadastrar novo fornecedor" abre o quick-add e já seleciona. */}
             <div className="sm:col-span-2">

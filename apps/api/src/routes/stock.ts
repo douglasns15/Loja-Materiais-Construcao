@@ -155,7 +155,7 @@ stock.post('/movements', requireActiveTenant, async (c) => {
     const prisma = getPrisma(c);
     const product = await prisma.product.findFirst({
       where: { id: mov.productId, tenantId, deletedAt: null },
-      select: { id: true, name: true, stockQty: true, costPrice: true, trackStock: true },
+      select: { id: true, name: true, stockQty: true, costPrice: true, salePrice: true, trackStock: true },
     });
     if (!product) {
       return c.json({ ok: false, error: 'Produto inexistente.' }, 400);
@@ -182,6 +182,15 @@ stock.post('/movements', requireActiveTenant, async (c) => {
       mov.type === 'INCOME' &&
       mov.newCostPrice != null &&
       Number(mov.newCostPrice) !== Number(product.costPrice);
+    // Preço de venda (opcional na entrada, igual à importação de NF-e): se o operador informou um
+    // preço novo, ele já revisou a margem AGORA — grava o preço e LIMPA o aviso de revisão. Se NÃO
+    // mexeu no preço mas o custo mudou, acende o aviso. Precedência: preço informado vence.
+    const setsSalePrice = mov.type === 'INCOME' && mov.newSalePrice != null;
+    const priceReview = setsSalePrice
+      ? { priceReviewPendingAt: null }
+      : costChanges
+        ? { priceReviewPendingAt: new Date() }
+        : {};
 
     const result = await prisma.$transaction(async (tx) => {
       const movement = await tx.stockMovement.create({
@@ -210,21 +219,25 @@ stock.post('/movements', requireActiveTenant, async (c) => {
           ...(mov.type === 'INCOME' && mov.newCostPrice != null
             ? { costPrice: mov.newCostPrice }
             : {}),
+          ...(setsSalePrice ? { salePrice: mov.newSalePrice } : {}),
           // Aviso de revisão de preço: a margem mudou com o novo custo, mas o preço não —
           // o cadastro do produto sinaliza "confira o preço" até o operador reconhecer.
-          ...(costChanges ? { priceReviewPendingAt: new Date() } : {}),
+          ...priceReview,
         },
       });
-      // Histórico de custo/preço (2026-10-16): entrada com custo novo ⇒ linha "de → para".
-      if (mov.type === 'INCOME' && mov.newCostPrice != null) {
+      // Histórico de custo/preço (2026-10-16): entrada com custo e/ou preço novo ⇒ linha "de → para".
+      if (mov.type === 'INCOME' && (mov.newCostPrice != null || setsSalePrice)) {
         await recordPriceHistory(tx, {
           tenantId,
           productId: mov.productId,
           userId: c.get('userId'),
           userName: c.get('userName'),
           source: 'STOCK_ENTRY',
-          before: { costPrice: product.costPrice.toString(), salePrice: null },
-          after: { costPrice: mov.newCostPrice },
+          before: { costPrice: product.costPrice.toString(), salePrice: product.salePrice.toString() },
+          after: {
+            costPrice: mov.newCostPrice,
+            ...(setsSalePrice ? { salePrice: mov.newSalePrice } : {}),
+          },
           detail: mov.reason ?? null,
         });
       }

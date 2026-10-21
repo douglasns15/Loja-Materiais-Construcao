@@ -8,6 +8,14 @@
 > custo fixo do Prisma por requisição já passa de 10 ms). **Correção: Owner assinou o Workers Paid** (teto 30 s) —
 > pós-assinatura 130 requisições reais + 30 de stress, 0 falhas. Sem mudança de código. Ver ADR-005, adendo 2026-10-14.
 >
+> **ONDE PARAMOS (2026-10-21) — Preço de venda na Entrada de estoque (web + API, SEM migration) — IMPLEMENTADO;
+> deploy e E2E do Owner PENDENTES:**
+> - Estoque → "Entrada de estoque": campo **"Preço de venda — vazio: não muda"** (igual ao da importação de NF-e), com
+>   "Atual: R$ …" + margem resultante. Preço por unidade de venda (barra/rolo/pacote, kg/L ou unidade).
+> - API `POST /stock/movements` aceita `newSalePrice` (shared `createStockMovementSchema`): grava o `salePrice` na mesma
+>   transação, limpa o aviso "confira o preço" e registra no histórico de custo/preço (`STOCK_ENTRY`). Core 551,
+>   shared 153 (+4 em `stock.test.ts`), typecheck web/api verde.
+>
 > **ONDE PARAMOS (2026-10-16, noite) — Histórico de custo e preço do produto (web + API, SEM migration) — CONCLUÍDO e
 > E2E do Owner VALIDADO (2026-10-16):**
 > - Produtos → abrir produto → fim da ficha: **"Histórico de custo e preço"** (de → para, %, data/hora, quem, por onde).

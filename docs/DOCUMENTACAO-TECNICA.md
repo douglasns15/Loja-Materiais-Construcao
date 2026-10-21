@@ -5,7 +5,7 @@
 > e diagramas de arquitetura.
 >
 > **Produto:** ERP/PDV multi-tenant, modular e custo-zero (PWA única para Web/Android/iOS).
-> **Última atualização:** 2026-10-16 · **Fontes:** `docs/ARCHITECTURE.md`, `docs/adr/` (ADR-001…043), código do monorepo.
+> **Última atualização:** 2026-10-21 · **Fontes:** `docs/ARCHITECTURE.md`, `docs/adr/` (ADR-001…043), código do monorepo.
 > **Par funcional:** [`docs/DOCUMENTACAO-FUNCIONAL.md`](DOCUMENTACAO-FUNCIONAL.md) — o "como funciona / como configurar" de
 > cada funcionalidade, do ponto de vista de quem usa. Toda mudança de comportamento atualiza os dois.
 
@@ -432,7 +432,7 @@ testável exaustivamente e compartilhada entre as duas apps.
 |---|---|
 | `GET /movements` | Histórico de movimentações (livro-razão). |
 | `GET /summary` | Resumo/posição de estoque. |
-| `POST /movements` 🔒 | Entrada/saída manual (`StockMovement` + `stockQty`). Recusa (400) produto **sem controle de estoque** (`trackStock = false`, ADR-040 §2). Entrada com `newCostPrice` grava a linha do **histórico de custo/preço** (`STOCK_ENTRY`, 2026-10-16). |
+| `POST /movements` 🔒 | Entrada/saída manual (`StockMovement` + `stockQty`). Recusa (400) produto **sem controle de estoque** (`trackStock = false`, ADR-040 §2). Entrada com `newCostPrice` grava a linha do **histórico de custo/preço** (`STOCK_ENTRY`, 2026-10-16). Aceita `newSalePrice` (opcional, só INCOME, > 0, por unidade de venda — 2026-10-21): reajusta o `salePrice` do cadastro na mesma transação e **limpa** `priceReviewPendingAt` (margem revisada agora — mesma precedência do `POST /nfe/entry`); sem preço novo e custo mudado ⇒ acende o aviso, como antes. Custo e/ou preço novos geram uma linha `STOCK_ENTRY` no histórico. |
 | `POST /adjust` 🔒 | Ajuste/inventário (acerta o saldo com auditoria). Recusa (400) produto sem controle de estoque. |
 
 **`/productions` — Produção com ficha técnica (ADR-043, módulo `RECIPES`)**
@@ -749,6 +749,14 @@ Alertas CALCULADOS sob demanda (custo-zero: nada é gravado; a pendência some q
     cheio do que está em aberto; parcial = proporcional (aviso na tela; regra aprovada pelo Owner no E2E de 2026-10-16). Campo segue **editável** (`surchargeTouched`
     + "recalcular"). Antes (C.3) era digitado à mão com "usar sug." (que ignorava rolo/pacote e devolução).
   - Testes: `packages/core/src/recebimento-conta.test.ts` (17). Sem migration.
+- **Preço de venda na Entrada de estoque (2026-10-21).** O formulário "Entrada de estoque" (`app/(app)/estoque/page.tsx`)
+  ganhou o campo **"Preço de venda — vazio: não muda"**, espelho do campo do casamento na importação de NF-e: valor por
+  **unidade de venda** (= `Product.salePrice`; rótulo "por barra/rolo/pacote" na unidade fechada, "por kg/L" no peso),
+  **sem conversão** (diferente do `unitCost`, que vai à régua fina). Ao lado: **"Atual: R$ …"** + margem resultante
+  (core `calcMarginPercent` com custo digitado ou do cadastro × preço digitado ou do cadastro). Só envia `newSalePrice`
+  ao `POST /stock/movements` quando > 0 e diferente do preço atual (4 casas); o custo segue com o `window.confirm` de
+  sempre. Contrato: `createStockMovementSchema.newSalePrice` (shared, `z.number().positive().optional()`). Testes:
+  `packages/shared/src/stock.test.ts` (4). Sem migration.
 - **Histórico de custo e preço do produto (2026-10-16).** Sem tabela nova: cada mudança de `costPrice`/`salePrice` vira
   um `AuditEvent` (`entity = 'Product'`, `entityId = productId`, `action = PRICE_COST_CHANGE`; `meta = { source,
   byName, costBefore, costAfter, priceBefore, priceAfter, detail? }`), gravado **na mesma transação** da alteração por
@@ -756,7 +764,7 @@ Alertas CALCULADOS sob demanda (custo-zero: nada é gravado; a pendência some q
   (core): compara na precisão do banco (4 casas), campo ausente = não mexeu, nada mudou ⇒ não grava; cadastro ⇒ "de"
   nulo. Origens (`PRICE_CHANGE_SOURCES`, shared, com rótulos): `PRODUCT_CREATE` (POST /products — inclui cadastro em
   sequência e "Cadastrar agora"), `PRODUCT_EDIT` (PATCH), `SPREADSHEET` (import), `STOCK_ENTRY` (POST /stock/movements
-  INCOME com `newCostPrice`; `detail` = motivo), `NFE_IMPORT` (produto novo ou custo/preço ao casar; `detail` = "Compra
+  INCOME com `newCostPrice` e/ou `newSalePrice`; `detail` = motivo), `NFE_IMPORT` (produto novo ou custo/preço ao casar; `detail` = "Compra
   NF …"), `PRODUCTION` e `DISASSEMBLY` (último custo do pronto/cortes; `detail` = código `P-…`). Tela:
   `PriceHistorySection` no fim do `ProductDetail` (modo leitura) — lista mais recente primeiro, 8 linhas + "Ver tudo",
   variação % (alta em vermelho, queda em verde), recarrega quando o produto salva (`updatedAt`). Alterações anteriores

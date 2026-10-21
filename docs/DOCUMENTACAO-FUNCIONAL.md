@@ -10,7 +10,7 @@
 > **Cobertura:** começa pelas entregas de 2026-10-09 (carga do catálogo e balança). As funcionalidades anteriores
 > entram aqui conforme forem tocadas — ver [Pendências de cobertura](#pendências-de-cobertura).
 >
-> **Última atualização:** 2026-10-16 (noite).
+> **Última atualização:** 2026-10-21.
 
 ---
 
@@ -30,8 +30,9 @@
    - 6.2 [Imprimir pelo iPhone/iPad (app instalado)](#62-imprimir-pelo-iphoneipad-app-instalado)
 7. [Receber conta: troco e acréscimo do cartão](#7-receber-conta-troco-e-acréscimo-do-cartão)
 8. [Histórico de custo e preço do produto](#8-histórico-de-custo-e-preço-do-produto)
-9. [Pendências de cobertura](#pendências-de-cobertura)
-10. [Histórico deste documento](#histórico-deste-documento)
+9. [Entrada de estoque: custo e preço de venda](#9-entrada-de-estoque-custo-e-preço-de-venda)
+10. [Pendências de cobertura](#pendências-de-cobertura)
+11. [Histórico deste documento](#histórico-deste-documento)
 
 ---
 
@@ -609,6 +610,37 @@ por onde — para acompanhar aumentos de fornecedor e conferir reajustes.
 - O histórico começa a contar a partir desta versão (16/10/2026): mudanças feitas antes não aparecem.
 - Precisa de internet para carregar.
 
+## 9. Entrada de estoque: custo e preço de venda
+
+**Para que serve:** ao dar entrada de uma compra, já atualizar o **custo** e, se quiser, o **preço de venda** do
+produto — do mesmo jeito que na importação de NF-e, sem precisar abrir a tela de Produtos depois.
+
+**Onde fica:** **Estoque →** quadro **"Entrada de estoque"**.
+
+**Passo a passo**
+
+1. Escolha o produto e informe a quantidade (ou o peso, ou peça a peça).
+2. **Custo** (opcional): o custo da compra. Se for diferente do custo do cadastro, o sistema pergunta se deve
+   atualizar o custo do produto.
+3. **Preço de venda — vazio: não muda** (opcional): digite o preço novo para reajustar o produto. Ao lado aparecem o
+   **preço atual** e a **margem** que fica com o custo e o preço informados (sem nada digitado, a margem é a do
+   cadastro).
+4. Fornecedor e motivo, como sempre → **Registrar entrada** (ou F8).
+
+**Regras**
+
+- O preço é na **unidade de venda** do produto: por barra/rolo/pacote (unidade fechada), por kg/L (peso) ou por
+  unidade — o rótulo do campo diz qual.
+- Campo **vazio** ou com o **mesmo** preço de hoje: o preço do produto não muda.
+- Preço novo informado: o produto passa a vender por ele na hora, e o aviso **"confira o preço"** do cadastro some
+  (você já revisou a margem). Mudou só o custo, sem preço novo: o aviso acende, como antes.
+- Toda mudança de custo/preço feita aqui entra no **Histórico de custo e preço** (§8) como "Entrada de estoque".
+
+**Limitações**
+
+- Não há sugestão automática de preço pela margem; para isso use a precificação na tela de Produtos.
+- Precisa de internet (como toda a tela de Estoque).
+
 ---
 
 ## Pendências de cobertura
@@ -643,3 +675,4 @@ painel da plataforma.
 | 2026-10-16 | Receber conta (§7) conferido pelo Owner em produção: troco e acréscimo (total e parcial proporcional) funcionando; regra do parcial aprovada. |
 | 2026-10-16 | Histórico de custo e preço do produto (§8): de → para, data/hora, quem e por onde, no fim da ficha do produto. |
 | 2026-10-16 | Histórico de custo e preço (§8) conferido pelo Owner na Loja Demo: Tela de Produtos, Entrada de estoque e Importação de NF-e registrando certo. |
+| 2026-10-21 | Entrada de estoque (§9): campo opcional de preço de venda (vazio não muda), com preço atual e margem, igual à importação de NF-e. |
