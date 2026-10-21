@@ -23,7 +23,7 @@ Um *Architecture Decision Record* é um documento curto e versionado que captura
 | [ADR-002](./ADR-002-delivery-status-enum.md) | Tipo do campo `Delivery.status` (`Int` vs. `enum`) | Aceito — implementado |
 | [ADR-003](./ADR-003-payment-tenantid-syncstatus.md) | `tenantId` e `syncStatus` no modelo `Payment` | Aceito — implementado |
 | [ADR-004](./ADR-004-soft-delete-e-auditoria.md) | Estratégia de soft-delete e auditoria | Aceito — implementado |
-| [ADR-005](./ADR-005-stack-e-arquitetura.md) | Stack tecnológica e arquitetura geral | Aceito |
+| [ADR-005](./ADR-005-stack-e-arquitetura.md) | Stack tecnológica e arquitetura geral | Aceito (adendo 2026-10-21: Next.js 16 + OpenNext 1.20.13) |
 | [ADR-006](./ADR-006-devolucao-e-movimentacoes-de-caixa.md) | Devolução de venda e movimentações de caixa | Aceito |
 | [ADR-007](./ADR-007-armazenamento-de-midia-r2.md) | Armazenamento de mídia no Cloudflare R2 (logo) | Aceito |
 | [ADR-008](./ADR-008-papeis-e-rbac.md) | Papéis de usuário e RBAC dentro da loja | Aceito |

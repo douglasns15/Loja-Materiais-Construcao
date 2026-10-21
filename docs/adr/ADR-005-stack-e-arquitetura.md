@@ -192,3 +192,20 @@ Sob uso normal (Produtos e PDV, só pesquisando/salvando), o operador passou a v
 **Validação (2026-10-14):** depois da assinatura, **30/30** chamadas ao `/db-check` (20 sequenciais + 10 paralelas) e **130/130** requisições reais da loja OK, com CPU de até ~300 ms (`/products` 117 ms) — valores que antes seriam cortados.
 
 > As otimizações anteriores (`$queryRaw` no catálogo/busca, `getPrisma(c)` = 1 client por request, throttle do sino, auto-recuperação da tela) **continuam valendo**: reduzem custo e latência mesmo sem o teto. A leitura de planilha no navegador (ADR-041) também segue o melhor lugar para processamento pesado.
+
+## Adendo (2026-10-21): **Next.js 16** — o OpenNext passou a recusar o Next 15
+
+Em 2026-10-21 o `npm run deploy` do web abortou: o `@opennextjs/cloudflare` 1.20.1 recusa versões do Next com mais de 2 anos ("Next.js version 15.5.19 is not supported by the Next.js team"; o Next 15 saiu em 2024-10-21). O deploy do dia saiu com `--dangerouslyUseUnsupportedNextVersion`, o que não é aceitável como rotina: pela política do Next (nextjs.org/support-policy), o 15 termina a manutenção (correções de segurança) em ~2026-10-21, e o 16 é a linha ativa.
+
+**Opções avaliadas:**
+
+- **A — ponte:** Next 15.5.28 + `@opennextjs/cloudflare` 1.20.13 (a regra nova do OpenNext aceita um major até sair o major+2) + wrangler ^4.148. Zero código, mas fica numa versão sem patch de segurança. Descartada.
+- **B — Next 16 (escolhida pelo Owner):** `next ^16.4.2` + `@opennextjs/cloudflare ^1.20.13` + `wrangler ^4.148.0` (web e API — o wrangler é instalado na raiz). Suporte até a vinda do Next 18.
+
+**Impacto no app (baixo):** todas as páginas são client components, sem `middleware`, sem `params`/`searchParams`/`cookies()`/`headers()` no servidor, sem `next/image`, `revalidateTag`, rotas paralelas, AMP ou `runtimeConfig` — as quebras do Next 16 não se aplicam. Continuam valendo: `headers()` do `next.config.mjs` (`no-store` nos documentos), `export const dynamic = 'force-dynamic'` no `app/layout.tsx`, `devIndicators.position`, Tailwind 3 via PostCSS e o `public/sw.js`. Mudanças efetivas:
+
+- `next build` agora usa **Turbopack** (o OpenNext 1.20.13 tem os patches para ele). O CSS passa de `/_next/static/css/` para `/_next/static/chunks/*.css`; SW e smoke usam o prefixo `/_next/static/` e seguem funcionando. Plano B se o Turbopack der problema: `next build --webpack`.
+- `next lint` foi removido → saiu o script `lint` do web (nunca houve config de ESLint); a checagem estática é o `typecheck`.
+- `next-env.d.ts` regenerado pelo Next 16 (importa `.next/types/routes.d.ts` e `root-params.d.ts`).
+
+**Validação (branch, sem deploy):** typecheck web/API verde; testes core 551, shared 153, API 7; `opennextjs-cloudflare build` **sem a flag** (Next 16.4.2 Turbopack, 28 rotas); worker gerado servido local (`wrangler dev`): `/login`, `/venda`, `/estoque`, `/products` 200 com `Cache-Control: no-store`, CSS 200 com `.flex{` (52 KB, igual ao build anterior), `verify-deploy.mjs` local OK, SW ativo cacheando os chunks novos; `wrangler deploy --dry-run` da API OK com wrangler 4.151.3. Telas logadas não foram abertas localmente (a API de produção não libera CORS para `localhost`) — ficam para o E2E do Owner após o deploy.

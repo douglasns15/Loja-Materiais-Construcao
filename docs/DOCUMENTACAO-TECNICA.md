@@ -44,7 +44,7 @@ início e escalar sem retrabalho.
 | Dimensão | Escolha |
 |---|---|
 | Padrão de app | PWA instalável (uma base → Web + Android + iOS) |
-| Frontend | Next.js 15 (App Router) + React 19 + TypeScript |
+| Frontend | Next.js 16 (App Router, build com Turbopack) + React 19 + TypeScript |
 | Backend | Hono sobre Cloudflare Workers |
 | Banco | Supabase PostgreSQL + Row-Level Security |
 | ORM | Prisma 6 (fonte única de schema e migrações) |
@@ -129,8 +129,9 @@ Cada camada, a tecnologia escolhida e a justificativa. (Versões conforme os `pa
 | **Testes e2e** | Playwright | — | Fluxos ponta-a-ponta (planejado/faseado). |
 | **Monorepo / build** | Turborepo + npm workspaces | `^2.3.3` | Build incremental e código compartilhado. |
 | **Runtime de deploy** | Cloudflare Workers (plano **Workers Paid** desde 2026-10-14) | — | Web (via OpenNext) e API (via Wrangler). Teto de CPU de 30 s por requisição — o free (10 ms) derrubava requisições comuns; ver ADR-005, adendo 2026-10-14. |
-| **Adaptador web→Workers** | `@opennextjs/cloudflare` | `^1.20.1` | Roda Next.js em Workers (não em Pages). |
-| **CLI de deploy** | Wrangler | `^4.107.0` | Publica os Workers e gera tipos. |
+| **Framework web** | Next.js | `^16.4.2` | App Router; `next build` usa **Turbopack** (padrão do 16). Next 15 saiu do suporte em 2026-10-21 — ver ADR-005, adendo 2026-10-21. |
+| **Adaptador web→Workers** | `@opennextjs/cloudflare` | `^1.20.13` | Roda Next.js em Workers (não em Pages). Exige `next >=16.4.1` (ou `>=15.5.28 <16`) e `wrangler ^4.148`. Build **sem** `--dangerouslyUseUnsupportedNextVersion`. |
+| **CLI de deploy** | Wrangler | `^4.148.0` | Publica os Workers e gera tipos (instalado na raiz do monorepo — web e API usam a mesma versão). |
 | **Linguagem** | TypeScript | `^5.7.2` | Estrito, ponta a ponta (front, back, core, schemas). |
 | **Runtime local** | Node.js | `>= 20` (rec. 24 LTS) | Ambiente de desenvolvimento e scripts. |
 
@@ -606,7 +607,11 @@ Alertas CALCULADOS sob demanda (custo-zero: nada é gravado; a pendência some q
 
 ## 9. Frontend — PWA Next.js
 
-- **Framework:** Next.js 15 (App Router) + React 19, em TypeScript estrito.
+- **Framework:** Next.js 16 (App Router) + React 19, em TypeScript estrito. Build de produção com **Turbopack**
+  (padrão do Next 16; `next build --webpack` é o plano B se o Turbopack quebrar algo). Com Turbopack o CSS sai em
+  `/_next/static/chunks/*.css` (antes `/_next/static/css/`) — o service worker e o smoke `verify-deploy.mjs` usam o
+  prefixo genérico `/_next/static/`, então nada muda neles. `next lint` foi removido no Next 16: o web **não tem
+  script `lint`** (o repo nunca teve config de ESLint); a checagem estática é o `typecheck` (`tsc --noEmit`).
 - **Rotas principais (`apps/web/app/`):** `(app)` (área logada), `login`, `definir-senha`, `plataforma`
   (super-admin), `offline` (fallback do service worker).
 - **PWA:** `manifest.ts` (Web App Manifest) + registro de service worker (`RegisterSW.tsx`) +
@@ -884,7 +889,12 @@ O isolamento entre lojas é garantido **no banco**, não só na aplicação — 
 
 - As variáveis `NEXT_PUBLIC_*` são **embutidas no build** (não são secrets de runtime). Ao trocar a URL
   do web, atualizar *Site URL* / *Redirect URLs* no Supabase Auth e o CORS da API.
-- **CI/CD:** GitHub Actions roda `turbo run lint test`, depois aplica migrações e publica os dois Workers.
+- **CI/CD:** GitHub Actions roda `turbo run lint test`, depois aplica migrações e publica os dois Workers. (Desde o
+  Next 16 o web não tem tarefa `lint`; use `npm run typecheck -w @nexoloja/web`.)
+- **Pré-visualizar o build de produção localmente:** `npx opennextjs-cloudflare build` em `apps/web` e depois a
+  configuração `web-build` do `.claude/launch.json` (`wrangler dev` do worker gerado em `http://localhost:8788`). O
+  smoke roda contra ele com `node scripts/verify-deploy.mjs http://localhost:8788`. A API de produção não libera CORS
+  para essa porta, então ali só dá para conferir HTML/CSS/SW, não telas logadas.
 
 ### Riscos operacionais conhecidos
 

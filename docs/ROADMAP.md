@@ -8,6 +8,17 @@
 > custo fixo do Prisma por requisição já passa de 10 ms). **Correção: Owner assinou o Workers Paid** (teto 30 s) —
 > pós-assinatura 130 requisições reais + 30 de stress, 0 falhas. Sem mudança de código. Ver ADR-005, adendo 2026-10-14.
 >
+> **ONDE PARAMOS (2026-10-21, noite) — Upgrade para Next.js 16 (só web/infra, SEM migration) — PRONTO NO BRANCH,
+> deploy PENDENTE do sinal do Owner:**
+> - Motivo: o OpenNext recusava o Next 15.5.19 (fim do suporte do 15); o deploy só saía com
+>   `--dangerouslyUseUnsupportedNextVersion`. Owner aprovou a opção B: `next ^16.4.2` + `@opennextjs/cloudflare ^1.20.13`
+>   + `wrangler ^4.148.0` (web e API). Saiu o script `lint` do web (`next lint` não existe mais). ADR-005, adendo 2026-10-21.
+> - Gates: typecheck web/API verde; core 551, shared 153, API 7; `opennextjs-cloudflare build` **sem a flag** (Turbopack);
+>   worker local: PDV/Estoque/Produtos/Login 200 + `no-store`, CSS 200 com `.flex{` (agora em `/_next/static/chunks/`),
+>   smoke local OK, SW ativo; dry-run da API OK.
+> - **Próximo passo (Owner):** merge + `npm install` + `npm run deploy` do web (sem flag) e deploy da API quando quiser
+>   (o wrangler mudou, o código da API não); E2E logado em PDV, Estoque e Produtos. Push do Owner.
+>
 > **ONDE PARAMOS (2026-10-21) — Preço de venda na Entrada de estoque (web + API, SEM migration) — CONCLUÍDO e
 > E2E do Owner VALIDADO (2026-10-21):**
 > - Estoque → "Entrada de estoque": campo **"Preço de venda — vazio: não muda"** (igual ao da importação de NF-e), com

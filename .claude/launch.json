@@ -20,6 +20,19 @@
       ],
       "port": 8787,
       "url": "http://localhost:8787"
+    },
+    {
+      "name": "web-build",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "wrangler",
+        "dev",
+        "--config",
+        "apps/web/wrangler.jsonc",
+        "--port",
+        "8788"
+      ],
+      "port": 8788
     }
   ]
 }
