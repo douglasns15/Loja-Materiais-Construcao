@@ -8,8 +8,8 @@
 > custo fixo do Prisma por requisição já passa de 10 ms). **Correção: Owner assinou o Workers Paid** (teto 30 s) —
 > pós-assinatura 130 requisições reais + 30 de stress, 0 falhas. Sem mudança de código. Ver ADR-005, adendo 2026-10-14.
 >
-> **ONDE PARAMOS (2026-10-21, noite) — Upgrade para Next.js 16 (só web/infra, SEM migration) — PRONTO NO BRANCH,
-> deploy PENDENTE do sinal do Owner:**
+> **ONDE PARAMOS (2026-10-21, noite) — Upgrade para Next.js 16 (só web/infra, SEM migration) — NO AR
+> (web `9558de09`, API `f441a291`):**
 > - Motivo: o OpenNext recusava o Next 15.5.19 (fim do suporte do 15); o deploy só saía com
 >   `--dangerouslyUseUnsupportedNextVersion`. Owner aprovou a opção B: `next ^16.4.2` + `@opennextjs/cloudflare ^1.20.13`
 >   + `wrangler ^4.148.0` (web e API). Saiu o script `lint` do web (`next lint` não existe mais). ADR-005, adendo 2026-10-21.
@@ -20,8 +20,12 @@
 >   Produtos, Estoque (entrada via F8, 135 → 136), PDV (F9, adicionar/remover), janela flutuante, atalhos e todas as
 >   telas do menu — com estilo e sem erro no console. **Venda de teste V-000134** (1× Anel, dinheiro R$ 5,00, troco
 >   R$ 1,90) concluída com F8 + comprovante 80mm conferido; estoque 136 → 135.
-> - **Próximo passo (Owner):** `npm install` na pasta principal + `npm run deploy` do web (sem flag); deploy da API
->   quando quiser (o wrangler mudou, o código não); conferir em produção e imprimir de verdade um comprovante. Push do Owner.
+> - **NO AR (2026-10-21, a pedido do Owner):** `npm install` na pasta principal (workerd 1.20261019.1 = binário Windows);
+>   **web `9558de09`** via `npm run deploy` **sem a flag** (Next 16.4.2 Turbopack; smoke ✅; `/login`, `/venda`, `/estoque`,
+>   `/products`, `/caixa` 200; CSS 52 KB com `.flex{`); **API `f441a291`** (wrangler 4.151.3; `prisma generate` + schema
+>   embutido conferido; `/health` 200, `/db-check` 200, rota protegida 401) com escrita validada: venda de teste
+>   **V-000135** (1× Anel, dinheiro) → `POST /orders - Ok` no `wrangler tail`. Rollback: web `bc65f1c6`, API `84accd25`.
+> - **Pendente (Owner):** imprimir um comprovante de verdade em produção + push.
 >
 > **ONDE PARAMOS (2026-10-21) — Preço de venda na Entrada de estoque (web + API, SEM migration) — CONCLUÍDO e
 > E2E do Owner VALIDADO (2026-10-21):**
