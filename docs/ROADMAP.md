@@ -11,8 +11,9 @@
 > **Repositório em dia (2026-10-22):** push do Owner feito — `main` = `origin/main` (até `9f07a1b`). Todas as notas
 > "push do Owner pendente" dos blocos abaixo ficam resolvidas por este push.
 >
-> **ONDE PARAMOS (2026-10-22, tarde) — Extrato do crédito do cliente (web + API, SEM migration) — IMPLEMENTADO,
-> gates verdes; deploy, E2E do Owner e push PENDENTES.**
+> **ONDE PARAMOS (2026-10-22, tarde) — Extrato do crédito do cliente (web + API, SEM migration) — NO AR
+> (API `13824264`, web `e27910c7`; smoke ✅: rota nova protegida 401, `/db-check` 200, HTML `no-store`, CSS com
+> `.flex{`). Rollback: API `b707311a`, web `dcb458d2`. Commit `548ed9f`. E2E do Owner e push PENDENTES.**
 > - Pedido do Owner: em Contas a Receber → "Com crédito", ver o histórico do crédito (o que gerou, o que foi usado, o que
 >   sobrou) no molde do extrato da dívida, com resumo no começo.
 > - Core `creditStatement` (resumo entrou/usado/estornado/saldo + saldo corrente, centavos; +8 testes em
