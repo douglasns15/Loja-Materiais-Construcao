@@ -13,12 +13,13 @@
 >
 > **2026-10-22 (noite) — PDV: cliente obrigatório em verde (só web)** — pedido do Owner: quando o cliente é exigido
 > (sobra do vale em crédito sem cliente na origem; entrega), "+ Identificar cliente" fica verde com o motivo e sem
-> "(opcional)". NO AR: web `b6a43805` (smoke ✅; rollback web `71086371`). Commit `ee3d051`. E2E PENDENTE.
+> "(opcional)". NO AR: web `b6a43805` (smoke ✅; rollback web `71086371`). Commit `ee3d051`. QA na Loja Demo ✅ (entrega).
 >
 > **ONDE PARAMOS (2026-10-22, noite) — Retirada do crédito do cliente (web + API, migration `0050` APLICADA no
 > Supabase) — NO AR (API `cab7fbd3`, web `71086371`; smoke ✅: rotas protegidas 401, `/db-check` 200, HTML
-> `no-store`, CSS com `.flex{`). Rollback: API `13824264`, web `e27910c7`. Commit `bf558ac`. E2E do Owner e push
-> PENDENTES.**
+> `no-store`, CSS com `.flex{`). Rollback: API `13824264`, web `e27910c7`. Commit `bf558ac`. **QA ponta a ponta em
+> produção na Loja Demo ✅** (Jamiro: retirada R$ 5 dinheiro + R$ 3 PIX; caixa, livro-razão, auditoria e Recebido
+> conferidos — ver `registro-de-testes.md`). Push PENDENTE.**
 > - Pedido do Owner no E2E do extrato (validado): poder RETIRAR o crédito; mostrar a forma de pagamento da venda de
 >   origem; "Usado numa compra" → "Utilizado na compra: V-…". Decisões do Owner: qualquer forma (a da origem só
 >   sugerida, não trava); dinheiro sai do caixa de hoje e o Recebido é abatido no dia da venda de origem; qualquer

@@ -6541,3 +6541,36 @@ atual e margem; `POST /stock/movements` aceita `newSalePrice` (grava o preço, l
 | Mensagem da API em reais | `POST /orders` recusado (nada gravado) | ✅ "Sobram R$ 7,50 do vale. Escolha como devolver…" (antes "7.50") |
 | Reimpressão com a linha da sobra | Owner reimprimiu a V-000138 (2026-10-22) | ✅ comprovante saiu com "Sobra do vale" corretamente |
 
+## Melhoria — Extrato e retirada do crédito do cliente (ADR-022/037, adendos) + cliente obrigatório em verde no PDV — 2026-10-22
+
+| O que foi testado | Método | Resultado |
+|---|---|---|
+| Extrato (resumo + saldo corrente), FIFO da retirada, sugestão de forma | Vitest `packages/core/src/extratoCredito.test.ts` | ✅ 22/22 (core 581) |
+| Shared / API | Vitest | ✅ 155 / 7 |
+| Typecheck web/API/shared | `tsc --noEmit` | ✅ |
+| Migration `0050` (`customer_credits.method` + `reason`) | `migrate diff` (só as 2 colunas) + `migrate deploy` | ✅ aplicada (aprovada pelo Owner) |
+| Dados reais antes da feature | SQL só-leitura | ✅ 6/6 créditos `RETURN` com a devolução de origem ligada; cache `creditBalance` = Σ livro-razão em todos os clientes |
+| Deploys | extrato: API `13824264`/web `e27910c7`; retirada: API `cab7fbd3`/web `71086371`; verde: web `b6a43805` | ✅ smoke (rotas protegidas 401, `/db-check` 200, HTML `no-store`, CSS com `.flex{`) |
+| Extrato do crédito (loja real) | Owner, Antônio Marceneiro | ✅ validado pelo Owner (pediu a retirada + forma da origem + "Utilizado na compra") |
+
+**QA ponta a ponta em produção (Claude, Loja Demo, logado pelo Owner):**
+
+| Caso | Resultado | Evidência |
+|---|---|---|
+| Lista "Com crédito" | ✅ | Selo verde "crédito R$ … ›" em Silas (R$ 90), Cliente 02 (R$ 20), Jamiro (R$ 17) |
+| Extrato do Jamiro | ✅ | "Sobra de troca · da venda V-000137" + **"Venda paga em: Dinheiro R$ 45,00 + PIX R$ 30,00"**; Entrou R$ 17 |
+| Sugestão de forma | ✅ | Painel abre com "Dinheiro (forma da venda de origem)" (maior parte da V-000137 em dinheiro) |
+| Sem motivo | ✅ | "Informe o motivo da retirada." (nada gravado) |
+| Valor acima do saldo | ✅ | R$ 20 com saldo R$ 17 → "O valor não pode passar do crédito (R$ 17,00)." |
+| Retirada R$ 5,00 em dinheiro | ✅ | "Crédito retirado: R$ 5,00 em dinheiro. Saiu do caixa como devolução. Saldo: R$ 12,00."; linha "Crédito retirado em dinheiro · da venda V-000137" + motivo; quadro Retirado −R$ 5,00 |
+| Retirada R$ 3,00 em PIX | ✅ | "…em PIX. Faça o PIX/estorno na maquininha. Saldo: R$ 9,00."; Retirado −R$ 8,00 · 2 retiradas; cartão da lista → R$ 9,00 |
+| Banco (só-leitura) | ✅ | 2 linhas `WITHDRAWAL` (CASH/PIX, motivo, `relatedOrderId` = V-000137); cache = livro-razão = R$ 9,00; **só** a de dinheiro no caixa (`EXPENSE/RETURN` R$ 5 "Retirada de crédito — Jamiro Dos Testes SIlva (venda V-000137)"); 2 `AuditEvent CREDIT_WITHDRAWAL` |
+| Relatórios (dia da V-000137) | ✅ | Dinheiro: "Estorno de devolução V-000137 · Jamiro … · retirada de crédito −R$ 5,00"; PIX: "…· retirada de crédito −R$ 3,00" → PIX R$ 20,20 (30 − 6,80 − 3); Estornos do dia R$ 42,00 |
+| "Utilizado na compra" | ✅ | Cliente 02: "Utilizado na compra: V-000056" / "V-000057" + "Estorno de compra · V-000057 cancelada/devolvida"; quadro Estornado R$ 20 |
+| Origem a prazo | ✅ (esperado) | V-000055 foi fiado (sem pagamento à vista) → sem linha "Venda paga em"; sugestão cai em Dinheiro |
+| Esc | ✅ | Fecha o extrato e a composição dos Relatórios |
+| PDV — venda comum | ✅ | Link azul "+ Identificar cliente (opcional)" |
+| PDV — retirada posterior → Retirada | ✅ | Painel "Cliente (opcional)" |
+| PDV — Entrega | ✅ | Painel verde "Cliente (obrigatório para a entrega)"; recolhido = botão verde "+ Identificar cliente · Obrigatório para a entrega" |
+| PDV — volta para Retirada | ✅ | Volta o "+ Identificar cliente (opcional)" (nada finalizado; carrinho do Owner intacto) |
+| PDV — sobra do vale em crédito sem cliente | ⏭️ | Mesma regra (`customerRequiredFor`); não executado para não criar troca de teste |
