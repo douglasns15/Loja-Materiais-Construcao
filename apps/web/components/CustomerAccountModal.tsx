@@ -78,11 +78,14 @@ export function CustomerAccountModal({
   customerId,
   onClose,
   onReceive,
+  onOpenCredit,
   reloadSignal = 0,
 }: {
   customerId: string;
   onClose: () => void;
   onReceive?: (a: CustomerAccountRow) => void;
+  /** Abre o extrato do CRÉDITO a favor (2026-10-22) pelo "Crédito a favor" do resumo. */
+  onOpenCredit?: (customerId: string) => void;
   reloadSignal?: number;
 }) {
   // Esc fecha / F8 confirma nesta janela (pilha de camadas — lib/keyboard.tsx).
@@ -284,6 +287,15 @@ export function CustomerAccountModal({
                 {detail.creditBalance > 0 && (
                   <p className="mt-1 text-sm font-medium text-green-700">
                     Crédito a favor: {BRL(detail.creditBalance)}
+                    {onOpenCredit && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenCredit(detail.customerId)}
+                        className="ml-2 text-xs font-semibold text-indigo-600 hover:underline"
+                      >
+                        ver extrato
+                      </button>
+                    )}
                   </p>
                 )}
               </div>

@@ -748,6 +748,136 @@ receivables.get('/accounts/:customerId', async (c) => {
   }
 });
 
+/** Teto de lançamentos no extrato do crédito (o livro-razão de um cliente é pequeno na prática). */
+const CREDIT_STATEMENT_MAX = 300;
+
+/**
+ * Extrato do CRÉDITO a favor do cliente (Contas a Receber → "Com crédito", 2026-10-22): o livro-razão
+ * `customer_credits` (ADR-022) com o contexto de cada lançamento — a devolução/troca que GEROU o
+ * crédito (itens e motivo, pelo elo `OrderReturn.customerCreditId`) e a compra em que foi USADO ou
+ * ESTORNADO (itens e total da venda, por `relatedOrderId`). Ordem cronológica; o resumo e o saldo
+ * corrente saem de `creditStatement` (core) na tela. Acima do teto, lista os mais recentes e manda o
+ * saldo anterior (`openingBalance`). Só leitura — sem migration.
+ */
+receivables.get('/accounts/:customerId/credits', async (c) => {
+  const tenantId = getTenantId(c);
+  const connectionString = getConnectionString(c.env);
+  if (!tenantId || !connectionString) {
+    return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
+  }
+  const customerId = c.req.param('customerId');
+  if (!UUID_RE.test(customerId)) {
+    return c.json({ ok: false, error: 'Cliente não encontrado.' }, 404);
+  }
+
+  try {
+    const prisma = getPrisma(c);
+    const customer = await prisma.customer.findFirst({
+      where: { id: customerId, tenantId },
+      select: { id: true, name: true, creditBalance: true },
+    });
+    if (!customer) {
+      return c.json({ ok: false, error: 'Cliente não encontrado.' }, 404);
+    }
+
+    // Os mais recentes primeiro (p/ o teto cortar o passado), depois reordenados p/ o extrato.
+    const rows = await prisma.customerCredit.findMany({
+      where: { tenantId, customerId },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: CREDIT_STATEMENT_MAX + 1,
+      select: {
+        id: true,
+        createdAt: true,
+        amount: true,
+        origin: true,
+        relatedOrderId: true,
+        createdByName: true,
+      },
+    });
+    const truncated = rows.length > CREDIT_STATEMENT_MAX;
+    const credits = (truncated ? rows.slice(0, CREDIT_STATEMENT_MAX) : rows).reverse();
+
+    // Saldo anterior quando truncado: Σ do livro-razão inteiro − Σ do que foi listado.
+    let openingBalance = 0;
+    if (truncated) {
+      const all = await prisma.customerCredit.aggregate({
+        where: { tenantId, customerId },
+        _sum: { amount: true },
+      });
+      const listed = credits.reduce((s, cr) => s + Math.round(Number(cr.amount) * 100), 0);
+      openingBalance = (Math.round(Number(all._sum.amount ?? 0) * 100) - listed) / 100;
+    }
+
+    // De onde veio: a devolução/troca que gerou cada crédito (elo solto `customerCreditId`).
+    const creditIds = credits.filter((cr) => cr.origin === 'RETURN').map((cr) => cr.id);
+    const sourceRows = creditIds.length
+      ? await prisma.orderReturn.findMany({
+          where: { tenantId, customerCreditId: { in: creditIds } },
+          select: { ...RETURN_SELECT, intent: true, customerCreditId: true },
+        })
+      : [];
+    const sourceByCredit = new Map(
+      sourceRows.map((rt) => [rt.customerCreditId as string, { ...mapReturnEvent(rt), intent: rt.intent }]),
+    );
+
+    // As vendas relacionadas: código + total de todas; itens só das compras (uso/estorno).
+    const orderIds = [...new Set(credits.map((cr) => cr.relatedOrderId).filter((x): x is string => !!x))];
+    const purchaseIds = new Set(
+      credits
+        .filter((cr) => cr.origin !== 'RETURN' && cr.relatedOrderId)
+        .map((cr) => cr.relatedOrderId as string),
+    );
+    const orders = orderIds.length
+      ? await prisma.order.findMany({
+          where: { tenantId, id: { in: orderIds } },
+          select: {
+            id: true,
+            orderNumber: true,
+            total: true,
+            items: { select: { productName: true, quantity: true, total: true } },
+          },
+        })
+      : [];
+    const orderById = new Map(orders.map((o) => [o.id, o]));
+
+    const entries = credits.map((cr) => {
+      const order = cr.relatedOrderId ? orderById.get(cr.relatedOrderId) : undefined;
+      const src = cr.origin === 'RETURN' ? sourceByCredit.get(cr.id) : undefined;
+      return {
+        ...cr,
+        relatedOrderNumber: order?.orderNumber ?? null,
+        relatedOrderTotal: order?.total ?? null,
+        orderItems:
+          order && purchaseIds.has(order.id)
+            ? order.items.map((it) => ({
+                productName: it.productName,
+                quantity: String(it.quantity),
+                total: String(it.total),
+              }))
+            : [],
+        source: src
+          ? { intent: src.intent, reason: src.reason, totalValue: src.totalValue, items: src.items }
+          : null,
+      };
+    });
+
+    return c.json({
+      ok: true,
+      data: {
+        customerId: customer.id,
+        customerName: customer.name,
+        creditBalance: Number(customer.creditBalance),
+        openingBalance,
+        truncated,
+        entries,
+      },
+    });
+  } catch (err) {
+    console.error('GET /receivables/accounts/:customerId/credits falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao buscar o extrato do crédito.' }, 500);
+  }
+});
+
 /**
  * Lista de DÍVIDAS por status (ADR-026), para a aba **Quitadas** (default `paid`). As dívidas em
  * aberto continuam vindo de `/accounts` (a conta do cliente = a dívida aberta). Paginada por cursor

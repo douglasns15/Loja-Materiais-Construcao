@@ -25,6 +25,7 @@ import { OfflineNotice } from '@/components/OfflineNotice';
 import { MoneyInput } from '@/components/MoneyInput';
 import { CustomerAccountModal } from '@/components/CustomerAccountModal';
 import { DebtDetailModal } from '@/components/DebtDetailModal';
+import { CustomerCreditModal } from '@/components/CustomerCreditModal';
 import { useModalLayer, useSearchNav } from '@/lib/keyboard';
 
 const BRL = (v: string | number) =>
@@ -62,6 +63,8 @@ export default function ContasAReceberPage() {
   const [acctFilter, setAcctFilter] = useState<AccountFilter>('debt');
   const [accountDetailId, setAccountDetailId] = useState<string | null>(null);
   const [accountReload, setAccountReload] = useState(0);
+  // Extrato do CRÉDITO a favor (2026-10-22): de onde veio e onde foi usado — abre pelo "Com crédito".
+  const [creditDetailId, setCreditDetailId] = useState<string | null>(null);
 
   // ---- Aba QUITADAS (dívidas arquivadas — ADR-026) ----
   const [paidDebts, setPaidDebts] = useState<DebtListRow[]>([]);
@@ -422,8 +425,14 @@ export default function ContasAReceberPage() {
           customerId={accountDetailId}
           onClose={() => setAccountDetailId(null)}
           onReceive={openReceiveAccount}
+          onOpenCredit={setCreditDetailId}
           reloadSignal={accountReload}
         />
+      )}
+
+      {/* Extrato do CRÉDITO a favor (só leitura) — por cima do detalhe da dívida, se aberto. */}
+      {creditDetailId && (
+        <CustomerCreditModal customerId={creditDetailId} onClose={() => setCreditDetailId(null)} />
       )}
 
       {/* Detalhe da dívida QUITADA (só leitura). */}
@@ -562,6 +571,11 @@ export default function ContasAReceberPage() {
       <div className="flex flex-col gap-2.5">
         {accounts.map((a) => {
           const overdue = isDatePast(a.nextDueDate);
+          // No filtro "Com crédito" (ou sem dívida aberta), o cartão abre o extrato do CRÉDITO;
+          // senão, o extrato da dívida.
+          const opensCredit = a.creditBalance > 0 && (acctFilter === 'credit' || !a.debtId);
+          const openDetail = () =>
+            opensCredit ? setCreditDetailId(a.customerId) : a.debtId && setAccountDetailId(a.customerId);
           return (
             <div
               key={a.customerId}
@@ -570,7 +584,7 @@ export default function ContasAReceberPage() {
               <div className="flex items-start justify-between gap-3">
                 <button
                   type="button"
-                  onClick={() => a.debtId && setAccountDetailId(a.customerId)}
+                  onClick={openDetail}
                   className="min-w-0 text-left"
                 >
                   <div className="flex flex-wrap items-center gap-2">
@@ -601,15 +615,22 @@ export default function ContasAReceberPage() {
                   )}
                 </button>
                 <div className="flex shrink-0 flex-col items-end gap-1.5">
-                  {a.totalBalance > 0 ? (
+                  {a.totalBalance > 0 && (
                     <span className="text-lg font-extrabold tabular-nums text-gray-900">
                       {BRL(a.totalBalance)}
                     </span>
-                  ) : a.creditBalance > 0 ? (
-                    <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-bold text-green-800">
-                      crédito {BRL(a.creditBalance)}
-                    </span>
-                  ) : null}
+                  )}
+                  {/* Selo do crédito a favor — abre o extrato do crédito (de onde veio, onde foi usado). */}
+                  {a.creditBalance > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setCreditDetailId(a.customerId)}
+                      title="Ver o extrato do crédito"
+                      className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-bold text-green-800 hover:bg-green-200"
+                    >
+                      crédito {BRL(a.creditBalance)} ›
+                    </button>
+                  )}
                   {a.totalBalance > 0 && (
                     <button
                       type="button"

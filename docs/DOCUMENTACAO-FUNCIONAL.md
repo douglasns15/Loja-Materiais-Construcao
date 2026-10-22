@@ -32,8 +32,9 @@
 8. [Histórico de custo e preço do produto](#8-histórico-de-custo-e-preço-do-produto)
 9. [Entrada de estoque: custo e preço de venda](#9-entrada-de-estoque-custo-e-preço-de-venda)
 10. [Troca por item mais barato (sobra do vale)](#10-troca-por-item-mais-barato-sobra-do-vale)
-11. [Pendências de cobertura](#pendências-de-cobertura)
-12. [Histórico deste documento](#histórico-deste-documento)
+11. [Extrato do crédito do cliente](#11-extrato-do-crédito-do-cliente)
+12. [Pendências de cobertura](#pendências-de-cobertura)
+13. [Histórico deste documento](#histórico-deste-documento)
 
 ---
 
@@ -690,6 +691,47 @@ que o vale.
 
 ---
 
+## 11. Extrato do crédito do cliente
+
+**Para que serve:** ver de onde veio o crédito que o cliente tem na loja e onde ele já foi usado — como um extrato de
+banco. Responde na hora perguntas como "por que tenho R$ 40 de crédito?" ou "quanto ainda sobrou depois daquela
+compra?".
+
+**Onde fica:** **Contas a Receber → Em aberto → filtro "Com crédito" →** toque no cliente. Também abre:
+
+- pelo selo verde **"crédito R$ … ›"** no cartão do cliente (em qualquer filtro);
+- pelo link **"ver extrato"** ao lado de "Crédito a favor", dentro do extrato da dívida do cliente.
+
+**O que aparece**
+
+1. **Resumo no topo:**
+   - **Saldo do crédito** — quanto o cliente ainda pode usar.
+   - **Entrou** — tudo o que virou crédito (devoluções e sobras de troca), com quantas foram.
+   - **Usado** — quanto já foi gasto em compras, com quantas compras.
+   - **Estornado** — só aparece quando uma compra paga com crédito foi cancelada/devolvida e o valor voltou.
+2. **Movimentações**, da mais antiga para a mais nova, cada uma com o **saldo depois dela**:
+   - **Crédito de devolução · da venda V-…** — a devolução que gerou o crédito, com o motivo e os itens que voltaram.
+   - **Sobra de troca** — a sobra do vale de uma troca que o cliente pediu como crédito (veja §10).
+   - **Usado numa compra · V-…** — a compra em que usou o crédito, com "Compra de R$ X · R$ Y pago com crédito" e os
+     itens comprados.
+   - **Estorno de compra · V-… cancelada/devolvida** — o crédito que voltou.
+3. Botão **Usar na venda** — abre o PDV com o cliente já identificado; lá, use **"Usar crédito da loja"**.
+
+**Regras**
+
+- O saldo é sempre a soma das movimentações (entradas − usos + estornos).
+- Uma compra paga com crédito e depois cancelada aparece duas vezes: o uso e o estorno. No resumo, "Usado" já desconta
+  o estorno.
+- Só leitura: o extrato não altera nada. Crédito se gera por devolução/troca e se usa no PDV.
+
+**Limitações**
+
+- Mostra as últimas 300 movimentações; acima disso, a primeira linha é o **Saldo anterior**.
+- Ainda não tem impressão (o "Imprimir resumo" do extrato da dívida não inclui o detalhe do crédito).
+- Precisa de internet.
+
+---
+
 ## Pendências de cobertura
 
 Funcionalidades já em uso que ainda não estão descritas aqui (entram conforme forem tocadas): PDV (pagamentos,
@@ -728,3 +770,4 @@ painel da plataforma.
 | 2026-10-22 | Troca por item mais barato (§10) conferida em produção na Loja Demo: os três destinos, caixa, crédito do cliente e Relatórios. |
 | 2026-10-22 | Troca por item mais barato (§10): a sobra aparece no Histórico (venda de origem e venda nova) e na reimpressão; avisos do sistema com valor saem em "R$ 7,50". |
 | 2026-10-22 | Reimpressão da venda da troca conferida pelo Owner: o comprovante sai com a linha "Sobra do vale". |
+| 2026-10-22 | Extrato do crédito do cliente (§11): em Contas a Receber → "Com crédito", resumo (saldo, entrou, usado, estornado) e as movimentações com de onde veio e onde foi usado. |

@@ -505,6 +505,7 @@ testável exaustivamente e compartilhada entre as duas apps.
 | `GET /` | Lista dívidas (contas a receber). |
 | `GET /accounts` | Saldo devedor **consolidado por cliente** (1 linha por pessoa) — aba **Em aberto**. Cada linha inclui `debtId`/`debtNumber` da dívida ABERTA do cliente (ADR-026, código `D-000X`). |
 | `GET /accounts/:customerId` | Extrato da conta (dívida aberta) de um cliente; inclui `debtId`/`debtNumber`/`debtOpenedAt` (ADR-026). Cada item das vendas traz `surchargeDebit`/`surchargeCredit` e, desde 2026-10-16, `baseQuantity`/`returnedBaseQty` (unidade-base; legado sem base = `quantity`) — base do acréscimo de cartão calculado na tela ao receber. |
+| `GET /accounts/:customerId/credits` | **Extrato do crédito a favor** do cliente (2026-10-22, só leitura, sem migration): o livro-razão `customer_credits` em ordem cronológica, cada lançamento com contexto — `source` (a devolução/troca que **gerou** o crédito, pelo elo `OrderReturn.customerCreditId`: `intent`, `reason`, `totalValue`, itens que voltaram na unidade vendida) e, no uso (`SALE_USE`) e estorno (`SALE_REVERSAL`), `orderItems` + `relatedOrderTotal` da compra. Teto de 300 lançamentos (os mais recentes); acima disso `truncated: true` e `openingBalance` = Σ do livro-razão − Σ listado. Resumo e saldo corrente calculados na tela por `creditStatement` (core). 404 se o cliente não é da loja. Auth: login (qualquer papel). |
 | `POST /accounts/:customerId/receive` 🔒 | Recebe pagamento **FIFO** distribuído nas dívidas abertas (um `CashMovement` pelo total). Ao zerar, fecha a **dívida** (ADR-026: `PAID`+`closedAt`). `surcharge` (só cartão) é gravado como veio — a tela o calcula (`receiptCardSurcharge`) e o operador pode ajustar; receita a mais, não abate. Troco do dinheiro não trafega (só tela). |
 | `GET /debts` | Lista de **dívidas** por status (ADR-026) — default `paid` (aba **Quitadas**), paginada por `closedAt`. Cada linha: `debtNumber`, cliente, `originalTotal`, `salesCount`, `openedAt`/`closedAt`. |
 | `GET /debts/:id` | Extrato de **uma dívida** pelo id (ADR-026): cabeçalho (código/status/datas), resumo (original/recebido/devolvido/saldo) e as vendas a prazo com itens + recebimentos + devoluções. Usado no detalhe da aba Quitadas e no **comprovante de quitação** (`DebtPaidPrint`). |
@@ -754,6 +755,18 @@ Alertas CALCULADOS sob demanda (custo-zero: nada é gravado; a pendência some q
     cheio do que está em aberto; parcial = proporcional (aviso na tela; regra aprovada pelo Owner no E2E de 2026-10-16). Campo segue **editável** (`surchargeTouched`
     + "recalcular"). Antes (C.3) era digitado à mão com "usar sug." (que ignorava rolo/pacote e devolução).
   - Testes: `packages/core/src/recebimento-conta.test.ts` (17). Sem migration.
+- **Extrato do crédito a favor (Contas a Receber, 2026-10-22).** `components/CustomerCreditModal.tsx`, no molde do
+  extrato da dívida (`CustomerAccountModal`): **resumo no topo** — saldo do crédito, **Entrou** (Σ `RETURN` + manuais
+  positivos, com nº de devoluções/trocas), **Usado** (uso líquido = Σ |`SALE_USE`| − Σ `SALE_REVERSAL`, com nº de
+  compras) e **Estornado** (só aparece se > 0) — e as **Movimentações** em ordem cronológica (mais antiga primeiro),
+  cada uma com o **saldo do crédito depois dela**. Títulos: "Crédito de devolução · da venda V-…" / "Sobra de troca"
+  (`source.intent = EXCHANGE`) com motivo + itens que voltaram (âmbar); "Usado numa compra · V-…" com "Compra de R$ X ·
+  R$ Y pago com crédito" + itens comprados; "Estorno de compra · V-… cancelada/devolvida". Botão **"Usar na venda"**
+  leva ao PDV com o cliente identificado (`/venda?customerId=…`). Cálculo: `creditStatement(entries, opening)` (core,
+  centavos — `packages/core/src/extratoCredito.test.ts`, 8 testes). Onde abre: cartão do cliente no filtro **"Com
+  crédito"** (ou sem dívida aberta), o selo verde "crédito R$ … ›" em qualquer filtro, e o link **"ver extrato"** ao
+  lado de "Crédito a favor" no extrato da dívida (`onOpenCredit`; a janela do crédito fica por cima, `z-50`). API:
+  `GET /receivables/accounts/:customerId/credits` (§8.2). Sem migration.
 - **Preço de venda na Entrada de estoque (2026-10-21).** O formulário "Entrada de estoque" (`app/(app)/estoque/page.tsx`)
   ganhou o campo **"Preço de venda — vazio: não muda"**, espelho do campo do casamento na importação de NF-e: valor por
   **unidade de venda** (= `Product.salePrice`; rótulo "por barra/rolo/pacote" na unidade fechada, "por kg/L" no peso),

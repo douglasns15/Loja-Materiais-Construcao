@@ -11,6 +11,20 @@
 > **Repositório em dia (2026-10-22):** push do Owner feito — `main` = `origin/main` (até `9f07a1b`). Todas as notas
 > "push do Owner pendente" dos blocos abaixo ficam resolvidas por este push.
 >
+> **ONDE PARAMOS (2026-10-22, tarde) — Extrato do crédito do cliente (web + API, SEM migration) — IMPLEMENTADO,
+> gates verdes; deploy, E2E do Owner e push PENDENTES.**
+> - Pedido do Owner: em Contas a Receber → "Com crédito", ver o histórico do crédito (o que gerou, o que foi usado, o que
+>   sobrou) no molde do extrato da dívida, com resumo no começo.
+> - Core `creditStatement` (resumo entrou/usado/estornado/saldo + saldo corrente, centavos; +8 testes em
+>   `extratoCredito.test.ts`); shared `CustomerCreditStatement`/`CreditStatementEntry`; API nova
+>   `GET /receivables/accounts/:customerId/credits` (livro-razão + devolução/troca de origem + itens da compra);
+>   web `CustomerCreditModal` (abre pelo cartão no filtro "Com crédito", pelo selo "crédito R$ … ›" e por "ver extrato"
+>   no extrato da dívida).
+> - Checagem só-leitura no banco: os 6 créditos `RETURN` têm a devolução de origem ligada; cache `creditBalance` = Σ
+>   livro-razão em todos os clientes.
+> - Docs: DOCUMENTACAO-TECNICA §8.2 + §9, DOCUMENTACAO-FUNCIONAL §11.
+> - **Ordem de deploy: API antes do web** (rota nova).
+>
 > **ONDE PARAMOS (2026-10-22) — Troca por item mais barato: sobra do vale (web + API, SEM migration) — CONCLUÍDO, NO AR
 > (API `7096fc27`, web `d1456b64`) + QA ponta a ponta em produção na Loja Demo ✅ (V-000137 → V-000138/139/140:
 > dinheiro, estorno e crédito; caixa, crédito do cliente e Recebido conferidos — ver `registro-de-testes.md`).

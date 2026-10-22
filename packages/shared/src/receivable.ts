@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { paymentMethodSchema, type PaymentMethod } from './sale';
-import type { ReturnTarget } from './return';
+import type { ReturnIntent, ReturnTarget } from './return';
 
 /**
  * Conta a receber / venda a prazo — o "fiado" (ADR-019). Tipos e schemas compartilhados entre
@@ -178,6 +178,36 @@ export type AccountCreditEvent = {
   /** Código sequencial da venda relacionada (ADR-023) — `V-000128` no extrato do crédito. */
   relatedOrderNumber: number | null;
   createdByName: string | null;
+};
+
+/** Um lançamento do EXTRATO DO CRÉDITO (2026-10-22) — o lançamento do livro-razão + o contexto que
+ * o explica: de onde o crédito veio (`source`, a devolução/troca que o gerou, com itens e motivo) ou
+ * em que compra foi usado/estornado (`orderItems`/`relatedOrderTotal`, a venda relacionada). */
+export type CreditStatementEntry = AccountCreditEvent & {
+  /** Total da venda relacionada (a de origem na devolução; a compra no uso/estorno). */
+  relatedOrderTotal: string | null;
+  /** Itens da venda relacionada — só no uso (SALE_USE) e no estorno (SALE_REVERSAL). */
+  orderItems: AccountReturnItem[];
+  /** A devolução/troca que GEROU o crédito (origin RETURN). `null` em uso/estorno/manual. */
+  source: {
+    intent: ReturnIntent;
+    reason: string;
+    totalValue: string;
+    items: AccountReturnItem[];
+  } | null;
+};
+
+/** Extrato do CRÉDITO a favor do cliente — `GET /receivables/accounts/:customerId/credits`.
+ * `entries` em ordem cronológica (mais antigo primeiro); o resumo e o saldo corrente saem de
+ * `creditStatement` (core). `openingBalance` ≠ 0 só quando o extrato veio truncado (`truncated`). */
+export type CustomerCreditStatement = {
+  customerId: string;
+  customerName: string | null;
+  /** Cache do saldo (`Customer.creditBalance`) — deve bater com Σ do livro-razão (ADR-022). */
+  creditBalance: number;
+  openingBalance: number;
+  truncated: boolean;
+  entries: CreditStatementEntry[];
 };
 
 /** Detalhe da CONTA de um cliente — `GET /receivables/accounts/:customerId`. Reúne as vendas a

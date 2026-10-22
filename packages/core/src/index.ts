@@ -766,6 +766,65 @@ export function splitExchangeCredit(
   return { used: usedCents / 100, leftover: (creditCents - usedCents) / 100 };
 }
 
+/** Um lançamento do livro-razão de CRÉDITO do cliente (ADR-022): `amount` ASSINADO (+ gerado na
+ * devolução/troca ou estornado de venda cancelada, − usado numa venda); `origin` é "RETURN",
+ * "SALE_USE", "SALE_REVERSAL" ou "MANUAL". */
+export interface CreditLedgerEntry {
+  amount: number;
+  origin: string;
+}
+
+/** Resumo + saldo corrente do EXTRATO do crédito do cliente (Contas a Receber → Com crédito). */
+export interface CreditStatement {
+  /** Saldo antes do 1º lançamento listado (≠ 0 só quando o extrato veio truncado). */
+  opening: number;
+  /** Quanto ENTROU de crédito: devoluções/sobras de troca (RETURN) e ajustes manuais positivos. */
+  generated: number;
+  /** Quanto foi USADO em compras (Σ |SALE_USE| e manuais negativos), bruto. */
+  used: number;
+  /** Quanto VOLTOU de compras canceladas/devolvidas (SALE_REVERSAL). */
+  reversed: number;
+  /** Uso líquido: `used − reversed` (o que de fato foi gasto). */
+  netUsed: number;
+  /** Saldo final = opening + Σ amount (o livro-razão é a fonte de verdade — ADR-022). */
+  balance: number;
+  /** Saldo do crédito DEPOIS de cada lançamento, na ordem recebida (mais antigo primeiro). */
+  running: number[];
+}
+
+/**
+ * Monta o extrato do CRÉDITO a favor do cliente (Contas a Receber → "Com crédito", 2026-10-22): o
+ * resumo do topo (gerado × usado × estornado × saldo) e o saldo corrente linha a linha, como o
+ * extrato da dívida. `entries` em ordem cronológica (mais antigo primeiro); `opening` é o saldo
+ * anterior quando a lista veio truncada. Tudo em centavos (sem erro de ponto flutuante); valores
+ * inválidos contam como 0.
+ */
+export function creditStatement(entries: CreditLedgerEntry[], opening = 0): CreditStatement {
+  const openingCents = toCents(Number.isFinite(opening) ? opening : 0);
+  let generated = 0;
+  let used = 0;
+  let reversed = 0;
+  let cents = openingCents;
+  const running: number[] = [];
+  for (const e of entries) {
+    const a = toCents(Number.isFinite(e.amount) ? e.amount : 0);
+    if (e.origin === 'SALE_REVERSAL') reversed += a;
+    else if (a >= 0) generated += a;
+    else used += -a;
+    cents += a;
+    running.push(cents / 100);
+  }
+  return {
+    opening: openingCents / 100,
+    generated: generated / 100,
+    used: used / 100,
+    reversed: reversed / 100,
+    netUsed: (used - reversed) / 100,
+    balance: cents / 100,
+    running,
+  };
+}
+
 /** Valores (em reais) das moedas do Real em circulação, para o contador de gaveta. */
 export const BRL_COIN_VALUES = [0.05, 0.1, 0.25, 0.5, 1] as const;
 /** Valores (em reais) das cédulas do Real em circulação, para o contador de gaveta. */
