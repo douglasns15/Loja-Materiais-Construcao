@@ -31,8 +31,9 @@
 7. [Receber conta: troco e acréscimo do cartão](#7-receber-conta-troco-e-acréscimo-do-cartão)
 8. [Histórico de custo e preço do produto](#8-histórico-de-custo-e-preço-do-produto)
 9. [Entrada de estoque: custo e preço de venda](#9-entrada-de-estoque-custo-e-preço-de-venda)
-10. [Pendências de cobertura](#pendências-de-cobertura)
-11. [Histórico deste documento](#histórico-deste-documento)
+10. [Troca por item mais barato (sobra do vale)](#10-troca-por-item-mais-barato-sobra-do-vale)
+11. [Pendências de cobertura](#pendências-de-cobertura)
+12. [Histórico deste documento](#histórico-deste-documento)
 
 ---
 
@@ -643,6 +644,49 @@ produto — do mesmo jeito que na importação de NF-e, sem precisar abrir a tel
 
 ---
 
+## 10. Troca por item mais barato (sobra do vale)
+
+**Para que serve:** o cliente devolve um item e leva outro **mais barato**. O valor do que ele devolveu vira um
+**vale-troca**; o vale paga a compra nova e a **sobra** volta para ele — em dinheiro, estornada no cartão/PIX ou
+como crédito na loja. Tudo num passo só, sem precisar fazer uma devolução e uma venda separadas.
+
+**Onde fica:** **Histórico de Vendas →** na venda, **Cancelar / Devolver → Trocar por outro item**. O PDV abre com o
+banner da troca; o quadro **"Sobra do vale — como devolver?"** aparece no pagamento quando a compra nova fica menor
+que o vale.
+
+**Passo a passo**
+
+1. No Histórico, abra a venda → **Cancelar / Devolver** → **Trocar por outro item** → escolha os itens, a condição
+   (revenda/defeito) e o motivo → **Ir para a troca**.
+2. No PDV, monte a compra nova. Se ela ficar **mais barata** que o vale, aparece o quadro verde com a sobra.
+3. Escolha **uma** forma de devolver a sobra:
+   - **Dinheiro** — a sobra inteira sai da gaveta. A tela mostra "Sai do caixa: R$ …".
+   - **Estorno na forma original** — volta como o cliente pagou a venda de origem: a parte que foi paga em dinheiro
+     sai da gaveta e o resto você estorna **na maquininha** (a tela mostra quanto é cada um).
+   - **Crédito na loja** — vira crédito para o cliente usar depois. Não sai do caixa.
+4. **Concluir venda** (ou F8) → confira na revisão → **Confirmar**. O comprovante mostra o "Vale-troca" usado e a
+   linha **"Sobra do vale (em dinheiro / estorno na forma original / crédito na loja)"**.
+
+**Regras**
+
+- A sobra é: **vale − valor da compra nova**. Se a compra for **igual ou maior** que o vale, não há sobra: o cliente
+  paga a diferença, como sempre.
+- Com sobra, a compra já está paga pelo vale: não dá para usar outra forma de pagamento, crédito da loja nem "a prazo"
+  junto.
+- **Uma forma só** por troca (não dá para dividir a sobra, ex.: parte em dinheiro e parte em crédito).
+- **Crédito na loja precisa de cliente:** vai para o cliente da venda de origem. Se a venda de origem não tinha
+  cliente, use **"+ Identificar cliente"** no PDV — ele recebe o crédito e passa a constar na venda de origem.
+- **Dinheiro** e a parte em dinheiro do **estorno** aparecem no Caixa como saída "Troca (sobra do vale) — venda V-…".
+- Nos **Relatórios**, a sobra devolvida em dinheiro/estorno sai do **Recebido** (no dia da venda de origem, na forma
+  em que voltou), igual a uma devolução. Sobra em crédito não sai do Recebido.
+
+**Limitações**
+
+- Troca de venda **a prazo em aberto** continua bloqueada — faça uma devolução.
+- Precisa de internet (como toda troca).
+
+---
+
 ## Pendências de cobertura
 
 Funcionalidades já em uso que ainda não estão descritas aqui (entram conforme forem tocadas): PDV (pagamentos,
@@ -677,3 +721,4 @@ painel da plataforma.
 | 2026-10-16 | Histórico de custo e preço (§8) conferido pelo Owner na Loja Demo: Tela de Produtos, Entrada de estoque e Importação de NF-e registrando certo. |
 | 2026-10-21 | Entrada de estoque (§9): campo opcional de preço de venda (vazio não muda), com preço atual e margem, igual à importação de NF-e. |
 | 2026-10-21 | Entrada de estoque com preço de venda (§9) conferida pelo Owner em produção. |
+| 2026-10-22 | Troca por item mais barato (§10): a sobra do vale volta ao cliente em dinheiro, estorno na forma original ou crédito na loja. |

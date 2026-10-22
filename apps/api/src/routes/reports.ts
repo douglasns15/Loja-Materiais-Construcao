@@ -135,6 +135,9 @@ interface RefundSlice {
  * (`refundSlicesByMethod`, core); o excedente em crédito e o abatimento de dívida são só informativos
  * (`toCredit`/`toDebt`) — não são dinheiro devolvido. Fatias em crédito/vale são descartadas (nunca
  * entraram no Recebido). Devoluções são raras — leitura enxuta com teto de segurança.
+ * Adendo 2026-10-22 (ADR-033, troca por item mais barato): a TROCA (`EXCHANGE`) entra também — a
+ * SOBRA do vale devolvida em dinheiro/estorno (`excessAmount` + `target`) é dinheiro que voltou, igual
+ * ao excedente de uma devolução. Trocas sem sobra têm `excessAmount = 0`/`target = null` e não contam.
  */
 async function loadRefunds(
   prisma: PrismaLike,
@@ -145,7 +148,7 @@ async function loadRefunds(
   const rows = await prisma.orderReturn.findMany({
     where: {
       tenantId,
-      intent: 'REFUND',
+      intent: { in: ['REFUND', 'EXCHANGE'] },
       order: { ...RECEIVED_ORDER_WHERE, ...(range ? { createdAt: range } : {}) },
     },
     select: {

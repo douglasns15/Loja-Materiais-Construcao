@@ -1156,7 +1156,15 @@ export default function VendasPage() {
             // Troca ATÔMICA (ADR-033, Fatia 3 revisada): NADA foi gravado — guarda só a intenção da
             // troca (itens/motivo/vale) e abre o PDV. O servidor devolve o estoque e conclui a venda
             // na mesma transação; se o operador desistir ou atualizar, o estoque fica intacto.
-            writeExchangePayload(ctx);
+            // Adendo 2026-10-22: leva também as formas pagas e o cliente da origem (prévia da sobra).
+            writeExchangePayload({
+              ...ctx,
+              sourcePayments: returnOrder.payments.map((p) => ({ method: p.method, amount: Number(p.amount) })),
+              sourceCustomer:
+                returnOrder.customerId && returnOrder.customer
+                  ? { id: returnOrder.customerId, name: returnOrder.customer.name }
+                  : null,
+            });
             setReturnOrder(null);
             router.push('/venda');
           }}

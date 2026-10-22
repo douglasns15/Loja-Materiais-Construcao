@@ -113,6 +113,8 @@
 2. **Esperado:** conclui; comprovante só com "Vale-troca R$ 25,00"; caixa não muda.
 
 ### F3.3 — Troca "trade-down" bloqueada (v1)
+> **Substituído 2026-10-22 (ADR-033 §Adendo 2026-10-22):** a compra menor que o vale passou a ser permitida — a
+> sobra volta ao cliente. Ver **F3.9** abaixo. O bloqueio descrito aqui não existe mais.
 1. Venda **1× P2** (R$ 25). Trocar → vale R$ 25 → adicionar só **1× P3** (R$ 8).
 2. Tentar **Concluir**.
 3. **Esperado:** bloqueio com mensagem **"A troca é de valor ≥ R$ 25,00 (o vale). Adicione itens."** Não conclui.
@@ -140,6 +142,22 @@
 ### F3.8 — Troca é online-only
 1. Simule offline (se possível no ambiente) e tente concluir uma venda com vale.
 2. **Esperado:** bloqueio "A troca exige conexão." (Se não der para simular offline, marcar ⏭️.)
+
+### F3.9 — Troca por item mais barato: sobra do vale (adendo 2026-10-22)
+Base: venda **1× P2** (R$ 25) paga **R$ 15 em dinheiro + R$ 10 no cartão**. Trocar → vale R$ 25 → adicionar só
+**1× P3** (R$ 8) → **sobra R$ 17**.
+1. **Sem escolher destino:** o quadro "Sobra do vale — como devolver?" aparece com R$ 17,00; Concluir →
+   **"Sobram R$ 17,00 do vale. Escolha como devolver ao cliente."** Não conclui.
+2. **Dinheiro:** escolha **Dinheiro** → "Sai do caixa: R$ 17,00" → Concluir. **Esperado:** comprovante com
+   "Vale-troca R$ 8,00" + "Sobra do vale (em dinheiro) R$ 17,00"; o caixa ganha uma saída "Troca (sobra do vale) —
+   venda V-…" de R$ 17,00; P2 volta ao estoque; P3 baixa.
+3. **Estorno na forma original** (repita com outra venda igual): "Sai do caixa: R$ 10,20 — o restante (R$ 6,80) é
+   estorno no cartão/PIX". **Esperado:** saída de caixa R$ 10,20; Relatórios → Recebido do dia da venda de origem
+   abate R$ 10,20 no dinheiro e R$ 6,80 no cartão.
+4. **Crédito na loja** numa venda **sem cliente**: sem identificar ninguém → **"Crédito na loja exige um cliente:
+   use "+ Identificar cliente"."**. Identifique o cliente → Concluir. **Esperado:** caixa não muda; o crédito do
+   cliente sobe R$ 17,00; a venda de origem passa a mostrar o cliente; o Recebido **não** muda.
+5. **Outra forma junto:** com sobra, ligue "a prazo" ou "crédito da loja" → **"O vale-troca já paga esta compra…"**.
 
 ---
 

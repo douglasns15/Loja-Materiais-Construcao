@@ -748,6 +748,24 @@ export function refundSlicesByMethod(
     .map(([method, cents]) => ({ method, amount: cents / 100 }));
 }
 
+/**
+ * Reparte o VALE-TROCA entre a compra nova e a SOBRA (ADR-033, adendo 2026-10-22 — troca por item
+ * mais barato). O vale (valor pago pelos itens devolvidos) paga a compra nova até o total dela
+ * (`used`, vira a parcela EXCHANGE_CREDIT); o que passar do total é a `leftover`, devolvida ao
+ * cliente por UM destino (dinheiro, estorno na forma original ou crédito na loja — mesmos destinos
+ * do excedente da devolução, `cashOutForReturn`/`refundSlicesByMethod`). Compra ≥ vale ⇒ sobra 0
+ * (o cliente paga a diferença, como sempre). Valores inválidos/negativos contam como 0. Centavos.
+ */
+export function splitExchangeCredit(
+  credit: number,
+  saleTotal: number,
+): { used: number; leftover: number } {
+  const creditCents = Math.max(0, toCents(Number.isFinite(credit) ? credit : 0));
+  const totalCents = Math.max(0, toCents(Number.isFinite(saleTotal) ? saleTotal : 0));
+  const usedCents = Math.min(creditCents, totalCents);
+  return { used: usedCents / 100, leftover: (creditCents - usedCents) / 100 };
+}
+
 /** Valores (em reais) das moedas do Real em circulação, para o contador de gaveta. */
 export const BRL_COIN_VALUES = [0.05, 0.1, 0.25, 0.5, 1] as const;
 /** Valores (em reais) das cédulas do Real em circulação, para o contador de gaveta. */

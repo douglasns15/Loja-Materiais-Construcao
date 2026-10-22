@@ -24,6 +24,7 @@ import {
   sellableQty,
   sellsWholeOfWeighed,
   splitReturnValue,
+  splitExchangeCredit,
   toBaseQuantity,
   tracksStock,
   wholeOfWeighedSale,
@@ -787,12 +788,21 @@ orders.post('/', requireActiveTenant, async (c) => {
     // descontos); o estorno de estoque + a devolução amarrada + a parcela EXCHANGE_CREDIT são gravados
     // na transação. Como nada é gravado antes de concluir, cancelar a troca ou atualizar a página no
     // PDV não devolve nada ao estoque nem deixa devolução órfã. v1: total ≥ vale; online-only.
+    // Adendo 2026-10-22 (troca por item mais barato): o vale paga a compra até o total dela
+    // (`exchangeCredit` = vale USADO → parcela EXCHANGE_CREDIT) e a SOBRA volta ao cliente pelo
+    // destino escolhido (`leftoverTarget`): dinheiro/estorno (CashMovement RETURN) ou crédito na loja.
     let exchangeCredit = 0;
     let exchangeExec: {
       sourceOrderId: string;
       sourceOrderNumber: number;
       reason: string;
       prep: ReturnPrepLine[];
+      value: number; // vale inteiro (valor pago pelos itens devolvidos) = OrderReturn.totalValue
+      leftover: number; // sobra do vale (vale − usado) = OrderReturn.excessAmount
+      leftoverTarget: 'CASH' | 'SAME_AS_PAYMENT' | 'STORE_CREDIT' | null;
+      leftoverCashOut: number; // quanto da sobra sai da gaveta (cashOutForReturn)
+      creditCustomerId: string | null; // cliente que recebe a sobra em crédito
+      attachCustomerToSource: boolean; // venda de origem anônima ganha o cliente do crédito (ADR-035)
     } | null = null;
     if (sale.exchangeReturn) {
       if (isOffline) {
@@ -802,6 +812,8 @@ orders.post('/', requireActiveTenant, async (c) => {
         where: { id: sale.exchangeReturn.fromOrderId, tenantId },
         include: {
           items: true,
+          // Parcelas da venda de origem: base do estorno "na forma original" da sobra (adendo 2026-10-22).
+          payments: { select: { method: true, amount: true } },
           receivable: {
             select: { originalAmount: true, settledAmount: true, returnedAmount: true, status: true },
           },
@@ -847,21 +859,68 @@ orders.post('/', requireActiveTenant, async (c) => {
       if (!preparedExchange.ok) {
         return c.json({ ok: false, error: preparedExchange.error }, 400);
       }
-      exchangeCredit = preparedExchange.totalValue;
-      if (exchangeCredit > total + 0.005) {
-        return c.json(
-          {
-            ok: false,
-            error: `A troca precisa ser de valor igual ou maior que o vale (${exchangeCredit.toFixed(2)}). Adicione itens ou faça uma devolução.`,
-          },
-          400,
-        );
+      // Adendo 2026-10-22: em vez de recusar a compra menor que o vale (v1), reparte — o vale paga a
+      // compra (`used`) e a sobra (`leftover`) volta ao cliente por UM destino.
+      const exchangeValue = preparedExchange.totalValue;
+      const { used, leftover } = splitExchangeCredit(exchangeValue, total);
+      exchangeCredit = used;
+      const leftoverTarget = leftover > 0 ? sale.exchangeReturn.leftoverTarget ?? null : null;
+      let leftoverCashOut = 0;
+      let creditCustomerId: string | null = null;
+      let attachCustomerToSource = false;
+      if (leftover > 0) {
+        if (!leftoverTarget) {
+          return c.json(
+            {
+              ok: false,
+              error: `Sobram ${leftover.toFixed(2)} do vale. Escolha como devolver: dinheiro, estorno ou crédito na loja.`,
+            },
+            400,
+          );
+        }
+        // O vale já paga a compra inteira: qualquer outra forma (dinheiro/cartão, crédito da loja,
+        // a prazo) seria cobrar o cliente e devolver a ele ao mesmo tempo.
+        if (paid > 0.005 || creditApplied > 0 || credit > 0) {
+          return c.json(
+            { ok: false, error: 'O vale-troca já paga esta compra; remova as outras formas de pagamento.' },
+            400,
+          );
+        }
+        const srcPayments = src.payments.map((p) => ({ method: p.method, amount: Number(p.amount) }));
+        leftoverCashOut = cashOutForReturn(leftoverTarget, leftover, srcPayments);
+        if (leftoverTarget === 'STORE_CREDIT') {
+          // Cliente do crédito (mesma regra da devolução, ADR-035): o da venda de origem tem
+          // prioridade; se ela é anônima, vale o identificado nesta venda — e ele é ANEXADO à origem.
+          creditCustomerId = src.customerId ?? sale.customerId ?? null;
+          if (!creditCustomerId) {
+            return c.json(
+              { ok: false, error: 'Crédito na loja exige um cliente: identifique o cliente nesta venda.' },
+              400,
+            );
+          }
+          if (!src.customerId) {
+            const exists = await prisma.customer.findFirst({
+              where: { id: creditCustomerId, tenantId },
+              select: { id: true },
+            });
+            if (!exists) {
+              return c.json({ ok: false, error: 'Cliente do crédito não encontrado.' }, 400);
+            }
+            attachCustomerToSource = true;
+          }
+        }
       }
       exchangeExec = {
         sourceOrderId: src.id,
         sourceOrderNumber: src.orderNumber,
         reason: sale.exchangeReturn.reason,
         prep: preparedExchange.prep,
+        value: exchangeValue,
+        leftover,
+        leftoverTarget,
+        leftoverCashOut,
+        creditCustomerId,
+        attachCustomerToSource,
       };
     }
     // "Pago agora" para a cobertura = dinheiro/cartão + crédito da loja + vale-troca (todos settlam agora).
@@ -1224,15 +1283,67 @@ orders.post('/', requireActiveTenant, async (c) => {
           orderNumber: exchangeExec.sourceOrderNumber,
           reasonPrefix: 'Troca da venda',
         });
+        // Sobra do vale (adendo 2026-10-22): volta ao cliente pelo destino escolhido, nesta mesma
+        // transação. Dinheiro/estorno → saída de caixa (`CashMovement RETURN`, só a fatia que sai da
+        // gaveta); crédito na loja → livro-razão `customer_credits` + cache `creditBalance` (ADR-022).
+        const ex = exchangeExec;
+        let leftoverCashMovementId: string | null = null;
+        let leftoverCreditId: string | null = null;
+        if (ex.leftover > 0 && ex.leftoverCashOut > 0) {
+          const mov = await tx.cashMovement.create({
+            data: {
+              tenantId,
+              cashSessionId: session.id,
+              userId,
+              type: 'EXPENSE',
+              kind: 'RETURN',
+              amount: ex.leftoverCashOut,
+              reason: `Troca (sobra do vale) — venda ${formatOrderNumber(ex.sourceOrderNumber)}`,
+              relatedOrderId: ex.sourceOrderId,
+              syncStatus: 'SYNCED',
+              registeredByName: c.get('userName'),
+            },
+          });
+          leftoverCashMovementId = mov.id;
+        } else if (ex.leftover > 0 && ex.leftoverTarget === 'STORE_CREDIT' && ex.creditCustomerId) {
+          // ADR-035 (pick-no-retorno): venda de origem anônima ganha o cliente que recebe o crédito.
+          if (ex.attachCustomerToSource) {
+            await tx.order.update({
+              where: { id: ex.sourceOrderId },
+              data: { customerId: ex.creditCustomerId },
+            });
+          }
+          const cc = await tx.customerCredit.create({
+            data: {
+              tenantId,
+              customerId: ex.creditCustomerId,
+              amount: ex.leftover, // + (crédito a favor)
+              origin: 'RETURN',
+              relatedOrderId: ex.sourceOrderId,
+              createdById: userId,
+              createdByName: c.get('userName'),
+            },
+          });
+          leftoverCreditId = cc.id;
+          await tx.customer.update({
+            where: { id: ex.creditCustomerId },
+            data: { creditBalance: { increment: ex.leftover } },
+          });
+        }
         const exReturn = await tx.orderReturn.create({
           data: {
             tenantId,
             orderId: exchangeExec.sourceOrderId,
-            customerId: null, // a troca não vincula cliente (o valor vira vale, não crédito)
-            totalValue: exchangeCredit,
+            // A troca não vincula cliente (o valor vira vale, não crédito) — exceto quando a SOBRA
+            // vira crédito na loja (adendo 2026-10-22): aí reflete o cliente creditado.
+            customerId: ex.leftoverTarget === 'STORE_CREDIT' ? ex.creditCustomerId : null,
+            // Vale inteiro (valor pago pelos itens devolvidos); a parcela EXCHANGE_CREDIT é o USADO.
+            totalValue: ex.value,
             abatedAmount: 0,
-            excessAmount: 0,
-            target: null,
+            excessAmount: ex.leftover, // sobra do vale devolvida ao cliente (0 quando a compra cobre)
+            target: ex.leftover > 0 ? ex.leftoverTarget : null,
+            cashMovementId: leftoverCashMovementId,
+            customerCreditId: leftoverCreditId,
             intent: 'EXCHANGE',
             exchangeOrderId: created.id, // amarra a devolução a ESTA venda (vale consumido no ato)
             reason: exchangeExec.reason,
@@ -1261,7 +1372,12 @@ orders.post('/', requireActiveTenant, async (c) => {
             meta: {
               returnId: exReturn.id,
               intent: 'EXCHANGE',
-              totalValue: exchangeCredit,
+              totalValue: ex.value,
+              usedValue: exchangeCredit, // parte do vale que pagou a compra nova
+              leftover: ex.leftover, // adendo 2026-10-22: sobra devolvida ao cliente
+              leftoverTarget: ex.leftover > 0 ? ex.leftoverTarget : null,
+              leftoverCashOut: ex.leftoverCashOut,
+              attachedCustomerId: ex.attachCustomerToSource ? ex.creditCustomerId : null,
               exchangeOrderId: created.id,
               itemsCount: exchangeExec.prep.length,
               defectiveCount: exchangeExec.prep.filter((p) => p.condition === 'DEFECTIVE').length,
@@ -1284,6 +1400,15 @@ orders.post('/', requireActiveTenant, async (c) => {
           change: credit > 0 ? 0 : Number((paidNow - total).toFixed(2)),
           ...(credit > 0 ? { creditAmount: credit } : {}),
           ...(creditApplied > 0 ? { creditApplied } : {}),
+          // Troca por item mais barato (adendo 2026-10-22): sobra do vale, destino e quanto saiu da
+          // gaveta — o PDV mostra/imprime ("Sobra do vale: R$ X em dinheiro").
+          ...(exchangeExec && exchangeExec.leftover > 0
+            ? {
+                exchangeLeftover: exchangeExec.leftover,
+                exchangeLeftoverTarget: exchangeExec.leftoverTarget,
+                exchangeLeftoverCashOut: exchangeExec.leftoverCashOut,
+              }
+            : {}),
           // CS-4: sinaliza ao cliente que a venda foi anexada a um caixa já fechado (reconciliação).
           ...(cashClosedAt ? { syncedToClosedCash: true } : {}),
         },

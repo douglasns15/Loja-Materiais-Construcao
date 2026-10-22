@@ -68,6 +68,9 @@ type Props = {
   /** Vale-troca consumido (ADR-033, Fatia 3): imprime a linha "Vale-troca". Usado quando o vale NÃO
    *  vem dentro de `payments` (venda recém-concluída no PDV). */
   exchangeCreditAmount?: number;
+  /** Sobra do vale devolvida ao cliente (ADR-033, adendo 2026-10-22 — troca por item mais barato):
+   *  imprime "Sobra do vale (destino)". Não é pagamento: é o que voltou ao cliente. */
+  exchangeLeftover?: { amount: number; label: string };
   /** Nome do cliente devedor (venda a prazo) — impresso junto da linha "A prazo". */
   customerName?: string | null;
   /** Código sequencial da venda (ADR-023): impresso como "Venda V-000128" abaixo do título. Só em
@@ -109,7 +112,7 @@ const QTY = (v: number) => Number(v).toLocaleString('pt-BR', { maximumFractionDi
  * e só aparece na impressão (ver regras @media print em globals.css). O modelo
  * (80mm / A4) é controlado pelo atributo data-model, definido antes de imprimir.
  */
-export function ReceiptPrint({ kind, store, items, total, date, discount, payments, method, change, creditAmount, storeCreditAmount, exchangeCreditAmount, customerName, orderNumber, codeLabel, quoteNumber, validUntil, pickupNotice, pickupPaid, pickupLines, captureMode }: Props) {
+export function ReceiptPrint({ kind, store, items, total, date, discount, payments, method, change, creditAmount, storeCreditAmount, exchangeCreditAmount, exchangeLeftover, customerName, orderNumber, codeLabel, quoteNumber, validUntil, pickupNotice, pickupPaid, pickupLines, captureMode }: Props) {
   const isQuote = kind === 'quote';
   // Subtotal já LÍQUIDO do desconto por item (ADR-036); o "Desconto" abaixo é só o do PEDIDO.
   const subtotal = items.reduce((acc, i) => acc + receiptLineNet(i), 0);
@@ -250,6 +253,12 @@ export function ReceiptPrint({ kind, store, items, total, date, discount, paymen
             <div>
               <span>Vale-troca</span>
               <span>{BRL(exchangeCredit)}</span>
+            </div>
+          ) : null}
+          {exchangeLeftover && exchangeLeftover.amount > 0 ? (
+            <div>
+              <span>Sobra do vale ({exchangeLeftover.label})</span>
+              <span>{BRL(exchangeLeftover.amount)}</span>
             </div>
           ) : null}
           {hasChange ? (

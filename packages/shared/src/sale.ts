@@ -172,9 +172,10 @@ export const createSaleSchema = z.object({
    * adiantada (ao clicar "Ir para a troca") e o vale ficava pendente — se o operador atualizasse a
    * página ou cancelasse a troca, os itens já tinham voltado ao estoque e ficava uma devolução órfã.
    * Agora nada é gravado até concluir: o servidor valida as quantidades devolvíveis, calcula o VALOR
-   * PAGO (líquido de descontos — o vale), exige total da venda ≥ vale (sem "troco" na troca — v1),
+   * PAGO (líquido de descontos — o vale), reparte o vale entre a compra e a sobra (a v1 exigia total
+   * da venda ≥ vale, sem "troco" na troca — ver `leftoverTarget`),
    * estorna o estoque (revenda volta / defeito vira defeituoso), cria a devolução `intent = EXCHANGE`
-   * já amarrada a esta venda (`exchangeOrderId`) e grava a parcela `EXCHANGE_CREDIT` = o vale.
+   * já amarrada a esta venda (`exchangeOrderId`) e grava a parcela `EXCHANGE_CREDIT` = o vale USADO.
    * Online-only (a troca exige conexão).
    */
   exchangeReturn: z
@@ -190,6 +191,15 @@ export const createSaleSchema = z.object({
           }),
         )
         .min(1),
+      /**
+       * Troca por item mais barato (ADR-033, adendo 2026-10-22): destino da SOBRA do vale quando a
+       * compra nova sai menor que ele (`splitExchangeCredit`, core). Os mesmos destinos do excedente
+       * da devolução (`ReturnTarget`): `CASH` = sai da gaveta inteira; `SAME_AS_PAYMENT` = estorno na
+       * forma da venda de origem (só a fatia em dinheiro sai da gaveta); `STORE_CREDIT` = crédito na
+       * loja (exige cliente: o da venda de origem ou o identificado nesta venda). Uma forma só por
+       * troca. Obrigatório quando há sobra; ignorado quando a compra cobre o vale.
+       */
+      leftoverTarget: z.enum(['CASH', 'SAME_AS_PAYMENT', 'STORE_CREDIT']).optional(),
     })
     .optional(),
 });

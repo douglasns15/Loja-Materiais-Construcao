@@ -58,6 +58,8 @@ import {
   cardFeePercentFor,
   netMarginPercent,
   planReorder,
+  splitExchangeCredit,
+  cashOutForReturn,
   type ReorderSourceItem,
   type ReorderProductInfo,
   type ReorderPlan,
@@ -260,6 +262,8 @@ type View =
       storeCredit?: number;
       /** Vale-troca consumido nesta venda (ADR-033, Fatia 3) — mostrado como forma no comprovante. */
       exchangeCredit?: number;
+      /** Sobra do vale devolvida ao cliente (adendo 2026-10-22): valor + destino legível. */
+      exchangeLeftover?: { amount: number; label: string };
       customerName?: string | null;
       /** Venda com retirada/entrega futura (ADR-020): habilita o 2º botão "Imprimir comprovante de
        *  retirada" na tela final (cupom + faixa "FALTA RETIRAR"). */
@@ -372,6 +376,21 @@ function Summary({
   );
 }
 
+/** Destino da sobra do vale-troca (ADR-033, adendo 2026-10-22) — os mesmos do excedente da devolução. */
+type LeftoverTarget = 'CASH' | 'SAME_AS_PAYMENT' | 'STORE_CREDIT';
+/** Rótulos dos botões de destino da sobra no PDV. */
+const LEFTOVER_BUTTONS: Record<LeftoverTarget, string> = {
+  CASH: 'Dinheiro',
+  SAME_AS_PAYMENT: 'Estorno na forma original',
+  STORE_CREDIT: 'Crédito na loja',
+};
+/** Destino da sobra como sai na tela final e no comprovante ("Sobra do vale devolvida · …"). */
+const LEFTOVER_LABELS: Record<LeftoverTarget, string> = {
+  CASH: 'em dinheiro',
+  SAME_AS_PAYMENT: 'estorno na forma original',
+  STORE_CREDIT: 'crédito na loja',
+};
+
 /** Formas de pagamento de uma venda (uma linha por forma) + crédito da loja + troco, reusado na
  *  revisão e na conclusão. `storeCredit` (ADR-022, Fatia C) aparece como uma forma a mais. */
 function PaymentsLines({
@@ -379,11 +398,14 @@ function PaymentsLines({
   change,
   storeCredit = 0,
   exchangeCredit = 0,
+  exchangeLeftover,
 }: {
   payments: PaidPart[];
   change: number;
   storeCredit?: number;
   exchangeCredit?: number;
+  /** Sobra do vale devolvida ao cliente (adendo 2026-10-22) — não é pagamento, é o que voltou. */
+  exchangeLeftover?: { amount: number; label: string };
 }) {
   // Com crédito da loja / vale-troca há sempre ≥ 2 "formas" na exibição (a parcela + o abatimento).
   const multi = payments.length + (storeCredit > 0 ? 1 : 0) + (exchangeCredit > 0 ? 1 : 0) > 1;
@@ -405,6 +427,12 @@ function PaymentsLines({
         <div className="flex justify-between text-sm text-gray-600">
           <span>Pagamento · Vale-troca</span>
           <span>{BRL(exchangeCredit)}</span>
+        </div>
+      )}
+      {exchangeLeftover && exchangeLeftover.amount > 0 && (
+        <div className="flex justify-between text-sm font-medium text-emerald-800">
+          <span>Sobra do vale devolvida · {exchangeLeftover.label}</span>
+          <span>{BRL(exchangeLeftover.amount)}</span>
         </div>
       )}
       {change > 0 && (
@@ -583,6 +611,10 @@ export default function VendaPage() {
   // gravado). O total precisa ser ≥ o vale (sem troco na troca).
   const [exchange, setExchange] = useState<ExchangePayload | null>(null);
   const exchangeConsumedRef = useRef(false);
+  // Troca por item mais barato (ADR-033, adendo 2026-10-22): destino da SOBRA do vale quando a compra
+  // nova sai menor que ele — dinheiro, estorno na forma original ou crédito na loja (uma forma só).
+  // `null` = ainda não escolhido (a conclusão trava enquanto houver sobra sem destino).
+  const [leftoverTarget, setLeftoverTarget] = useState<LeftoverTarget | null>(null);
   // Atalhos de teclado (ADR-032, Fatia 3): o campo de busca de produto (foco por F9) e o registro
   // das ações do PDV no motor global.
   const { registerAction } = useShortcuts();
@@ -1108,7 +1140,26 @@ export default function VendaPage() {
 
   // Vale-troca (ADR-033, Fatia 3): abate o "a pagar agora" (não é dinheiro na gaveta). v1: o total
   // deve cobrir o vale (sem troco na troca) — a validação em `onConcluir` barra o total < vale.
-  const exchangeCredit = exchange?.credit ?? 0;
+  // Adendo 2026-10-22: o vale abate só até o total (`exchangeCredit` = vale USADO, mesma função pura
+  // do servidor); a SOBRA (`exchangeLeftover`) volta ao cliente pelo destino escolhido no PDV.
+  const exchangeSplit = exchange
+    ? splitExchangeCredit(exchange.credit, totals.total)
+    : { used: 0, leftover: 0 };
+  const exchangeCredit = exchangeSplit.used;
+  const exchangeLeftover = exchangeSplit.leftover;
+  // Prévia de quanto da sobra sai da gaveta (o "estorno na forma original" só tira a fatia que foi
+  // paga em dinheiro na venda de origem; sem as formas da origem, conta como tudo em dinheiro).
+  const leftoverCashOut =
+    exchangeLeftover > 0 && leftoverTarget
+      ? exchange?.sourcePayments
+        ? cashOutForReturn(leftoverTarget, exchangeLeftover, exchange.sourcePayments)
+        : leftoverTarget === 'STORE_CREDIT'
+          ? 0
+          : exchangeLeftover
+      : 0;
+  // Cliente que recebe a sobra em crédito: o da venda de origem tem prioridade (regra do servidor);
+  // se ela é anônima, vale o identificado nesta venda.
+  const leftoverCreditName = exchange?.sourceCustomer?.name ?? (customerId ? customerName : null);
   const payableNow = Number(
     (totals.total - creditValue - storeCreditUsed - exchangeCredit).toFixed(2),
   );
@@ -1773,6 +1824,23 @@ export default function VendaPage() {
   }
 
   /** "Concluir venda" agora só abre a REVISÃO — nada é gravado ainda. */
+  /** Troca por item mais barato (adendo 2026-10-22): o que impede concluir com SOBRA do vale. As
+   *  mesmas guardas do servidor — destino escolhido, sem outra forma de pagamento (o vale já paga
+   *  tudo) e cliente para o crédito na loja. `null` = pode seguir (ou não há sobra). */
+  function exchangeLeftoverError(): string | null {
+    if (!exchange || exchangeLeftover <= 0) return null;
+    if (!leftoverTarget) {
+      return `Sobram ${BRL(exchangeLeftover)} do vale. Escolha como devolver ao cliente.`;
+    }
+    if (isCredit || storeCreditUsed > 0) {
+      return 'O vale-troca já paga esta compra; desligue o "a prazo" e o crédito da loja.';
+    }
+    if (leftoverTarget === 'STORE_CREDIT' && !exchange.sourceCustomer && !customerId) {
+      return 'Crédito na loja exige um cliente: use "+ Identificar cliente".';
+    }
+    return null;
+  }
+
   function onConcluir() {
     setError(null);
     if (cart.length === 0) {
@@ -1789,6 +1857,11 @@ export default function VendaPage() {
     }
     if (!payStatus.sufficient) {
       setError(`Pagamento insuficiente: falta ${BRL(payStatus.remaining)}.`);
+      return;
+    }
+    const leftoverError = exchangeLeftoverError();
+    if (leftoverError) {
+      setError(leftoverError);
       return;
     }
     // ADR-042: a etapa de agendamento abre com HOJE no dia (o operador troca se for outro).
@@ -1863,10 +1936,10 @@ export default function VendaPage() {
       setError('A troca exige conexão.');
       return;
     }
-    if (exchange && totals.total + 0.005 < exchange.credit) {
-      setError(
-        `A troca é de valor ≥ ${exchange.credit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} (o vale). Adicione itens.`,
-      );
+    // Adendo 2026-10-22: compra menor que o vale é permitida — a sobra precisa de destino.
+    const leftoverError = exchangeLeftoverError();
+    if (leftoverError) {
+      setError(leftoverError);
       return;
     }
     // Parcelas que somam o total (troco já fora); o troco (`change`) é o excedente do dinheiro
@@ -1883,6 +1956,10 @@ export default function VendaPage() {
       ...(isCredit ? { credit: creditValue, customerName } : {}),
       ...(storeCreditUsed > 0 ? { storeCredit: storeCreditUsed, customerName } : {}),
       ...(exchangeCredit > 0 ? { exchangeCredit } : {}),
+      // Sobra do vale devolvida (adendo 2026-10-22) — linha própria na tela final e no comprovante.
+      ...(exchangeLeftover > 0 && leftoverTarget
+        ? { exchangeLeftover: { amount: exchangeLeftover, label: LEFTOVER_LABELS[leftoverTarget] } }
+        : {}),
       // Retirada/entrega futura (ADR-020): liga o botão "Imprimir comprovante de retirada" na prévia.
       ...(isScheduled ? { scheduled: true } : {}),
     };
@@ -2003,7 +2080,15 @@ export default function VendaPage() {
       // servidor revalida as quantidades devolvíveis, estorna o estoque, grava a parcela
       // EXCHANGE_CREDIT e amarra a devolução a esta venda. Online-only.
       ...(exchange
-        ? { exchangeReturn: { fromOrderId: exchange.fromOrderId, reason: exchange.reason, items: exchange.items } }
+        ? {
+            exchangeReturn: {
+              fromOrderId: exchange.fromOrderId,
+              reason: exchange.reason,
+              items: exchange.items,
+              // Adendo 2026-10-22: destino da sobra do vale (só quando a compra sai menor que ele).
+              ...(exchangeLeftover > 0 && leftoverTarget ? { leftoverTarget } : {}),
+            },
+          }
         : {}),
     };
     const parsed = createSaleSchema.safeParse(payload);
@@ -2028,6 +2113,7 @@ export default function VendaPage() {
       setQuoteReview([]);
       // Troca (ADR-033, Fatia 3): vale consumido — não pode ser reaplicado numa próxima venda.
       setExchange(null);
+      setLeftoverTarget(null);
       // Cesta persistente (ADR-021): venda registrada — esvazia a cesta em todos os aparelhos (o
       // comprovante usa o snapshot em `doneBase.items`). Evita reabrir um carrinho já vendido.
       clearCart();
@@ -2412,6 +2498,11 @@ export default function VendaPage() {
             change={change}
             storeCredit={storeCreditUsed}
             exchangeCredit={exchangeCredit}
+            exchangeLeftover={
+              exchangeLeftover > 0 && leftoverTarget
+                ? { amount: exchangeLeftover, label: LEFTOVER_LABELS[leftoverTarget] }
+                : undefined
+            }
           />
           {/* Agenda de entregas (ADR-042): dia, faixa, endereço, entregador e observações. */}
           {isScheduled && (
@@ -2497,6 +2588,7 @@ export default function VendaPage() {
               change={view.change}
               storeCredit={view.storeCredit}
               exchangeCredit={view.exchangeCredit}
+              exchangeLeftover={view.exchangeLeftover}
             />
           )}
           {view.kind === 'done' && view.credit && view.credit > 0 ? (
@@ -2629,6 +2721,7 @@ export default function VendaPage() {
           creditAmount={view.kind === 'done' ? view.credit : undefined}
           storeCreditAmount={view.kind === 'done' ? view.storeCredit : undefined}
           exchangeCreditAmount={view.kind === 'done' ? view.exchangeCredit : undefined}
+          exchangeLeftover={view.kind === 'done' ? view.exchangeLeftover : undefined}
           customerName={view.kind === 'done' ? view.customerName : undefined}
           orderNumber={view.kind === 'done' ? view.orderNumber : undefined} // ADR-023
           quoteNumber={view.kind === 'quote' ? view.quoteNumber : undefined} // ADR-024
@@ -2679,11 +2772,14 @@ export default function VendaPage() {
             <strong>
               {exchange.credit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
             </strong>
-            . Monte a nova compra (valor ≥ o vale).
+            . Monte a nova compra — se ficar mais barata, a sobra volta ao cliente.
           </p>
           <button
             type="button"
-            onClick={() => setExchange(null)}
+            onClick={() => {
+              setExchange(null);
+              setLeftoverTarget(null);
+            }}
             className="rounded-lg border border-emerald-300 px-3 py-1 text-xs font-medium text-emerald-800 hover:bg-emerald-100"
           >
             Cancelar troca
@@ -3230,6 +3326,48 @@ export default function VendaPage() {
 
       {/* Seção: pagamento + condições (a prazo/crédito/retirada são opt-in, "+ …"). */}
       <div className="min-w-0 space-y-3 border-t border-gray-100 p-4">
+          {/* Troca por item mais barato (ADR-033, adendo 2026-10-22): a compra saiu menor que o vale —
+              o operador escolhe UMA forma de devolver a sobra. As formas de pagamento ficam sem efeito
+              (o vale já paga tudo; "a pagar" = 0). */}
+          {exchange && exchangeLeftover > 0 && (
+            <div className="space-y-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-emerald-900">Sobra do vale — como devolver?</span>
+                <span className="text-lg font-bold text-emerald-800 tabular-nums">{BRL(exchangeLeftover)}</span>
+              </div>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                {(['CASH', 'SAME_AS_PAYMENT', 'STORE_CREDIT'] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setLeftoverTarget(t)}
+                    aria-pressed={leftoverTarget === t}
+                    className={`rounded-lg border px-3 py-2 text-sm font-medium ${
+                      leftoverTarget === t
+                        ? 'border-emerald-600 bg-emerald-600 text-white'
+                        : 'border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-100'
+                    }`}
+                  >
+                    {LEFTOVER_BUTTONS[t]}
+                  </button>
+                ))}
+              </div>
+              {leftoverTarget === 'STORE_CREDIT' ? (
+                <p className="text-xs text-emerald-800">
+                  {leftoverCreditName
+                    ? `Vira crédito para ${leftoverCreditName}. Não sai do caixa.`
+                    : 'Identifique o cliente abaixo ("+ Identificar cliente") para receber o crédito.'}
+                </p>
+              ) : leftoverTarget ? (
+                <p className="text-xs text-emerald-800">
+                  Sai do caixa: <strong>{BRL(leftoverCashOut)}</strong>
+                  {leftoverTarget === 'SAME_AS_PAYMENT' && leftoverCashOut + 0.005 < exchangeLeftover
+                    ? ` — o restante (${BRL(exchangeLeftover - leftoverCashOut)}) é estorno no cartão/PIX, feito na maquininha.`
+                    : '.'}
+                </p>
+              ) : null}
+            </div>
+          )}
           <div className="flex items-center justify-between">
             <label className="block text-sm font-medium">Formas de pagamento</label>
             <button

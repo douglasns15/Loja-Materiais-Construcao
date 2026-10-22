@@ -1,6 +1,6 @@
 # ADR-033: Devolução unificada — condição do item (defeito), forma do estorno e troca
 
-**Status:** Aceito — desenho aprovado pelo Owner (2026-09-09). **Fatias 1, 2 e 3 NO AR** (2026-09-09): migrations `0038`/`0039`/`0040` aplicadas no Supabase; API Version `24ab85d2`; web Version `85eb33b5` (smoke ✅). Commit `7f6d70f` em `main`. **E2E de QA (Claude) executado ponta a ponta em 2026-09-09** (Fatia 1 6/6 ✅; Fatia 2 7 ✅/1 ⚠️; Fatia 3 7 ✅/1 ⏭️; Regressão 4 ✅/1 ⏭️; caixa coerente R$37→R$184,50) — evidência em [`registro-de-testes.md`](../testes/registro-de-testes.md) §"ADR-033 — E2E completo (QA)" e roteiro preenchido em [`e2e-adr033-devolucao-troca.md`](../testes/e2e-adr033-devolucao-troca.md). **Achado não-bloqueante:** "Crédito na loja" inalcançável em venda paga → originou a [ADR-034](ADR-034-cliente-opcional-em-venda.md). **Validação própria do Owner e push pendentes.** **Refino na Fatia 2:** a "forma do estorno" foi modelada como 3ª opção do `ReturnTarget` (`SAME_AS_PAYMENT`) em vez de um campo `refundMethod` separado no `return-items` (o `cancel` usa `refundMethod` no schema/audit). **Decisão de escopo (Fatia 2):** os dois endpoints (`cancel`/`return-items`) foram mantidos com suas semânticas (só a UI unificou) porque os relatórios não subtraem devoluções — fundir tudo inflaria o faturamento (dívida técnica registrada). **Escopo da Fatia 3 (troca):** vale-troca consumido por uma venda nova (parcela `EXCHANGE_CREDIT`, espelha o `STORE_CREDIT`); v1 exige **total da nova venda ≥ vale** (sem "troco" na troca — trade-down fica para depois) e **bloqueia troca de venda a prazo em aberto**; migration `0040` (`ReturnIntent` + `order_returns.intent`/`exchangeOrderId`).
+**Status:** Aceito — desenho aprovado pelo Owner (2026-09-09). **Fatias 1, 2 e 3 NO AR** (2026-09-09): migrations `0038`/`0039`/`0040` aplicadas no Supabase; API Version `24ab85d2`; web Version `85eb33b5` (smoke ✅). Commit `7f6d70f` em `main`. **E2E de QA (Claude) executado ponta a ponta em 2026-09-09** (Fatia 1 6/6 ✅; Fatia 2 7 ✅/1 ⚠️; Fatia 3 7 ✅/1 ⏭️; Regressão 4 ✅/1 ⏭️; caixa coerente R$37→R$184,50) — evidência em [`registro-de-testes.md`](../testes/registro-de-testes.md) §"ADR-033 — E2E completo (QA)" e roteiro preenchido em [`e2e-adr033-devolucao-troca.md`](../testes/e2e-adr033-devolucao-troca.md). **Achado não-bloqueante:** "Crédito na loja" inalcançável em venda paga → originou a [ADR-034](ADR-034-cliente-opcional-em-venda.md). **Validação própria do Owner e push pendentes.** **Refino na Fatia 2:** a "forma do estorno" foi modelada como 3ª opção do `ReturnTarget` (`SAME_AS_PAYMENT`) em vez de um campo `refundMethod` separado no `return-items` (o `cancel` usa `refundMethod` no schema/audit). **Decisão de escopo (Fatia 2):** os dois endpoints (`cancel`/`return-items`) foram mantidos com suas semânticas (só a UI unificou) porque os relatórios não subtraem devoluções — fundir tudo inflaria o faturamento (dívida técnica registrada). **Escopo da Fatia 3 (troca):** vale-troca consumido por uma venda nova (parcela `EXCHANGE_CREDIT`, espelha o `STORE_CREDIT`); v1 exige **total da nova venda ≥ vale** (sem "troco" na troca — trade-down fica para depois) e **bloqueia troca de venda a prazo em aberto**; migration `0040` (`ReturnIntent` + `order_returns.intent`/`exchangeOrderId`). **Adendo 2026-10-22:** o trade-down foi liberado — compra menor que o vale devolve a **sobra** em dinheiro, estorno na forma original ou crédito na loja (sem migration; ver §Adendo 2026-10-22).
 **Data:** 2026-09-09
 **Deciders:** Owner do produto
 **Relacionados:** [ADR-022](ADR-022-conta-do-cliente-fiado-acumulado.md) (devolução por item + crédito — a base reusada aqui), [ADR-006](ADR-006-devolucao-e-movimentacoes-de-caixa.md) (devolução de venda + movimentações de caixa), [ADR-001](ADR-001-consistencia-de-estoque.md) (consistência de estoque: cache + livro-razão), [ADR-018](ADR-018-caixa-compartilhado-por-loja.md) (caixa por loja), [ADR-020](ADR-020-retirada-entrega-futura.md) (retirada futura — eixo ortogonal), [ADR-010](ADR-010-atribuicao-de-autoria.md) (autoria), [ADR-004](ADR-004-soft-delete-e-auditoria.md) (auditoria seletiva)
@@ -175,3 +175,36 @@ Os testes de **fechamento de caixa** (regra 2) devem cobrir a matriz forma-do-pa
 **Decisão:** a troca passa a ser **atômica**. Nada é gravado ao iniciar a troca — o Histórico carrega apenas a **intenção** (itens/condições/motivo + o vale calculado localmente) para o PDV via `sessionStorage`. Ao **concluir** a nova venda, `POST /orders` recebe `exchangeReturn { fromOrderId, reason, items[] }` e executa, **na MESMA transação da venda**: valida as quantidades devolvíveis, calcula o vale (valor pago líquido de descontos — ver ADR-036), estorna o estoque (revenda volta / defeito vira defeituoso), cria a devolução `EXCHANGE` já amarrada a esta venda (`exchangeOrderId = novaVenda`) e grava a parcela `EXCHANGE_CREDIT`. Cancelar a troca ou atualizar a página **não grava nada** → estoque intacto, sem órfãos.
 
 **Consequências:** o campo `exchangeReturnId` de `POST /orders` sai (substituído por `exchangeReturn`); `POST /orders/:id/return-items` passa a **rejeitar** `intent = EXCHANGE` (é só devolução). Sem migration (o schema já suportava criar `OrderReturn` com `exchangeOrderId` no ato). Lógica de devolução extraída em `prepareReturnLines`/`applyReturnStock` (fonte única entre a devolução avulsa e a troca). "Bloqueia troca de venda a prazo em aberto" continua valendo (agora validado ao concluir).
+
+## Adendo 2026-10-22 — Troca por item mais barato (sobra do vale)
+
+**Problema (pedido do Owner):** na troca, o cliente às vezes leva um item **mais barato** e quer o resto de volta —
+em dinheiro, estornado no cartão/PIX ou como crédito na loja. A v1 recusava ("A troca precisa ser de valor igual ou
+maior que o vale"), obrigando a fazer uma devolução + uma venda separadas.
+
+**Decisão (aprovada pelo Owner 2026-10-22):** a troca aceita compra **menor** que o vale. A conta é a função pura
+`splitExchangeCredit(vale, totalDaCompra)` (core): o vale paga a compra até o total dela (**usado** → parcela
+`EXCHANGE_CREDIT`) e o que passar é a **sobra**, devolvida por **um** destino escolhido no PDV
+(`exchangeReturn.leftoverTarget`) — os mesmos do excedente da devolução (§3):
+
+- `CASH` — **dinheiro**: a sobra inteira sai da gaveta (`CashMovement RETURN`, "Troca (sobra do vale) — venda V-…").
+- `SAME_AS_PAYMENT` — **estorno na forma original** da venda de origem: só a fatia paga em dinheiro sai da gaveta
+  (`cashOutForReturn`); o resto é estorno no cartão/PIX (feito na maquininha).
+- `STORE_CREDIT` — **crédito na loja**: `customer_credits` (origem `RETURN`) + `creditBalance`. Cliente = o da venda de
+  origem; se ela é anônima, o identificado na venda nova — e ele é **anexado** à venda de origem (regra da ADR-035).
+
+Tudo na **mesma transação** da troca atômica (Revisão 2026-09-16). A devolução `EXCHANGE` grava `totalValue` = vale
+inteiro, `excessAmount` = sobra, `target` = destino e os elos `cashMovementId`/`customerCreditId` — **sem migration**
+(os campos já existiam para a devolução por item).
+
+**Regras:** com sobra, a venda nova não aceita outra forma (pagamento, crédito da loja, a prazo — o vale já paga
+tudo); uma forma só por troca (dividir a sobra em duas formas fica fora); **troca de venda a prazo em aberto continua
+bloqueada**; online-only como antes.
+
+**Relatórios (ADR-037):** o "Recebido" passa a abater também a sobra da troca devolvida em dinheiro/estorno
+(`loadRefunds` lê `REFUND` **e** `EXCHANGE`), no dia da venda de origem e por forma — senão o Recebido ficaria
+inflado. Sobra em crédito não sai do Recebido (como na devolução). Trocas sem sobra têm `excessAmount = 0` e não
+mudam nada.
+
+**Testes:** `packages/core/src/trocaSobra.test.ts` (repartição do vale + caixa/Recebido por destino). Roteiro E2E:
+`docs/testes/e2e-adr033-devolucao-troca.md` §F3.9.

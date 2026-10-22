@@ -24,6 +24,11 @@ export type ExchangePayload = {
   credit: number; // valor do vale (em R$) calculado no Histórico p/ o banner + trava total ≥ vale
   reason: string; // motivo da devolução (obrigatório)
   items: ExchangeItem[]; // itens/condições a devolver, enviados ao concluir a venda
+  // Troca por item mais barato (ADR-033, adendo 2026-10-22): base da prévia da SOBRA do vale no PDV.
+  // Formas pagas na venda de origem → quanto sai da gaveta no "estorno na forma original"
+  // (`cashOutForReturn`); cliente da origem → recebe a sobra em crédito na loja. O servidor recalcula.
+  sourcePayments?: { method: string; amount: number }[];
+  sourceCustomer?: { id: string; name: string } | null;
 };
 
 export function writeExchangePayload(payload: ExchangePayload): void {
