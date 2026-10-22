@@ -171,7 +171,7 @@ Base: venda **1× P2** (R$ 25) paga **R$ 15 em dinheiro + R$ 10 no cartão**. Tr
 | 5. Outra forma junto (API) | ✅ | `POST /orders` com sobra + pagamento → 400 "O vale-troca já paga esta compra…"; sem `leftoverTarget` → 400 "Sobram 7.50 do vale…" (nada gravado) |
 
 Ajuste do mesmo dia (API `b707311a`, web `dcb458d2`): o **Histórico** mostra a sobra no card da V-000137 (uma linha
-por troca) e nos cards das V-000138/139/140; a mensagem da API saiu "Sobram R$ 7,50 do vale…" ✅.
+por troca) e nos cards das V-000138/139/140; a mensagem da API saiu "Sobram R$ 7,50 do vale…" ✅. Reimpressão da V-000138 conferida pelo Owner: linha "Sobra do vale" no comprovante ✅.
 
 Observação: abrir "+ Venda a prazo" **sem digitar valor** não vira fiado (valor a prazo = 0), então a revisão abre
 normalmente — a guarda do item 5 vale quando há valor a prazo/crédito da loja de fato.

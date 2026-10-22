@@ -727,3 +727,4 @@ painel da plataforma.
 | 2026-10-22 | Troca por item mais barato (§10): a sobra do vale volta ao cliente em dinheiro, estorno na forma original ou crédito na loja. |
 | 2026-10-22 | Troca por item mais barato (§10) conferida em produção na Loja Demo: os três destinos, caixa, crédito do cliente e Relatórios. |
 | 2026-10-22 | Troca por item mais barato (§10): a sobra aparece no Histórico (venda de origem e venda nova) e na reimpressão; avisos do sistema com valor saem em "R$ 7,50". |
+| 2026-10-22 | Reimpressão da venda da troca conferida pelo Owner: o comprovante sai com a linha "Sobra do vale". |

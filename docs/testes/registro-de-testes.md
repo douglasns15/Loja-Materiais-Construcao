@@ -6539,5 +6539,5 @@ atual e margem; `POST /stock/movements` aceita `newSalePrice` (grava o preço, l
 | Card da venda de origem | Histórico, Loja Demo | ✅ V-000137: "Trocada → V-000138, V-000139, V-000140" + uma linha de sobra por troca (dinheiro / estorno na forma original / crédito na loja, R$ 17,00 cada) |
 | Card da venda nova | Histórico, Loja Demo | ✅ V-000138/139/140: "Sobra do vale devolvida · <destino> R$ 17,00" abaixo do "Vale-troca" |
 | Mensagem da API em reais | `POST /orders` recusado (nada gravado) | ✅ "Sobram R$ 7,50 do vale. Escolha como devolver…" (antes "7.50") |
-| Reimpressão/WhatsApp com a linha da sobra | — | ⏭️ não impresso de fato (abriria o diálogo de impressão); mesmo componente já conferido no PDV |
+| Reimpressão com a linha da sobra | Owner reimprimiu a V-000138 (2026-10-22) | ✅ comprovante saiu com "Sobra do vale" corretamente |
 
