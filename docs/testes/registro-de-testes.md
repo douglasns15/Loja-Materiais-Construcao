@@ -6574,3 +6574,4 @@ atual e margem; `POST /stock/movements` aceita `newSalePrice` (grava o preço, l
 | PDV — Entrega | ✅ | Painel verde "Cliente (obrigatório para a entrega)"; recolhido = botão verde "+ Identificar cliente · Obrigatório para a entrega" |
 | PDV — volta para Retirada | ✅ | Volta o "+ Identificar cliente (opcional)" (nada finalizado; carrinho do Owner intacto) |
 | PDV — sobra do vale em crédito sem cliente | ⏭️ | Mesma regra (`customerRequiredFor`); não executado para não criar troca de teste |
+| Origem fiado → "Venda a prazo" (ajuste pós-QA; API `0664f850`, web `d127fcb3`) | ✅ | Cliente 02: entrada da V-000055 mostra "Venda a prazo: R$ 111,00"; Jamiro segue "Venda paga em: Dinheiro R$ 45,00 + PIX R$ 30,00"; gates core 581 / shared 155 / API 7 + `tsc` |

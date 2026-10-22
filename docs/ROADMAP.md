@@ -12,7 +12,8 @@
 > "push do Owner pendente" dos blocos abaixo ficam resolvidas por este push.
 >
 > **2026-10-22 (noite) — Extrato do crédito: origem fiado mostra "Venda a prazo"** — achado do QA (V-000055 do Cliente 02
-> era fiado e ficava sem a linha "Venda paga em"). API `relatedOrderOnCredit` + web `originPaymentText`. Deploy PENDENTE.
+> era fiado e ficava sem a linha "Venda paga em"). API `relatedOrderOnCredit` + web `originPaymentText`. NO AR: API
+> `0664f850`, web `d127fcb3` (rollback API `cab7fbd3`, web `b6a43805`); commit `034c0b5`; conferido na Loja Demo ✅.
 >
 > **2026-10-22 (noite) — PDV: cliente obrigatório em verde (só web)** — pedido do Owner: quando o cliente é exigido
 > (sobra do vale em crédito sem cliente na origem; entrega), "+ Identificar cliente" fica verde com o motivo e sem
