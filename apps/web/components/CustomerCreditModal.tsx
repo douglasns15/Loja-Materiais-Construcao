@@ -57,6 +57,16 @@ function paymentsText(payments: { method: string; amount: string }[]): string {
   return payments.map((p) => `${paymentMethodLabel(p.method)} ${BRL(p.amount)}`).join(' + ');
 }
 
+/** Como a venda de ORIGEM foi paga, incluindo a parte a prazo (fiado): "Venda a prazo: R$ 111,00",
+ *  "Venda paga em: Dinheiro R$ 20,00 + a prazo R$ 91,00" ou "Venda paga em: PIX R$ 30,00". `null` sem dados. */
+function originPaymentText(e: CreditStatementEntry): string | null {
+  const onCredit = e.relatedOrderOnCredit ?? null;
+  const paid = e.relatedOrderPayments.length > 0 ? paymentsText(e.relatedOrderPayments) : '';
+  if (onCredit && !paid) return `Venda a prazo: ${BRL(onCredit)}`;
+  if (onCredit) return `Venda paga em: ${paid} + a prazo ${BRL(onCredit)}`;
+  return paid ? `Venda paga em: ${paid}` : null;
+}
+
 /** Lista de itens sob o lançamento (o que voltou na devolução, ou o que foi comprado). */
 function ItemList({ items, tone }: { items: AccountReturnItem[]; tone: 'amber' | 'gray' }) {
   if (items.length === 0) return null;
@@ -333,10 +343,8 @@ export function CustomerCreditModal({
                               </p>
                             )}
                             {/* Como a venda de origem foi paga — base da sugestão ao retirar o crédito. */}
-                            {e.origin === 'RETURN' && e.relatedOrderPayments.length > 0 && (
-                              <p className="mt-0.5 text-xs text-gray-500">
-                                Venda paga em: {paymentsText(e.relatedOrderPayments)}
-                              </p>
+                            {e.origin === 'RETURN' && originPaymentText(e) && (
+                              <p className="mt-0.5 text-xs text-gray-500">{originPaymentText(e)}</p>
                             )}
                             {e.origin === 'WITHDRAWAL' && e.reason && (
                               <p className="mt-0.5 text-xs text-gray-500">Motivo: {e.reason}</p>

@@ -849,6 +849,8 @@ receivables.get('/accounts/:customerId/credits', async (c) => {
             total: true,
             items: { select: { productName: true, quantity: true, total: true } },
             payments: { select: { method: true, amount: true } },
+            // Parte a prazo (fiado — ADR-019): a venda de origem pode não ter pagamento à vista.
+            receivable: { select: { originalAmount: true } },
           },
         })
       : [];
@@ -882,6 +884,10 @@ receivables.get('/accounts/:customerId/credits', async (c) => {
           order && !isPurchase(cr.origin)
             ? order.payments.map((p) => ({ method: p.method, amount: String(p.amount) }))
             : [],
+        relatedOrderOnCredit:
+          order && !isPurchase(cr.origin) && order.receivable && Number(order.receivable.originalAmount) > 0
+            ? Number(order.receivable.originalAmount).toFixed(2)
+            : null,
         orderItems:
           order && purchaseIds.has(order.id)
             ? order.items.map((it) => ({

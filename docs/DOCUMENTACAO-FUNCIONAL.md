@@ -716,7 +716,8 @@ compra?".
    - **Estornado** — só aparece quando uma compra paga com crédito foi cancelada/devolvida e o valor voltou.
 2. **Movimentações**, da mais antiga para a mais nova, cada uma com o **saldo depois dela**:
    - **Crédito de devolução · da venda V-…** — a devolução que gerou o crédito, com o motivo, os itens que voltaram e
-     **como a venda foi paga** ("Venda paga em: Dinheiro R$ 22,00").
+     **como a venda foi paga** ("Venda paga em: Dinheiro R$ 22,00"; se a venda foi fiado, "Venda a prazo:
+     R$ 111,00"; se foi parte à vista e parte a prazo, "Venda paga em: Dinheiro R$ 20,00 + a prazo R$ 91,00").
    - **Sobra de troca** — a sobra do vale de uma troca que o cliente pediu como crédito (veja §10).
    - **Utilizado na compra: V-…** — a compra em que usou o crédito, com "Compra de R$ X · R$ Y pago com crédito" e
      os itens comprados.
@@ -798,3 +799,4 @@ painel da plataforma.
 | 2026-10-22 | Extrato do crédito do cliente (§11): em Contas a Receber → "Com crédito", resumo (saldo, entrou, usado, estornado) e as movimentações com de onde veio e onde foi usado. |
 | 2026-10-22 | Extrato do crédito (§11): retirada do crédito (qualquer forma, a da venda de origem sugerida; dinheiro sai do caixa de hoje; Recebido abatido no dia da venda de origem), forma de pagamento da origem no extrato e "Utilizado na compra: V-…". |
 | 2026-10-22 | PDV: quando o cliente é obrigatório (sobra do vale em crédito, entrega), "+ Identificar cliente" fica verde com o motivo e sem "(opcional)". |
+| 2026-10-22 | Extrato do crédito (§11): venda de origem fiado mostra "Venda a prazo: R$ …" (antes ficava sem a linha). |

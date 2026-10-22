@@ -189,6 +189,9 @@ export type CreditStatementEntry = AccountCreditEvent & {
   /** Como a venda de ORIGEM foi paga (só na entrada `RETURN` e na retirada) — base da sugestão de
    * forma ao retirar o crédito. Formas de balcão + crédito/vale, como gravadas na venda. */
   relatedOrderPayments: { method: string; amount: string }[];
+  /** Quanto da venda de ORIGEM ficou A PRAZO (fiado — `Receivable.originalAmount`), no mesmo caso de
+   * `relatedOrderPayments`; `null` quando a venda não teve parte a prazo. A tela mostra "Venda a prazo". */
+  relatedOrderOnCredit: string | null;
   /** Retirada (origin `WITHDRAWAL`, migration 0050): forma em que o valor voltou e o motivo. */
   method: string | null;
   reason: string | null;
