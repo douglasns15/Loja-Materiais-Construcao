@@ -13,7 +13,7 @@
 >
 > **2026-10-22 (noite) — PDV: cliente obrigatório em verde (só web)** — pedido do Owner: quando o cliente é exigido
 > (sobra do vale em crédito sem cliente na origem; entrega), "+ Identificar cliente" fica verde com o motivo e sem
-> "(opcional)". Typecheck verde; deploy do web e E2E PENDENTES.
+> "(opcional)". NO AR: web `b6a43805` (smoke ✅; rollback web `71086371`). Commit `ee3d051`. E2E PENDENTE.
 >
 > **ONDE PARAMOS (2026-10-22, noite) — Retirada do crédito do cliente (web + API, migration `0050` APLICADA no
 > Supabase) — NO AR (API `cab7fbd3`, web `71086371`; smoke ✅: rotas protegidas 401, `/db-check` 200, HTML
