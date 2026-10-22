@@ -23,6 +23,8 @@
 > - **Ajustes pós-QA (2026-10-22):** Histórico mostra a sobra no card da origem ("Troca → V-…: sobra devolvida") e da
 >   venda nova (+ reimpressão/WhatsApp); `GET /orders` ganhou `exchangeLeftovers`/`exchangeLeftover`; mensagens de
 >   erro com valor da API em "R$ 7,50" (`formatBRL`, shared +2 testes).
+>   **NO AR: API `b707311a`, web `dcb458d2`** (smoke ✅); conferido na Loja Demo: cards da V-000137 (3 sobras) e
+>   V-000138/139/140, e a mensagem "Sobram R$ 7,50 do vale…". Rollback: API `7096fc27`, web `d1456b64`.
 >
 > **ONDE PARAMOS (2026-10-21, noite) — Upgrade para Next.js 16 (só web/infra, SEM migration) — NO AR
 > (web `9558de09`, API `f441a291`):**
