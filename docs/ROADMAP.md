@@ -12,7 +12,9 @@
 > "push do Owner pendente" dos blocos abaixo ficam resolvidas por este push.
 >
 > **ONDE PARAMOS (2026-10-22, noite) — Retirada do crédito do cliente (web + API, migration `0050` APLICADA no
-> Supabase) — IMPLEMENTADO, gates verdes; deploy (API antes do web), E2E do Owner e push PENDENTES.**
+> Supabase) — NO AR (API `cab7fbd3`, web `71086371`; smoke ✅: rotas protegidas 401, `/db-check` 200, HTML
+> `no-store`, CSS com `.flex{`). Rollback: API `13824264`, web `e27910c7`. Commit `bf558ac`. E2E do Owner e push
+> PENDENTES.**
 > - Pedido do Owner no E2E do extrato (validado): poder RETIRAR o crédito; mostrar a forma de pagamento da venda de
 >   origem; "Usado numa compra" → "Utilizado na compra: V-…". Decisões do Owner: qualquer forma (a da origem só
 >   sugerida, não trava); dinheiro sai do caixa de hoje e o Recebido é abatido no dia da venda de origem; qualquer
