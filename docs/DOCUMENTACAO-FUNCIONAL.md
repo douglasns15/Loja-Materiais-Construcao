@@ -677,6 +677,10 @@ que o vale.
 - **Uma forma só** por troca (não dá para dividir a sobra, ex.: parte em dinheiro e parte em crédito).
 - **Crédito na loja precisa de cliente:** vai para o cliente da venda de origem. Se a venda de origem não tinha
   cliente, use **"+ Identificar cliente"** no PDV — ele recebe o crédito e passa a constar na venda de origem.
+- **Cliente obrigatório em verde:** sempre que o PDV **exige** o cliente — sobra do vale em crédito com venda de
+  origem sem cliente, ou **entrega** (retirada/entrega posterior → Entrega) — o "+ Identificar cliente" aparece como
+  um **botão verde** com o motivo ("Obrigatório para receber a sobra do vale em crédito" / "para a entrega"), e o
+  painel do cliente fica verde até escolher alguém. O "(opcional)" só aparece quando o cliente é mesmo opcional.
 - **Dinheiro** e a parte em dinheiro do **estorno** aparecem no Caixa como saída "Troca (sobra do vale) — venda V-…".
 - Nos **Relatórios**, a sobra devolvida em dinheiro/estorno sai do **Recebido** (no dia da venda de origem, na forma
   em que voltou), igual a uma devolução. Sobra em crédito não sai do Recebido.
@@ -793,3 +797,4 @@ painel da plataforma.
 | 2026-10-22 | Reimpressão da venda da troca conferida pelo Owner: o comprovante sai com a linha "Sobra do vale". |
 | 2026-10-22 | Extrato do crédito do cliente (§11): em Contas a Receber → "Com crédito", resumo (saldo, entrou, usado, estornado) e as movimentações com de onde veio e onde foi usado. |
 | 2026-10-22 | Extrato do crédito (§11): retirada do crédito (qualquer forma, a da venda de origem sugerida; dinheiro sai do caixa de hoje; Recebido abatido no dia da venda de origem), forma de pagamento da origem no extrato e "Utilizado na compra: V-…". |
+| 2026-10-22 | PDV: quando o cliente é obrigatório (sobra do vale em crédito, entrega), "+ Identificar cliente" fica verde com o motivo e sem "(opcional)". |

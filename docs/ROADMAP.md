@@ -11,6 +11,10 @@
 > **Repositório em dia (2026-10-22):** push do Owner feito — `main` = `origin/main` (até `9f07a1b`). Todas as notas
 > "push do Owner pendente" dos blocos abaixo ficam resolvidas por este push.
 >
+> **2026-10-22 (noite) — PDV: cliente obrigatório em verde (só web)** — pedido do Owner: quando o cliente é exigido
+> (sobra do vale em crédito sem cliente na origem; entrega), "+ Identificar cliente" fica verde com o motivo e sem
+> "(opcional)". Typecheck verde; deploy do web e E2E PENDENTES.
+>
 > **ONDE PARAMOS (2026-10-22, noite) — Retirada do crédito do cliente (web + API, migration `0050` APLICADA no
 > Supabase) — NO AR (API `cab7fbd3`, web `71086371`; smoke ✅: rotas protegidas 401, `/db-check` 200, HTML
 > `no-store`, CSS com `.flex{`). Rollback: API `13824264`, web `e27910c7`. Commit `bf558ac`. E2E do Owner e push

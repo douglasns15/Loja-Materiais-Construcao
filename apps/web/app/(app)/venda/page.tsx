@@ -1168,6 +1168,16 @@ export default function VendaPage() {
   // pagamento (paga-se normalmente, à vista ou a prazo) — só a saída da mercadoria é adiada.
   const isScheduled = showSchedule;
 
+  // Cliente OBRIGATÓRIO (2026-10-22, pedido do Owner): o motivo, ou `null` quando é opcional. Com
+  // motivo, o afford "+ Identificar cliente" fica destacado em verde e perde o "(opcional)". O fiado e
+  // o crédito da loja têm o próprio seletor de cliente (o afford some), por isso não entram aqui.
+  const customerRequiredFor: string | null =
+    exchange && exchangeLeftover > 0 && leftoverTarget === 'STORE_CREDIT' && !exchange.sourceCustomer
+      ? 'para receber a sobra do vale em crédito'
+      : isScheduled && fulfillmentType === 'DELIVERY'
+        ? 'para a entrega'
+        : null;
+
   // --- Recebimento (pagamento dividido) ---
   // Parcelas resolvidas (vazio = resto) e a situação do recebimento (pago/falta/troco), pela mesma
   // função pura do servidor. O DINHEIRO nas parcelas é o RECEBIDO (pode passar do total → troco).
@@ -3355,7 +3365,7 @@ export default function VendaPage() {
                 <p className="text-xs text-emerald-800">
                   {leftoverCreditName
                     ? `Vira crédito para ${leftoverCreditName}. Não sai do caixa.`
-                    : 'Identifique o cliente abaixo ("+ Identificar cliente") para receber o crédito.'}
+                    : 'Identifique o cliente abaixo (botão verde "+ Identificar cliente") para receber o crédito.'}
                 </p>
               ) : leftoverTarget ? (
                 <p className="text-xs text-emerald-800">
@@ -3467,19 +3477,46 @@ export default function VendaPage() {
               ADR-033) + histórico/garantia/entrega/CPF. Colapsado por padrão: a venda anônima não
               ganha clique. Some quando fiado/crédito estão abertos — esses blocos já coletam (e
               EXIGEM) o cliente no mesmo estado compartilhado. Porta ÚNICA de anexar cliente. */}
+          {/* Quando o cliente é OBRIGATÓRIO (`customerRequiredFor`), o afford/painel fica em verde e
+              diz para quê; o "(opcional)" só aparece quando de fato é opcional. */}
           {!showCredit && !showStoreCredit &&
             (!showCustomer && !customerId ? (
-              <button
-                type="button"
-                onClick={() => setShowCustomer(true)}
-                className="block text-sm font-medium text-blue-600 hover:text-blue-700"
-              >
-                + Identificar cliente (opcional)
-              </button>
+              customerRequiredFor ? (
+                <button
+                  type="button"
+                  onClick={() => setShowCustomer(true)}
+                  className="block w-full rounded-lg border border-emerald-400 bg-emerald-50 px-3 py-2 text-left text-sm font-semibold text-emerald-800 ring-2 ring-emerald-100 hover:bg-emerald-100"
+                >
+                  + Identificar cliente
+                  <span className="block text-xs font-medium text-emerald-700">
+                    Obrigatório {customerRequiredFor}
+                  </span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowCustomer(true)}
+                  className="block text-sm font-medium text-blue-600 hover:text-blue-700"
+                >
+                  + Identificar cliente (opcional)
+                </button>
+              )
             ) : (
-              <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3">
+              <div
+                className={`space-y-2 rounded-xl border p-3 ${
+                  customerRequiredFor && !customerId
+                    ? 'border-emerald-400 bg-emerald-50 ring-2 ring-emerald-100'
+                    : 'border-gray-200 bg-gray-50/70'
+                }`}
+              >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-semibold text-gray-800">Cliente (opcional)</span>
+                  <span
+                    className={`text-sm font-semibold ${
+                      customerRequiredFor && !customerId ? 'text-emerald-800' : 'text-gray-800'
+                    }`}
+                  >
+                    {customerRequiredFor ? `Cliente (obrigatório ${customerRequiredFor})` : 'Cliente (opcional)'}
+                  </span>
                   <button
                     type="button"
                     onClick={() => {

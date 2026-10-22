@@ -756,6 +756,13 @@ Alertas CALCULADOS sob demanda (custo-zero: nada é gravado; a pendência some q
     cheio do que está em aberto; parcial = proporcional (aviso na tela; regra aprovada pelo Owner no E2E de 2026-10-16). Campo segue **editável** (`surchargeTouched`
     + "recalcular"). Antes (C.3) era digitado à mão com "usar sug." (que ignorava rolo/pacote e devolução).
   - Testes: `packages/core/src/recebimento-conta.test.ts` (17). Sem migration.
+- **Cliente obrigatório destacado no PDV (2026-10-22, pedido do Owner).** `customerRequiredFor` (`app/(app)/venda/page.tsx`)
+  = o motivo quando o cliente é EXIGIDO, `null` quando é opcional: sobra do vale com destino `STORE_CREDIT` e venda de
+  origem sem cliente ("para receber a sobra do vale em crédito"; mesma regra de `exchangeLeftoverError`) ou retirada
+  futura com `fulfillmentType = DELIVERY` ("para a entrega"; mesma regra do `onConfirmar`). Com motivo, o afford vira
+  botão **esmeralda** ("+ Identificar cliente" + "Obrigatório …") e o painel aberto fica esmeralda até haver
+  `customerId`; o rótulo "(opcional)" só existe no caso opcional. Fiado e crédito da loja têm seletor próprio (o afford
+  some) e ficam de fora. Só web, sem API/banco.
 - **Extrato do crédito a favor (Contas a Receber, 2026-10-22).** `components/CustomerCreditModal.tsx`, no molde do
   extrato da dívida (`CustomerAccountModal`): **resumo no topo** — saldo do crédito, **Entrou** (Σ `RETURN` + manuais
   positivos, com nº de devoluções/trocas), **Usado** (uso líquido = Σ |`SALE_USE`| − Σ `SALE_REVERSAL`, com nº de
