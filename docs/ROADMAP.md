@@ -8,10 +8,13 @@
 > custo fixo do Prisma por requisição já passa de 10 ms). **Correção: Owner assinou o Workers Paid** (teto 30 s) —
 > pós-assinatura 130 requisições reais + 30 de stress, 0 falhas. Sem mudança de código. Ver ADR-005, adendo 2026-10-14.
 >
-> **ONDE PARAMOS (2026-10-22) — Troca por item mais barato: sobra do vale (web + API, SEM migration) — NO AR
+> **Repositório em dia (2026-10-22):** push do Owner feito — `main` = `origin/main` (até `9f07a1b`). Todas as notas
+> "push do Owner pendente" dos blocos abaixo ficam resolvidas por este push.
+>
+> **ONDE PARAMOS (2026-10-22) — Troca por item mais barato: sobra do vale (web + API, SEM migration) — CONCLUÍDO, NO AR
 > (API `7096fc27`, web `d1456b64`) + QA ponta a ponta em produção na Loja Demo ✅ (V-000137 → V-000138/139/140:
 > dinheiro, estorno e crédito; caixa, crédito do cliente e Recebido conferidos — ver `registro-de-testes.md`).
-> Rollback: API `f441a291`, web `9558de09`. Pendente: push do Owner.**
+> Rollback: API `f441a291`, web `9558de09`. Push do Owner feito (2026-10-22).**
 > - Pedido do Owner: na troca, o cliente leva item mais barato e o resto volta em dinheiro, estorno ou crédito. A v1
 >   recusava (compra ≥ vale). Decisões do Owner: 3 destinos, **uma forma só**, venda a prazo em aberto segue bloqueada.
 > - Core `splitExchangeCredit` (+8 testes em `trocaSobra.test.ts`); shared `exchangeReturn.leftoverTarget`; API

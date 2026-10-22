@@ -208,3 +208,11 @@ mudam nada.
 
 **Testes:** `packages/core/src/trocaSobra.test.ts` (repartição do vale + caixa/Recebido por destino). Roteiro E2E:
 `docs/testes/e2e-adr033-devolucao-troca.md` §F3.9.
+
+**Histórico e mensagens (ajuste do mesmo dia, pedido do Owner):** o `GET /orders` passou a expor a sobra
+(`exchangeLeftovers` na venda de origem, `exchangeLeftover` na venda nova) e o card do Histórico mostra a sobra nas duas
+pontas; a reimpressão/WhatsApp da venda nova repete a linha "Sobra do vale". As mensagens de erro com valor da API
+saem em reais (`formatBRL`, shared).
+
+**Status do adendo:** CONCLUÍDO — NO AR (API `b707311a`, web `dcb458d2`), QA ponta a ponta em produção na Loja Demo
+✅ (V-000137 → V-000138/139/140, os três destinos; ver `registro-de-testes.md`), push do Owner feito (2026-10-22).

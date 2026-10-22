@@ -6530,3 +6530,14 @@ atual e margem; `POST /stock/movements` aceita `newSalePrice` (grava o preço, l
 | 4. Crédito na loja | ✅ | Sem cliente → "Crédito na loja exige um cliente: use "+ Identificar cliente"."; com o cliente "Jamiro Dos Testes SIlva" → **V-000140**; crédito dele R$ 0 → **R$ 17**; V-000137 passou a ter o cliente; caixa e Recebido inalterados; `returnsToCredit` R$ 17 |
 | 5. Outra forma junto (API) | ✅ | `POST /orders` com sobra + pagamento → 400 "O vale-troca já paga esta compra…"; sem `leftoverTarget` → 400 "Sobram 7.50 do vale…" (nada gravado) |
 
+**Ajustes pós-QA (mesmo dia — API `b707311a`, web `dcb458d2`):**
+
+| O que foi testado | Método | Resultado |
+|---|---|---|
+| `formatBRL` (mensagens em reais) | Vitest `packages/shared/src/format.test.ts` | ✅ +2 (shared 155) |
+| Gates | core 559, API 7, `tsc` shared/API/web, `next build` | ✅ |
+| Card da venda de origem | Histórico, Loja Demo | ✅ V-000137: "Trocada → V-000138, V-000139, V-000140" + uma linha de sobra por troca (dinheiro / estorno na forma original / crédito na loja, R$ 17,00 cada) |
+| Card da venda nova | Histórico, Loja Demo | ✅ V-000138/139/140: "Sobra do vale devolvida · <destino> R$ 17,00" abaixo do "Vale-troca" |
+| Mensagem da API em reais | `POST /orders` recusado (nada gravado) | ✅ "Sobram R$ 7,50 do vale. Escolha como devolver…" (antes "7.50") |
+| Reimpressão/WhatsApp com a linha da sobra | — | ⏭️ não impresso de fato (abriria o diálogo de impressão); mesmo componente já conferido no PDV |
+
