@@ -6507,3 +6507,26 @@ atual e margem; `POST /stock/movements` aceita `newSalePrice` (grava o preço, l
 | Deploy API | `prisma generate` + `npm run deploy` → `84accd25`; `/health` 200; rota sem token 401 | ✅ |
 | Deploy web | OpenNext (com `--dangerouslyUseUnsupportedNextVersion`, Next 15 fora do suporte) → `bc65f1c6`; CSS ~52 KB com `.flex{`; bundle com o campo | ✅ |
 | E2E do Owner em produção: entrada com preço novo → preço do produto, aviso "confira o preço" e Histórico de custo e preço | Manual (Owner) | ✅ VALIDADO 2026-10-21 |
+
+---
+
+## Melhoria — Troca por item mais barato: sobra do vale (ADR-033, adendo) — 2026-10-22
+
+| O que foi testado | Método | Resultado |
+|---|---|---|
+| Repartição do vale + caixa/Recebido por destino | Vitest `packages/core/src/trocaSobra.test.ts` | ✅ 8/8 (core 559) |
+| Shared / API | Vitest | ✅ 153 / 7 |
+| Typecheck web/API/shared + build do web | `tsc --noEmit`, `next build` | ✅ |
+| Deploy | API `7096fc27` (prisma generate antes), web `d1456b64` | ✅ smoke (`/health`, `/db-check` 200; rota protegida 401; CSS ok) |
+
+**QA ponta a ponta em produção (Claude, Loja Demo, logado pelo Owner):**
+
+| Caso | Resultado | Evidência |
+|---|---|---|
+| Venda de origem | ✅ | **V-000137**: 3× P2 = R$ 75 (R$ 45 dinheiro + R$ 30 PIX), anônima |
+| 1. Sem destino | ✅ | Quadro "Sobra do vale — como devolver? R$ 17,00"; Concluir → "Sobram R$ 17,00 do vale. Escolha como devolver ao cliente." |
+| 2. Dinheiro | ✅ | **V-000138** (1× P3 R$ 8): revisão/tela final/comprovante com "Vale-troca R$ 8,00" + "Sobra do vale (em dinheiro) R$ 17,00"; caixa esperado R$ 1.311,40 → **R$ 1.294,40** (saída RETURN "Troca (sobra do vale) — venda V-000137" R$ 17) |
+| 3. Estorno na forma original | ✅ | **V-000139**: prévia "Sai do caixa: R$ 10,20 — o restante (R$ 6,80) é estorno no cartão/PIX"; caixa → **R$ 1.284,20**; Relatórios do dia: bruto R$ 118, estornos R$ 34, **Recebido R$ 84**, dinheiro R$ 60,80, PIX R$ 23,20 |
+| 4. Crédito na loja | ✅ | Sem cliente → "Crédito na loja exige um cliente: use "+ Identificar cliente"."; com o cliente "Jamiro Dos Testes SIlva" → **V-000140**; crédito dele R$ 0 → **R$ 17**; V-000137 passou a ter o cliente; caixa e Recebido inalterados; `returnsToCredit` R$ 17 |
+| 5. Outra forma junto (API) | ✅ | `POST /orders` com sobra + pagamento → 400 "O vale-troca já paga esta compra…"; sem `leftoverTarget` → 400 "Sobram 7.50 do vale…" (nada gravado) |
+

@@ -159,6 +159,20 @@ Base: venda **1× P2** (R$ 25) paga **R$ 15 em dinheiro + R$ 10 no cartão**. Tr
    cliente sobe R$ 17,00; a venda de origem passa a mostrar o cliente; o Recebido **não** muda.
 5. **Outra forma junto:** com sobra, ligue "a prazo" ou "crédito da loja" → **"O vale-troca já paga esta compra…"**.
 
+**Resultado — QA em produção (Claude, Loja Demo, 2026-10-22; API `7096fc27`, web `d1456b64`):**
+
+| Caso | Resultado | Evidência |
+|---|---|---|
+| Venda de origem | ✅ | **V-000137**: 3× P2 = R$ 75 (R$ 45 dinheiro + R$ 30 PIX), anônima |
+| 1. Sem destino | ✅ | Quadro "Sobra do vale — como devolver? R$ 17,00"; Concluir → "Sobram R$ 17,00 do vale. Escolha como devolver ao cliente." |
+| 2. Dinheiro | ✅ | **V-000138** (1× P3 R$ 8): revisão/tela final/comprovante com "Vale-troca R$ 8,00" + "Sobra do vale (em dinheiro) R$ 17,00"; caixa esperado R$ 1.311,40 → **R$ 1.294,40** (saída RETURN "Troca (sobra do vale) — venda V-000137" R$ 17) |
+| 3. Estorno na forma original | ✅ | **V-000139**: prévia "Sai do caixa: R$ 10,20 — o restante (R$ 6,80) é estorno no cartão/PIX"; caixa → **R$ 1.284,20**; Relatórios do dia: bruto R$ 118, estornos R$ 34, **Recebido R$ 84**, dinheiro R$ 60,80, PIX R$ 23,20 |
+| 4. Crédito na loja | ✅ | Sem cliente → "Crédito na loja exige um cliente: use "+ Identificar cliente"."; com o cliente "Jamiro Dos Testes SIlva" → **V-000140**; crédito dele R$ 0 → **R$ 17**; V-000137 passou a ter o cliente; caixa e Recebido inalterados; `returnsToCredit` R$ 17 |
+| 5. Outra forma junto (API) | ✅ | `POST /orders` com sobra + pagamento → 400 "O vale-troca já paga esta compra…"; sem `leftoverTarget` → 400 "Sobram 7.50 do vale…" (nada gravado) |
+
+Observação: abrir "+ Venda a prazo" **sem digitar valor** não vira fiado (valor a prazo = 0), então a revisão abre
+normalmente — a guarda do item 5 vale quando há valor a prazo/crédito da loja de fato.
+
 ---
 
 ## Regressão (garantir que o que já existia não quebrou)

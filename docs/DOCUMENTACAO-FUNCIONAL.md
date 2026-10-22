@@ -722,3 +722,4 @@ painel da plataforma.
 | 2026-10-21 | Entrada de estoque (§9): campo opcional de preço de venda (vazio não muda), com preço atual e margem, igual à importação de NF-e. |
 | 2026-10-21 | Entrada de estoque com preço de venda (§9) conferida pelo Owner em produção. |
 | 2026-10-22 | Troca por item mais barato (§10): a sobra do vale volta ao cliente em dinheiro, estorno na forma original ou crédito na loja. |
+| 2026-10-22 | Troca por item mais barato (§10) conferida em produção na Loja Demo: os três destinos, caixa, crédito do cliente e Relatórios. |

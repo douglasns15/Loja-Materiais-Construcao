@@ -8,8 +8,10 @@
 > custo fixo do Prisma por requisição já passa de 10 ms). **Correção: Owner assinou o Workers Paid** (teto 30 s) —
 > pós-assinatura 130 requisições reais + 30 de stress, 0 falhas. Sem mudança de código. Ver ADR-005, adendo 2026-10-14.
 >
-> **ONDE PARAMOS (2026-10-22) — Troca por item mais barato: sobra do vale (web + API, SEM migration) — IMPLEMENTADO,
-> deploy/E2E/push PENDENTES:**
+> **ONDE PARAMOS (2026-10-22) — Troca por item mais barato: sobra do vale (web + API, SEM migration) — NO AR
+> (API `7096fc27`, web `d1456b64`) + QA ponta a ponta em produção na Loja Demo ✅ (V-000137 → V-000138/139/140:
+> dinheiro, estorno e crédito; caixa, crédito do cliente e Recebido conferidos — ver `registro-de-testes.md`).
+> Rollback: API `f441a291`, web `9558de09`. Pendente: push do Owner.**
 > - Pedido do Owner: na troca, o cliente leva item mais barato e o resto volta em dinheiro, estorno ou crédito. A v1
 >   recusava (compra ≥ vale). Decisões do Owner: 3 destinos, **uma forma só**, venda a prazo em aberto segue bloqueada.
 > - Core `splitExchangeCredit` (+8 testes em `trocaSobra.test.ts`); shared `exchangeReturn.leftoverTarget`; API
@@ -17,7 +19,7 @@
 >   `EXCHANGE` com `excessAmount`/`target`); relatórios: `loadRefunds` passa a ler `EXCHANGE` (Recebido abate a
 >   sobra em dinheiro/estorno). PDV: quadro "Sobra do vale — como devolver?" + linha no comprovante.
 > - Docs: ADR-033 §Adendo 2026-10-22, DOCUMENTACAO-TECNICA §8.2, DOCUMENTACAO-FUNCIONAL §10, roteiro E2E §F3.9.
-> - **Ordem de deploy: API antes do web** (contrato novo `leftoverTarget`).
+> - **Ordem de deploy: API antes do web** (contrato novo `leftoverTarget`) — feito assim.
 >
 > **ONDE PARAMOS (2026-10-21, noite) — Upgrade para Next.js 16 (só web/infra, SEM migration) — NO AR
 > (web `9558de09`, API `f441a291`):**
