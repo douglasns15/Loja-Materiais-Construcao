@@ -44,3 +44,12 @@ Causa (verificada no código e nos dados): pelas ADR-035/036 o card mostrava o R
 
 - Estorno "mesma forma" de venda paga em parte com crédito da loja: a fatia proporcional ao crédito não volta ao Recebido (nunca esteve nele) — correto para o relatório; a restauração desse crédito ao cliente no `return-items` é assunto à parte.
 - Velocidade de estoque das projeções segue baseada em saídas (EXPENSE); devoluções não a reduzem (não é valor monetário).
+
+## Adendo 2026-10-22 — Retirada do crédito abate o Recebido (ADR-022, adendo da mesma data)
+
+O crédito na loja não sai do Recebido (decisão 2) porque o dinheiro fica na loja. Quando o cliente **retira** o
+crédito (dinheiro/PIX/cartão), o dinheiro sai de verdade: cada parte da retirada (`customer_credits`
+`WITHDRAWAL`) vira uma fatia de estorno em `loadRefunds`, **no dia da venda de origem** (`relatedOrderId`) e **na
+forma em que voltou** (`method`) — mesma regra da decisão 3 e da sobra do vale. O caixa registra a saída no dia
+da retirada (só em dinheiro). Retirada sem venda de origem (crédito manual) não abate (não tem dia de venda). No
+detalhe por forma, a linha `estorno` diz "· retirada de crédito".

@@ -782,6 +782,8 @@ export interface CreditStatement {
   generated: number;
   /** Quanto foi USADO em compras (Σ |SALE_USE| e manuais negativos), bruto. */
   used: number;
+  /** Quanto foi RETIRADO (devolvido ao cliente em dinheiro/PIX/cartão — WITHDRAWAL, 2026-10-22). */
+  withdrawn: number;
   /** Quanto VOLTOU de compras canceladas/devolvidas (SALE_REVERSAL). */
   reversed: number;
   /** Uso líquido: `used − reversed` (o que de fato foi gasto). */
@@ -803,12 +805,14 @@ export function creditStatement(entries: CreditLedgerEntry[], opening = 0): Cred
   const openingCents = toCents(Number.isFinite(opening) ? opening : 0);
   let generated = 0;
   let used = 0;
+  let withdrawn = 0;
   let reversed = 0;
   let cents = openingCents;
   const running: number[] = [];
   for (const e of entries) {
     const a = toCents(Number.isFinite(e.amount) ? e.amount : 0);
     if (e.origin === 'SALE_REVERSAL') reversed += a;
+    else if (e.origin === 'WITHDRAWAL') withdrawn += -a;
     else if (a >= 0) generated += a;
     else used += -a;
     cents += a;
@@ -818,11 +822,111 @@ export function creditStatement(entries: CreditLedgerEntry[], opening = 0): Cred
     opening: openingCents / 100,
     generated: generated / 100,
     used: used / 100,
+    withdrawn: withdrawn / 100,
     reversed: reversed / 100,
     netUsed: (used - reversed) / 100,
     balance: cents / 100,
     running,
   };
+}
+
+/** Um lançamento do livro-razão do crédito com identidade e venda relacionada — base da RETIRADA. */
+export interface CreditSourceLedgerEntry extends CreditLedgerEntry {
+  id: string;
+  relatedOrderId: string | null;
+}
+
+/** Quanto ainda resta de um crédito que ENTROU (uma devolução/sobra de troca), após o consumo FIFO. */
+export interface CreditSourceRemaining {
+  creditId: string;
+  relatedOrderId: string | null;
+  remaining: number;
+}
+
+/**
+ * O que ainda resta de cada ENTRADA de crédito (devolução/sobra de troca = `RETURN`, ou ajuste manual
+ * positivo), consumindo do MAIS ANTIGO para o mais novo (FIFO, como o recebimento da dívida) tudo o que
+ * já saiu: usos em compras e retiradas (líquidos dos estornos `SALE_REVERSAL`, que devolvem crédito já
+ * consumido). `entries` em ordem cronológica. Só devolve entradas com saldo > 0. Base da retirada do
+ * crédito (2026-10-22): diz de qual venda de origem sai cada parte. Centavos.
+ */
+export function creditSourcesRemaining(entries: CreditSourceLedgerEntry[]): CreditSourceRemaining[] {
+  const sources: { creditId: string; relatedOrderId: string | null; cents: number }[] = [];
+  let consumed = 0;
+  for (const e of entries) {
+    const a = toCents(Number.isFinite(e.amount) ? e.amount : 0);
+    if (e.origin === 'SALE_REVERSAL') consumed -= a;
+    else if (a > 0) sources.push({ creditId: e.id, relatedOrderId: e.relatedOrderId, cents: a });
+    else consumed += -a;
+  }
+  consumed = Math.max(0, consumed);
+  const out: CreditSourceRemaining[] = [];
+  for (const s of sources) {
+    const take = Math.min(s.cents, consumed);
+    consumed -= take;
+    const rest = s.cents - take;
+    if (rest > 0) out.push({ creditId: s.creditId, relatedOrderId: s.relatedOrderId, remaining: rest / 100 });
+  }
+  return out;
+}
+
+/** Uma parte da retirada do crédito: quanto sai de qual venda de origem (null = sem venda, ex.: manual). */
+export interface CreditWithdrawalSlice {
+  relatedOrderId: string | null;
+  amount: number;
+}
+
+/**
+ * Reparte uma RETIRADA de crédito (2026-10-22) pelas entradas que ainda têm saldo, da mais antiga para a
+ * mais nova (`creditSourcesRemaining`). Partes da mesma venda de origem são somadas. Se o valor passar do
+ * que as entradas explicam (ex.: livro-razão antigo), o excedente vira uma parte sem venda
+ * (`relatedOrderId = null`) — o teto real é o saldo, validado pelo chamador. Centavos.
+ */
+export function allocateCreditWithdrawal(
+  sources: CreditSourceRemaining[],
+  amount: number,
+): CreditWithdrawalSlice[] {
+  let left = Math.max(0, toCents(Number.isFinite(amount) ? amount : 0));
+  const byOrder = new Map<string | null, number>();
+  for (const s of sources) {
+    if (left <= 0) break;
+    const take = Math.min(toCents(s.remaining), left);
+    if (take <= 0) continue;
+    byOrder.set(s.relatedOrderId, (byOrder.get(s.relatedOrderId) ?? 0) + take);
+    left -= take;
+  }
+  if (left > 0) byOrder.set(null, (byOrder.get(null) ?? 0) + left);
+  return [...byOrder.entries()].map(([relatedOrderId, cents]) => ({ relatedOrderId, amount: cents / 100 }));
+}
+
+/** Formas em que o crédito pode voltar ao cliente na retirada (as 4 de balcão). */
+export const CREDIT_WITHDRAWAL_METHODS = ['CASH', 'PIX', 'DEBIT_CARD', 'CREDIT_CARD'] as const;
+export type CreditWithdrawalMethod = (typeof CREDIT_WITHDRAWAL_METHODS)[number];
+
+/**
+ * Forma SUGERIDA para devolver o crédito (2026-10-22): a forma de maior valor com que a venda de origem
+ * foi paga, entre as 4 de balcão (crédito da loja, vale-troca e afins ficam de fora). Sem pagamento em
+ * dinheiro "de verdade" (ex.: venda a prazo), sugere Dinheiro. É só a sugestão — o operador escolhe.
+ */
+export function suggestCreditWithdrawalMethod(
+  payments: { method: string; amount: number }[],
+): CreditWithdrawalMethod {
+  const totals = new Map<CreditWithdrawalMethod, number>();
+  for (const p of payments) {
+    const m = p.method as CreditWithdrawalMethod;
+    if (!CREDIT_WITHDRAWAL_METHODS.includes(m)) continue;
+    totals.set(m, (totals.get(m) ?? 0) + toCents(Number(p.amount) || 0));
+  }
+  let best: CreditWithdrawalMethod = 'CASH';
+  let bestCents = 0;
+  for (const m of CREDIT_WITHDRAWAL_METHODS) {
+    const v = totals.get(m) ?? 0;
+    if (v > bestCents) {
+      best = m;
+      bestCents = v;
+    }
+  }
+  return best;
 }
 
 /** Valores (em reais) das moedas do Real em circulação, para o contador de gaveta. */

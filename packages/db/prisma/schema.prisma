@@ -1101,8 +1101,12 @@ model CustomerCredit {
   tenantId       String   @db.Uuid // Denormalizado para RLS (ADR-003)
   customerId     String   @db.Uuid
   amount         Decimal  @db.Decimal(12, 2) // ASSINADO: + de devolução, − ao usar numa venda
-  origin         String   @db.VarChar(30) // "RETURN" / "SALE_USE" / "MANUAL"
+  origin         String   @db.VarChar(30) // "RETURN" / "SALE_USE" / "SALE_REVERSAL" / "WITHDRAWAL" / "MANUAL"
   relatedOrderId String?  @db.Uuid // Venda que gerou/consumiu o crédito (referência solta)
+  // Retirada do crédito (2026-10-22, migration 0050): forma em que o valor voltou ao cliente (CASH/PIX/
+  // DEBIT_CARD/CREDIT_CARD) e o motivo. Só preenchidos em origin = "WITHDRAWAL"; nulos nos demais.
+  method         String?  @db.VarChar(30)
+  reason         String?  @db.VarChar(500)
   createdAt      DateTime @default(now())
   // Autoria (ADR-010): quem gerou/consumiu. Referência solta; snapshot do nome.
   createdById    String?  @db.Uuid

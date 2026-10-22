@@ -11,6 +11,18 @@
 > **Repositório em dia (2026-10-22):** push do Owner feito — `main` = `origin/main` (até `9f07a1b`). Todas as notas
 > "push do Owner pendente" dos blocos abaixo ficam resolvidas por este push.
 >
+> **ONDE PARAMOS (2026-10-22, noite) — Retirada do crédito do cliente (web + API, migration `0050` APLICADA no
+> Supabase) — IMPLEMENTADO, gates verdes; deploy (API antes do web), E2E do Owner e push PENDENTES.**
+> - Pedido do Owner no E2E do extrato (validado): poder RETIRAR o crédito; mostrar a forma de pagamento da venda de
+>   origem; "Usado numa compra" → "Utilizado na compra: V-…". Decisões do Owner: qualquer forma (a da origem só
+>   sugerida, não trava); dinheiro sai do caixa de hoje e o Recebido é abatido no dia da venda de origem; qualquer
+>   operador com acesso à tela. Migration `0050` (`customer_credits.method` + `reason`, opcionais) aprovada.
+> - Core `creditSourcesRemaining`/`allocateCreditWithdrawal`/`suggestCreditWithdrawalMethod` + `creditStatement.withdrawn`
+>   (`extratoCredito.test.ts` 8→22); shared `withdrawCreditSchema`; API `POST /receivables/accounts/:id/credits/withdraw`
+>   + extrato com `relatedOrderPayments`/`method`/`reason`/`suggestedWithdrawalMethod`; relatórios `loadRefunds` soma
+>   as retiradas; web painel "Retirar crédito".
+> - Docs: ADR-022 + ADR-037 (adendos 2026-10-22), DOCUMENTACAO-TECNICA §8.2/§9, DOCUMENTACAO-FUNCIONAL §11.
+>
 > **ONDE PARAMOS (2026-10-22, tarde) — Extrato do crédito do cliente (web + API, SEM migration) — NO AR
 > (API `13824264`, web `e27910c7`; smoke ✅: rota nova protegida 401, `/db-check` 200, HTML `no-store`, CSS com
 > `.flex{`). Rollback: API `b707311a`, web `dcb458d2`. Commit `548ed9f`. E2E do Owner e push PENDENTES.**

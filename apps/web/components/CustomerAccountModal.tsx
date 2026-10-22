@@ -445,7 +445,9 @@ export function CustomerAccountModal({
                                     ? 'Crédito gerado'
                                     : e.origin === 'SALE_REVERSAL'
                                       ? 'Crédito estornado'
-                                      : e.amount < 0
+                                      : e.origin === 'WITHDRAWAL'
+                                        ? 'Crédito retirado'
+                                        : e.amount < 0
                                         ? 'Crédito usado'
                                         : 'Crédito a favor'}
                                 <span className="ml-1 font-normal text-gray-500">

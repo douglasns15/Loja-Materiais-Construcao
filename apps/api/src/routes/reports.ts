@@ -125,6 +125,8 @@ interface RefundSlice {
   orderNumber: number;
   orderCreatedAt: Date;
   customerName: string | null;
+  /** Retirada do crédito (2026-10-22) — e não excedente de devolução/sobra de troca. */
+  creditWithdrawal?: boolean;
 }
 
 /**
@@ -188,6 +190,46 @@ async function loadRefunds(
         orderNumber: r.order.orderNumber,
         orderCreatedAt: r.order.createdAt,
         customerName: r.order.customer?.name ?? null,
+      });
+    }
+  }
+
+  // Retirada do crédito (2026-10-22, migration 0050): o crédito que tinha ficado no Recebido (devolução
+  // em crédito não sai dele) volta ao cliente em dinheiro/PIX/cartão — abate o Recebido no DIA DA VENDA
+  // DE ORIGEM (`relatedOrderId` de cada parte), na forma em que voltou. Retirada sem venda de origem
+  // (crédito manual) não tem dia de venda e fica de fora.
+  const withdrawals = await prisma.customerCredit.findMany({
+    where: {
+      tenantId,
+      origin: 'WITHDRAWAL',
+      relatedOrderId: { not: null },
+      ...(method ? { method } : {}),
+    },
+    select: { amount: true, method: true, relatedOrderId: true },
+    take: 5000,
+  });
+  if (withdrawals.length > 0) {
+    const ids = [...new Set(withdrawals.map((w) => w.relatedOrderId as string))];
+    const origins = await prisma.order.findMany({
+      where: {
+        tenantId,
+        id: { in: ids },
+        ...RECEIVED_ORDER_WHERE,
+        ...(range ? { createdAt: range } : {}),
+      },
+      select: { id: true, orderNumber: true, createdAt: true, customer: { select: { name: true } } },
+    });
+    const originById = new Map(origins.map((o) => [o.id, o]));
+    for (const w of withdrawals) {
+      const o = originById.get(w.relatedOrderId as string);
+      if (!o || !w.method) continue;
+      slices.push({
+        method: w.method,
+        amount: Math.abs(Number(w.amount)),
+        orderNumber: o.orderNumber,
+        orderCreatedAt: o.createdAt,
+        customerName: o.customer?.name ?? null,
+        creditWithdrawal: true,
       });
     }
   }
@@ -509,7 +551,7 @@ reports.get('/payment-composition', async (c) => {
       rows.push({
         tipo: 'estorno',
         ref: formatOrderNumber(s.orderNumber),
-        descricao: s.customerName ?? 'Consumidor',
+        descricao: `${s.customerName ?? 'Consumidor'}${s.creditWithdrawal ? ' · retirada de crédito' : ''}`,
         valor: -s.amount,
         data: s.orderCreatedAt.toISOString(),
       });

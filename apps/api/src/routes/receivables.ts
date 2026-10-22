@@ -1,14 +1,23 @@
 import { Hono } from 'hono';
 import { type Prisma } from '@nexoloja/db';
 import {
+  allocateCreditWithdrawal,
   applyReceivablePayment,
+  creditSourcesRemaining,
   customerAccountBalance,
   distributeAccountPayment,
   isValidReceipt,
   manualCashMovementType,
   receivableBalance,
+  suggestCreditWithdrawalMethod,
 } from '@nexoloja/core';
-import { formatBRL, receiveReceivableSchema, updateReceivableSchema } from '@nexoloja/shared';
+import {
+  formatBRL,
+  formatOrderNumber,
+  receiveReceivableSchema,
+  updateReceivableSchema,
+  withdrawCreditSchema,
+} from '@nexoloja/shared';
 import { type Env, getConnectionString, getPrisma, getTenantId } from '../lib/request';
 import { requireActiveTenant, requireAuth } from '../middleware/auth';
 
@@ -792,6 +801,8 @@ receivables.get('/accounts/:customerId/credits', async (c) => {
         origin: true,
         relatedOrderId: true,
         createdByName: true,
+        method: true, // retirada (migration 0050)
+        reason: true,
       },
     });
     const truncated = rows.length > CREDIT_STATEMENT_MAX;
@@ -820,11 +831,13 @@ receivables.get('/accounts/:customerId/credits', async (c) => {
       sourceRows.map((rt) => [rt.customerCreditId as string, { ...mapReturnEvent(rt), intent: rt.intent }]),
     );
 
-    // As vendas relacionadas: código + total de todas; itens só das compras (uso/estorno).
+    // As vendas relacionadas: código + total de todas; itens só das compras (uso/estorno); formas de
+    // pagamento só das vendas de ORIGEM (entrada `RETURN` e retirada) — mostradas e base da sugestão.
     const orderIds = [...new Set(credits.map((cr) => cr.relatedOrderId).filter((x): x is string => !!x))];
+    const isPurchase = (origin: string) => origin === 'SALE_USE' || origin === 'SALE_REVERSAL';
     const purchaseIds = new Set(
       credits
-        .filter((cr) => cr.origin !== 'RETURN' && cr.relatedOrderId)
+        .filter((cr) => isPurchase(cr.origin) && cr.relatedOrderId)
         .map((cr) => cr.relatedOrderId as string),
     );
     const orders = orderIds.length
@@ -835,10 +848,28 @@ receivables.get('/accounts/:customerId/credits', async (c) => {
             orderNumber: true,
             total: true,
             items: { select: { productName: true, quantity: true, total: true } },
+            payments: { select: { method: true, amount: true } },
           },
         })
       : [];
     const orderById = new Map(orders.map((o) => [o.id, o]));
+
+    // Sugestão da forma de retirada: a da venda de origem do crédito mais antigo ainda com saldo (FIFO).
+    // Com o extrato truncado o FIFO perde o começo — aí só sugere Dinheiro (raro; é só a sugestão).
+    const firstSource = truncated
+      ? undefined
+      : creditSourcesRemaining(
+          credits.map((cr) => ({
+            id: cr.id,
+            amount: Number(cr.amount),
+            origin: cr.origin,
+            relatedOrderId: cr.relatedOrderId,
+          })),
+        )[0];
+    const firstSourceOrder = firstSource?.relatedOrderId ? orderById.get(firstSource.relatedOrderId) : undefined;
+    const suggestedWithdrawalMethod = suggestCreditWithdrawalMethod(
+      (firstSourceOrder?.payments ?? []).map((p) => ({ method: p.method, amount: Number(p.amount) })),
+    );
 
     const entries = credits.map((cr) => {
       const order = cr.relatedOrderId ? orderById.get(cr.relatedOrderId) : undefined;
@@ -847,6 +878,10 @@ receivables.get('/accounts/:customerId/credits', async (c) => {
         ...cr,
         relatedOrderNumber: order?.orderNumber ?? null,
         relatedOrderTotal: order?.total ?? null,
+        relatedOrderPayments:
+          order && !isPurchase(cr.origin)
+            ? order.payments.map((p) => ({ method: p.method, amount: String(p.amount) }))
+            : [],
         orderItems:
           order && purchaseIds.has(order.id)
             ? order.items.map((it) => ({
@@ -870,11 +905,193 @@ receivables.get('/accounts/:customerId/credits', async (c) => {
         openingBalance,
         truncated,
         entries,
+        suggestedWithdrawalMethod,
       },
     });
   } catch (err) {
     console.error('GET /receivables/accounts/:customerId/credits falhou:', err);
     return c.json({ ok: false, error: 'Falha ao buscar o extrato do crédito.' }, 500);
+  }
+});
+
+/**
+ * RETIRADA do crédito a favor (2026-10-22, migration 0050): o valor (até o saldo) volta ao cliente na
+ * forma escolhida — qualquer uma das 4 de balcão (a da venda de origem é só a sugestão da tela). Sai das
+ * entradas de crédito mais antigas primeiro (FIFO — `creditSourcesRemaining`/`allocateCreditWithdrawal`,
+ * core) e grava UMA linha `WITHDRAWAL` por venda de origem (`relatedOrderId`, `method`, `reason`): é
+ * por ela que os Relatórios abatem o Recebido no DIA DA VENDA DE ORIGEM, na forma em que voltou (ADR-037).
+ * Em DINHEIRO, sai da gaveta do caixa aberto HOJE (`CashMovement RETURN`) — exige caixa aberto; PIX/cartão
+ * só registram (o operador faz o PIX/estorno na maquininha). Trava de corrida no saldo (`updateMany gte`,
+ * como o uso do crédito numa venda). Auditoria `CREDIT_WITHDRAWAL` (ADR-004). Qualquer operador.
+ */
+receivables.post('/accounts/:customerId/credits/withdraw', requireActiveTenant, async (c) => {
+  const tenantId = getTenantId(c);
+  const userId = c.get('userId');
+  const userName = c.get('userName');
+  const connectionString = getConnectionString(c.env);
+  if (!tenantId || !connectionString) {
+    return c.json({ ok: false, error: 'Contexto inválido.' }, 400);
+  }
+  const customerId = c.req.param('customerId');
+  if (!UUID_RE.test(customerId)) {
+    return c.json({ ok: false, error: 'Cliente não encontrado.' }, 404);
+  }
+  const parsed = withdrawCreditSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) {
+    const reasonIssue = parsed.error.issues.find((i) => i.path[0] === 'reason');
+    return c.json({ ok: false, error: reasonIssue ? 'Informe o motivo da retirada.' : 'Dados da retirada inválidos.' }, 400);
+  }
+  const { method, reason } = parsed.data;
+  const amount = Number(parsed.data.amount.toFixed(2));
+
+  try {
+    const prisma = getPrisma(c);
+    const customer = await prisma.customer.findFirst({
+      where: { id: customerId, tenantId },
+      select: { id: true, name: true, creditBalance: true },
+    });
+    if (!customer) {
+      return c.json({ ok: false, error: 'Cliente não encontrado.' }, 404);
+    }
+    const balance = Number(customer.creditBalance);
+    if (amount > balance + 0.005) {
+      return c.json(
+        { ok: false, error: `O valor passa do crédito do cliente (${formatBRL(balance)}).` },
+        400,
+      );
+    }
+
+    // ADR-018: caixa por loja — a retirada em dinheiro sai da gaveta do caixa aberto hoje.
+    let openSessionId: string | null = null;
+    if (method === 'CASH') {
+      const session = await prisma.cashSession.findFirst({
+        where: { tenantId, closedAt: null },
+        select: { id: true },
+      });
+      if (!session) {
+        return c.json({ ok: false, error: 'Abra o caixa para devolver o crédito em dinheiro.' }, 400);
+      }
+      openSessionId = session.id;
+    }
+
+    // De qual venda de origem sai cada parte (FIFO sobre o livro-razão inteiro, em ordem).
+    const ledger = await prisma.customerCredit.findMany({
+      where: { tenantId, customerId },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      take: 5000,
+      select: { id: true, amount: true, origin: true, relatedOrderId: true },
+    });
+    const slices = allocateCreditWithdrawal(
+      creditSourcesRemaining(
+        ledger.map((l) => ({ id: l.id, amount: Number(l.amount), origin: l.origin, relatedOrderId: l.relatedOrderId })),
+      ),
+      amount,
+    );
+    const sliceOrderIds = slices.map((s) => s.relatedOrderId).filter((x): x is string => !!x);
+    const orderNumberById = new Map(
+      (sliceOrderIds.length
+        ? await prisma.order.findMany({
+            where: { tenantId, id: { in: sliceOrderIds } },
+            select: { id: true, orderNumber: true },
+          })
+        : []
+      ).map((o) => [o.id, o.orderNumber]),
+    );
+    const codes = sliceOrderIds
+      .map((id) => formatOrderNumber(orderNumberById.get(id) ?? null))
+      .filter(Boolean)
+      .join(', ');
+    const customerName = customer.name ?? 'cliente';
+
+    const result = await prisma.$transaction(async (tx) => {
+      // Trava contra corrida (duas retiradas/usos do mesmo crédito): só debita se ainda houver saldo.
+      const upd = await tx.customer.updateMany({
+        where: { id: customerId, tenantId, creditBalance: { gte: amount } },
+        data: { creditBalance: { decrement: amount } },
+      });
+      if (upd.count !== 1) {
+        throw new Error('INSUFFICIENT_CREDIT');
+      }
+      // Mesmo instante em todas as partes: o extrato reconhece que são UMA retirada.
+      const at = new Date();
+      for (const s of slices) {
+        await tx.customerCredit.create({
+          data: {
+            tenantId,
+            customerId,
+            createdAt: at,
+            amount: -s.amount, // − ao retirar (livro-razão ASSINADO — ADR-022)
+            origin: 'WITHDRAWAL',
+            relatedOrderId: s.relatedOrderId, // venda de ORIGEM da parte (Recebido abatido no dia dela)
+            method,
+            reason,
+            createdById: userId, // autoria (ADR-010)
+            createdByName: userName,
+          },
+        });
+      }
+      let cashMovementId: string | null = null;
+      if (method === 'CASH' && openSessionId) {
+        const mov = await tx.cashMovement.create({
+          data: {
+            tenantId,
+            cashSessionId: openSessionId,
+            userId,
+            type: 'EXPENSE',
+            kind: 'RETURN',
+            amount,
+            reason: `Retirada de crédito — ${customerName}${codes ? ` (venda ${codes})` : ''}`.slice(0, 300),
+            relatedOrderId: slices[0]?.relatedOrderId ?? null,
+            syncStatus: 'SYNCED',
+            registeredByName: userName,
+          },
+        });
+        cashMovementId = mov.id;
+      }
+      const cust = await tx.customer.findUnique({ where: { id: customerId }, select: { creditBalance: true } });
+      // Evento crítico (ADR-004): dinheiro saindo da loja.
+      await tx.auditEvent.create({
+        data: {
+          tenantId,
+          userId,
+          entity: 'Customer',
+          entityId: customerId,
+          action: 'CREDIT_WITHDRAWAL',
+          meta: {
+            amount,
+            method,
+            reason,
+            cashMovementId,
+            slices: slices.map((s) => ({ relatedOrderId: s.relatedOrderId, amount: s.amount })),
+          },
+        },
+      });
+      return { creditBalance: Number(cust?.creditBalance ?? 0) };
+    });
+
+    return c.json(
+      {
+        ok: true,
+        data: {
+          withdrawn: amount,
+          method,
+          creditBalance: result.creditBalance,
+          cashOut: method === 'CASH' ? amount : 0,
+          slices: slices.map((s) => ({
+            relatedOrderId: s.relatedOrderId,
+            relatedOrderNumber: s.relatedOrderId ? orderNumberById.get(s.relatedOrderId) ?? null : null,
+            amount: s.amount,
+          })),
+        },
+      },
+      201,
+    );
+  } catch (err) {
+    if (err instanceof Error && err.message === 'INSUFFICIENT_CREDIT') {
+      return c.json({ ok: false, error: 'O crédito do cliente mudou. Atualize o extrato e tente de novo.' }, 409);
+    }
+    console.error('POST /receivables/accounts/:customerId/credits/withdraw falhou:', err);
+    return c.json({ ok: false, error: 'Falha ao registrar a retirada do crédito.' }, 500);
   }
 });
 

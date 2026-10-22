@@ -40,7 +40,7 @@ Um *Architecture Decision Record* é um documento curto e versionado que captura
 | [ADR-019](./ADR-019-venda-a-prazo-contas-a-receber.md) | Venda a prazo / Contas a receber (o "fiado") | Aceito — implementado/validado |
 | [ADR-020](./ADR-020-retirada-entrega-futura.md) | Retirada / entrega futura (adiar a saída de estoque) | Aceito — implementado/validado |
 | [ADR-021](./ADR-021-cesta-persistente-sincronizada.md) | Cesta persistente sincronizada (carrinho do PDV entre dispositivos) | Aceito — implementado (migration `0016_carts`) |
-| [ADR-022](./ADR-022-conta-do-cliente-fiado-acumulado.md) | Conta do cliente (fiado acumulado): conta que soma + devolução por item + crédito | Aceito — implementado/validado |
+| [ADR-022](./ADR-022-conta-do-cliente-fiado-acumulado.md) | Conta do cliente (fiado acumulado): conta que soma + devolução por item + crédito (adendo 2026-10-22: extrato e retirada do crédito, migration `0050`) | Aceito — implementado/validado |
 | [ADR-023](./ADR-023-numeracao-sequencial-de-vendas.md) | Numeração sequencial de vendas por loja (código `V-000128`) | Aceito — implementado/validado |
 | [ADR-024](./ADR-024-orcamentos-salvos.md) | Orçamentos salvos (documento `O-000045`, ciclo de vida, validade, conversão) | Aceito — implementado/validado (2.A + 2.B) |
 | [ADR-025](./ADR-025-catalogo-global-ean.md) | Catálogo global de EAN (enriquecimento por código de barras e NF-e; cache cross-tenant custo-zero) | Aceito — Fatias 1 e 2.A implementadas/validadas; Fatia 2.B desenhada (§5.B), não implementada |

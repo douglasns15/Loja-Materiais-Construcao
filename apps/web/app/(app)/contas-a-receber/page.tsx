@@ -432,7 +432,15 @@ export default function ContasAReceberPage() {
 
       {/* Extrato do CRÉDITO a favor (só leitura) — por cima do detalhe da dívida, se aberto. */}
       {creditDetailId && (
-        <CustomerCreditModal customerId={creditDetailId} onClose={() => setCreditDetailId(null)} />
+        <CustomerCreditModal
+          customerId={creditDetailId}
+          onClose={() => setCreditDetailId(null)}
+          onChanged={() => {
+            // Retirada mudou o saldo: atualiza os cartões e o extrato da dívida, se aberto.
+            loadAccounts();
+            setAccountReload((n) => n + 1);
+          }}
+        />
       )}
 
       {/* Detalhe da dívida QUITADA (só leitura). */}

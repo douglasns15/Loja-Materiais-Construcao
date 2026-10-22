@@ -708,21 +708,42 @@ compra?".
    - **Saldo do crédito** — quanto o cliente ainda pode usar.
    - **Entrou** — tudo o que virou crédito (devoluções e sobras de troca), com quantas foram.
    - **Usado** — quanto já foi gasto em compras, com quantas compras.
+   - **Retirado** — quanto já foi devolvido ao cliente (só aparece se houve retirada).
    - **Estornado** — só aparece quando uma compra paga com crédito foi cancelada/devolvida e o valor voltou.
 2. **Movimentações**, da mais antiga para a mais nova, cada uma com o **saldo depois dela**:
-   - **Crédito de devolução · da venda V-…** — a devolução que gerou o crédito, com o motivo e os itens que voltaram.
+   - **Crédito de devolução · da venda V-…** — a devolução que gerou o crédito, com o motivo, os itens que voltaram e
+     **como a venda foi paga** ("Venda paga em: Dinheiro R$ 22,00").
    - **Sobra de troca** — a sobra do vale de uma troca que o cliente pediu como crédito (veja §10).
-   - **Usado numa compra · V-…** — a compra em que usou o crédito, com "Compra de R$ X · R$ Y pago com crédito" e os
-     itens comprados.
+   - **Utilizado na compra: V-…** — a compra em que usou o crédito, com "Compra de R$ X · R$ Y pago com crédito" e
+     os itens comprados.
+   - **Crédito retirado em dinheiro/PIX/cartão · da venda V-…** — o valor que voltou ao cliente, com o motivo.
    - **Estorno de compra · V-… cancelada/devolvida** — o crédito que voltou.
 3. Botão **Usar na venda** — abre o PDV com o cliente já identificado; lá, use **"Usar crédito da loja"**.
+
+**Retirar o crédito — passo a passo** (o cliente quer o valor de volta em vez de comprar)
+
+1. No extrato do crédito, toque em **Retirar crédito**.
+2. **Valor a devolver:** vem o saldo todo; mude para devolver só uma parte.
+3. **Devolver em:** Dinheiro, PIX, Cartão Débito ou Cartão Crédito. Já vem marcada a forma em que a venda de origem
+   foi paga — "(forma da venda de origem)" —, mas pode escolher qualquer outra.
+4. **Motivo** (obrigatório) → **Retirar**.
+
+Regras da retirada:
+
+- **Dinheiro** sai da gaveta do **caixa aberto hoje** (aparece no Caixa como "Retirada de crédito — cliente"). Precisa
+  de caixa aberto.
+- **PIX ou cartão** não mexem no caixa: faça o PIX ou o estorno na maquininha.
+- Crédito que veio de mais de uma venda sai **da mais antiga para a mais nova**.
+- Nos **Relatórios**, o valor retirado sai do **Recebido no dia da venda de origem**, na forma em que voltou (igual a
+  uma devolução em dinheiro/estorno). No detalhe da forma aparece "· retirada de crédito".
+- Qualquer operador com acesso a Contas a Receber pode retirar.
 
 **Regras**
 
 - O saldo é sempre a soma das movimentações (entradas − usos + estornos).
 - Uma compra paga com crédito e depois cancelada aparece duas vezes: o uso e o estorno. No resumo, "Usado" já desconta
   o estorno.
-- Só leitura: o extrato não altera nada. Crédito se gera por devolução/troca e se usa no PDV.
+- Crédito se gera por devolução/troca; sai usando no PDV ou retirando (acima).
 
 **Limitações**
 
@@ -771,3 +792,4 @@ painel da plataforma.
 | 2026-10-22 | Troca por item mais barato (§10): a sobra aparece no Histórico (venda de origem e venda nova) e na reimpressão; avisos do sistema com valor saem em "R$ 7,50". |
 | 2026-10-22 | Reimpressão da venda da troca conferida pelo Owner: o comprovante sai com a linha "Sobra do vale". |
 | 2026-10-22 | Extrato do crédito do cliente (§11): em Contas a Receber → "Com crédito", resumo (saldo, entrou, usado, estornado) e as movimentações com de onde veio e onde foi usado. |
+| 2026-10-22 | Extrato do crédito (§11): retirada do crédito (qualquer forma, a da venda de origem sugerida; dinheiro sai do caixa de hoje; Recebido abatido no dia da venda de origem), forma de pagamento da origem no extrato e "Utilizado na compra: V-…". |

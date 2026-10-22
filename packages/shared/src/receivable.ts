@@ -186,6 +186,12 @@ export type AccountCreditEvent = {
 export type CreditStatementEntry = AccountCreditEvent & {
   /** Total da venda relacionada (a de origem na devolução; a compra no uso/estorno). */
   relatedOrderTotal: string | null;
+  /** Como a venda de ORIGEM foi paga (só na entrada `RETURN` e na retirada) — base da sugestão de
+   * forma ao retirar o crédito. Formas de balcão + crédito/vale, como gravadas na venda. */
+  relatedOrderPayments: { method: string; amount: string }[];
+  /** Retirada (origin `WITHDRAWAL`, migration 0050): forma em que o valor voltou e o motivo. */
+  method: string | null;
+  reason: string | null;
   /** Itens da venda relacionada — só no uso (SALE_USE) e no estorno (SALE_REVERSAL). */
   orderItems: AccountReturnItem[];
   /** A devolução/troca que GEROU o crédito (origin RETURN). `null` em uso/estorno/manual. */
@@ -208,6 +214,31 @@ export type CustomerCreditStatement = {
   openingBalance: number;
   truncated: boolean;
   entries: CreditStatementEntry[];
+  /** Forma sugerida para a RETIRADA: a da venda de origem do crédito mais antigo ainda com saldo
+   * (`suggestCreditWithdrawalMethod`, core). Só sugestão — o operador escolhe qualquer forma. */
+  suggestedWithdrawalMethod: PaymentMethod;
+};
+
+/**
+ * Payload da RETIRADA do crédito (2026-10-22) — `POST /receivables/accounts/:customerId/credits/withdraw`.
+ * O valor (até o saldo) volta ao cliente na forma escolhida (qualquer uma das 4 de balcão; a da venda de
+ * origem é só a sugestão). Dinheiro sai do caixa aberto hoje. Motivo obrigatório (como na devolução).
+ */
+export const withdrawCreditSchema = z.object({
+  amount: z.number().positive().max(9_999_999),
+  method: paymentMethodSchema,
+  reason: z.string().trim().min(3, 'Informe o motivo.').max(500),
+});
+export type WithdrawCreditInput = z.infer<typeof withdrawCreditSchema>;
+
+/** Resposta da retirada do crédito. `slices` = quanto saiu de cada venda de origem (FIFO). */
+export type WithdrawCreditResult = {
+  withdrawn: number;
+  method: PaymentMethod;
+  creditBalance: number;
+  /** Quanto saiu da gaveta (= `withdrawn` em dinheiro; 0 em PIX/cartão). */
+  cashOut: number;
+  slices: { relatedOrderId: string | null; relatedOrderNumber: number | null; amount: number }[];
 };
 
 /** Detalhe da CONTA de um cliente — `GET /receivables/accounts/:customerId`. Reúne as vendas a

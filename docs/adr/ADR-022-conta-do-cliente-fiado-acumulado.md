@@ -246,3 +246,19 @@ aplicação), incluídas na migration. **100% aditiva** — nenhuma tabela exist
 - **Trade-off do FIFO:** receber "da conta" abate do mais antigo — simples e previsível; se um
   dia o Owner quiser escolher **qual** dívida quitar, é uma opção de UI por cima (não muda o
   schema).
+
+## Adendo 2026-10-22 — Extrato e RETIRADA do crédito (aprovado pelo Owner; migration `0050`)
+
+- **Extrato do crédito:** Contas a Receber → "Com crédito" abre o livro-razão `customer_credits` como extrato
+  (resumo entrou/usado/retirado/estornado + saldo corrente — `creditStatement`, core), com a devolução/troca que
+  gerou cada crédito e a forma em que a venda de origem foi paga (`GET /receivables/accounts/:id/credits`).
+- **Retirada:** o crédito pode voltar ao cliente em **qualquer** forma de balcão (Dinheiro, PIX, Cartão Débito,
+  Cartão Crédito). A forma da venda de origem é só a **sugestão** (`suggestCreditWithdrawalMethod`), nunca trava.
+  Valor parcial até o saldo; motivo obrigatório; qualquer operador com acesso à tela.
+- **De onde sai:** FIFO — as entradas de crédito mais antigas primeiro (`creditSourcesRemaining` consome usos e
+  retiradas, líquidos dos estornos; `allocateCreditWithdrawal` reparte). Uma linha `origin = 'WITHDRAWAL'` por
+  venda de origem (`relatedOrderId`), com `method` e `reason` (colunas novas, migration `0050`, opcionais).
+- **Caixa:** em dinheiro sai da gaveta do caixa aberto **hoje** (`CashMovement RETURN`, exige caixa aberto);
+  PIX/cartão só registram (o operador faz o PIX/estorno). Trava de corrida no saldo (`updateMany gte`).
+  Auditoria `CREDIT_WITHDRAWAL` (ADR-004).
+- **Relatórios:** ver ADR-037, adendo 2026-10-22.
