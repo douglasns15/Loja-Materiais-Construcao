@@ -8,7 +8,7 @@ import {
   manualCashMovementType,
   receivableBalance,
 } from '@nexoloja/core';
-import { receiveReceivableSchema, updateReceivableSchema } from '@nexoloja/shared';
+import { formatBRL, receiveReceivableSchema, updateReceivableSchema } from '@nexoloja/shared';
 import { type Env, getConnectionString, getPrisma, getTenantId } from '../lib/request';
 import { requireActiveTenant, requireAuth } from '../middleware/auth';
 
@@ -421,7 +421,7 @@ receivables.post('/accounts/:customerId/receive', requireActiveTenant, async (c)
     const totalBalance = customerAccountBalance(accountRecs);
     if (!isValidReceipt(amount, totalBalance)) {
       return c.json(
-        { ok: false, error: `Valor inválido: o saldo da conta é ${totalBalance.toFixed(2)}.` },
+        { ok: false, error: `Valor inválido: o saldo da conta é ${formatBRL(totalBalance)}.` },
         400,
       );
     }
@@ -1191,7 +1191,7 @@ receivables.post('/:id/receive', requireActiveTenant, async (c) => {
     const balance = receivableBalance(original, settled, returned);
     if (!isValidReceipt(amount, balance)) {
       return c.json(
-        { ok: false, error: `Valor inválido: o saldo devedor é ${balance.toFixed(2)}.` },
+        { ok: false, error: `Valor inválido: o saldo devedor é ${formatBRL(balance)}.` },
         400,
       );
     }

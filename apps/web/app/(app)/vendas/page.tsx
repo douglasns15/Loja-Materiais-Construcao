@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   formatOrderNumber,
+  EXCHANGE_LEFTOVER_LABELS,
+  type ExchangeLeftoverTarget,
   paymentMethodLabel,
   cancelOrderSchema,
   returnOrderSchema,
@@ -74,7 +76,22 @@ type Order = {
   returnedValue?: number; // Σ devolvido em REFUND (parcial, quando a venda segue CONFIRMED)
   exchangedValue?: number; // Σ trocado (EXCHANGE)
   exchangedTo?: number[]; // nº das vendas geradas na troca (V-000XXX)
+  // Adendo 2026-10-22 (ADR-033): sobra do vale devolvida ao cliente. Na venda de ORIGEM, uma por troca
+  // (com a venda nova); na venda NOVA (paga com o vale), a sobra daquela troca.
+  exchangeLeftovers?: { toOrderNumber: number | null; amount: number; target: string | null }[];
+  exchangeLeftover?: { amount: number; target: string | null } | null;
 };
+
+/** Rótulo do destino da sobra do vale ("em dinheiro", "estorno na forma original", "crédito na loja"). */
+function leftoverLabel(target: string | null): string {
+  return target ? EXCHANGE_LEFTOVER_LABELS[target as ExchangeLeftoverTarget] ?? target : 'devolvida';
+}
+
+/** Sobra do vale para o comprovante (só na venda paga com o vale — a nova venda da troca). */
+function receiptLeftover(order: Order): { amount: number; label: string } | undefined {
+  const l = order.exchangeLeftover;
+  return l && l.amount > 0 ? { amount: l.amount, label: leftoverLabel(l.target) } : undefined;
+}
 
 /** Ação em curso no modal: cancelamento (caixa aberto) ou devolução (caixa fechado). */
 type ActionMode = 'cancel' | 'return';
@@ -922,6 +939,24 @@ export default function VendasPage() {
                             </div>
                           </>
                         )}
+                        {/* Adendo 2026-10-22 (ADR-033): venda paga com vale-troca cuja compra saiu menor
+                            que o vale — a sobra que voltou ao cliente. */}
+                        {o.exchangeLeftover && o.exchangeLeftover.amount > 0 && (
+                          <div className="flex justify-between font-medium text-violet-700">
+                            <span>Sobra do vale devolvida · {leftoverLabel(o.exchangeLeftover.target)}</span>
+                            <span>{BRL(o.exchangeLeftover.amount)}</span>
+                          </div>
+                        )}
+                        {/* Lado da venda de ORIGEM: a sobra de cada troca (dinheiro/estorno/crédito). */}
+                        {(o.exchangeLeftovers ?? []).map((l, i) => (
+                          <div key={`lo-${i}`} className="flex justify-between text-violet-700">
+                            <span>
+                              Troca{l.toOrderNumber ? ` → ${formatOrderNumber(l.toOrderNumber)}` : ''}: sobra devolvida ·{' '}
+                              {leftoverLabel(l.target)}
+                            </span>
+                            <span>{BRL(l.amount)}</span>
+                          </div>
+                        ))}
                       </div>
                     );
                   })()}
@@ -1098,6 +1133,8 @@ export default function VendasPage() {
               ? Number(printJob.order.changeAmount)
               : undefined
           }
+          // Adendo 2026-10-22: reimpressão da venda da troca repete a linha "Sobra do vale".
+          exchangeLeftover={receiptLeftover(printJob.order)}
         />
       )}
 
@@ -1127,6 +1164,7 @@ export default function VendasPage() {
                 ? Number(shareJob.order.changeAmount)
                 : undefined
             }
+            exchangeLeftover={receiptLeftover(shareJob.order)}
           />
         </div>
       )}

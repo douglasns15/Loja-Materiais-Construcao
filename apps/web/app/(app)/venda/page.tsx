@@ -22,6 +22,8 @@ import {
   type QuoteItem,
   type SaleUnitMode,
   type UnitType,
+  EXCHANGE_LEFTOVER_LABELS,
+  type ExchangeLeftoverTarget,
 } from '@nexoloja/shared';
 import {
   calcMarginPercent,
@@ -377,19 +379,16 @@ function Summary({
 }
 
 /** Destino da sobra do vale-troca (ADR-033, adendo 2026-10-22) — os mesmos do excedente da devolução. */
-type LeftoverTarget = 'CASH' | 'SAME_AS_PAYMENT' | 'STORE_CREDIT';
+type LeftoverTarget = ExchangeLeftoverTarget;
 /** Rótulos dos botões de destino da sobra no PDV. */
 const LEFTOVER_BUTTONS: Record<LeftoverTarget, string> = {
   CASH: 'Dinheiro',
   SAME_AS_PAYMENT: 'Estorno na forma original',
   STORE_CREDIT: 'Crédito na loja',
 };
-/** Destino da sobra como sai na tela final e no comprovante ("Sobra do vale devolvida · …"). */
-const LEFTOVER_LABELS: Record<LeftoverTarget, string> = {
-  CASH: 'em dinheiro',
-  SAME_AS_PAYMENT: 'estorno na forma original',
-  STORE_CREDIT: 'crédito na loja',
-};
+/** Destino da sobra como sai na tela final e no comprovante ("Sobra do vale devolvida · …") —
+ *  mesmos rótulos do Histórico (shared). */
+const LEFTOVER_LABELS = EXCHANGE_LEFTOVER_LABELS;
 
 /** Formas de pagamento de uma venda (uma linha por forma) + crédito da loja + troco, reusado na
  *  revisão e na conclusão. `storeCredit` (ADR-022, Fatia C) aparece como uma forma a mais. */

@@ -20,6 +20,9 @@
 >   sobra em dinheiro/estorno). PDV: quadro "Sobra do vale — como devolver?" + linha no comprovante.
 > - Docs: ADR-033 §Adendo 2026-10-22, DOCUMENTACAO-TECNICA §8.2, DOCUMENTACAO-FUNCIONAL §10, roteiro E2E §F3.9.
 > - **Ordem de deploy: API antes do web** (contrato novo `leftoverTarget`) — feito assim.
+> - **Ajustes pós-QA (2026-10-22):** Histórico mostra a sobra no card da origem ("Troca → V-…: sobra devolvida") e da
+>   venda nova (+ reimpressão/WhatsApp); `GET /orders` ganhou `exchangeLeftovers`/`exchangeLeftover`; mensagens de
+>   erro com valor da API em "R$ 7,50" (`formatBRL`, shared +2 testes).
 >
 > **ONDE PARAMOS (2026-10-21, noite) — Upgrade para Next.js 16 (só web/infra, SEM migration) — NO AR
 > (web `9558de09`, API `f441a291`):**

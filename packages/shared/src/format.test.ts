@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  formatBRL,
   formatCnpj,
   formatCpf,
   formatCpfCnpj,
@@ -245,5 +246,18 @@ describe('isWeightUnitLabel', () => {
   });
   it('demais unidades não', () => {
     for (const u of ['UNIT', 'un', 'm', 'BAG', null, undefined]) expect(isWeightUnitLabel(u)).toBe(false);
+  });
+});
+
+describe('formatBRL (mensagens do servidor em reais)', () => {
+  // toLocaleString usa espaço não separável depois do "R$"; normaliza para comparar.
+  const norm = (t: string) => t.replace(/\s/g, ' ');
+  it('formata no padrão brasileiro', () => {
+    expect(norm(formatBRL(7.5))).toBe('R$ 7,50');
+    expect(norm(formatBRL(1234))).toBe('R$ 1.234,00');
+    expect(norm(formatBRL(0.1 + 0.2))).toBe('R$ 0,30');
+  });
+  it('valor não finito vira R$ 0,00', () => {
+    expect(norm(formatBRL(NaN))).toBe('R$ 0,00');
   });
 });

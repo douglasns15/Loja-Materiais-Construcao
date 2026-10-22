@@ -679,6 +679,9 @@ que o vale.
 - **Dinheiro** e a parte em dinheiro do **estorno** aparecem no Caixa como saída "Troca (sobra do vale) — venda V-…".
 - Nos **Relatórios**, a sobra devolvida em dinheiro/estorno sai do **Recebido** (no dia da venda de origem, na forma
   em que voltou), igual a uma devolução. Sobra em crédito não sai do Recebido.
+- No **Histórico de Vendas** a sobra aparece nos dois cartões: na venda de origem, "Troca → V-…: sobra devolvida ·
+  em dinheiro R$ …" (uma linha por troca); na venda nova, "Sobra do vale devolvida · em dinheiro R$ …". **Reimprimir**
+  e **WhatsApp** da venda nova repetem a linha "Sobra do vale" no comprovante.
 
 **Limitações**
 
@@ -723,3 +726,4 @@ painel da plataforma.
 | 2026-10-21 | Entrada de estoque com preço de venda (§9) conferida pelo Owner em produção. |
 | 2026-10-22 | Troca por item mais barato (§10): a sobra do vale volta ao cliente em dinheiro, estorno na forma original ou crédito na loja. |
 | 2026-10-22 | Troca por item mais barato (§10) conferida em produção na Loja Demo: os três destinos, caixa, crédito do cliente e Relatórios. |
+| 2026-10-22 | Troca por item mais barato (§10): a sobra aparece no Histórico (venda de origem e venda nova) e na reimpressão; avisos do sistema com valor saem em "R$ 7,50". |

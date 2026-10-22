@@ -34,6 +34,7 @@ import {
   createReturnSchema,
   createSaleSchema,
   formatOrderNumber,
+  formatBRL,
   parseDeliverySettings,
   parseMoneyQuery,
   parseOrderNumberQuery,
@@ -138,7 +139,7 @@ function prepareReturnLines(
     if (!isValidPartialReturn(requestedBase, remainingBase)) {
       return {
         ok: false,
-        error: `Quantidade inválida para "${item.productName}" (devolvível: ${(remainingBase / basePerSold).toFixed(2)}).`,
+        error: `Quantidade inválida para "${item.productName}" (devolvível: ${(remainingBase / basePerSold).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}).`,
       };
     }
     // Valor efetivamente PAGO por esta fatia da linha (ADR-036): desconto por item já está em
@@ -430,7 +431,9 @@ orders.get('/', async (c) => {
           },
           // ADR-036: devoluções/trocas da venda, para o card do Histórico refletir o desfecho
           // (Devolvida / Devolução parcial / Trocada → V-XXX) e o valor ajustado.
-          returns: { select: { intent: true, totalValue: true, exchangeOrderId: true } },
+          returns: {
+            select: { intent: true, totalValue: true, exchangeOrderId: true, excessAmount: true, target: true },
+          },
         },
       });
 
@@ -452,16 +455,35 @@ orders.get('/', async (c) => {
           })
         : [];
       const numById = new Map(exchangeOrders.map((o) => [o.id, o.orderNumber]));
+      // Adendo 2026-10-22 (ADR-033): sobra do vale devolvida nas trocas QUE GERARAM vendas desta
+      // página (lado da venda nova) — o card e a reimpressão mostram "Sobra do vale devolvida".
+      const incomingLeftovers = await prisma.orderReturn.findMany({
+        where: {
+          tenantId,
+          intent: 'EXCHANGE',
+          exchangeOrderId: { in: rows.map((o) => o.id) },
+          excessAmount: { gt: 0 },
+        },
+        select: { exchangeOrderId: true, excessAmount: true, target: true },
+      });
+      const leftoverByNewOrder = new Map(
+        incomingLeftovers.map((r) => [r.exchangeOrderId as string, { amount: Number(r.excessAmount), target: r.target }]),
+      );
       const rowsOut = rows.map((o) => {
         let returnedValue = 0;
         let exchangedValue = 0;
         const exchangedTo: number[] = [];
+        // Adendo 2026-10-22: sobra do vale devolvida em cada troca desta venda (lado da origem).
+        const exchangeLeftovers: { toOrderNumber: number | null; amount: number; target: string | null }[] = [];
         for (const r of o.returns) {
           const v = Number(r.totalValue);
           if (r.intent === 'EXCHANGE') {
             exchangedValue += v;
             const n = r.exchangeOrderId ? numById.get(r.exchangeOrderId) : undefined;
             if (n != null) exchangedTo.push(n);
+            if (Number(r.excessAmount) > 0) {
+              exchangeLeftovers.push({ toOrderNumber: n ?? null, amount: Number(r.excessAmount), target: r.target });
+            }
           } else {
             returnedValue += v;
           }
@@ -472,6 +494,8 @@ orders.get('/', async (c) => {
           returnedValue: Number(returnedValue.toFixed(2)),
           exchangedValue: Number(exchangedValue.toFixed(2)),
           exchangedTo,
+          exchangeLeftovers,
+          exchangeLeftover: leftoverByNewOrder.get(o.id) ?? null,
         };
       });
       return c.json({ ok: true, data: { rows: rowsOut, nextCursor } });
@@ -778,7 +802,7 @@ orders.post('/', requireActiveTenant, async (c) => {
       const maxCredit = maxStoreCreditForSale(total, credit, Number(cust.creditBalance));
       if (creditApplied > maxCredit + 0.005) {
         return c.json(
-          { ok: false, error: `Crédito da loja não pode passar de ${maxCredit.toFixed(2)} nesta venda.` },
+          { ok: false, error: `Crédito da loja não pode passar de ${formatBRL(maxCredit)} nesta venda.` },
           400,
         );
       }
@@ -873,7 +897,7 @@ orders.post('/', requireActiveTenant, async (c) => {
           return c.json(
             {
               ok: false,
-              error: `Sobram ${leftover.toFixed(2)} do vale. Escolha como devolver: dinheiro, estorno ou crédito na loja.`,
+              error: `Sobram ${formatBRL(leftover)} do vale. Escolha como devolver: dinheiro, estorno ou crédito na loja.`,
             },
             400,
           );
@@ -942,14 +966,14 @@ orders.post('/', requireActiveTenant, async (c) => {
         return c.json(
           {
             ok: false,
-            error: `Valores não fecham: total ${total.toFixed(2)}, pago agora ${paidNow.toFixed(2)} + a prazo ${credit.toFixed(2)}.`,
+            error: `Valores não fecham: total ${formatBRL(total)}, pago agora ${formatBRL(paidNow)} + a prazo ${formatBRL(credit)}.`,
           },
           400,
         );
       }
     } else if (paidNow + 1e-9 < total) {
       return c.json(
-        { ok: false, error: `Pagamento insuficiente: total ${total.toFixed(2)}, pago ${paidNow.toFixed(2)}.` },
+        { ok: false, error: `Pagamento insuficiente: total ${formatBRL(total)}, pago ${formatBRL(paidNow)}.` },
         400,
       );
     }

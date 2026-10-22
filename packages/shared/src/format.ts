@@ -90,6 +90,14 @@ export function formatOrderNumber(n: number | null | undefined): string {
   return formatSeqCode(ORDER_CODE_PREFIX, n);
 }
 
+/**
+ * Valor em reais no padrão brasileiro (`R$ 7,50`, `R$ 1.234,00`) — para mensagens que o servidor manda
+ * ao operador (antes saíam como `7.50`). Valor não finito vira `R$ 0,00`.
+ */
+export function formatBRL(value: number): string {
+  return (Number.isFinite(value) ? value : 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
 /** Busca por código de venda (ADR-023): `V-000128`/`000128`/`128` → 128. Alias de `parseSeqNumberQuery`. */
 export function parseOrderNumberQuery(query: string | null | undefined): number | null {
   return parseSeqNumberQuery(query);

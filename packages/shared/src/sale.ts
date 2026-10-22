@@ -205,6 +205,15 @@ export const createSaleSchema = z.object({
 });
 export type CreateSaleInput = z.infer<typeof createSaleSchema>;
 
+/** Destino da sobra do vale-troca (ADR-033, adendo 2026-10-22) — os mesmos do excedente da devolução. */
+export type ExchangeLeftoverTarget = 'CASH' | 'SAME_AS_PAYMENT' | 'STORE_CREDIT';
+/** Destino da sobra como sai na tela e no comprovante ("Sobra do vale devolvida · em dinheiro"). */
+export const EXCHANGE_LEFTOVER_LABELS: Record<ExchangeLeftoverTarget, string> = {
+  CASH: 'em dinheiro',
+  SAME_AS_PAYMENT: 'estorno na forma original',
+  STORE_CREDIT: 'crédito na loja',
+};
+
 /**
  * Payload de uma RETIRADA parcial (ADR-020): as linhas que saem agora e quanto de cada uma, em
  * UNIDADE-BASE (a mesma de `OrderItem.baseQuantity`/estoque). Cada quantidade é validada no
