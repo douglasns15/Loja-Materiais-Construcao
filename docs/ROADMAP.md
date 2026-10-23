@@ -12,7 +12,8 @@
 > no seletor (Código · Cliente · Valor · **Produto**), casando nome/nome popular/fabricante/SKU/EAN (mesmo critério do
 > `GET /products`, incluindo inativos/excluídos). API `GET /orders?scope=all&product=` (filtro `items.some.productId IN`);
 > web aba "Produto". Docs: DOCUMENTACAO-TECNICA §8.2, DOCUMENTACAO-FUNCIONAL §12. Gate: api/web `tsc` 0.
-> **Deploy (API antes do web), E2E do Owner e push PENDENTES.**
+> **NO AR** (API `44290036`, web `f8abcc8c`; smoke ✅: rotas protegidas 401, `/db-check` 200, HTML `no-store`, CSS
+> com `.flex{`). Rollback: API `0664f850`, web `d127fcb3`. Commit `e3385cf`. **E2E do Owner e push PENDENTES.**
 >
 > **Repositório em dia (2026-10-22):** push do Owner feito — `main` = `origin/main` (até `9f07a1b`). Todas as notas
 > "push do Owner pendente" dos blocos abaixo ficam resolvidas por este push.
