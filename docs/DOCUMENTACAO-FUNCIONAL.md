@@ -834,3 +834,4 @@ painel da plataforma.
 | 2026-10-22 | PDV: quando o cliente é obrigatório (sobra do vale em crédito, entrega), "+ Identificar cliente" fica verde com o motivo e sem "(opcional)". |
 | 2026-10-22 | Extrato do crédito (§11): venda de origem fiado mostra "Venda a prazo: R$ …" (antes ficava sem a linha). |
 | 2026-10-23 | Histórico de Vendas (§12): nova busca por **Produto** (nome, nome popular, fabricante, SKU ou código de barras). |
+| 2026-10-23 | Busca por Produto no Histórico (§12) conferida pelo Owner em produção. |

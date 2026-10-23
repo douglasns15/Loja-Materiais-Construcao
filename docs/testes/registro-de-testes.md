@@ -6575,3 +6575,19 @@ atual e margem; `POST /stock/movements` aceita `newSalePrice` (grava o preço, l
 | PDV — volta para Retirada | ✅ | Volta o "+ Identificar cliente (opcional)" (nada finalizado; carrinho do Owner intacto) |
 | PDV — sobra do vale em crédito sem cliente | ⏭️ | Mesma regra (`customerRequiredFor`); não executado para não criar troca de teste |
 | Origem fiado → "Venda a prazo" (ajuste pós-QA; API `0664f850`, web `d127fcb3`) | ✅ | Cliente 02: entrada da V-000055 mostra "Venda a prazo: R$ 111,00"; Jamiro segue "Venda paga em: Dinheiro R$ 45,00 + PIX R$ 30,00"; gates core 581 / shared 155 / API 7 + `tsc` |
+
+## Melhoria — Histórico de Vendas: busca por Produto — 2026-10-23
+
+Pedido do Owner: 4ª opção no seletor de busca do Histórico (Código · Cliente · Valor · **Produto**), casando nome,
+nome popular, fabricante, SKU ou EAN de algum item da venda. API `GET /orders?scope=all&product=` (mesmo critério do
+`GET /products`, incluindo produtos inativos/excluídos; teto de 500 produtos casados). Sem migration.
+
+| O que foi testado | Método | Resultado |
+|---|---|---|
+| Typecheck API/web | `tsc --noEmit` | ✅ 0 erros |
+| Consulta nova no banco real (Loja Demo) | script só-leitura com o mesmo SQL + filtro `items.some.productId IN` | ✅ "argamassa" → 2 produtos / 21+ vendas; "arg-port" (SKU) → 16; "Portokoll" (fabricante) → 16; termo inexistente → 0 |
+| Prisma Client embutido | `prisma generate` + diff com `packages/db/prisma/schema.prisma` | ✅ idêntico |
+| Deploy | API `44290036`, web `f8abcc8c` (rollback API `0664f850`, web `d127fcb3`) | ✅ smoke: rotas protegidas 401, `/db-check` 200, HTML `no-store`, CSS com `.flex{`, chunk da tela com a aba "Produto" servido |
+| E2E do Owner em produção | tela Histórico de Vendas → Produto | ✅ "validado com sucesso" (2026-10-23) |
+
+Commits: `e3385cf` (feature) + `ecfffb4` (versões no ROADMAP) + este registro.
