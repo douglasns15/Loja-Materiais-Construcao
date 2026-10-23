@@ -115,17 +115,20 @@ const SORT_LABELS: Record<Sort, string> = {
 /** Quantas vendas por página / clique em "Mostrar mais". */
 const PAGE_SIZE = 20;
 
-/** Tipo de busca do Histórico: por código (V-000128), por cliente (nome) ou por valor (total exato). */
-type SearchType = 'code' | 'customer' | 'value';
+/** Tipo de busca do Histórico: por código (V-000128), por cliente (nome), por valor (total exato) ou
+ *  por produto (nome, nome popular, fabricante, SKU ou EAN de algum item da venda). */
+type SearchType = 'code' | 'customer' | 'value' | 'product';
 const SEARCH_LABELS: Record<SearchType, string> = {
   code: 'Código',
   customer: 'Cliente',
   value: 'Valor',
+  product: 'Produto',
 };
 const SEARCH_PLACEHOLDERS: Record<SearchType, string> = {
   code: 'Ex.: V-000128 ou 128',
   customer: 'Ex.: João Silva',
   value: 'Ex.: 150,00',
+  product: 'Ex.: cimento, Votorantim, SKU ou EAN',
 };
 /** Busca aplicada (o que a lista está mostrando). `null` = sem busca (lista por período). */
 type Search = { type: SearchType; term: string };
@@ -138,9 +141,10 @@ const fmtQty = (v: number) => {
   return Number.isInteger(n) ? String(n) : String(Number(n.toFixed(2)));
 };
 /** Monta a query de `GET /orders?scope=all` com cursor, período, ordenação e busca.
- *  Toda busca (código/cliente/valor) procura em TODO o histórico — o período é ignorado pelo
+ *  Toda busca (código/cliente/valor/produto) procura em TODO o histórico — o período é ignorado pelo
  *  servidor. Código casa o inteiro `orderNumber` (0 ou 1 venda); cliente casa por nome
- *  (unaccent+tokenizado, só vendas com cliente vinculado); valor casa o total exato. */
+ *  (unaccent+tokenizado, só vendas com cliente vinculado); valor casa o total exato; produto casa
+ *  vendas com algum item cujo produto bate por nome/nome popular/fabricante/SKU/EAN. */
 function ordersQuery(cursor: string | null, r: Range, sort: Sort, search: Search | null): string {
   const p = new URLSearchParams({ scope: 'all', limit: String(PAGE_SIZE) });
   if (cursor) p.set('cursor', cursor);
@@ -188,7 +192,7 @@ export default function VendasPage() {
   const [range, setRange] = useState<Range>(() => defaultRange());
   // Ordenação aplicada no servidor (default = mais recentes primeiro).
   const [sort, setSort] = useState<Sort>('recent');
-  // Busca do Histórico (código/cliente/valor). `searchType` = o tipo escolhido no seletor;
+  // Busca do Histórico (código/cliente/valor/produto). `searchType` = o tipo escolhido no seletor;
   // `searchInput` = o que está no campo; `search` = a busca APLICADA (o que a lista mostra) ou
   // null. Busca no servidor, em todo o histórico (ignora o período).
   const [searchType, setSearchType] = useState<SearchType>('code');
@@ -359,7 +363,7 @@ export default function VendasPage() {
     if (!search) void loadReport(r);
   }
 
-  /** Aplica a busca (código/cliente/valor): recarrega do início varrendo todo o histórico (ignora o
+  /** Aplica a busca (código/cliente/valor/produto): recarrega do início varrendo todo o histórico (ignora o
    *  período). Campo vazio limpa a busca e volta à lista por período. */
   function buscar(e: React.FormEvent) {
     e.preventDefault();
@@ -653,7 +657,8 @@ export default function VendasPage() {
             ))}
           </select>
         </label>
-        {/* Busca por código (V-000128), cliente (nome) ou valor (total exato). Procura todo o
+        {/* Busca por código (V-000128), cliente (nome), valor (total exato) ou produto (nome,
+            fabricante, SKU, EAN). Procura todo o
             histórico, ignorando o período. O seletor (controle segmentado — identidade das telas
             repaginadas) troca o tipo; um campo só, adaptável. */}
         <form onSubmit={buscar} className="mt-3 border-t border-gray-100 pt-3">
@@ -674,7 +679,7 @@ export default function VendasPage() {
           <div className="flex flex-wrap items-center gap-2">
             <input
               type="text"
-              inputMode={searchType === 'customer' ? 'text' : 'decimal'}
+              inputMode={searchType === 'customer' || searchType === 'product' ? 'text' : 'decimal'}
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               placeholder={SEARCH_PLACEHOLDERS[searchType]}
@@ -711,6 +716,12 @@ export default function VendasPage() {
             )}
             {search.type === 'value' && (
               <>Buscando vendas com total <strong>{search.term}</strong> (valor exato).</>
+            )}
+            {search.type === 'product' && (
+              <>
+                Buscando vendas com o produto <strong>{search.term}</strong> (nome, fabricante, SKU ou
+                código de barras, em todo o histórico).
+              </>
             )}
           </p>
         )}

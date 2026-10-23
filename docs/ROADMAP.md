@@ -8,6 +8,12 @@
 > custo fixo do Prisma por requisição já passa de 10 ms). **Correção: Owner assinou o Workers Paid** (teto 30 s) —
 > pós-assinatura 130 requisições reais + 30 de stress, 0 falhas. Sem mudança de código. Ver ADR-005, adendo 2026-10-14.
 >
+> **2026-10-23 — Histórico de Vendas: busca por Produto (web + API, SEM migration)** — pedido do Owner: 4ª opção
+> no seletor (Código · Cliente · Valor · **Produto**), casando nome/nome popular/fabricante/SKU/EAN (mesmo critério do
+> `GET /products`, incluindo inativos/excluídos). API `GET /orders?scope=all&product=` (filtro `items.some.productId IN`);
+> web aba "Produto". Docs: DOCUMENTACAO-TECNICA §8.2, DOCUMENTACAO-FUNCIONAL §12. Gate: api/web `tsc` 0.
+> **Deploy (API antes do web), E2E do Owner e push PENDENTES.**
+>
 > **Repositório em dia (2026-10-22):** push do Owner feito — `main` = `origin/main` (até `9f07a1b`). Todas as notas
 > "push do Owner pendente" dos blocos abaixo ficam resolvidas por este push.
 >

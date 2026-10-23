@@ -10,7 +10,7 @@
 > **Cobertura:** começa pelas entregas de 2026-10-09 (carga do catálogo e balança). As funcionalidades anteriores
 > entram aqui conforme forem tocadas — ver [Pendências de cobertura](#pendências-de-cobertura).
 >
-> **Última atualização:** 2026-10-21.
+> **Última atualização:** 2026-10-23.
 
 ---
 
@@ -33,8 +33,9 @@
 9. [Entrada de estoque: custo e preço de venda](#9-entrada-de-estoque-custo-e-preço-de-venda)
 10. [Troca por item mais barato (sobra do vale)](#10-troca-por-item-mais-barato-sobra-do-vale)
 11. [Extrato do crédito do cliente](#11-extrato-do-crédito-do-cliente)
-12. [Pendências de cobertura](#pendências-de-cobertura)
-13. [Histórico deste documento](#histórico-deste-documento)
+12. [Histórico de Vendas: buscar por produto](#12-histórico-de-vendas-buscar-por-produto)
+13. [Pendências de cobertura](#pendências-de-cobertura)
+14. [Histórico deste documento](#histórico-deste-documento)
 
 ---
 
@@ -758,6 +759,38 @@ Regras da retirada:
 
 ---
 
+## 12. Histórico de Vendas: buscar por produto
+
+**Para que serve:** achar as vendas em que saiu um produto — por exemplo, "quem levou aquele piso Eliane?" ou "em
+que venda saiu esse código de barras?".
+
+**Onde fica:** **Histórico de Vendas →** quadro de busca, opção **Produto** (ao lado de Código, Cliente e Valor).
+
+**Passo a passo**
+
+1. Toque em **Produto**.
+2. Digite qualquer informação do produto: **nome**, **nome popular**, **fabricante**, **SKU** ou **código de barras
+   (EAN)** — ou bipe o código com o leitor.
+3. **Buscar** (ou Enter). A lista mostra as vendas que têm **ao menos um item** desse produto.
+4. **Limpar busca** volta à lista do período.
+
+**Regras**
+
+- Procura em **todo o histórico** — o período escolhido é ignorado durante a busca (igual às outras buscas).
+- Pode digitar várias palavras, em qualquer ordem e sem acento: "cimento votorantim" acha "Cimento CP-II 50kg —
+  Votorantim". Cada palavra precisa aparecer em algum dos campos do produto.
+- Um pedaço basta: "7891" acha os códigos de barras que contêm 7891.
+- Acha também vendas de produtos que **já foram desativados ou excluídos** do cadastro.
+- Ordenação, "Mostrar mais", reimpressão e as ações da venda funcionam normalmente nos resultados.
+
+**Limitações**
+
+- A busca usa o cadastro **atual** do produto: se o nome mudou, procure pelo nome novo (ou pelo SKU/código de barras).
+- Uma busca muito genérica (uma letra só) pode casar centenas de produtos; nesse caso considera os 500 primeiros —
+  seja mais específico.
+
+---
+
 ## Pendências de cobertura
 
 Funcionalidades já em uso que ainda não estão descritas aqui (entram conforme forem tocadas): PDV (pagamentos,
@@ -800,3 +833,4 @@ painel da plataforma.
 | 2026-10-22 | Extrato do crédito (§11): retirada do crédito (qualquer forma, a da venda de origem sugerida; dinheiro sai do caixa de hoje; Recebido abatido no dia da venda de origem), forma de pagamento da origem no extrato e "Utilizado na compra: V-…". |
 | 2026-10-22 | PDV: quando o cliente é obrigatório (sobra do vale em crédito, entrega), "+ Identificar cliente" fica verde com o motivo e sem "(opcional)". |
 | 2026-10-22 | Extrato do crédito (§11): venda de origem fiado mostra "Venda a prazo: R$ …" (antes ficava sem a linha). |
+| 2026-10-23 | Histórico de Vendas (§12): nova busca por **Produto** (nome, nome popular, fabricante, SKU ou código de barras). |

@@ -54,6 +54,8 @@ const ORDERS_PAGE_MAX = 50;
 
 /** Teto de clientes casados numa busca por nome (limita o `IN` do filtro de vendas; base pequena). */
 const CUSTOMER_MATCH_MAX = 500;
+/** Teto de produtos casados numa busca do Histórico por produto (limita o `IN` do filtro de itens). */
+const PRODUCT_MATCH_MAX = 500;
 
 /**
  * Escapa os curingas do `LIKE`/`ILIKE` (`%`, `_`, `\`) para tratar o termo como texto literal
@@ -340,6 +342,43 @@ async function resolveCustomerIdsByName(
 }
 
 /**
+ * Resolve os IDs dos produtos do tenant que casam a busca do Histórico por PRODUTO — o mesmo critério
+ * do `GET /products` (tokenizado AND, ordem-livre, acento-insensível; cada palavra precisa aparecer em
+ * nome, nome popular, fabricante, SKU ou EAN). Diferente do catálogo, inclui produtos INATIVOS e
+ * EXCLUÍDOS: uma venda antiga continua achável mesmo que o produto tenha saído do cadastro. Devolve
+ * `[]` quando nada casa (⇒ lista vazia). `Prisma.sql` parametrizado ⇒ à prova de injeção.
+ */
+async function resolveProductIdsByQuery(
+  prisma: ReturnType<typeof createPrismaClient>,
+  tenantId: string,
+  query: string,
+): Promise<string[]> {
+  const tokens = query.split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return [];
+  const textMatch = Prisma.join(
+    tokens.map((token) => {
+      const pat = `%${likeEscape(token)}%`;
+      return Prisma.sql`(
+        extensions.unaccent(p."name") ILIKE extensions.unaccent(${pat})
+        OR extensions.unaccent(coalesce(p."popularName", '')) ILIKE extensions.unaccent(${pat})
+        OR extensions.unaccent(coalesce(p."manufacturer", '')) ILIKE extensions.unaccent(${pat})
+        OR extensions.unaccent(p."sku") ILIKE extensions.unaccent(${pat})
+        OR extensions.unaccent(coalesce(p."ean", '')) ILIKE extensions.unaccent(${pat})
+      )`;
+    }),
+    ' AND ',
+  );
+  const rows = await prisma.$queryRaw<Array<{ id: string }>>(
+    Prisma.sql`
+      SELECT p."id" FROM "products" p
+      WHERE p."tenantId" = ${tenantId}::uuid AND (${textMatch})
+      LIMIT ${PRODUCT_MATCH_MAX}
+    `,
+  );
+  return rows.map((r) => r.id);
+}
+
+/**
  * Lista as vendas com itens, pagamentos e status (mais recentes primeiro).
  *  - `?scope=all`: Histórico de Vendas — **paginado por cursor** (keyset). Aceita
  *    `limit`, `cursor` (opaco), `from`/`to` (AAAA-MM-DD, fuso da loja) e `sort`
@@ -350,8 +389,10 @@ async function resolveCustomerIdsByName(
  *    exibir de quem é. Sem exigir caixa aberto.
  *    **Busca (todas ignoram o período e varrem todo o histórico):** `number` (código
  *    V-000128), `customer` (nome do cliente — só casa vendas com cliente vinculado:
- *    fiado/crédito da loja/entrega futura) e `value` (total exato, tolerante ao formato).
- *    Precedência quando mais de uma vem junto: `number` > `customer` > `value`.
+ *    fiado/crédito da loja/entrega futura), `value` (total exato, tolerante ao formato) e
+ *    `product` (vendas com ao menos um item cujo produto casa por nome, nome popular,
+ *    fabricante, SKU ou EAN — inclui produtos inativos/excluídos).
+ *    Precedência quando mais de uma vem junto: `number` > `customer` > `value` > `product`.
  *  - padrão: vendas do caixa atualmente aberto do operador (base do cancelamento,
  *    restrito ao caixa aberto). Sem caixa aberto, retorna lista vazia (array cru,
  *    contrato antigo preservado).
@@ -384,8 +425,11 @@ orders.get('/', async (c) => {
       // (o cliente só manda uma por vez; a precedência é só uma trava de segurança no servidor).
       const customerQuery = orderNumber ? '' : (c.req.query('customer')?.trim() ?? '');
       const valueQuery = orderNumber || customerQuery ? null : parseMoneyQuery(c.req.query('value'));
+      // Busca por PRODUTO (nome/nome popular/fabricante/SKU/EAN) — a última na precedência.
+      const productQuery =
+        orderNumber || customerQuery || valueQuery != null ? '' : (c.req.query('product')?.trim() ?? '');
       // Qualquer busca ativa varre TODO o histórico (ignora o período), como já era com o código.
-      const hasSearch = !!orderNumber || !!customerQuery || valueQuery != null;
+      const hasSearch = !!orderNumber || !!customerQuery || valueQuery != null || !!productQuery;
       const { field, dir } = sortConfig(c.req.query('sort'));
       const cursorParam = c.req.query('cursor');
       const cursor = cursorParam ? decodeCursor(cursorParam) : null;
@@ -401,6 +445,17 @@ orders.get('/', async (c) => {
         customerFilter = { customerId: { in: ids } };
       }
 
+      // Busca por produto: resolve os IDs dos produtos e filtra as vendas com ao menos um item deles.
+      // Nenhum produto casado ⇒ lista vazia (mesmo atalho da busca por cliente).
+      let productFilter: object = {};
+      if (productQuery) {
+        const ids = await resolveProductIdsByQuery(prisma, tenantId, productQuery);
+        if (ids.length === 0) {
+          return c.json({ ok: true, data: { rows: [], nextCursor: null } });
+        }
+        productFilter = { items: { some: { productId: { in: ids } } } };
+      }
+
       // Keyset: só as linhas após o cursor na ordem escolhida (`field dir`, `id dir`). Os filtros
       // (período OU busca) e o cursor coexistem por AND.
       const keyset = cursor ? keysetWhere(field, dir, cursor) : {};
@@ -412,6 +467,7 @@ orders.get('/', async (c) => {
           ...(hasSearch ? {} : dateFilter ? { createdAt: dateFilter } : {}),
           ...(orderNumber ? { orderNumber } : {}),
           ...customerFilter,
+          ...productFilter,
           ...(valueQuery != null ? { total: valueQuery } : {}),
           ...keyset,
         },
